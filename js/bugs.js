@@ -275,7 +275,10 @@
         }
         // 放不回去也沒人能接手時，任務的經驗值和算力直接給冒險者，創世門檻才不會差這一份
         n.quest.done = true;
-        if (mine) game.player.carrying = null;
+        if (mine) {
+          game.bagTake('goods', 1, n.id); // 要送的東西也從背包拿掉
+          game.player.carrying = null;
+        }
         if (!(opts && opts.noExp)) {
           game.addExp(n.quest.exp);
           game.earn(n.quest.compute || 0);

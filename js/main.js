@@ -38,7 +38,7 @@
   };
   const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee' };
   // 按鍵視窗：同時只開一個
-  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', '`': 'reports' };
+  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', '`': 'reports' };
 
   // 在對話視窗裡選第 i 個選項（選項本身不再花動作）
   function choose(i) {
@@ -110,6 +110,12 @@
       applyZoom();
       return;
     }
+    // 背包視窗開著：數字鍵用第幾樣東西（算一個動作）
+    if (FE.UI.win() === 'backpack' && /^[1-9]$/.test(k)) {
+      e.preventDefault();
+      dispatch('背包', () => game.useItem(Number(k) - 1));
+      return;
+    }
     // 視窗開著時，方向鍵與戰鬥鍵都不作用
     if (FE.UI.win()) return;
     if (ACTS[k]) {
@@ -145,7 +151,9 @@
   document.getElementById('btnMenu').addEventListener('click', () => toggleWindow('settings'));
   document.getElementById('btnMini').addEventListener('click', () => FE.UI.toggleMinimap());
   document.getElementById('overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'overlay' || (e.target.dataset && 'close' in e.target.dataset)) FE.UI.closeWindow();
+    const use = e.target.closest && e.target.closest('[data-use]');
+    if (use && !use.disabled) dispatch('背包', () => game.useItem(Number(use.dataset.use)));
+    else if (e.target.id === 'overlay' || (e.target.dataset && 'close' in e.target.dataset)) FE.UI.closeWindow();
     else if (e.target.dataset && e.target.dataset.open) FE.UI.openWindow(e.target.dataset.open);
   });
 

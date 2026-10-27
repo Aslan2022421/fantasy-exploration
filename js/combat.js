@@ -108,7 +108,9 @@
           : aP
             ? kind === 'deep' ? `你對${dName}使出重擊` : `你攻擊${dName}`
             : `${aName}攻擊${dName}`;
-      const tag = `（擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''}：${roll.name}）`;
+      // 擲出 6～10 的「對方必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中
+      const rollName = roll.key === 'hard' && !aP ? '命中' : roll.name;
+      const tag = `（擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''}：${rollName}）`;
       let text;
       if (roll.key === 'miss') {
         text = `${head}${tag}，沒有打中。`;
@@ -151,11 +153,11 @@
       }
     }
 
-    // 6. 反擊：防守方還活著、還貼著，擲出 6～10 必定反擊，不然擲反擊機率；反擊只能一次，反擊打出的那一下不能再被反擊。
-    // 士兵不反擊（反擊機率 0，連必定反擊也不算）
+    // 6. 反擊：防守方還活著、還貼著，冒險者出手擲出 6～10 時怪物必定反擊，不然擲反擊機率；反擊只能一次，反擊打出的那一下不能再被反擊。
+    // 「必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中，對方照自己的反擊機率擲。士兵不反擊（反擊機率 0）
     const alive = !killed && (dP || (dS ? game.soldiers.includes(D) : game.monsters.includes(D)));
     let countered = false;
-    if (alive && !dS && !opts.noCounter && adjacent(game, A, D) && (roll.key === 'hard' || r() < dd.counter)) countered = true;
+    if (alive && !dS && !opts.noCounter && adjacent(game, A, D) && ((aP && roll.key === 'hard') || r() < dd.counter)) countered = true;
     if (FE.Combat.hook) {
       FE.Combat.hook({
         by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, key: roll.key, dodged, crit, blocked: absorbed > 0, resisted, dmg,

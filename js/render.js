@@ -73,6 +73,7 @@
     't-house': ['#d6a46b', true], 't-road': ['#8b7a5e'], 't-market': ['#e3b341', true], 't-temple': ['#d2a8ff', true], 't-door': ['#f0c674', true],
     't-bed': ['#a5b4fc'], 't-furniture': ['#c9a26b'], 't-ruin': ['#9a8f7c'], 't-relic': ['#e3c07a', true],
   };
+  const NODE_FG = { ore: '#56d4dd', herb: '#c3e88d' }; // 礦脈青色、藥草淺綠
   const HEIGHT_BG = ['#070a0e', '#0e131a', '#151c26', '#1e2733', '#283442'];
   const BG = { village: '#1c2333', town: '#2a2140', indoor: '#2a2218', road: '#3a3122', glitch: '#2d1214', hasQuest: '#4a1d3a', recipient: '#1a4d2a' };
 
@@ -92,6 +93,8 @@
     const npcs = new Map(W.npcs.map((n) => [key(n.x, n.y), n]));
     const soldiers = new Map(game.soldiers.map((s) => [key(s.x, s.y), s]));
     const chests = new Map(W.chests.map((c) => [key(c.x, c.y), c]));
+    // 採集點：採完還沒長回來的不畫（那一格就是普通地面）
+    const nodes = new Map(W.nodes.filter((n) => !(n.regrowAt > (game.ticks || 0))).map((n) => [key(n.x, n.y), n]));
     const monsters = new Map(game.monsters.map((m) => [key(m.x, m.y), m]));
     const overlay = new Map();
     for (const m of game.monsters) {
@@ -152,6 +155,12 @@
         }
         let outline = null;
         let hpPct = -1;
+        const nd = nodes.get(k);
+        if (nd && FE.TERRAIN[c.t].pass) {
+          glyph = FE.NODES[nd.kind].glyph;
+          fg = NODE_FG[nd.kind];
+          bold = true;
+        }
         if (chests.has(k)) {
           glyph = '$';
           fg = '#e3b341';
@@ -411,7 +420,8 @@
         ? `任務：清掉${c.village}附近的小怪物，還剩 ${left} / ${c.total} 隻（紫框）。獎勵 經驗值 ${c.exp}、金幣 ${c.gold}`
         : `任務：小怪物都清掉了，回${c.village}找委託人（綠底的 &）領獎勵`;
     } else if (c) {
-      text = `任務：把${c.item}送到${c.targetVillage}的${c.targetName}${c.steps ? `（約 ${c.steps} 步）` : ''}，收貨人是綠底的 &。獎勵 經驗值 ${c.exp}、金幣 ${c.gold}`;
+      const g = game.goodsFor(c);
+      text = `任務：把${g ? g.name : '東西'}送到${c.targetVillage}的${c.targetName}${c.steps ? `（約 ${c.steps} 步）` : ''}，收貨人是綠底的 &。獎勵 經驗值 ${c.exp}、金幣 ${c.gold}`;
     }
     $('questText').textContent = text;
   }
@@ -512,8 +522,22 @@
       <div class="row"><span>附近的地貌</span><span>${esc(lmText)}</span></div>`;
   }
 
+  // 背包：列出每樣東西與數量，按數字使用（目前能用的只有藥草）
+  function drawBackpack() {
+    const list = game.bagList();
+    $('backpack').innerHTML = list.length
+      ? list
+          .map(
+            (e, i) =>
+              `<li><button data-use="${i}" ${e.use ? '' : 'disabled'}><kbd>${i + 1}</kbd>${esc(e.name)} ×${e.n}${e.use ? ' <span class="dim">（使用）</span>' : ''}</button></li>`
+          )
+          .join('')
+      : '<li class="dim">背包是空的。</li>';
+  }
+
   const WINDOWS = {
     legend: null,
+    backpack: drawBackpack,
     history: drawHistory,
     messages: drawLogAll,
     steading: drawSteading,

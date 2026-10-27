@@ -2,7 +2,9 @@
 // 生成統計（40 個種子各創 17 塊）＋3 個種子各 1500 個動作的單人機器人模擬＋一組「只走路不打怪」的對照
 // ＋「四人等效」模擬（機器人每做 4 個動作，世界才走 1 回合；3 個種子各至少 3000 個動作、至少創出 15 塊）。
 // 檢查：室內走得通、住戶碰得到、聚落周圍沒有怪物（嚴格）、出入口、戰鬥判定、世界狀態、創世耗時、
-// 創世門檻（清光一塊的內容一定解得出下一塊）、世界等級加成、城鎮出現時機、士兵的行為。
+// 創世門檻（清光一塊的內容一定解得出下一塊）、世界等級加成、城鎮出現時機、士兵的行為、
+// 背包與送貨物品、買工具、採集、藥草、礦石改良、怪物出手擲 6～10 不讓冒險者必定反擊。
+// 另外量測：各世界等級機器人打倒小怪物、中型怪物平均用了幾下，以及武器等級的中間值（校準怪物血量的世界等級加成用）。
 // 只跑四人等效模擬（調數字用）：node tools/test.js sim4
 const UNIT_ONLY = process.argv[2] === 'unit'; // 只跑場景測試（創世門檻、世界等級、士兵、對話），不跑生成統計和模擬
 const SIM4_ONLY = process.argv[2] === 'sim4' || UNIT_ONLY;
@@ -48,7 +50,7 @@ function flood(w, starts, limit) {
   return seen;
 }
 
-// 室內走得通：每棟建築從門外那一格走得到室內每一格能走的地方；地貌從外圍走得到裡面每一格能走的地方
+// 室內走得通：每棟建築從門外那一格走得到室內每一格能走的地方；地貌從外圍走得到畫上去的每一格能走的地方
 function checkInteriors(game, tag) {
   const w = game.world;
   for (const v of w.villages) {
@@ -74,7 +76,10 @@ function checkInteriors(game, tag) {
     const ring = [];
     for (let y = l.y0 - 1; y <= l.y1 + 1; y++) for (let x = l.x0 - 1; x <= l.x1 + 1; x++) if (x < l.x0 || x > l.x1 || y < l.y0 || y > l.y1) ring.push([x, y]);
     const seen = flood(w, ring, box);
+    // 只看地貌畫上去的格子；圖樣裡的 . 保留原本的地形，那些格子走不走得到歸檢查器（斷層）管
+    const art = FE.LANDMARKS[l.kind].art;
     for (let y = l.y0; y <= l.y1; y++) for (let x = l.x0; x <= l.x1; x++) {
+      if (art[y - l.y0][x - l.x0] === '.') continue;
       if (w.passable(x, y) && !seen.has(key(x, y))) fail(`${tag} 地貌${l.name} (${x},${y}) 走不到`);
     }
   }
@@ -120,6 +125,8 @@ function checkBuffer(game, tag) {
 }
 
 // ---- 戰鬥統計 ----
+// 量測：on 時才記（機器人模擬）；kills[世界等級] = { small: [幾下...], mid: [...] }，weapon[世界等級] = [每個動作時的武器等級...]
+const measure = { on: false, hits: new Map(), kills: {}, weapon: {} };
 const combat = { player: {}, monster: {}, soldier: {}, soldierHits: 0, onSoldier: 0, dodged: 0, blocked: 0, resisted: 0, crit: 0, counters: 0, opportunity: 0, opportunityHit: 0, chain: 0, negative: 0, events: 0, pdmg: 0, mdmg: 0, pn: 0, mn: 0 };
 FE.Combat.hook = (e) => {
   combat.events++;
@@ -135,6 +142,16 @@ FE.Combat.hook = (e) => {
   if (e.opportunity && e.countered) { combat.chain++; fail('趁機攻擊觸發了反擊'); }
   if (!(e.dmg >= 0)) { combat.negative++; fail(`傷害不是非負數：${e.dmg}`); }
   if (e.by === 'player') { combat.pdmg += e.dmg; combat.pn++; } else if (e.by === 'monster') { combat.mdmg += e.dmg; combat.mn++; }
+  // 量測：冒險者自己出手（不含反擊）打同一隻怪物幾下；冒險者打倒牠時記下（世界等級看怪物生成時的 wl）
+  if (measure.on && e.by === 'player') {
+    if (!e.counter) measure.hits.set(e.d.id, (measure.hits.get(e.d.id) || 0) + 1);
+    if (e.killed) {
+      const tier = e.d.tier === 'small' ? 'small' : 'mid';
+      const r = measure.kills[e.d.wl] || (measure.kills[e.d.wl] = { small: [], mid: [] });
+      r[tier].push(measure.hits.get(e.d.id) || 0);
+      measure.hits.delete(e.d.id);
+    }
+  }
   // 士兵：只打事件與侵蝕生的小怪物（m.small），從不碰創世時的怪物；不反擊；怪物打士兵也走同一套判定
   if (e.by === 'soldier') {
     combat.soldierHits++;
@@ -172,12 +189,12 @@ for (let seed = 1; seed <= GEN_SEEDS; seed++) {
     if (gap !== 4 && gap !== 5) fail(`生成 seed${seed} 兩座城鎮隔了 ${gap} 塊`);
   }
   if (w.villages[0].kind !== 'village') fail(`生成 seed${seed} 第 1 塊不是村莊`);
-  // 士兵：每座城鎮的人數照人口，站在自己城鎮的室外，數值以同世界等級的小怪物為準
+  // 士兵：每座城鎮固定 3 位，站在自己城鎮的室外，數值以同世界等級的小怪物為準
   for (const v of w.villages) {
     const mine = game.soldiers.filter((s) => s.villageId === v.id);
     if (v.kind !== 'town') { if (mine.length) fail(`生成 seed${seed} 村莊 ${v.name} 有士兵`); continue; }
-    const want = C.SOLDIER_COUNT[v.steading.population];
-    if (mine.length !== want) fail(`生成 seed${seed} ${v.name} 有 ${mine.length} 位士兵，人口 ${v.steading.population} 應該是 ${want}`);
+    const want = 3;
+    if (C.SOLDIER_PER_TOWN !== 3 || mine.length !== want) fail(`生成 seed${seed} ${v.name} 有 ${mine.length} 位士兵，應該固定是 ${want}`);
     stats.soldiers += mine.length;
     for (const s of mine) {
       if (w.villageAt(s.x, s.y) !== v || FE.Steading.roomAt(v, s.x, s.y) >= 0 || !w.passable(s.x, s.y)) fail(`生成 seed${seed} ${v.name} 士兵站的位置不對 (${s.x},${s.y})`);
@@ -264,6 +281,8 @@ function botStep(game, rng, goal, lazy) {
   const w = game.world;
   const p = game.player;
   const adj = game.adjacentMonsters();
+  // 血量低又有藥草就先吃（戰鬥中也能吃）
+  if (p.hp < p.maxHp * (adj.length ? 0.3 : 0.4) && game.bagCount('herb')) return game.eatHerb();
   if (adj.length) {
     if (p.hp < p.maxHp * 0.25) return game.act('flee');
     if (!lazy) {
@@ -309,14 +328,15 @@ function botStep(game, rng, goal, lazy) {
 }
 
 // 機器人在對話視窗裡的選擇：能交件、回報就交，能接委託就接，錢夠就改良武器，不然離開（走新的對話介面）
-const dlgStats = { opened: 0, accept: 0, report: 0, deliver: 0, improve: 0, leave: 0 };
+const dlgStats = { opened: 0, accept: 0, report: 0, deliver: 0, improve: 0, buyPick: 0, buySickle: 0, leave: 0 };
 function botTalk(game) {
   const npc = game.talkTarget(game.talking);
   if (!npc) { game.closeTalk(); return; }
   const t = game.talkOptions(npc);
   dlgStats.opened++;
   const idx = (id) => t.options.findIndex((o) => o.id === id && !o.disabled);
-  let pick = ['report', 'deliver', 'accept', 'improve'].find((id) => idx(id) >= 0) || 'leave';
+  // 改良優先；改良不了（錢或礦石不夠）時才買礦鎬、鐮刀
+  let pick = ['report', 'deliver', 'accept', 'improve', 'buyPick', 'buySickle'].find((id) => idx(id) >= 0) || 'leave';
   if (pick === 'leave') dlgStats.leave++; else dlgStats[pick]++;
   game.choose(npc, t.options.findIndex((o) => o.id === pick));
   if (game.talking != null) fail('對話選完沒有關掉');
@@ -365,9 +385,16 @@ function simulate(seed, opts) {
       const p = game.player;
       if (target && target.kind === 'npc' && !w.npcById(target.id)) target = null;
       if (target && target.kind === 'mon' && !game.monsters.some((m) => m.id === target.id)) target = null;
+      if (target && target.kind === 'node' && !w.nodes.some((n) => n.id === target.id && game.nodeAt(n.x, n.y) === n)) target = null;
       if (!target || rng() < 0.01) {
         const c = p.carrying;
+        // 採集：有礦鎬又缺改良要的礦石，去挖最近的礦脈；有鐮刀、藥草少於 3 份，割附近的藥草
+        const near = (kind, r) => w.nodes.filter((n) => n.kind === kind && game.nodeAt(n.x, n.y) === n && Math.abs(n.x - p.x) + Math.abs(n.y - p.y) < r)
+          .sort((a, b) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y) - (Math.abs(b.x - p.x) + Math.abs(b.y - p.y)))[0];
+        const ore = game.bagCount('pick') && game.bagCount('ore') < game.oreNeeded() ? near('ore', 120) : null;
+        const herb = !ore && game.bagCount('sickle') && game.bagCount('herb') < 3 ? near('herb', 16) : null;
         if (c && c.kind !== 'hunt' && w.npcById(c.targetId)) target = { kind: 'npc', id: c.targetId };
+        else if (ore || herb) target = { kind: 'node', id: (ore || herb).id };
         else if (rng() < 0.3) {
           const ns = w.npcs.filter((n) => Math.abs(n.x - p.x) + Math.abs(n.y - p.y) < 80);
           if (ns.length) target = { kind: 'npc', id: FE.pick(rng, ns).id };
@@ -381,7 +408,7 @@ function simulate(seed, opts) {
         }
       }
       if (!target) return null;
-      const o = target.kind === 'npc' ? w.npcById(target.id) : game.monsters.find((m) => m.id === target.id);
+      const o = target.kind === 'npc' ? w.npcById(target.id) : target.kind === 'node' ? w.nodes.find((n) => n.id === target.id) : game.monsters.find((m) => m.id === target.id);
       return o ? { x: o.x, y: o.y } : null;
     },
     drop() { target = null; },
@@ -392,6 +419,8 @@ function simulate(seed, opts) {
   const first = [null, null, null];
   const firstWL = [null, null, null]; // 第一次進動盪、失序時的世界等級
   const byWL = {};                    // 世界等級 → { n: 動作數, s: [安穩, 動盪, 失序] 的動作數 }
+  measure.on = !lazy;
+  measure.hits.clear();
   const stopAt = (i) => (opts.untilChunks ? i >= opts.maxActions || (i >= opts.minActions && game.world.chunks.length >= opts.untilChunks) : i >= opts.steps);
   let i = 0;
   for (; !stopAt(i); i++) {
@@ -416,6 +445,7 @@ function simulate(seed, opts) {
     lv[L]++;
     const wl = FE.Stability.worldLevel(game);
     const rec = byWL[wl] || (byWL[wl] = { n: 0, s: [0, 0, 0], chaosAt: null });
+    if (measure.on) (measure.weapon[wl] || (measure.weapon[wl] = [])).push(p.weaponLv);
     rec.n++;
     rec.s[L]++;
     if (L > 0 && first[L] === null) { first[L] = i + 1; firstWL[L] = wl; }
@@ -445,7 +475,7 @@ function simulate(seed, opts) {
     for (const v of game.world.villages) {
       if (v.kind !== 'town') continue;
       const n = game.soldiers.filter((s) => s.villageId === v.id).length;
-      const quota = C.SOLDIER_COUNT[v.steading.population];
+      const quota = C.SOLDIER_PER_TOWN;
       const prev = townCount.get(v.id);
       if (prev !== undefined && n > prev && (L !== 0 || n !== quota)) fail(`模擬 seed${seed} 第${i}步 ${v.name} 士兵補回的時機不對（狀態 ${L}，${prev}→${n}，應有 ${quota}）`);
       if (L === 0 && n < quota) fail(`模擬 seed${seed} 第${i}步 世界安穩了 ${v.name} 還沒補回士兵 ${n}/${quota}`);
@@ -453,6 +483,7 @@ function simulate(seed, opts) {
     }
   }
   const steps = i;
+  measure.on = false;
   const syncCalls = soldierCalls.n; // 存檔讀回來的遊戲還會再玩幾步，先記下這個遊戲的士兵回合數
   checkInteriors(game, `模擬 seed${seed}`);
   checkResidents(game, `模擬 seed${seed}`);
@@ -490,6 +521,7 @@ function simulate(seed, opts) {
     perWorldLevel: perWL,
     bugTotal: `min${pct(0)} p50 ${pct(0.5)} p90 ${pct(0.9)} max${pct(1)}`, recur: st.recur, sabotage: st.sabotage,
     soldiers: `出動 ${st.sorties} 次、出手 ${st.soldierAttacks}、清掉 ${st.soldierKills} 隻、陣亡 ${st.soldierDeaths}、補回 ${st.refills}`,
+    weapon: `Lv${game.player.weaponLv}（攻擊力 ${game.player.atk}）`, bag: game.player.bag.map((e) => `${e.name}×${e.n}`).join(' '),
   };
 }
 
@@ -580,6 +612,9 @@ function testDialogs() {
   ok(ids(b) === 'accept/decline', '不接之後回來沒有再問一次');
   pick(b, 'accept');
   ok(b.quest.accepted && g.player.carrying && g.player.carrying.targetId === c.id, '接下後手上沒有委託');
+  // 送貨的物品放進背包（委託資料照舊，手上不再記物品）
+  const goods = g.goodsFor(g.player.carrying);
+  ok(!!goods && goods.name === b.quest.item && goods.n === 1 && g.player.carrying.item === undefined, `接下送貨後背包裡沒有要送的東西（${JSON.stringify(g.player.bag)}）`);
   bump(b);
   ok(ids(b) === 'leave', `接下後再找委託人：${ids(b)}`);
   g.closeTalk();
@@ -598,6 +633,7 @@ function testDialogs() {
   ok(ids(c) === 'deliver/leave', `收貨人的選項是 ${ids(c)}`);
   pick(c, 'deliver');
   ok(!g.player.carrying && b.quest.done && g.player.gold === gold0 + car.gold && g.exp === exp0 + car.exp, '交件後狀態不對');
+  ok(!g.player.bag.some((e) => e.id === 'goods'), '交件後要送的東西還在背包裡');
   bump(c);
   ok(ids(c) === 'accept/decline', `交件後收貨人自己的委託：${ids(c)}`);
   g.closeTalk();
@@ -691,7 +727,7 @@ function testWorldLevel() {
   const mk = (wl, scope, type) => FE.makeMonster({ type: type || 'TERRAIN', x: 0, y: 0, cells: [], scope }, 1, wl);
   const a = mk(1, 4);
   const b = mk(4, 4);
-  ok(b.maxHp === Math.round(a.maxHp * 1.3) && b.atk === Math.round(a.atk * 1.3), `等級 4 的血量／攻擊力 ${b.maxHp}/${b.atk}（等級 1 是 ${a.maxHp}/${a.atk}）`);
+  ok(b.maxHp === Math.round(a.maxHp * (1 + 3 * C.WL_BONUS.HP)) && b.atk === Math.round(a.atk * 1.3), `等級 4 的血量／攻擊力 ${b.maxHp}/${b.atk}（等級 1 是 ${a.maxHp}/${a.atk}）`);
   ok(b.exp === Math.round(a.exp * 1.3) && Math.abs(b.compute - Math.round(a.compute * 1.3 * 10) / 10) < 1e-9, `等級 4 的經驗值／算力 ${b.exp}/${b.compute}`);
   ok(a.compute === 3 && mk(1, 6).compute === 11, `等級 1 的算力 ${a.compute}／${mk(1, 6).compute}（小怪物 3、影響範圍 6 的中型怪物 8＋3）`);
   const da = FE.monsterDef(a);
@@ -737,7 +773,7 @@ function testSoldiers() {
   const w = g.world;
   const mine = () => g.soldiers.filter((s) => s.villageId === town.id);
   const quota = g.soldierQuota(town);
-  ok(mine().length === quota && quota >= 1 && quota <= 3, `城鎮的士兵 ${mine().length} 位，應該是 ${quota}`);
+  ok(mine().length === quota && quota === 3, `城鎮的士兵 ${mine().length} 位，應該固定是 3（quota ${quota}）`);
   g.checkCreate = () => {};
   g.monsters = [];
   g.player.x = town.cx;
@@ -829,6 +865,175 @@ function testSoldiers() {
 }
 try { testSoldiers(); } catch (e) { fail('士兵測試拋出例外：' + e.stack); }
 
+// ---- 背包、工具、採集、藥草、礦石改良、艱難選擇只罰冒險者：場景測試 ----
+let bagChecks = 0;
+function testBackpack() {
+  const ok = (cond, msg) => { bagChecks++; if (!cond) fail('背包 ' + msg); };
+  // 找一個有礦坑（礦脈）的世界
+  let g = null;
+  for (let seed = 1; seed < 400 && !g; seed++) {
+    const t = new FE.Game(seed * 131);
+    t.start();
+    for (let i = 0; i < 6 && !t.world.nodes.some((n) => n.kind === 'ore'); i++) t.createChunk(false);
+    if (t.world.nodes.some((n) => n.kind === 'ore') && t.world.nodes.some((n) => n.kind === 'herb')) g = t;
+  }
+  ok(!!g, '找不到有礦脈和藥草的世界');
+  if (!g) return;
+  const w = g.world;
+  const p = g.player;
+  g.checkCreate = () => {};
+  g.monsters = [];
+
+  // 疊放：同一種東西疊在一起；送貨的物品另外放，不跟採來的藥草疊
+  g.bagAdd('herb', 1);
+  g.bagAdd('herb', 2);
+  g.bagAdd('goods', 1, { name: '藥草', giverId: 777 });
+  ok(p.bag.filter((e) => e.id === 'herb').length === 1 && g.bagCount('herb') === 3, `藥草沒有疊放：${JSON.stringify(p.bag)}`);
+  ok(g.bagEntry('goods', 777) && g.bagEntry('goods', 777).n === 1 && g.bagList().length === 2, '送貨的物品沒有另外放');
+  ok(!g.bagList().find((e) => e.id === 'goods').use && g.bagList().find((e) => e.id === 'herb').use, '只有藥草能直接用');
+  ok(g.bagTake('herb', 5) === false && g.bagCount('herb') === 3, '不夠時不該拿出來');
+  p.bag = [];
+
+  // 買工具：錢不夠時選項寫差多少、選了不買；錢夠就買，已有的不再出現
+  const smith = w.npcs.find((n) => n.role === 'smith');
+  const ids = () => g.talkOptions(smith).options.map((o) => o.id);
+  const opt = (id) => g.talkOptions(smith).options.find((o) => o.id === id);
+  const pick = (id) => g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === id));
+  p.gold = C.TOOL_PRICE - 1;
+  ok(opt('buyPick') && opt('buyPick').disabled && opt('buyPick').note.includes('還差 1 金幣') && opt('buySickle').disabled, `錢不夠時買工具的選項：${JSON.stringify(opt('buyPick'))}`);
+  g.talking = smith.id;
+  pick('buyPick');
+  ok(!g.bagCount('pick') && p.gold === C.TOOL_PRICE - 1, '錢不夠還是買到了礦鎬');
+  p.gold = C.TOOL_PRICE * 2 + 5;
+  pick('buyPick');
+  ok(g.bagCount('pick') === 1 && p.gold === C.TOOL_PRICE + 5 && !ids().includes('buyPick') && ids().includes('buySickle'), `買礦鎬之後 ${ids()}，金幣 ${p.gold}`);
+  pick('buySickle');
+  ok(g.bagCount('sickle') === 1 && p.gold === 5 && !ids().includes('buySickle'), `買鐮刀之後 ${ids()}，金幣 ${p.gold}`);
+  g.bagAdd('pick', 0);
+  ok(g.bagCount('pick') === 1, '工具重複了');
+
+  // 採集：沒工具時照常走過去、訊息寫需要什麼；有工具時撞上去就採，不移動，得到 1～2 份，算一個動作、產生跟移動一樣的算力；
+  // 採完那一格變回普通地面，2000 刻後長回來
+  const S = C.PLAYER_COMPUTE_SCALE * C.CREATION_SHARE;
+  const besides = (n) => DIRS.find(([dx, dy]) => w.canStep(n.x + dx, n.y + dy, n.x, n.y) && w.passable(n.x + dx, n.y + dy) && !w.npcAt(n.x + dx, n.y + dy) && !g.soldierAt(n.x + dx, n.y + dy) && !g.nodeAt(n.x + dx, n.y + dy) && !w.chestAt(n.x + dx, n.y + dy));
+  for (const kind of ['herb', 'ore']) {
+    const def = FE.NODES[kind];
+    const toolName = FE.BAG_ITEMS[def.tool].name;
+    const node = w.nodes.find((n) => n.kind === kind && besides(n) && !w.chestAt(n.x, n.y));
+    ok(!!node, `找不到旁邊能站的${def.name}`);
+    if (!node) continue;
+    const [dx, dy] = besides(node);
+    // 沒有工具
+    const tool = p.bag.find((e) => e.id === def.tool);
+    p.bag = p.bag.filter((e) => e !== tool);
+    p.x = node.x + dx; p.y = node.y + dy;
+    g.move(-dx, -dy);
+    const said = g.log.slice(0, 5).find((l) => l.text.includes(`需要${toolName}`));
+    ok(p.x === node.x && p.y === node.y && !!said && !g.bagCount(def.item), `沒有${toolName}時：位置 (${p.x},${p.y})、訊息「${g.log.slice(0, 3).map((l) => l.text).join('／')}」`);
+    // 有工具
+    p.bag.push(tool);
+    p.x = node.x + dx; p.y = node.y + dy;
+    const t0 = g.turn, c0 = g.creation, n0 = g.bagCount(def.item), steps0 = p.steps;
+    g.move(-dx, -dy);
+    const got = g.bagCount(def.item) - n0;
+    ok(p.x === node.x + dx && p.y === node.y + dy && got >= 1 && got <= 2 && g.turn === t0 + 1 && p.steps === steps0, `有${toolName}時：得到 ${got} 份、回合 ${g.turn - t0}、位置 (${p.x},${p.y})`);
+    ok(Math.abs(g.creation - c0 - C.COMPUTE_PER_GATHER * S) < 1e-9 && C.COMPUTE_PER_GATHER === 0.15, `採集的創世力 ${g.creation - c0}`);
+    ok(!g.nodeAt(node.x, node.y) && node.regrowAt > g.ticks - 50, `${def.name}採完沒有變回普通地面`);
+    // 採完的那一格走得過去，不會再採
+    const n1 = g.bagCount(def.item);
+    g.move(-dx, -dy);
+    ok(p.x === node.x && p.y === node.y && g.bagCount(def.item) === n1, `採完的${def.name}那一格沒有變回普通地面`);
+    // 存檔讀回來，採完的狀態還在
+    FE.Save.save(g);
+    const back = FE.Save.load();
+    const bn = back && back.game && back.game.world.nodes.find((o) => o.id === node.id);
+    ok(!!bn && bn.regrowAt === node.regrowAt && !back.game.nodeAt(node.x, node.y) && back.game.bagCount(def.item) === n1, '採集點或背包的狀態存檔讀不回來');
+    // 2000 刻後長回來
+    g.ticks = node.regrowAt - 1;
+    ok(!g.nodeAt(node.x, node.y), `${def.name}還不到 2000 刻就長回來`);
+    g.ticks = node.regrowAt;
+    ok(g.nodeAt(node.x, node.y) === node && node.regrowAt - C.REGROW_TICKS <= node.regrowAt, `${def.name}到了 2000 刻沒有長回來`);
+  }
+
+  // 吃藥草：回生命上限的 25%（無條件進位），算一個動作，戰鬥中也能吃；滿血不吃
+  p.bag = p.bag.filter((e) => e.id !== 'herb');
+  g.bagAdd('herb', 3);
+  p.maxHp = 30;
+  p.hp = 10;
+  let t0 = g.turn;
+  g.useItem(g.bagList().findIndex((e) => e.id === 'herb'));
+  ok(p.hp === 18 && g.bagCount('herb') === 2 && g.turn === t0 + 1, `吃藥草後 生命 ${p.hp}、藥草 ${g.bagCount('herb')}、回合 ${g.turn - t0}`);
+  p.hp = p.maxHp;
+  t0 = g.turn;
+  g.eatHerb();
+  ok(g.bagCount('herb') === 2 && g.turn === t0, '滿血時不該吃藥草');
+  // 戰鬥中：旁邊有怪物也能吃
+  const side = DIRS.find(([dx, dy]) => w.canStep(p.x, p.y, p.x + dx, p.y + dy) && !w.npcAt(p.x + dx, p.y + dy) && !g.nodeAt(p.x + dx, p.y + dy));
+  if (side && !w.inVillage(p.x, p.y)) {
+    const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + side[0], y: p.y + side[1], cells: [], scope: 1, data: {} }, null);
+    Object.assign(m, { x: p.x + side[0], y: p.y + side[1], home: { x: p.x + side[0], y: p.y + side[1] }, atk: 0 });
+    p.hp = 5;
+    t0 = g.turn;
+    const fighting = g.adjacentMonsters().includes(m);
+    g.eatHerb();
+    ok(fighting && p.hp >= 5 + Math.ceil(p.maxHp * C.HERB_HEAL) - 3 && g.turn === t0 + 1 && g.bagCount('herb') === 1, `戰鬥中吃藥草：生命 ${p.hp}、藥草 ${g.bagCount('herb')}`);
+    g.monsters = [];
+  }
+
+  // 礦石改良：Lv5 以下不用礦石；Lv5→6 一顆，之後每級多一顆；缺礦石不能改，金幣照舊要付
+  p.bag = p.bag.filter((e) => e.id !== 'ore');
+  const sv = w.villageById(smith.villageId);
+  const improve = () => { g.talking = smith.id; return g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === 'improve')); };
+  p.weaponLv = 4;
+  p.gold = 10000;
+  ok(g.oreNeeded() === 0 && !opt('improve').disabled, 'Lv4 改良不該要礦石');
+  improve();
+  ok(p.weaponLv === 5 && g.bagCount('ore') === 0, `Lv4 改良後 Lv${p.weaponLv}`);
+  ok(g.oreNeeded() === 1 && opt('improve').disabled && opt('improve').note.includes('1 顆礦石') && g.talkOptions(smith).text.includes('還差 1 顆礦石'), `Lv5 沒礦石：${JSON.stringify(opt('improve'))}／${g.talkOptions(smith).text}`);
+  let gold0 = p.gold;
+  improve();
+  ok(p.weaponLv === 5 && p.gold === gold0, 'Lv5 沒礦石還是改良了');
+  g.bagAdd('ore', 1);
+  gold0 = p.gold;
+  const price5 = g.smithPrice(sv);
+  improve();
+  ok(p.weaponLv === 6 && g.bagCount('ore') === 0 && p.gold === gold0 - price5, `Lv5→6：Lv${p.weaponLv}、礦石 ${g.bagCount('ore')}、金幣少了 ${gold0 - p.gold}（應該 ${price5}）`);
+  g.bagAdd('ore', 1);
+  ok(g.oreNeeded() === 2 && opt('improve').disabled && g.talkOptions(smith).text.includes('還差 1 顆礦石'), `Lv6 要 2 顆礦石：${g.oreNeeded()}`);
+  improve();
+  ok(p.weaponLv === 6 && g.bagCount('ore') === 1, 'Lv6 礦石不夠還是改良了');
+  g.bagAdd('ore', 1);
+  improve();
+  ok(p.weaponLv === 7 && g.bagCount('ore') === 0 && g.oreNeeded() === 3, `Lv6→7 後 Lv${p.weaponLv}、礦石 ${g.bagCount('ore')}`);
+
+  // 艱難選擇只罰冒險者：怪物出手擲出 6～10 時冒險者不會必定反擊；冒險者擲出 6～10 時怪物必定反擊
+  g.monsters = [];
+  const at = DIRS.map(([dx, dy]) => [p.x + dx, p.y + dy]).find(([x, y]) => w.canStep(p.x, p.y, x, y) && !w.npcAt(x, y));
+  const m = g.spawnMonster({ type: 'UNREACHABLE', x: at[0], y: at[1], cells: [], scope: 2, data: {} }, null);
+  Object.assign(m, { x: at[0], y: at[1], atk: 1, maxHp: 1e6, hp: 1e6 });
+  const hook0 = FE.Combat.hook;
+  const seen = { mHard: 0, mHardCountered: 0, pHard: 0, pHardCountered: 0 };
+  FE.Combat.hook = (e) => {
+    if (e.by === 'monster' && e.key === 'hard' && !e.counter) { seen.mHard++; if (e.countered) seen.mHardCountered++; }
+    if (e.by === 'player' && e.key === 'hard' && !e.counter) { seen.pHard++; if (e.countered) seen.pHardCountered++; }
+  };
+  const counter0 = C.PLAYER_COUNTER;
+  C.PLAYER_COUNTER = 0;
+  for (let i = 0; i < 600; i++) {
+    p.hp = p.maxHp = 1e6;
+    m.hp = 1e6;
+    FE.Combat.resolveAttack(g, m, p, 'attack');
+    FE.Combat.resolveAttack(g, p, m, 'attack');
+  }
+  C.PLAYER_COUNTER = counter0;
+  FE.Combat.hook = hook0;
+  ok(seen.mHard > 50 && seen.mHardCountered === 0, `怪物擲出 6～10 ${seen.mHard} 次，冒險者反擊了 ${seen.mHardCountered} 次（反擊機率設成 0，應該是 0）`);
+  ok(seen.pHard > 50 && seen.pHardCountered === seen.pHard, `冒險者擲出 6～10 ${seen.pHard} 次，怪物只反擊了 ${seen.pHardCountered} 次（應該每次都反擊）`);
+  const line = g.log.find((l) => l.text.startsWith(m.name + '攻擊你') && /擲出 ([6-9]|10)：/.test(l.text));
+  ok(!line || !line.text.includes('必定反擊'), `怪物擲出 6～10 的訊息還寫著必定反擊：${line && line.text}`);
+}
+try { testBackpack(); } catch (e) { fail('背包測試拋出例外：' + e.stack); }
+
 // ---- 報告 ----
 const avg = (a, f) => (a.length ? (a.reduce((s, x) => s + f(x), 0) / a.length).toFixed(2) : '-');
 const rate = (a, f) => `${a.filter(f).length}/${a.length}`;
@@ -848,7 +1053,20 @@ if (!SIM4_ONLY) {
 for (const s of sim) console.log('單人模擬', JSON.stringify(s));
 if (lazySim) console.log('對照（只走路不打怪）', JSON.stringify(lazySim));
 for (const s of sim4) console.log('四人等效（世界每 4 個動作走 1 回合，每個動作的算力不乘 4）', JSON.stringify(s));
-console.log(`對話：邏輯檢查 ${dlgChecks} 項｜機器人開了 ${dlgStats.opened} 次對話（接委託 ${dlgStats.accept}、交件 ${dlgStats.deliver}、回報 ${dlgStats.report}、改良武器 ${dlgStats.improve}、離開 ${dlgStats.leave}）`);
+console.log(`背包、工具、採集、藥草、礦石改良、艱難選擇的場景檢查 ${bagChecks} 項`);
+// 量測：各世界等級（怪物生成時的）機器人打倒小怪物、中型怪物平均用了幾下（冒險者自己出手的次數，不含反擊），
+// 以及機器人在那個世界等級時的武器等級中間值（單人與四人等效模擬合計）。目標：小怪物約 3 下、中型怪物約 6 下
+{
+  const med = (a) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.floor((b.length - 1) / 2)] : '-'; };
+  const mean = (a) => (a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1) : '-');
+  const wls = [...new Set(Object.keys(measure.kills).concat(Object.keys(measure.weapon)).map(Number))].sort((a, b) => a - b);
+  console.log(`怪物血量的世界等級加成 ${C.WL_BONUS.HP}（每級）｜各世界等級：武器等級中間值、打倒小怪物平均幾下（隻數）、中型怪物平均幾下（隻數）`);
+  for (const wl of wls) {
+    const k = measure.kills[wl] || { small: [], mid: [] };
+    console.log(`  世界等級 ${wl}：武器 Lv${med(measure.weapon[wl] || [])}｜小怪物 ${mean(k.small)} 下（${k.small.length}）｜中型怪物 ${mean(k.mid)} 下（${k.mid.length}）`);
+  }
+}
+console.log(`對話：邏輯檢查 ${dlgChecks} 項｜機器人開了 ${dlgStats.opened} 次對話（接委託 ${dlgStats.accept}、交件 ${dlgStats.deliver}、回報 ${dlgStats.report}、改良武器 ${dlgStats.improve}、買礦鎬 ${dlgStats.buyPick}、買鐮刀 ${dlgStats.buySickle}、離開 ${dlgStats.leave}）`);
 console.log(`聚落周圍的怪物（任何時刻、含生成點）：違規 ${bufferViolations} 次`);
 const pct = (n, d) => (d ? (100 * n / d).toFixed(1) + '%' : '-');
 const dist = (t) => { const n = Object.values(t).reduce((a, b) => a + b, 0); return ['crit', 'hit', 'hard', 'miss', 'fumble'].map((k) => `${k} ${pct(t[k] || 0, n)}`).join('、') + `（共 ${n}）`; };

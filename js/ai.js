@@ -312,17 +312,19 @@
     const st = FE.Stability.stat(game);
     const disorder = FE.Stability.state(game) === 2;
     const k = (x, y) => x + ',' + y;
-    // 被占住的格子：整理一次，找路時直接查
+    // 被占住的格子：整理一次，找路時直接查。士兵另外記：找路時隊友只擋第一步，
+    // 不然 3 位士兵在路上互相擋，最短路每回合換方向，整隊原地來回走
     const occ = new Set();
     for (const m of game.monsters) occ.add(k(m.x, m.y));
     for (const n of w.npcs) occ.add(k(n.x, n.y));
     for (const c of w.chests) occ.add(k(c.x, c.y));
-    for (const s of game.soldiers) occ.add(k(s.x, s.y));
     occ.add(k(game.player.x, game.player.y));
+    const mates = new Set(game.soldiers.map((s) => k(s.x, s.y)));
     // 創世時的怪物、合體怪物不歸士兵打，牠們旁邊的格子也不走（不然路過就被打倒）
     const danger = new Set();
     for (const m of game.monsters) if (!m.small) for (const [dx, dy] of DIRS) danger.add(k(m.x + dx, m.y + dy));
-    const free = (x, y) => w.passable(x, y) && !occ.has(k(x, y)) && !inBuilding(w, x, y) && !danger.has(k(x, y));
+    const open = (x, y) => w.passable(x, y) && !occ.has(k(x, y)) && !inBuilding(w, x, y) && !danger.has(k(x, y));
+    const free = (x, y) => open(x, y) && !mates.has(k(x, y));
 
     // 走到 goal(x, y) 成立的格子的最短路的第一步
     const stepToward = (s, goal) => {
@@ -343,7 +345,7 @@
           const nx = x + dx;
           const ny = y + dy;
           const nk = k(nx, ny);
-          if (prev.has(nk) || !free(nx, ny) || !w.heightOk(x, y, nx, ny)) continue;
+          if (prev.has(nk) || !(h === 0 ? free(nx, ny) : open(nx, ny)) || !w.heightOk(x, y, nx, ny)) continue;
           prev.set(nk, k(x, y));
           q.push([nx, ny]);
         }
@@ -351,10 +353,10 @@
       return null;
     };
     const moveTo = (s, x, y) => {
-      occ.delete(k(s.x, s.y));
+      mates.delete(k(s.x, s.y));
       s.x = x;
       s.y = y;
-      occ.add(k(x, y));
+      mates.add(k(x, y));
     };
 
     const preyCache = new Map();

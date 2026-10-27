@@ -15,6 +15,7 @@
       this.chests = [];
       this.villages = [];
       this.landmarks = [];      // 聚落附近的獨特地貌
+      this.nodes = [];          // 採集點（礦脈、藥草）：{ id, kind, x, y, regrowAt }，採完到 regrowAt 刻才長回來
       this.nextId = 1;
       this.spawn = null;
       this.dormant = new Set(); // 創世時放不下怪物的地形錯位
@@ -256,6 +257,8 @@
         placeNpcs(this, rng, village);
       }
       placeChests(this, rng, rect);
+      // 採集點最後放，前面的生成照舊
+      placeNodes(this, rng, rect, landmark);
       return { index, rect, village, landmark };
     }
   }
@@ -555,6 +558,31 @@
         if (!world.passable(x, y) || world.npcAt(x, y) || world.chestAt(x, y) || world.inVillage(x, y)) continue;
         world.chests.push({ id: world.nextId++, x, y, gold: FE.roughGold(rng) });
         break;
+      }
+    }
+  }
+
+  // 採集點：礦坑的空地上 3～5 處礦脈；溫帶森林、針葉林、熱帶雨林裡約 2% 的格子長藥草。
+  // 藥草不放在聚落、路、地貌、寶箱與出生點上
+  function placeNodes(world, rng, r, landmark) {
+    if (landmark && landmark.kind === 'mine') {
+      const art = FE.LANDMARKS.mine.art;
+      const floor = [];
+      art.forEach((row, dy) => [...row].forEach((ch, dx) => ch === 'o' && floor.push([landmark.x0 + dx, landmark.y0 + dy])));
+      const n = Math.min(floor.length, FE.randInt(rng, C.ORE_NODES[0], C.ORE_NODES[1]));
+      for (let i = 0; i < n; i++) {
+        const [x, y] = floor.splice(Math.floor(rng() * floor.length), 1)[0];
+        world.nodes.push({ id: world.nextId++, kind: 'ore', x, y, regrowAt: 0 });
+      }
+    }
+    const s = world.spawn;
+    for (let y = r.y0; y < r.y1; y++) {
+      for (let x = r.x0; x < r.x1; x++) {
+        const c = world.cell(x, y);
+        if (!C.HERB_BIOMES.includes(c.biome) || rng() >= C.HERB_RATE) continue;
+        if (!world.passable(x, y) || c.t === '·' || world.inVillage(x, y) || world.landmarkAt(x, y) || world.chestAt(x, y) || world.npcAt(x, y)) continue;
+        if (s && s.x === x && s.y === y) continue;
+        world.nodes.push({ id: world.nextId++, kind: 'herb', x, y, regrowAt: 0 });
       }
     }
   }

@@ -49,7 +49,8 @@
         weaponLv: 0,
         block: C.BLOCK_BASE,
         gold: 0,
-        carrying: null,
+        carrying: null,      // 手上的委託（送貨或清除）；送貨的物品放在背包裡
+        bag: [],             // 背包：不限格數，同一種東西疊放（{ id, name, n }；送貨的物品是 id 'goods'，另記 giverId）
         name: FE.store.load('fe.name', '冒險者'),
         steps: 0,
       };
@@ -167,10 +168,10 @@
     }
 
     // ---- 士兵 ----
-    // 只有城鎮有。住幾位看人口（大舉遷出、縮減 1 位，穩定、成長 2 位，急速發展 3 位）。
+    // 只有城鎮有，每座城鎮固定 3 位（第二十四版起不看人口）。
     // 數值以同世界等級的小怪物為準，不升級；被打倒就消失，要等世界回到安穩，該城鎮才補回原本的人數。
-    soldierQuota(v) {
-      return C.SOLDIER_COUNT[v.steading ? v.steading.population : 2];
+    soldierQuota() {
+      return C.SOLDIER_PER_TOWN;
     }
 
     // 在城鎮室外的空地放一位士兵；沒位置放就不放
@@ -220,6 +221,101 @@
 
     isPlayerAt(x, y) {
       return !!this.player && this.player.x === x && this.player.y === y;
+    }
+
+    // ---- 背包 ----
+    // 不限格數，同一種東西疊放。送貨的物品是 id 'goods'，名字照委託，記著是誰託的（giverId），不跟採來的東西疊在一起
+
+    bagEntry(id, giverId) {
+      return this.player.bag.find((e) => e.id === id && (id !== 'goods' || e.giverId === giverId)) || null;
+    }
+
+    bagCount(id) {
+      const e = this.bagEntry(id);
+      return e ? e.n : 0;
+    }
+
+    bagAdd(id, n, extra) {
+      const e = this.bagEntry(id, extra && extra.giverId);
+      if (e) e.n += n;
+      else this.player.bag.push(Object.assign({ id, name: FE.BAG_ITEMS[id] ? FE.BAG_ITEMS[id].name : id, n }, extra || {}));
+    }
+
+    // 拿出 n 個；不夠就不拿，回傳 false
+    bagTake(id, n, giverId) {
+      const e = this.bagEntry(id, giverId);
+      if (!e || e.n < n) return false;
+      e.n -= n;
+      if (e.n <= 0) this.player.bag = this.player.bag.filter((o) => o !== e);
+      return true;
+    }
+
+    // 手上這份送貨委託的物品（在背包裡）
+    goodsFor(c) {
+      return c && c.kind !== 'hunt' ? this.bagEntry('goods', c.giverId) : null;
+    }
+
+    // 背包視窗列的東西：{ id, name, n, use }，按數字用第幾樣（目前只有藥草能用）
+    bagList() {
+      return this.player.bag.map((e) => ({
+        id: e.id,
+        giverId: e.giverId,
+        name: e.id === 'goods' ? `${e.name}（要送去的東西）` : e.name,
+        n: e.n,
+        use: !!(FE.BAG_ITEMS[e.id] && FE.BAG_ITEMS[e.id].use),
+      }));
+    }
+
+    // 用背包裡的第 i 樣東西
+    useItem(i) {
+      const e = this.bagList()[i];
+      if (!e) return;
+      if (!e.use) {
+        this.say(`${e.name}不能直接用。`, 'sys');
+        return;
+      }
+      if (e.id === 'herb') this.eatHerb();
+    }
+
+    // 吃一份藥草：回生命上限的 25%（無條件進位），算一個動作，戰鬥中也能吃
+    eatHerb() {
+      const p = this.player;
+      if (!this.bagCount('herb')) {
+        this.say('背包裡沒有藥草。', 'sys');
+        return;
+      }
+      if (p.hp >= p.maxHp) {
+        this.say('生命是滿的，不用吃藥草。', 'sys');
+        return;
+      }
+      this.beginAction();
+      this.bagTake('herb', 1);
+      const got = Math.min(Math.ceil(p.maxHp * C.HERB_HEAL), p.maxHp - p.hp);
+      p.hp += got;
+      this.say(`你吃了一份藥草，生命回復 ${got}（還剩 ${this.bagCount('herb')} 份）。`, 'good');
+      this.endTurn(false);
+    }
+
+    // ---- 採集點 ----
+    // 礦脈在礦坑的空地上，藥草長在三種森林裡。都可以走過去；拿著對的工具撞上去就採（像撞上村民開對話），
+    // 採一次算一個動作，得到 1～2 份，跟移動一樣產生算力；採完那一格變回普通地面，2000 刻後長回來
+
+    // 這一格長著的採集點（採完還沒長回來的不算）
+    nodeAt(x, y) {
+      const t = this.ticks || 0;
+      return this.world.nodes.find((n) => n.x === x && n.y === y && !(n.regrowAt > t) && this.world.passable(x, y)) || null;
+    }
+
+    gather(node) {
+      const def = FE.NODES[node.kind];
+      const item = FE.BAG_ITEMS[def.item];
+      this.beginAction();
+      const n = FE.randInt(this.rng, C.GATHER_YIELD[0], C.GATHER_YIELD[1]);
+      this.bagAdd(def.item, n);
+      node.regrowAt = (this.ticks || 0) + C.REGROW_TICKS;
+      this.earn(C.COMPUTE_PER_GATHER);
+      this.say(`你用${FE.BAG_ITEMS[def.tool].name}${def.verb}下${item.name} ${n} 份（背包裡共 ${this.bagCount(def.item)} 份）。`, 'good');
+      this.endTurn(false);
     }
 
     // 找附近能放怪物的空地：不在聚落和它周圍那一圈裡；canReach(x, y) 給了就要冒險者碰得到
@@ -337,6 +433,12 @@
         this.openTalk(npc);
         return;
       }
+      // 採集點：拿著對的工具撞上去就採，不移動；沒有工具就照常走過去
+      const node = this.nodeAt(nx, ny);
+      if (node && this.bagCount(FE.NODES[node.kind].tool)) {
+        this.gather(node);
+        return;
+      }
       if (!this.world.passable(nx, ny)) return;
       this.beginAction();
       const leaving = this.adjacentMonsters();
@@ -352,6 +454,10 @@
           this.turn++;
           return;
         }
+      }
+      if (node) {
+        const def = FE.NODES[node.kind];
+        this.say(`這裡有${def.name}，需要${FE.BAG_ITEMS[def.tool].name}才${def.verb}得下來（武器匠有賣）。`, 'sys');
       }
       const chest = this.world.chestAt(nx, ny);
       if (chest) {
@@ -463,6 +569,12 @@
       return Math.round(base * FE.Steading.smithFactor(v));
     }
 
+    // 改良下一級要幾顆礦石：Lv5→6 一顆，之後每級多一顆；Lv5 以下不用
+    oreNeeded() {
+      const lv = this.player.weaponLv;
+      return lv >= C.ORE_FROM_LV ? lv - C.ORE_FROM_LV + 1 : 0;
+    }
+
     // ---- 對話 ----
     // 撞上村民或武器匠就打開對話視窗（畫面在 render.js，按鍵在 main.js）：打開算一個動作，不算步數，
     // 怪物各做一件事；在對話裡選選項不再花動作（改良武器也一樣，一次對話改良一次，改完關掉）。
@@ -481,6 +593,7 @@
       const c = p.carrying;
       const v = this.world.villageById(npc.villageId);
       const leave = { id: 'leave', label: '離開' };
+      const goods = this.goodsFor(c);
       const out = (text, options) => ({
         name: npc.name,
         role: npc.role === 'smith' ? '武器匠' : npc.role === 'soldier' ? '士兵' : '村民',
@@ -490,12 +603,26 @@
       });
       // 士兵只有一句閒話
       if (npc.role === 'soldier') return out(FE.SOLDIER_LINES[(npc.id + this.turn) % FE.SOLDIER_LINES.length], [leave]);
+      // 武器匠：改良（Lv5 以上還要礦石），另外賣礦鎬、鐮刀（已有的不再出現）
       if (npc.role === 'smith') {
         const price = this.smithPrice(v);
         const short = price - p.gold;
+        const ore = this.oreNeeded();
+        const oreShort = ore - this.bagCount('ore');
+        const lack = [short > 0 ? `${short} 金幣` : '', oreShort > 0 ? `${oreShort} 顆礦石` : ''].filter(Boolean).join('、');
+        const opts = [{ id: 'improve', label: '改良', note: lack ? `還差 ${lack}` : ore ? `${price} 金幣、${ore} 顆礦石` : `${price} 金幣`, disabled: !!lack }];
+        for (const [id, tool] of [['buyPick', 'pick'], ['buySickle', 'sickle']]) {
+          if (this.bagCount(tool)) continue;
+          const ts = C.TOOL_PRICE - p.gold;
+          opts.push({ id, label: `買${FE.BAG_ITEMS[tool].name}`, note: ts > 0 ? `還差 ${ts} 金幣` : `${C.TOOL_PRICE} 金幣`, disabled: ts > 0 });
+        }
+        opts.push(leave);
+        const oreText = ore
+          ? `和 ${ore} 顆礦石，你身上有 ${p.gold} 金幣、${this.bagCount('ore')} 顆礦石${oreShort > 0 ? `，還差 ${oreShort} 顆礦石` : ''}`
+          : `，你身上有 ${p.gold} 金幣`;
         return out(
-          `你的武器是 Lv${p.weaponLv}，攻擊力 ${p.atk}。改良一級要 ${price} 金幣，改良後攻擊力會加 1～2。你身上有 ${p.gold} 金幣。`,
-          [{ id: 'improve', label: '改良', note: short > 0 ? `還差 ${short} 金幣` : `${price} 金幣`, disabled: short > 0 }, leave]
+          `你的武器是 Lv${p.weaponLv}，攻擊力 ${p.atk}。改良一級要 ${price} 金幣${oreText}；改良後攻擊力會加 1～2。礦鎬、鐮刀一把 ${C.TOOL_PRICE} 金幣，買了就一直能用，不會壞。`,
+          opts
         );
       }
       if (c && c.kind === 'hunt' && c.giverId === npc.id) {
@@ -504,8 +631,8 @@
         return out('村子外面安靜多了，謝謝你。', [{ id: 'report', label: '回報，領取獎勵', note: `經驗值 +${c.exp}、金幣 +${c.gold}` }, leave]);
       }
       // 先處理交件，再處理接委託：收貨人身上自己也有委託時，貨照樣交得出去
-      if (c && c.kind !== 'hunt' && c.targetId === npc.id) {
-        return out(`你是把${c.item}送來的人吧？`, [{ id: 'deliver', label: '交給他', note: `經驗值 +${c.exp}、金幣 +${c.gold}` }, leave]);
+      if (c && c.kind !== 'hunt' && c.targetId === npc.id && goods) {
+        return out(`你是把${goods.name}送來的人吧？`, [{ id: 'deliver', label: '交給他', note: `經驗值 +${c.exp}、金幣 +${c.gold}` }, leave]);
       }
       if (q && q.kind === 'hunt' && !q.accepted && !q.done) {
         if (c) return out('你手上已經有委託了，辦完再來找我。', [leave]);
@@ -539,15 +666,31 @@
       let close = true;
       if (o.id === 'improve') {
         const price = this.smithPrice(this.world.villageById(npc.villageId));
-        if (p.gold < price) {
-          this.say(`${npc.name}：把武器改良一級要 ${price} 金幣，你現在有 ${p.gold}。`, 'npc');
+        const ore = this.oreNeeded();
+        if (p.gold < price || this.bagCount('ore') < ore) {
+          this.say(`${npc.name}：把武器改良一級要 ${price} 金幣${ore ? `和 ${ore} 顆礦石` : ''}，你現在有 ${p.gold} 金幣${ore ? `、${this.bagCount('ore')} 顆礦石` : ''}。`, 'npc');
           close = false;
         } else {
           const gain = FE.randInt(this.rng, 1, 2);
           p.gold -= price;
+          if (ore) this.bagTake('ore', ore);
           p.atk += gain;
           p.weaponLv++;
-          this.say(`${npc.name}幫你改良了武器：武器 Lv${p.weaponLv}，攻擊力 +${gain}（現在 ${p.atk}），花了 ${price} 金幣。`, 'good');
+          this.say(`${npc.name}幫你改良了武器：武器 Lv${p.weaponLv}，攻擊力 +${gain}（現在 ${p.atk}），花了 ${price} 金幣${ore ? `、${ore} 顆礦石` : ''}。`, 'good');
+        }
+      } else if (o.id === 'buyPick' || o.id === 'buySickle') {
+        // 工具買一次就一直有，不會壞；已有的選項不會出現
+        const tool = o.id === 'buyPick' ? 'pick' : 'sickle';
+        const name = FE.BAG_ITEMS[tool].name;
+        if (this.bagCount(tool)) {
+          close = false;
+        } else if (p.gold < C.TOOL_PRICE) {
+          this.say(`${npc.name}：一把${name}要 ${C.TOOL_PRICE} 金幣，你現在有 ${p.gold}。`, 'npc');
+          close = false;
+        } else {
+          p.gold -= C.TOOL_PRICE;
+          this.bagAdd(tool, 1);
+          this.say(`${npc.name}賣給你一把${name}，花了 ${C.TOOL_PRICE} 金幣。${tool === 'pick' ? '礦坑裡的礦脈挖得動了。' : '森林裡的藥草割得下來了。'}`, 'good');
         }
       } else if (o.id === 'report') {
         if (q) q.done = true;
@@ -560,7 +703,9 @@
       } else if (o.id === 'deliver') {
         const giver = this.world.npcById(c.giverId);
         if (giver && giver.quest) giver.quest.done = true;
-        const { exp, gold, item, compute } = c;
+        const { exp, gold, compute } = c;
+        const item = this.goodsFor(c).name;
+        this.bagTake('goods', 1, c.giverId); // 從背包拿出來交給他
         this.say(`${npc.name}：謝謝你把${item}送來。`, 'npc');
         this.say(`任務完成：經驗值 +${exp}、金幣 +${gold}。`, 'good');
         p.gold += gold;
@@ -573,17 +718,18 @@
           p.carrying = { kind: 'hunt', giverId: npc.id, monsterIds: q.monsterIds, total: q.total, village: q.village, exp: q.exp, gold: q.gold, compute: q.compute };
           this.say(`${npc.name}：${q.village}附近冒出了 ${q.total} 隻小怪物，可以幫忙清掉嗎？清完回來找我。`, 'npc');
         } else {
+          // 委託資料照舊記在手上，要送的東西放進背包
           p.carrying = {
             giverId: npc.id,
             targetId: q.targetId,
             targetName: q.targetName,
             targetVillage: q.targetVillage,
-            item: q.item,
             steps: q.steps,
             exp: q.exp,
             gold: q.gold,
             compute: q.compute,
           };
+          this.bagAdd('goods', 1, { name: q.item, giverId: npc.id });
           this.say(FE.fill(q.line, { giver: npc.name, target: q.targetName, village: q.targetVillage, item: q.item }), 'npc');
         }
       } else if (o.id === 'decline') {

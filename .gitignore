@@ -1,0 +1,5 @@
+# 本機用的檔案
+.claude/settings.local.json
+__pycache__/
+*.cpuprofile
+node_modules/

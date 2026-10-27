@@ -1,0 +1,242 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --line: #30363d;
+  --text: #c9d1d9;
+  --dim: #8b949e;
+  --accent: #58a6ff;
+  --good: #3fb950;
+  --bad: #f85149;
+  --bug: #ff7b72;
+  --world: #d2a8ff;
+  --npc: #f778ba;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #010409;
+  color: var(--text);
+  font-family: "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
+  font-size: 14px;
+}
+.dim { color: var(--dim); }
+.hidden { display: none !important; }
+
+/* 版面：上方狀態列、滿版地圖、下方列（手機另外多一排方向鍵） */
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+#status { flex: none; background: var(--panel); border-bottom: 1px solid var(--line); }
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 3px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+#row2 { color: var(--dim); }
+#row2 .keys { margin-left: auto; }
+.menu { display: none; padding: 0 8px; }
+.meter {
+  position: relative;
+  display: inline-block;
+  width: 130px;
+  height: 16px;
+  overflow: hidden;
+  background: #21262d;
+  border-radius: 4px;
+  flex: none;
+}
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--good); transition: width 0.2s; }
+.meter.exp > i { background: #1f6feb; }
+.meter > span { position: relative; display: block; text-align: center; font-size: 11px; line-height: 16px; color: #fff; text-shadow: 0 0 2px #000; }
+.badge { color: var(--bug); font-weight: bold; }
+
+/* 地圖：Canvas 滿版，小地圖與對話視窗疊在上面 */
+#mapwrap { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; background: #010409; }
+#map { position: absolute; left: 0; top: 0; display: block; }
+#minimap {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: block;
+  image-rendering: pixelated;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  opacity: 0.92;
+  background: #010409;
+  pointer-events: none;
+}
+
+#dialog {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100% - 24px));
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+.dlg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.dlg-head b { color: var(--npc); font-size: 16px; }
+.dlg-text { margin: 0 0 10px; line-height: 1.6; }
+.dlg-opts { display: flex; flex-direction: column; gap: 6px; }
+.dlg-opts button { text-align: left; }
+.dlg-hint { margin: 8px 0 0; font-size: 12px; }
+kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; background: #0d1117; border: 1px solid var(--line); border-radius: 3px; font: 12px Consolas, monospace; }
+
+/* 下方列：左邊目標，右邊任務與最近 3 行訊息（最新的在下） */
+#bottom {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) 1fr;
+  gap: 10px;
+  height: 118px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+}
+#target, #msgs { min-width: 0; overflow: hidden; }
+#target { padding-right: 10px; border-right: 1px solid var(--line); }
+#target .t-head { display: flex; justify-content: space-between; gap: 8px; }
+#target .t-head b { color: var(--bug); }
+#target p { margin: 2px 0; font-size: 12px; }
+.bar { height: 8px; margin: 4px 0; overflow: hidden; background: #21262d; border-radius: 4px; }
+.bar > i { display: block; height: 100%; background: var(--bad); transition: width 0.2s; }
+.t-hp { display: flex; align-items: center; gap: 8px; }
+.t-hp .bar { flex: 1; }
+.t-hp span { font-size: 12px; }
+.actions { display: flex; gap: 6px; margin-top: 4px; }
+.actions button { padding: 2px 8px; font-size: 12px; }
+#questText { margin: 0 0 4px; font-size: 13px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#log { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+#log li { margin: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.6; }
+#log li:last-child { opacity: 1; font-weight: bold; }
+
+.log-good { color: var(--good); }
+.log-bad { color: var(--bad); }
+.log-bug { color: var(--bug); }
+.log-world { color: var(--world); }
+.log-npc { color: var(--npc); }
+.log-sys { color: var(--dim); }
+
+/* 按鍵視窗與設定視窗 */
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(1, 4, 9, 0.78);
+}
+.win {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.win h2 { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 16px; color: var(--accent); }
+.win h2 .x { margin-left: auto; padding: 2px 8px; font-size: 12px; }
+.win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--accent); }
+.win p { margin: 6px 0; }
+.setrow { justify-content: flex-start; align-items: center; margin: 8px 0; }
+.logall { list-style: none; padding: 0; }
+#reports pre { margin: 4px 0; white-space: pre-wrap; color: var(--dim); font-size: 12px; }
+ul.tags { list-style: none; margin: 6px 0; padding: 0; font-size: 13px; }
+ul.tags li { margin: 2px 0; }
+ol { margin: 0; padding-left: 20px; }
+li { margin: 2px 0; }
+.row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+button {
+  padding: 6px 10px;
+  background: #21262d;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+
+input {
+  width: 9em;
+  padding: 2px 6px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+}
+
+/* 圖例用的顏色（跟地圖上畫的一致，地圖本身畫在 Canvas，顏色表在 render.js） */
+.t-plain { color: #6e7681; }
+.t-grass { color: #3fb950; }
+.t-forest { color: #2ea043; font-weight: bold; }
+.t-snow { color: #f0f6fc; }
+.t-sand { color: #d29922; }
+.t-mount { color: #adbac7; font-weight: bold; }
+.t-water { color: #388bfd; }
+.t-rock { color: #5a6270 !important; }
+.t-stonewall { color: #c9ced6 !important; font-weight: bold; }
+.t-woodwall { color: #b5865a !important; font-weight: bold; }
+.t-house { color: #d6a46b !important; font-weight: bold; }
+.t-road { color: #8b7a5e !important; }
+.t-market { color: #e3b341 !important; font-weight: bold; }
+.t-temple { color: #d2a8ff !important; font-weight: bold; }
+.t-door { color: #f0c674 !important; font-weight: bold; }
+.t-bed { color: #a5b4fc !important; }
+.t-furniture { color: #c9a26b !important; }
+.t-ruin { color: #9a8f7c !important; }
+.t-relic { color: #e3c07a !important; font-weight: bold; }
+
+.player { color: #fff; background: #1f6feb; font-weight: bold; }
+.npc { color: var(--npc); font-weight: bold; }
+.npc.has-quest { background: #4a1d3a; }
+.npc.recipient { background: #1a4d2a; }
+.npc.smith { color: #79c0ff; }
+.npc.soldier { color: #b8c0cc; }
+.village { background: #1c2333; }
+.legend b.town { background: #2a2140; }
+.chest { color: #e3b341; font-weight: bold; }
+.bug { color: #0d1117; background: var(--bug); font-weight: bold; }
+.bug.mid { color: #fff; background: #8e1519; }
+.legend b { font-family: Consolas, monospace; padding: 0 2px; }
+
+/* 觸控裝置顯示方向鍵 */
+#dpad { display: none; flex: none; grid-template-columns: repeat(3, 52px); gap: 4px; justify-content: center; padding: 4px 0 6px; background: var(--panel); }
+#dpad button { height: 40px; }
+@media (pointer: coarse) { #dpad { display: grid; } .menu { display: block; margin-left: 8px; } }
+
+/* 手機（視窗寬小於 520px）：狀態列縮成兩行小字，地圖照樣滿版（變直的），下方列只留目標與一行訊息 */
+@media (max-width: 519px) {
+  body { font-size: 12px; }
+  .srow { gap: 6px; padding: 2px 6px; font-size: 11px; }
+  .meter { width: 64px; height: 14px; }
+  .meter > span { font-size: 10px; line-height: 14px; }
+  #row2 .keys { display: none; }
+  #row2 .menu { display: block; margin-left: auto; }
+  #bottom { grid-template-columns: 1fr; gap: 2px; height: 76px; padding: 4px 6px; }
+  #target { padding-right: 0; border-right: 0; }
+  #target .t-extra { display: none; }
+  #questText { display: none; }
+  #log li { display: none; }
+  #log li:last-child { display: block; }
+  #minimap { top: 4px; right: 4px; }
+  .win { padding: 10px; }
+}

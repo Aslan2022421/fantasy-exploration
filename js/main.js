@@ -26,8 +26,30 @@
   FE.game = game;
   FE.Save.save(game);
 
+  // 試玩紀錄：每個動作記一筆（動作、位置、生命、等級、武器、世界狀態、這個動作新增的訊息），
+  // 存在這台瀏覽器（fe.playlog，最多留最近 PLAYLOG_MAX 筆），設定視窗可以匯出成檔案給開發者分析；不上傳
+  const PLAYLOG_MAX = 5000;
+  let playlog = FE.store.load('fe.playlog', []);
+  function record(label, logBefore) {
+    const p = game.player;
+    const msgs = [];
+    for (const l of game.log) {
+      if (l === logBefore) break;
+      msgs.push(l.text);
+    }
+    playlog.push({
+      t: game.turn, k: game.ticks || 0, a: label, x: p.x, y: p.y, hp: p.hp, mhp: p.maxHp, lv: game.level, exp: game.exp,
+      wpn: p.weaponLv, atk: p.atk, g: p.gold, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
+      m: msgs.reverse(),
+    });
+    if (playlog.length > PLAYLOG_MAX) playlog = playlog.slice(-PLAYLOG_MAX);
+    FE.store.save('fe.playlog', playlog);
+  }
+
   function dispatch(label, fn) {
+    const logBefore = game.log[0];
     game.guard(label, fn);
+    record(label, logBefore);
     FE.Save.save(game);
     FE.UI.update();
   }
@@ -193,6 +215,17 @@
   document.getElementById('clearSave').addEventListener('click', () => {
     FE.Save.clearAll();
     location.search = freshSeed();
+  });
+
+  // 匯出試玩紀錄：下載成 JSON 檔（檔名帶台北時間），附上世界種子與版本
+  document.getElementById('exportPlaylog').addEventListener('click', () => {
+    const stamp = FE.nowTaipei().replace(/[\/: ]/g, '-');
+    const data = { version: FE.CONFIG.SAVE_VERSION, seed: game.seed, exported: FE.nowTaipei(), actions: playlog };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+    a.download = `fe-playlog-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   });
 
   FE.UI.init(game);

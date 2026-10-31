@@ -627,7 +627,7 @@
     world.npcs = world.npcs.filter((o) => !candidates.includes(o));
 
     // 先決定每個候選人的委託對象，再刪掉站錯地方的人。
-    // 順序是刻意的：被刪掉的人可能已經被別人的任務指到，留下懸空指標。
+    // 委託對象被刪掉的人就不給委託（第二十五版起送貨委託不留懸空指標）。
     const pool = candidates.concat(world.npcs.filter((o) => !FE.Gear.isShopkeeper(o)));
     const targets = new Map();
     for (const npc of candidates) {
@@ -651,8 +651,7 @@
       const t = targets.get(npc);
       if (!t) continue;
       const alive = world.npcById(t.id);
-      npc.quest = FE.makeQuest(world, rng, npc, alive, t.name);
-      if (!alive) npc.quest.targetId = t.id; // 指向被刪掉的人
+      if (alive) npc.quest = FE.makeQuest(world, rng, npc, alive);
     }
   }
 

@@ -51,7 +51,7 @@
   }
 
   // 村民有了新的委託。村莊周遭有小怪物時優先發清除委託；
-  // 送貨委託偶爾會指向還沒生成的村民，留下懸空指標。
+  // 送貨委託的收貨人一定是碰得到的村民（第二十五版起不再指向不存在的人）。
   function questEvent(game, canReach) {
     const w = game.world;
     const p = game.player;
@@ -68,11 +68,8 @@
     const rel = FE.Steading.related(v);
     const toRelated = targets.filter((n) => rel.includes(n.villageId));
     if (toRelated.length && game.rng() < 0.5) targets = toRelated;
-    if (!targets.length || game.rng() < C.EVENT_GHOST_RATE) {
-      giver.quest = FE.makeQuest(w, game.rng, giver, null, FE.pickName(w, game.rng));
-    } else {
-      giver.quest = FE.makeQuest(w, game.rng, giver, FE.pick(game.rng, targets));
-    }
+    if (!targets.length) return null;
+    giver.quest = FE.makeQuest(w, game.rng, giver, FE.pick(game.rng, targets));
     game.say(`${v ? v.name + '的' : ''}${giver.name}有了新的委託。`, 'npc');
     return { found: FE.Checker.checkNpc(w, giver) };
   }

@@ -134,49 +134,27 @@
     return false;
   }
 
-  // 破壞系統的東西：把還沒接的送貨委託改成指向不存在的人（虛影），或把還沒開的寶箱金幣算壞（狂亂），當下就生出對應的小怪物
+  // 破壞系統的東西：把還沒開的寶箱金幣算壞（狂亂），當下就生出對應的小怪物。
+  // 送貨委託不再被改成指向不存在的人（第二十五版：送貨就只是送貨，救人等之後的劇情委託）
   function sabotage(game, canReach) {
     const w = game.world;
     if (game.monsters.filter((m) => m.small).length >= C.SMALL_CAP) return false;
-    const kinds = game.rng() < 0.5 ? ['ref', 'val'] : ['val', 'ref'];
-    for (const k of kinds) {
-      if (k === 'ref') {
-        const list = w.npcs.filter((n) => !FE.Gear.isShopkeeper(n) && n.quest && n.quest.kind !== 'hunt' && !n.quest.accepted && !n.quest.done && w.npcById(n.quest.targetId));
-        if (!list.length) continue;
-        const n = FE.pick(game.rng, list);
-        const old = { targetId: n.quest.targetId, targetName: n.quest.targetName };
-        n.quest.targetId = w.nextId++;
-        n.quest.targetName = FE.pickName(w, game.rng);
-        const d = FE.Checker.checkNpc(w, n);
-        d.scope = Math.min(d.scope, maxScope(game));
-        const m = game.spawnMonster(d, canReach);
-        if (!m) {
-          Object.assign(n.quest, old);
-          continue;
-        }
-        m.small = true;
-        stat(game).sabotage++;
-        game.say(`${n.name}的委託忽然指向一個沒人聽過的名字，一隻${m.name}冒了出來。`, 'bug');
-        return true;
-      }
-      const list = w.chests.filter((c) => !FE.Checker.checkChest(c));
-      if (!list.length) continue;
-      const c = FE.pick(game.rng, list);
-      const old = c.gold;
-      c.gold = -FE.randInt(game.rng, 6, 30);
-      const d = FE.Checker.checkChest(c);
-      d.scope = Math.min(d.scope, maxScope(game));
-      const m = game.spawnMonster(d, canReach);
-      if (!m) {
-        c.gold = old;
-        continue;
-      }
-      m.small = true;
-      stat(game).sabotage++;
-      game.say('某個寶箱裡的金幣忽然算不清了，一隻' + m.name + '冒了出來。', 'bug');
-      return true;
+    const list = w.chests.filter((c) => !FE.Checker.checkChest(c));
+    if (!list.length) return false;
+    const c = FE.pick(game.rng, list);
+    const old = c.gold;
+    c.gold = -FE.randInt(game.rng, 6, 30);
+    const d = FE.Checker.checkChest(c);
+    d.scope = Math.min(d.scope, maxScope(game));
+    const m = game.spawnMonster(d, canReach);
+    if (!m) {
+      c.gold = old;
+      return false;
     }
-    return false;
+    m.small = true;
+    stat(game).sabotage++;
+    game.say('某個寶箱裡的金幣忽然算不清了，一隻' + m.name + '冒了出來。', 'bug');
+    return true;
   }
 
   // 每次演算事件：動盪起 BUG 與系統爭鬥

@@ -85,10 +85,11 @@ FE.CONFIG = {
   RECOMPUTE_FLASH_TICKS: 100,             // 地形重算的地方在小地圖上亮幾刻
 
   // 寶箱：只在創世時放在固定位置，拿了就沒有，不會重生；另外由怪物掉落
-  DROP_SMALL_CHANCE: 0.4,                 // 小怪物掉寶箱的機率
+  DROP_SMALL_CHANCE: 0.2,                 // 小怪物（會追人的 m.small）掉寶箱的機率（第二十五版再試玩後從 0.4 降）
+  DROP_BIG_CHANCE: 0.5,                   // 其他怪物（創世時的、合體生出的中型怪物）掉寶箱的機率（原本必掉）
   CHEST_GOLD_MUL: 0.5,                    // 所有寶箱的金幣乘這個數（創世時放的與怪物掉的都是；第二十五版試玩金幣太多，減半）
   DROP_SMALL_GOLD: [5, 15],               // 小怪物寶箱的金幣（乘 CHEST_GOLD_MUL 之前）
-  DROP_GOLD_BASE: 15,                     // 其他怪物一定掉寶箱：15＋影響範圍×2＋0～5
+  DROP_GOLD_BASE: 15,                     // 其他怪物掉的寶箱：15＋影響範圍×2＋0～5（再乘 CHEST_GOLD_MUL）
   DROP_GOLD_PER_SCOPE: 2,
 
   NPC_MOVE_EVERY: 2,                      // 冒險者每走幾步，村民在村莊裡走動一次
@@ -129,7 +130,8 @@ FE.CONFIG = {
 
   // 攻防判定（combat.js）：冒險者與怪物共用同一套流程
   HIGH_GROUND: 2,                         // 攻擊方比防守方高 1 階以上，擲骰 +2；低 1 階以上 -2
-  OPPORTUNITY_CHANCE: 0.5,                // 從貼著的怪物旁走開，那隻怪物趁機出手的機率
+  CLING_LOSE: 12,                         // 纏上冒險者的目標被拉開超過幾步就放開
+  OPPORTUNITY_CHANCE: 0.5,               // 從貼著的怪物旁走開，那隻怪物趁機出手的機率
   PLAYER_DODGE: 0.1,                      // 冒險者的閃避、反擊機率（格擋機率與格擋值看盾牌，沒拿盾牌是 0；見 FE.GEAR.shield）
   PLAYER_COUNTER: 0,                      // 冒險者的反擊機率先歸 0（第二十五版），之後由裝備提升，本版沒有任何來源
   COUNTER_DAMAGE: 1,                      // 冒險者反擊命中時固定造成的傷害
@@ -305,7 +307,7 @@ FE.NAMES = ['艾德', '蜜拉', '洛恩', '希雅', '巴頓', '妮可', '托爾'
 // 背包裡疊放的東西：use 是能在背包裡直接用的（只有藥草）；weight 是一份的重量；送貨的物品另外用 id 'goods'、名字照委託（重量 1）。
 // 箭矢只建資料（一捆 20 支、重量 1），商店不賣、寶箱與怪物不掉，第二十七版跟遠距離攻擊一起開放
 FE.BAG_ITEMS = {
-  herb: { name: '藥草', use: true, weight: 0.1 },
+  herb: { name: '藥草', use: true, weight: 0.05 },
   ore: { name: '礦石', weight: 0.5 },
   goods: { name: '送貨的東西', weight: 1 },
   arrow: { name: '箭矢', weight: 1, bundle: 20 },

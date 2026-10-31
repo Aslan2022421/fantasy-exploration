@@ -1329,7 +1329,7 @@ function testGear() {
     ok(W.robe.phys === 0 && W.robe.magic === 1 && W.robe.weight === 0.5 && W.robe.price === 10 && W.mrobe.phys === 0 && W.mrobe.magic === 3 && W.mrobe.sold === false, '衣袍的數字');
     ok(W.shield.block === 0.25 && W.shield.value === 4 && W.shield.weight === 2 && W.shield.price === 25, '盾牌的數字');
     ok(W.sword.dur === 200 && W.shield.dur === 100 && W.heavy.dur === 150 && W.pick.dur === 50 && W.sickle.dur === 50 && W.pick.weight === 1, '耐久或工具重量不對');
-    ok(FE.BAG_ITEMS.ore.weight === 0.5 && FE.BAG_ITEMS.herb.weight === 0.1 && FE.BAG_ITEMS.goods.weight === 1 && C.CARRY_LIMIT === 12 && C.ORE_PRICE === 5, '礦石、藥草、送貨物品的重量或負重上限不對');
+    ok(FE.BAG_ITEMS.ore.weight === 0.5 && FE.BAG_ITEMS.herb.weight === 0.05 && FE.BAG_ITEMS.goods.weight === 1 && C.CARRY_LIMIT === 12 && C.ORE_PRICE === 5, '礦石、藥草、送貨物品的重量或負重上限不對');
     // 起始：普通長劍、沒有防具、沒有副手
     const g2 = newGame(12);
     const q = g2.player;
@@ -1684,8 +1684,8 @@ function testGear() {
     // 藥草 0.1 一份，十份剛好 1；浮點誤差不該讓剛好上限變成超重
     p.bag = [];
     g.bagAdd('ore', 18);
-    g.bagAdd('herb', 10);
-    ok(g.weight() === 12 && g.loadTier() === 0, `礦石 18＋藥草 10 的重量 ${g.weight()}`);
+    g.bagAdd('herb', 20);
+    ok(g.weight() === 12 && g.loadTier() === 0, `礦石 18＋藥草 20 的重量 ${g.weight()}`);
     // 第一段：每個動作多 2 刻（12 刻），出手 -1（含品質加值）
     setOre(13);
     const side = DIRS.find(([dx, dy]) => g.world.canStep(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy) && !g.nodeAt(p.x + dx, p.y + dy));
@@ -1901,6 +1901,106 @@ function testGear() {
     ok(g.turn === before.turn, '在村莊裡按 1 不該出手');
   }
 
+  // 13. 纏上：撞上怪物設目標；往後退時目標一定出手一下（不擲 d20，只看閃避）並跟上來；換目標舊目標出手；撤退成功才解除
+  {
+    const g = newGame(23);
+    for (let i = 0; i < 2; i++) g.createChunk(false);
+    g.monsters = [];
+    const w = g.world;
+    const p = g.player;
+    // 找一塊 7×5 的空地：全部走得過去、高度平、不在聚落和它周圍的圈裡（怪物進不去）
+    const b = w.bounds();
+    let spot = null;
+    for (let y = b.y0; y < b.y1 - 5 && !spot; y++) {
+      for (let x = b.x0; x < b.x1 - 7 && !spot; x++) {
+        let good = true;
+        for (let dy = 0; dy < 5 && good; dy++) for (let dx = 0; dx < 7 && good; dx++) {
+          const c = w.cell(x + dx, y + dy);
+          good = !!c && w.passable(x + dx, y + dy) && !w.inBuffer(x + dx, y + dy) && w.heightOk(x, y, x + dx, y + dy) && !w.chestAt(x + dx, y + dy) && !g.nodeAt(x + dx, y + dy);
+        }
+        if (good) spot = { x, y };
+      }
+    }
+    ok(!!spot, '找不到 7×5 的空地');
+    if (spot) {
+      const mk = (id, x, y) => {
+        const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x, y, cells: [[x, y]], scope: 2, data: {} }, id, 1), w);
+        Object.assign(m, { home: { x, y }, atk: 3, maxHp: 1e9, hp: 1e9 });
+        return m;
+      };
+      const wander0 = C.WANDER_CHANCE;
+      const dodge0 = C.PLAYER_DODGE;
+      const flee0 = C.FLEE_FAIL;
+      C.WANDER_CHANCE = 0;
+      const cx = spot.x + 3, cy = spot.y + 2;
+      const touching = (a) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y) === 1;
+      const events = [];
+      let rolls = 0;
+      const roll0 = FE.rollD20;
+      FE.rollD20 = (r, mod) => { rolls++; return roll0(r, mod); };
+      FE.Combat.hook = (e) => { if (e.by === 'monster' && e.d === p) events.push(e); };
+      const reset = (ms) => { p.x = cx; p.y = cy; p.hp = p.maxHp = 1e6; p.block = null; g.monsters = ms; g.battle.targetId = null; events.length = 0; rolls = 0; };
+
+      // A. 撞上怪物只設目標；往後退時目標一定出手（閃避 0 時一定打中、閃避 100% 時一定沒事），不擲 d20，然後跟上來
+      const m1 = mk(910, cx + 1, cy);
+      reset([m1]);
+      C.PLAYER_DODGE = 0;
+      let t0 = g.turn;
+      g.move(1, 0);
+      ok(g.battle.targetId === m1.id && g.turn === t0 && events.length === 0, '撞上怪物只該設目標');
+      for (let step = 0; step < 3; step++) {
+        const hp0 = p.hp;
+        events.length = 0;
+        rolls = 0;
+        t0 = g.turn;
+        g.move(-1, 0);
+        const cling = events.filter((e) => e.cling);
+        ok(g.turn === t0 + 1 && cling.length === 1 && cling[0].dmg >= 2 && p.hp < hp0 && rolls === 0, `後退第 ${step + 1} 步：目標出手 ${cling.length} 次、傷害 ${cling[0] && cling[0].dmg}、擲 d20 ${rolls} 次`);
+        ok(touching(m1) && g.battle.targetId === m1.id, `後退第 ${step + 1} 步後目標沒有跟上來（目標 ${m1.x},${m1.y}，你 ${p.x},${p.y}）`);
+      }
+      ok(g.log.slice(0, 8).some((l) => l.text.includes('緊緊纏著你，趁你後退出手') && !l.text.includes('BUG')), '纏上的訊息不對');
+      C.PLAYER_DODGE = 1;
+      const hp1 = p.hp;
+      events.length = 0;
+      g.move(-1, 0);
+      ok(events.some((e) => e.cling && e.dmg === 0 && e.dodged) && p.hp === hp1, '閃避 100% 時目標的這一下該沒事');
+      C.PLAYER_DODGE = dodge0;
+
+      // B. 換目標算一個動作，原目標趁隙出手一下（只看閃避），之後新目標纏上、舊目標回到一般行為
+      const a = mk(911, cx + 1, cy);
+      const c2 = mk(912, cx - 1, cy);
+      reset([a, c2]);
+      C.PLAYER_DODGE = 0;
+      g.move(1, 0);
+      t0 = g.turn;
+      g.move(-1, 0);
+      const swap = events.filter((e) => e.cling && e.a === a);
+      ok(g.battle.targetId === c2.id && g.turn === t0 + 1 && swap.length === 1 && swap[0].dmg > 0, `換目標：回合 +${g.turn - t0}、原目標出手 ${swap.length} 次`);
+      events.length = 0;
+      g.move(0, -1);
+      g.move(0, -1);
+      ok(touching(c2) && !touching(a) && g.battle.targetId === c2.id, '換目標後新目標該纏上、舊目標不再跟著');
+      C.PLAYER_DODGE = dodge0;
+
+      // C. 撤退失敗不解除纏上，撤退成功才解除
+      const f = mk(913, cx + 1, cy);
+      reset([f]);
+      g.move(1, 0);
+      C.FLEE_FAIL = 1;
+      g.flee();
+      ok(g.battle.targetId === f.id, '撤退失敗不該解除纏上');
+      C.FLEE_FAIL = 0;
+      g.flee();
+      ok(g.battle.targetId === null && !touching(f), '撤退成功該解除纏上');
+      C.FLEE_FAIL = flee0;
+
+      FE.rollD20 = roll0;
+      C.WANDER_CHANCE = wander0;
+      C.PLAYER_DODGE = dodge0;
+      FE.Combat.hook = hook0;
+    }
+  }
+
   // 12. 寶箱金幣減半（創世時放的與怪物掉的），算壞的公式套在減半後的數字上
   {
     const r = FE.makeRng(5);
@@ -1927,6 +2027,8 @@ function testGear() {
     small.small = true;
     const dm = drop(mid, 300);
     const ds = drop(small, 600);
+    ok(Math.abs(dm.length / 300 - C.DROP_BIG_CHANCE) < 0.12 && C.DROP_BIG_CHANCE === 0.5, `中型怪物掉寶箱的比例 ${(dm.length / 300).toFixed(2)}（應該約 0.5）`);
+    ok(Math.abs(ds.length / 600 - C.DROP_SMALL_CHANCE) < 0.07 && C.DROP_SMALL_CHANCE === 0.2, `小怪物掉寶箱的比例 ${(ds.length / 600).toFixed(2)}（應該約 0.2）`);
     ok(dm.length > 0 && Math.min(...dm) >= 14 && Math.max(...dm) <= 16, `中型怪物的寶箱金幣 ${Math.min(...dm)}～${Math.max(...dm)}（原本 27～32，減半後 14～16）`);
     ok(ds.length > 0 && Math.min(...ds) >= 3 && Math.max(...ds) <= 8, `小怪物的寶箱金幣 ${Math.min(...ds)}～${Math.max(...ds)}（原本 5～15，減半後 3～8）`);
   }

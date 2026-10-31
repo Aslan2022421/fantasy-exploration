@@ -57,7 +57,9 @@
     let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + FE.Gear.hitMod(A) : 0;
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
     else if (cA.h < cD.h) mod -= C.HIGH_GROUND;
-    const roll = FE.rollD20(r, mod);
+    // opts.cling：纏著冒險者的目標趁冒險者移開或換目標時出手，不擲 d20 命中，只看冒險者的閃避（閃開就沒事），
+    // 沒閃開照一般傷害，不暴擊、不格擋，護甲照扣
+    const roll = opts.cling ? { n: 0, key: 'hit', name: '命中' } : FE.rollD20(r, mod);
     const dd = defense(game, D);
 
     let dmg = 0;
@@ -66,7 +68,17 @@
     let resisted = false;
     let absorbed = 0;
     let reduced = 0;
-    if (roll.key !== 'miss') {
+    if (opts.cling) {
+      dodged = r() < dd.dodge;
+      dmg = dodged ? 0 : baseDamage(game, A, kind, opts);
+      if (dP && dmg > 1) {
+        const cut = FE.Gear.physReduce(D);
+        if (cut > 0) {
+          reduced = Math.min(cut, dmg - 1);
+          dmg -= reduced;
+        }
+      }
+    } else if (roll.key !== 'miss') {
       // 2. 沒命中就沒有傷害；失手與命中都讓防守方擲閃避
       const base = baseDamage(game, A, kind, opts);
       // 減半：一般無條件進位；冒險者固定 1 點的反擊減半後最少 0（無條件捨去）
@@ -123,7 +135,9 @@
       const rollName = roll.key === 'hard' && (!aP || opts.counter || opts.opportunity) ? '命中' : roll.name;
       const tag = `（擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''}：${rollName}）`;
       let text;
-      if (roll.key === 'miss') {
+      if (opts.cling) {
+        text = `${aName}緊緊纏著你，趁你${opts.clingWord || '移開'}出手，${dodged ? '被你閃開了' : `造成 ${dmg} 點傷害${reduced > 0 ? `（護甲擋下 ${reduced} 點）` : ''}`}。`;
+      } else if (roll.key === 'miss') {
         text = `${head}${tag}，沒有打中。`;
       } else {
         const parts = [];
@@ -179,7 +193,7 @@
     if (FE.Combat.hook) {
       FE.Combat.hook({
         by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, key: roll.key, dodged, crit, blocked: absorbed > 0, resisted, reduced, dmg,
-        counter: !!opts.counter, opportunity: !!opts.opportunity, countered, killed, a: A, d: D,
+        counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D,
       });
     }
     if (countered) resolveAttack(game, D, A, 'attack', { noCounter: true, counter: true });

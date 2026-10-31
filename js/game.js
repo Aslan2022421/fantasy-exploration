@@ -533,9 +533,25 @@
       }
       const m = this.monsterAt(nx, ny);
       if (m) {
-        // 撞上怪物只把牠設成目前的目標，不出手，也不算動作（不花刻、怪物不動、不產生算力）；要按 1 一般攻擊、2 重擊才出手
-        if (this.battle.targetId !== m.id) this.say(`你盯上了${m.name}（按 1 攻擊、2 重擊、3 撤退）。`, 'sys');
+        // 撞上怪物只把牠設成目前的目標，不出手，也不算動作（不花刻、怪物不動、不產生算力）；要按 1 一般攻擊、2 重擊才出手。
+        // 目標會纏上冒險者（見 ai.js 的 worldTurn）。已經有貼著的目標時換目標算一個動作，原本的目標趁隙出手一下（只看閃避）
+        if (this.battle.targetId === m.id) return;
+        const old = this.monsters.find((o) => o.id === this.battle.targetId);
+        if (old && FE.AI.touching(this, old, p)) {
+          this.beginAction();
+          this.battle.targetId = m.id;
+          this.say(`你轉頭盯上了${m.name}（按 1 攻擊、2 重擊、3 撤退）。`, 'sys');
+          FE.Combat.resolveAttack(this, old, p, 'attack', { noCounter: true, cling: true, clingWord: '轉向別的怪物' });
+          if (this.fell) {
+            this.fell = false; // 倒下了，已經回到醒來的地方
+            this.turn++;
+            return;
+          }
+          this.endTurn(false);
+          return;
+        }
         this.battle.targetId = m.id;
+        this.say(`你盯上了${m.name}（按 1 攻擊、2 重擊、3 撤退）。`, 'sys');
         return;
       }
       const npc = this.world.npcAt(nx, ny) || this.soldierAt(nx, ny);
@@ -561,10 +577,16 @@
       p.x = nx;
       p.y = ny;
       this.discover();
-      // 趁機攻擊：從貼著的怪物旁走開，那隻怪物有機率白打一下（走判定流程，但這一下不觸發反擊）
+      // 從貼著的怪物旁走開：纏著你的目標一定趁這一步出手一下（不擲命中，只看你的閃避，見 combat.js 的 cling），
+      // 其他貼著的怪物各有機率白打一下（走判定流程，但這一下不觸發反擊）
       for (const o of leaving) {
-        if (!this.monsters.includes(o) || FE.AI.touching(this, o, p) || this.rng() >= C.OPPORTUNITY_CHANCE) continue;
-        FE.Combat.resolveAttack(this, o, p, 'attack', { noCounter: true, opportunity: true });
+        if (!this.monsters.includes(o) || FE.AI.touching(this, o, p)) continue;
+        if (o.id === this.battle.targetId) {
+          FE.Combat.resolveAttack(this, o, p, 'attack', { noCounter: true, cling: true, clingWord: '後退' });
+        } else {
+          if (this.rng() >= C.OPPORTUNITY_CHANCE) continue;
+          FE.Combat.resolveAttack(this, o, p, 'attack', { noCounter: true, opportunity: true });
+        }
         if (this.fell) {
           this.fell = false; // 倒下了，已經回到醒來的地方
           this.turn++;
@@ -1221,13 +1243,15 @@
       this.say(`${m.name}身上掉出一件${FE.Gear.name(g)}，你收進了背包。`, 'good');
     }
 
-    // 掉寶箱：會追人的怪物（m.small）有機率掉、金幣少；其他怪物一定掉，影響範圍越大金幣越多
+    // 掉寶箱：會追人的怪物（m.small）20% 機率掉、金幣少；其他怪物 50% 機率掉，影響範圍越大金幣越多。
+    // 多掉一件裝備（dropGear）是另外獨立判定的，不跟寶箱綁在一起
     dropChest(m) {
       let gold;
       if (m.small) {
         if (this.rng() >= C.DROP_SMALL_CHANCE) return;
         gold = FE.randInt(this.rng, C.DROP_SMALL_GOLD[0], C.DROP_SMALL_GOLD[1]);
       } else {
+        if (this.rng() >= C.DROP_BIG_CHANCE) return; // 中型以上怪物 50% 機率掉寶箱（原本必掉）
         gold = C.DROP_GOLD_BASE + m.scope * C.DROP_GOLD_PER_SCOPE + FE.randInt(this.rng, 0, 5);
       }
       gold = Math.round(gold * C.CHEST_GOLD_MUL); // 所有寶箱的金幣減半

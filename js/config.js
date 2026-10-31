@@ -2,7 +2,7 @@
 window.FE = window.FE || {};
 
 FE.CONFIG = {
-  SAVE_VERSION: 13,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大）
+  SAVE_VERSION: 14,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落）
   // 世界的比例：一塊世界 64×64（第十九版從 32×24 放大四倍成 64×48，第二十一版高度再加到 64）。
   // 按「每塊幾個」算的數字照面積乘 4（第二十一版再乘 4/3），按「走幾步」算的距離照長寬乘 2；每步的算力與事件間隔不變，冒險者身邊的密度跟原本一樣
   CHUNK_W: 64,          // 一塊世界的寬（世界是二維的區塊格，新的一塊長在離冒險者最近的邊界上）
@@ -24,10 +24,8 @@ FE.CONFIG = {
   LEVEL_FIRST: 50,      // 升到第 2 級要的經驗值
   LEVEL_STEP: 25,       // 之後每級多要的經驗值
   LEVEL_HP: 5,          // 每升一級生命上限 +5
-  PLAYER_ATK: 4,        // 初始武器攻擊力。一般攻擊＝攻擊力＋0～3，深度除錯＝攻擊力×2＋1～5
-  SMITH_PRICE: 30,      // 武器升級價格
-  SMITH_PRICE_STEP: 15, // 每升一次多要的金幣
-  QUEST_EXP: 15,        // 一個任務的基本經驗值
+  BARE_ATK: 1,          // 主手空著（武器壞掉）時的攻擊力。一般攻擊＝攻擊力＋0～3，重擊＝攻擊力×2＋1～5；武器的攻擊力見 FE.GEAR
+  QUEST_EXP: 15,       // 一個任務的基本經驗值
   QUEST_GOLD: 10,       // 一個任務的基本金幣
   QUEST_STEPS_PER_EXP: 8,   // 送貨路程每幾步多 1 經驗值（路程變兩倍，獎勵不跟著翻倍）
   QUEST_STEPS_PER_GOLD: 10, // 送貨路程每幾步多 1 金幣
@@ -40,7 +38,7 @@ FE.CONFIG = {
   VILLAGE_LANE: 7,      // 村莊的小巷離中央幾格
   VILLAGE_ARMS: [10, 5], // 村莊的大路從中央往東西、南北各延伸幾格（出入口外的路另外鋪出去）
   VILLAGE_MIN_STEPS: 80, // 新村莊離最近的村莊至少要走幾步（照實際路程算；120 步實測幾乎蓋不出村莊）
-  VILLAGE_MAX_NPC: 6,    // 一個村莊最多住幾個村民（不含武器匠）
+  VILLAGE_MAX_NPC: 6,    // 一個村莊最多住幾個村民（不含工匠）
   TOWN_FIRST_LEVEL: 3,   // 世界等級到這一級，才開始蓋大城鎮（第一座在創出後世界等級達到這一級的那一塊）
   TOWN_GAP: [4, 5],      // 之後每隔 4 或 5 塊世界蓋一座（用那一塊的亂數決定 4 或 5）
   TOWN_W: 45,            // 城鎮的工作範圍
@@ -48,7 +46,7 @@ FE.CONFIG = {
   TOWN_HOUSES: [8, 9, 10, 12, 14], // 城鎮蓋幾間民房
   TOWN_LANE: [13, 9],    // 城鎮的小巷：直的離中央幾格、橫的離中央幾格
   TOWN_ARMS: [18, 10],   // 城鎮的大路從中央往東西、南北各延伸幾格
-  TOWN_VILLAGERS: [7, 9], // 城鎮一開始住幾個居民（不含武器匠）
+  TOWN_VILLAGERS: [7, 9], // 城鎮一開始住幾個居民（不含工匠）
   TOWN_MAX_NPC: 12,      // 城鎮最多住幾個居民
   RUNTIME_EXP: 5,       // 執行時錯誤生出的怪物，經驗值不算在創世門檻裡
   GLITCH_MS: 140,       // 怪物字元跳動的間隔
@@ -87,13 +85,15 @@ FE.CONFIG = {
   RECOMPUTE_FLASH_TICKS: 100,             // 地形重算的地方在小地圖上亮幾刻
 
   // 寶箱：只在創世時放在固定位置，拿了就沒有，不會重生；另外由怪物掉落
-  DROP_SMALL_CHANCE: 0.4,                 // 小怪物掉寶箱的機率
-  DROP_SMALL_GOLD: [5, 15],               // 小怪物寶箱的金幣
-  DROP_GOLD_BASE: 15,                     // 其他怪物一定掉寶箱：15＋影響範圍×2＋0～5
+  DROP_SMALL_CHANCE: 0.2,                 // 小怪物（會追人的 m.small）掉寶箱的機率（第二十五版再試玩後從 0.4 降）
+  DROP_BIG_CHANCE: 0.5,                   // 其他怪物（創世時的、合體生出的中型怪物）掉寶箱的機率（原本必掉）
+  CHEST_GOLD_MUL: 0.5,                    // 所有寶箱的金幣乘這個數（創世時放的與怪物掉的都是；第二十五版試玩金幣太多，減半）
+  DROP_SMALL_GOLD: [5, 15],               // 小怪物寶箱的金幣（乘 CHEST_GOLD_MUL 之前）
+  DROP_GOLD_BASE: 15,                     // 其他怪物掉的寶箱：15＋影響範圍×2＋0～5（再乘 CHEST_GOLD_MUL）
   DROP_GOLD_PER_SCOPE: 2,
 
   NPC_MOVE_EVERY: 2,                      // 冒險者每走幾步，村民在村莊裡走動一次
-  NPC_MOVE_CHANCE: 0.5,                   // 每次輪到時，每個村民走一步的機率（武器匠不走）
+  NPC_MOVE_CHANCE: 0.5,                   // 每次輪到時，每個村民走一步的機率（工匠不走）
   NPC_HOME_CHANCE: 0.1,                   // 在外面走動的村民，每走一步有多少機率起身回家
   NPC_LEAVE_CHANCE: 0.15,                 // 在家的村民，每次輪到時有多少機率出門
   EVENT_GHOST_RATE: 0.25,                 // 新任務指向不存在村民的機率（事件生成器也是粗糙的）
@@ -130,13 +130,12 @@ FE.CONFIG = {
 
   // 攻防判定（combat.js）：冒險者與怪物共用同一套流程
   HIGH_GROUND: 2,                         // 攻擊方比防守方高 1 階以上，擲骰 +2；低 1 階以上 -2
-  OPPORTUNITY_CHANCE: 0.5,                // 從貼著的怪物旁走開，那隻怪物趁機出手的機率
-  PLAYER_DODGE: 0.1,                      // 冒險者的閃避、反擊、格擋機率
-  PLAYER_COUNTER: 0.1,
-  PLAYER_BLOCK: 0.2,
-  BLOCK_BASE: 3,                          // 冒險者的格擋值上限＝3＋武器等級×2
-  BLOCK_PER_LV: 2,
-  BLOCK_REGEN: 0.2,                       // 格擋值每回合回最大值的幾成
+  CLING_LOSE: 12,                         // 纏上冒險者的目標被拉開超過幾步就放開
+  OPPORTUNITY_CHANCE: 0.5,               // 從貼著的怪物旁走開，那隻怪物趁機出手的機率
+  PLAYER_DODGE: 0.1,                      // 冒險者的閃避、反擊機率（格擋機率與格擋值看盾牌，沒拿盾牌是 0；見 FE.GEAR.shield）
+  PLAYER_COUNTER: 0,                      // 冒險者的反擊機率先歸 0（第二十五版），之後由裝備提升，本版沒有任何來源
+  COUNTER_DAMAGE: 1,                      // 冒險者反擊命中時固定造成的傷害
+  BLOCK_REGEN: 0.2,                      // 格擋值每回合回最大值的幾成
   MID_DEF: { dodge: 0.05, block: 0.1, blockMax: 3 }, // 中型怪物的防禦在異常本身的數字上再加這些
 
   // 世界狀態（stability.js）：整體 BUG 值＝所有怪物的影響範圍總和；兩個分界把世界分成安穩、動盪、失序三級。
@@ -167,7 +166,7 @@ FE.CONFIG = {
     CUTS: 0.1,      // 世界狀態的分界（STATE_CUTS）
   },
 
-  // 背包、工具與採集（第二十四版）：背包不限格數，同一種東西疊放；工具向武器匠買，買一次就一直有
+  // 背包、工具與採集（第二十四版）：背包不限格數，同一種東西疊放；工具向鐵匠或武器匠買
   TOOL_PRICE: 20,                         // 礦鎬、鐮刀各多少金幣（不看聚落經濟）
   ORE_NODES: [3, 5],                      // 每座礦坑的空地上放幾處礦脈
   HERB_RATE: 0.02,                        // 溫帶森林、針葉林、熱帶雨林裡，每格有藥草的機率
@@ -175,7 +174,20 @@ FE.CONFIG = {
   GATHER_YIELD: [1, 2],                   // 採一次得到幾份
   REGROW_TICKS: 2000,                     // 採完幾刻後長回來
   HERB_HEAL: 0.25,                        // 吃一份藥草回生命上限的幾成（無條件進位）
-  ORE_FROM_LV: 5,                         // 武器 Lv5 起改良要礦石：Lv5→6 一顆，之後每級多一顆（金幣照舊）
+
+  // 裝備與物品（第二十五版）。裝備的數字（攻擊力、減傷、重量、價錢、耐久）見下面的 FE.GEAR，品質見 FE.QUALITIES
+  CARRY_LIMIT: 12,                        // 負重上限（暫用，第二十六版改成職業基礎＋力量修正值）
+  OVER_NEAR: 2,                           // 超過上限這麼多以內：每個動作多 OVER_TICKS 刻、出手 -1；再超過就不能移動、不能撤退、出手 -2
+  OVER_TICKS: 2,
+  ORE_PRICE: 5,                           // 礦石賣給工匠，一顆多少金幣
+  REPAIR_RATE: 1,                         // 修復費＝修回耐久佔上限的比例×原價×這個數×經濟倍率（至少 1）
+  SELL_RATE: 0.5,                         // 賣回裝備＝原價（含品質）×這個數×剩餘耐久比例
+  CRAFT_FEE_RATE: 0.5,                    // 打造的工錢＝原價的幾成（乘經濟倍率）
+  WARN_DUR: 0.2,                          // 耐久剩這麼多以下，訊息提醒一次
+  DROP_MID_GEAR: 0.1,                    // 創世時的中型怪物與合體生出的中型怪物，打倒時多掉一件裝備的機率（品質做工好～優秀）
+  CHEST_GEAR: 0.1,                      // 寶箱多開出一件裝備的機率（品質普通～傑作）
+  CRAFT_RANGE: { village: [0, 2], town: [1, 3] }, // 打造的品質範圍（QUALITIES 的索引）：村莊鐵匠普通～精良，城鎮武器匠與盔甲匠做工好～優秀
+  REPAIR_ALL: { village: true, town: true },      // 修復：村莊的鐵匠、城鎮的武器匠與盔甲匠都一次修到完整（false 是只修回損失的一半）
 
   // 士兵（只有城鎮有，role 'soldier'）：數值以同世界等級、影響範圍 2 的小怪物為準
   SOLDIER_PER_TOWN: 3,                    // 每座城鎮固定幾位士兵（第二十四版從照人口 1～3 位改成固定 3 位）
@@ -292,12 +304,45 @@ FE.ROLL_BANDS = [
 FE.TOWN_NAMES = ['銀橋城', '石冠城', '白塔城', '風語城', '金麥城', '黑鐵城', '晨星城', '霜門城'];
 FE.VILLAGE_NAMES = ['石橋村', '鐵杉村', '白霧村', '灰岩村', '長風村', '柳溪村', '赤土村', '雲杉村', '青苔村', '銅鈴村'];
 FE.NAMES = ['艾德', '蜜拉', '洛恩', '希雅', '巴頓', '妮可', '托爾', '葵', '歐文', '莉絲', '加隆', '芙蘭', '塞斯', '茉莉', '雷恩', '朵拉'];
-// 背包裡的東西：use 是能在背包裡直接用的（只有藥草）；送貨的物品另外用 id 'goods'、名字照委託
+// 背包裡疊放的東西：use 是能在背包裡直接用的（只有藥草）；weight 是一份的重量；送貨的物品另外用 id 'goods'、名字照委託（重量 1）。
+// 箭矢只建資料（一捆 20 支、重量 1），商店不賣、寶箱與怪物不掉，第二十七版跟遠距離攻擊一起開放
 FE.BAG_ITEMS = {
-  herb: { name: '藥草', use: true },
-  ore: { name: '礦石' },
-  pick: { name: '礦鎬', tool: true },
-  sickle: { name: '鐮刀', tool: true },
+  herb: { name: '藥草', use: true, weight: 0.05 },
+  ore: { name: '礦石', weight: 0.5 },
+  goods: { name: '送貨的東西', weight: 1 },
+  arrow: { name: '箭矢', weight: 1, bundle: 20 },
+};
+// 品質（參考矮人要塞的物品品質）：value 價值倍率；hit 武器命中 d20 加值；armor 防具減傷與盾牌格擋值倍率（乘完四捨五入）；
+// pierce 刃類（長劍、短刀、長槍）的穿甲（本版只存數值，沒有作用，怪物到第二十八版才有減傷）；clear 清除等級（抗性門檻看它）；
+// sym 畫在名字兩邊的符號；weight 隨機品質時的相對機率（每高一級減半，各範圍用 FE.Gear.rollQuality 算）。傳說物（索引 6）有獨有的名字，本版不會生出
+FE.QUALITIES = [
+  { name: '普通', sym: '', value: 1, hit: 0, armor: 1, pierce: 0, clear: 0 },
+  { name: '做工好', sym: '-', value: 1.1, hit: 1, armor: 1.2, pierce: 0.1, clear: 1 },
+  { name: '精良', sym: '+', value: 1.2, hit: 2, armor: 1.4, pierce: 0.2, clear: 2 },
+  { name: '優秀', sym: '*', value: 1.333, hit: 3, armor: 1.6, pierce: 0.3, clear: 3 },
+  { name: '卓越', sym: '≡', value: 1.5, hit: 4, armor: 1.8, pierce: 0.4, clear: 4 },
+  { name: '傑作', sym: '☼', value: 2, hit: 5, armor: 2, pierce: 0.5, clear: 5 },
+  { name: '傳說物', sym: '', value: 20, hit: 8, armor: 3, pierce: 0.5, clear: 6 },
+];
+// 裝備與工具（cat：weapon 武器、armor 防具、shield 盾牌、tool 工具）。
+// 武器 atk 攻擊力（一般攻擊＝攻擊力＋0～3，重擊＝攻擊力×2＋1～5）、blade 刃類（有穿甲）；
+// 防具 phys／magic 物理／魔法的固定減傷（扣完至少吃 1 點）、ticks 每個動作多花幾刻、dodge 閃避加減；
+// 盾牌 block 格擋機率、value 格擋值；weight 重量；price 普通品質的原價；ore 打造要幾顆礦石（沒寫的不能打造）；dur 耐久；
+// sold 商店有沒有賣（弓箭、法杖只建資料；魔法衣袍只從掉落來，price 是賣回與修復用的暫定值）；drop 寶箱與怪物會不會掉
+FE.GEAR = {
+  sword: { cat: 'weapon', name: '長劍', atk: 4, blade: true, weight: 2, price: 30, ore: 3, dur: 200, sold: true, drop: true },
+  spear: { cat: 'weapon', name: '長槍', atk: 4, blade: true, weight: 1, price: 25, ore: 3, dur: 200, sold: true, drop: true }, // 打 2 格等第二十七版
+  dagger: { cat: 'weapon', name: '短刀', atk: 3, blade: true, weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
+  bow: { cat: 'weapon', name: '弓箭', atk: 3, weight: 1, price: 30, dur: 200, twoHand: true, sold: false, drop: false },
+  staff: { cat: 'weapon', name: '法杖', atk: 3, weight: 1, price: 30, dur: 200, sold: false, drop: false },
+  heavy: { cat: 'armor', name: '重甲', phys: 3, magic: 1, ticks: 2, dodge: -0.05, weight: 4, price: 60, ore: 5, dur: 150, sold: true, drop: true },
+  medium: { cat: 'armor', name: '中甲', phys: 2, magic: 2, ticks: 1, dodge: 0, weight: 3, price: 40, ore: 4, dur: 150, sold: true, drop: true },
+  light: { cat: 'armor', name: '輕甲', phys: 1, magic: 1, ticks: 0, dodge: 0, weight: 1, price: 20, ore: 2, dur: 150, sold: true, drop: true },
+  robe: { cat: 'armor', name: '一般衣袍', phys: 0, magic: 1, ticks: 0, dodge: 0, weight: 0.5, price: 10, dur: 150, sold: true, drop: true },
+  mrobe: { cat: 'armor', name: '魔法衣袍', phys: 0, magic: 3, ticks: 0, dodge: 0, weight: 0.5, price: 40, dur: 150, sold: false, drop: true },
+  shield: { cat: 'shield', name: '盾牌', block: 0.25, value: 4, weight: 2, price: 25, ore: 2, dur: 100, sold: true, drop: true },
+  pick: { cat: 'tool', name: '礦鎬', weight: 1, price: 20, dur: 50, sold: true },
+  sickle: { cat: 'tool', name: '鐮刀', weight: 1, price: 20, dur: 50, sold: true },
 };
 // 採集點：都可以走過去；拿著對的工具撞上去就採，採完變回普通地面，REGROW_TICKS 刻後長回來
 FE.NODES = {

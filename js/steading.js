@@ -25,10 +25,10 @@
     誓約關係: '與這個聚落立有誓約',
     貿易關係: '與這個聚落固定往來買賣',
     敵對關係: '與這個聚落不和',
-    市場: '四方商人都來這裡交易；武器改良便宜一成',
+    市場: '四方商人都來這裡交易；工匠賣的裝備便宜一成',
     歷史: '這裡發生過重要的事',
-    神聖: '受神明眷顧；附近倒下的冒險者會在這裡醒來',
-    力量: '握有力量；附近倒下的冒險者會在這裡醒來',
+    神聖: '受神明眷顧',
+    力量: '握有力量',
     信仰: '居民十分虔誠',
     奇特: '有別處沒有的東西',
     重要人士: '住著有名的人物',
@@ -148,15 +148,15 @@
 
   const has = (v, k, a) => !!(v && v.steading && v.steading.tags.some((t) => t.k === k && (a === undefined || t.a === a)));
 
-  // 人口決定住多少村民（不含武器匠）
+  // 人口決定住多少村民（不含鐵匠、武器匠、盔甲匠）
   function villagerCount(rng, v) {
     const p = v.steading ? v.steading.population : 2;
     if (v.kind === 'town') return [4, 6, FE.randInt(rng, C.TOWN_VILLAGERS[0], C.TOWN_VILLAGERS[1]), 10, 11][p];
     return [1, 2, FE.randInt(rng, 3, 4), 5, 6][p];
   }
 
-  // 經濟決定武器匠的價錢；有市場再便宜一成
-  function smithFactor(v) {
+  // 經濟決定工匠的價錢（裝備的販售價、修復費、打造的工錢）；有市場再便宜一成
+  function shopFactor(v) {
     if (!v || !v.steading) return 1;
     const f = [1.6, 1.3, 1, 0.85, 0.7][v.steading.prosperity];
     return has(v, '市場') ? f * 0.9 : f;
@@ -235,6 +235,7 @@
     house: { wall: '⌂', shapes: TETROMINOES.flatMap((r) => orientations(fromRows(r))), doors: 1, spot: true, items: ['≡', '▌'] },
     big: { wall: '⌂', shapes: orientations(rectCells(4, 2)), doors: 1, items: ['π', '▌'] }, // 住 2～3 人，床另外加
     smithy: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['╤'] },
+    armory: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['╤'] }, // 盔甲匠工坊（只在城鎮），蓋法跟鐵匠工坊一樣
     temple: { wall: '∩', shapes: orientations(rectCells(4, 3)), doors: 1, items: ['¤'] },
     market: { wall: '♦', shapes: orientations(rectCells(5, 2)), doors: 2, items: ['╥', '╥', '╥'] },
   };
@@ -725,15 +726,16 @@
     const town = v.kind === 'town';
     const want = (town ? C.TOWN_HOUSES : C.VILLAGE_HOUSES)[v.steading ? v.steading.population : 2];
     const cap = town ? C.TOWN_MAX_NPC : C.VILLAGE_MAX_NPC;
-    // 神殿、市場只蓋在城鎮（使用者決定村莊不蓋神殿）
+    // 盔甲匠工坊、神殿、市場只蓋在城鎮（使用者決定村莊不蓋神殿）
     const extra = [];
+    if (town) extra.push('armory');
     if (town && (isHoly(v) || has(v, '信仰'))) extra.push('temple');
     if (town && has(v, '市場')) extra.push('market');
     const viable = exitViable(world, v);
     let best = null;
     for (let attempt = 0; attempt < 6; attempt++) {
       const p = plan(world, rng, v, want, cap, extra, viable);
-      p.score = (p.ok ? 1000 : 0) + p.houses * 10 + Math.min(p.beds, cap) + (p.buildings.some((b) => b.kind === 'smithy') ? 100 : 0) + p.entrances * 5;
+      p.score = (p.ok ? 1000 : 0) + p.houses * 10 + Math.min(p.beds, cap) + (p.buildings.some((b) => b.kind === 'smithy') ? 100 : 0) + (p.buildings.some((b) => b.kind === 'armory') ? 50 : 0) + p.entrances * 5;
       if (!best || p.score > best.score) best = p;
       if (p.ok) break;
     }
@@ -817,7 +819,7 @@
 
   // 每個村民有自己的家：挑還有空床的民房，先挑還沒住人的
   function freeHome(world, rng, v) {
-    const homes = world.npcs.filter((n) => n.villageId === v.id && n.home && n.role !== 'smith').map((n) => n.home);
+    const homes = world.npcs.filter((n) => n.villageId === v.id && n.home && !FE.Gear.isShopkeeper(n)).map((n) => n.home);
     const taken = new Set(homes.map((h) => h.b + ':' + ckey(h.bed)));
     const used = new Set(homes.map((h) => h.b));
     const slots = [];
@@ -975,7 +977,7 @@
   }
 
   FE.Steading = {
-    roll, layout, has, villagerCount, smithFactor, rewardFactor, isHoly, related, describe, tagText, placeLandmark,
+    roll, layout, has, villagerCount, shopFactor, rewardFactor, isHoly, related, describe, tagText, placeLandmark,
     roomAt, canWalk, freeHome, siteScore, exitViable,
   };
 })();

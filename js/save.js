@@ -22,6 +22,8 @@
       nextChunkAt: game.nextChunkAt,
       compute: game.compute,
       nextMonsterId: game.nextMonsterId,
+      nextGearId: game.nextGearId,
+      tickAcc: game.tickAcc,
       battle: game.battle,
       worldState: game.worldState,
       soldiers: game.soldiers,
@@ -57,7 +59,7 @@
   function restore(data) {
     const game = new FE.Game(data.seed);
     game.rng.setState(data.rngState);
-    for (const k of ['turn', 'ticks', 'exp', 'level', 'creation', 'nextChunkAt', 'compute', 'nextMonsterId', 'battle', 'worldState', 'soldiers', 'fixed', 'log', 'player', 'lastSafe', 'monsters', 'flashes']) {
+    for (const k of ['turn', 'ticks', 'exp', 'level', 'creation', 'nextChunkAt', 'compute', 'nextMonsterId', 'nextGearId', 'tickAcc', 'battle', 'worldState', 'soldiers', 'fixed', 'log', 'player', 'lastSafe', 'monsters', 'flashes']) {
       game[k] = data[k];
     }
     const w = game.world;
@@ -69,6 +71,7 @@
         cx: s.cx,
         cy: s.cy,
         cells,
+        ver: 0,
         x0: s.cx * C.CHUNK_W,
         y0: s.cy * C.CHUNK_H,
         x1: (s.cx + 1) * C.CHUNK_W,

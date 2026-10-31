@@ -202,23 +202,20 @@
         continue;
       }
       // 纏上：冒險者設定的目標（撞上去設的）跟著冒險者走，保持貼著（路徑被擋就照追擊的走法盡量貼近），
-      // 一直打到牠倒下或冒險者撤退成功；拉開超過 CLING_LOSE 步就放開。貼上之後的下一回合才攻擊（移動或攻擊擇一）
+      // 一直打到牠倒下、冒險者撤退成功或倒下才放開。冒險者在聚落裡時牠進不去，照平常行動，出來後再纏上。
+      // 貼上之後的下一回合才攻擊（移動或攻擊擇一）
       if (!safe && m.id === game.battle.targetId) {
-        if (dist(m, p) > C.CLING_LOSE) {
-          game.battle.targetId = null;
-        } else {
-          const s = stepToward(game, m, (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1 && game.world.heightOk(x, y, p.x, p.y));
-          if (s) {
-            [m.x, m.y] = s;
-            if (!m.small) m.home = { x: m.x, y: m.y }; // 不追人的怪物放開之後就在這裡徘徊
-          }
-          if (m.small) {
-            m.chase = C.CHASE_MEMORY;
-            m.chaseSteps = 0;
-            m.returning = false;
-          }
-          continue;
+        const s = stepToward(game, m, (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1 && game.world.heightOk(x, y, p.x, p.y));
+        if (s) {
+          [m.x, m.y] = s;
+          if (!m.small) m.home = { x: m.x, y: m.y }; // 不追人的怪物放開之後就在這裡徘徊
         }
+        if (m.small) {
+          m.chase = C.CHASE_MEMORY;
+          m.chaseSteps = 0;
+          m.returning = false;
+        }
+        continue;
       }
       // 貼著士兵的怪物也會攻擊（士兵算防守方，閃避格擋都是 0）；同時貼著幾位就打血量最少的
       if (game.soldiers.length) {

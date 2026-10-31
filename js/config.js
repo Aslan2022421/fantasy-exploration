@@ -130,8 +130,7 @@ FE.CONFIG = {
 
   // 攻防判定（combat.js）：冒險者與怪物共用同一套流程
   HIGH_GROUND: 2,                         // 攻擊方比防守方高 1 階以上，擲骰 +2；低 1 階以上 -2
-  CLING_LOSE: 12,                         // 纏上冒險者的目標被拉開超過幾步就放開
-  OPPORTUNITY_CHANCE: 0.5,               // 從貼著的怪物旁走開，那隻怪物趁機出手的機率
+  OPPORTUNITY_CHANCE: 0.5,                // 從貼著的怪物旁走開，那隻怪物趁機出手的機率
   PLAYER_DODGE: 0.1,                      // 冒險者的閃避、反擊機率（格擋機率與格擋值看盾牌，沒拿盾牌是 0；見 FE.GEAR.shield）
   PLAYER_COUNTER: 0,                      // 冒險者的反擊機率先歸 0（第二十五版），之後由裝備提升，本版沒有任何來源
   COUNTER_DAMAGE: 1,                      // 冒險者反擊命中時固定造成的傷害

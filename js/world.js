@@ -656,9 +656,9 @@
     }
   }
 
-  // 粗糙的掉落公式：約四分之一會算出負數，少數會除以零變成 NaN
+  // 粗糙的掉落公式：約四分之一會算出負數，少數會除以零變成 NaN。所有寶箱的金幣減半（CHEST_GOLD_MUL），算壞的公式套在減半後的數字上
   FE.roughGold = function (rng) {
-    let gold = Math.floor(25 + (rng() - 0.62) * 70);
+    let gold = Math.floor((25 + (rng() - 0.62) * 70) * C.CHEST_GOLD_MUL);
     if (rng() < 0.08) gold = Math.floor((gold / 0) * 0);
     return gold;
   };

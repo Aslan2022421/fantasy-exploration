@@ -412,7 +412,7 @@
     el.innerHTML = `
       <div class="t-head"><b style="color:var(--accent)">${esc(b.name)}</b><span class="dim">高度 ${c.h}</span></div>
       <p>${b.hit ? `在這裡出手 ${b.hit > 0 ? '+' : ''}${b.hit}` : '在這裡出手沒有加減'}${lm ? `，${esc(lm.name)}` : ''}</p>
-      <p class="t-extra dim">旁邊沒有怪物。撞上怪物就是攻擊牠。</p>`;
+      <p class="t-extra dim">旁邊沒有怪物。撞上怪物只會把牠設成目標，按 1 攻擊、2 重擊。</p>`;
   }
 
   function drawQuest() {

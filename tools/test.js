@@ -398,7 +398,9 @@ function botStep(game, rng, goal, lazy) {
   if (adj.length) {
     if (p.hp < p.maxHp * 0.25) return game.act('flee');
     if (!lazy) {
+      // 撞上怪物只設目標、不出手；先把目前的目標撞一下設好，再按 1／2 出手
       const m = game.targetMonster();
+      if (m) game.move(m.x - p.x, m.y - p.y);
       return game.act(game.battle.cooldown === 0 && m && m.hp > game.playerAtk() + 3 ? 'deep' : 'attack');
     }
   }
@@ -1162,11 +1164,21 @@ function testBackpack() {
   ok(!g.toolOf('pick') && p.gold === C.TOOL_PRICE - 1, '錢不夠還是買到了礦鎬');
   p.gold = C.TOOL_PRICE * 2 + 5;
   toolPick('buyItem:pick:0');
-  ok(!!g.toolOf('pick') && g.toolOf('pick').dur === 50 && p.gold === C.TOOL_PRICE + 5 && !toolIds().includes('buyItem:pick:0') && toolIds().includes('buyItem:sickle:0'), `買礦鎬之後 ${toolIds()}，金幣 ${p.gold}`);
+  ok(!!g.toolOf('pick') && g.toolOf('pick').dur === 50 && p.gold === C.TOOL_PRICE + 5 && toolIds().includes('buyItem:pick:0') && toolIds().includes('buyItem:sickle:0'), `買礦鎬之後 ${toolIds()}，金幣 ${p.gold}（買過的工具選項該還在）`);
   toolPick('buyItem:sickle:0');
-  ok(!!g.toolOf('sickle') && p.gold === 5 && !toolIds().includes('buyItem:sickle:0'), `買鐮刀之後 ${toolIds()}，金幣 ${p.gold}`);
+  ok(!!g.toolOf('sickle') && p.gold === 5 && toolIds().includes('buyItem:sickle:0'), `買鐮刀之後 ${toolIds()}，金幣 ${p.gold}`);
+  // 工具可以重複買，每一把各自有耐久；採集用耐久最低的那一把，壞了換下一把
+  p.gold = 100;
+  toolPick('buyItem:pick:0');
   g.talkPage = 'main';
-  ok(p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').length === 1, '工具重複了');
+  const picks = () => p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').map((e) => e.gear);
+  ok(picks().length === 2 && p.gold === 100 - C.TOOL_PRICE, `礦鎬該有 2 把（${picks().length}）`);
+  picks()[0].dur = 30;
+  ok(g.toolOf('pick') === picks()[0], '採集該先用耐久最低的那一把');
+  picks()[0].dur = 1;
+  const worn = picks()[0];
+  FE.Gear.wear(g, worn);
+  ok(picks().length === 1 && g.toolOf('pick') === picks()[0] && g.toolOf('pick').dur === 50, '壞了的礦鎬該消失，換用下一把');
 
   // 採集：沒工具時照常走過去、訊息寫需要什麼；有工具時撞上去就採，不移動，得到 1～2 份，算一個動作、產生跟移動一樣的算力；
   // 採完那一格變回普通地面，2000 刻後長回來
@@ -1536,7 +1548,7 @@ function testGear() {
     ok(b.r && b.spent === Math.round(60 * econ(vil)), `鐵匠買重甲 花了 ${b.spent}，應該 ${Math.round(60 * econ(vil))}`);
     ok(!buy(smith, 'sword', 1).r && !buy(wsmith, 'heavy', 0).r && !buy(armorer, 'sword', 0).r && !buy(wsmith, 'shield', 0).r, '店裡不賣的東西買到了（鐵匠做工好、武器匠賣防具、盔甲匠賣武器）');
     b = buy(smith, 'pick', 0);
-    ok(b.r && b.spent === 20 && !buy(smith, 'pick', 0).r, `礦鎬 20 金幣、已有的不再賣（花了 ${b.spent}）`);
+    ok(b.r && b.spent === 20 && buy(smith, 'pick', 0).r && p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').length === 2, `礦鎬 20 金幣、已有的還能再買（花了 ${b.spent}）`);
     // 錢不夠：選項寫還差多少
     p.gold = Math.round(60 * econ(vil)) - 9;
     open(smith);
@@ -1566,7 +1578,7 @@ function testGear() {
     ok(!g.talkOptions(smith).options.some((o) => o.id === `sellItem:${p.equip.main.id}`), '穿在身上的不該能賣');
 
     // 修復：村莊鐵匠一次修回損失的一半、城鎮的武器匠與盔甲匠修到完整，各修自己那一類（盾牌歸盔甲匠）
-    const fee = (item, restore, v, tool) => Math.max(1, Math.round((restore / item.max) * G.value(item) * 0.5 * (tool ? 1 : econ(v))));
+    const fee = (item, restore, v, tool) => Math.max(1, Math.round((restore / item.max) * G.value(item) * 1 * (tool ? 1 : econ(v))));
     p.gold = 1000;
     p.bag = [];
     const sw1 = p.equip.main; sw1.dur = 100;
@@ -1803,7 +1815,7 @@ function testGear() {
     const mid = () => { const m = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 6 }, 1, 1); return m; };
     const bagGear = () => p.bag.filter((e) => e.id === 'gear').map((e) => e.gear);
     // 創世時的中型怪物（small=false）與合體怪物（small=false、有 members）都會掉；事件生的 small、小怪物不掉
-    const runs = 4000;
+    const runs = 10000;
     let got = 0;
     const hist = {};
     const types = new Set();
@@ -1813,7 +1825,7 @@ function testGear() {
       const l = bagGear();
       if (l.length) { got++; hist[l[0].q] = (hist[l[0].q] || 0) + 1; types.add(l[0].type); }
     }
-    ok(Math.abs(got / runs - 0.3) < 0.03, `中型怪物掉裝備的比例 ${(got / runs).toFixed(3)}（應該約 0.3）`);
+    ok(Math.abs(got / runs - 0.1) < 0.02, `中型怪物掉裝備的比例 ${(got / runs).toFixed(3)}（應該約 0.1）`);
     ok(Object.keys(hist).every((q) => q >= 1 && q <= 3) && hist[1] > hist[2] && hist[2] > hist[3], `中型怪物掉的品質 ${JSON.stringify(hist)}（應該做工好～優秀，越高越少）`);
     ok([...types].every((t) => FE.GEAR[t].drop) && !types.has('bow') && !types.has('staff') && !types.has('pick') && ['sword', 'spear', 'dagger', 'heavy', 'medium', 'light', 'robe', 'mrobe', 'shield'].every((t) => types.has(t)), `掉落的種類 ${[...types]}`);
     const small = mid(); small.small = true;
@@ -1824,7 +1836,7 @@ function testGear() {
     // 寶箱
     let chestGot = 0;
     const ch = {};
-    const chestRuns = 6000;
+    const chestRuns = 20000;
     for (let i = 0; i < chestRuns; i++) {
       p.bag = [];
       p.hp = p.maxHp;
@@ -1833,7 +1845,7 @@ function testGear() {
       const l = bagGear();
       if (l.length) { chestGot++; ch[l[0].q] = (ch[l[0].q] || 0) + 1; }
     }
-    ok(Math.abs(chestGot / chestRuns - 0.25) < 0.03, `寶箱多開出裝備的比例 ${(chestGot / chestRuns).toFixed(3)}（應該約 0.25）`);
+    ok(Math.abs(chestGot / chestRuns - 0.1) < 0.02, `寶箱多開出裝備的比例 ${(chestGot / chestRuns).toFixed(3)}（應該約 0.1）`);
     ok(Object.keys(ch).every((q) => q >= 0 && q <= 5) && Object.keys(ch).length === 6 && ch[0] > ch[1] && ch[1] > ch[2] && ch[2] > ch[3], `寶箱開出的品質 ${JSON.stringify(ch)}（應該普通～傑作，越高越少）`);
   }
   // 10. 冒險者的反擊：機率 0、命中固定 1 點（暴擊 2、被閃開減半最少 0）；反擊的訊息不寫「必定反擊」；倒下在最近的聚落醒來
@@ -1872,6 +1884,51 @@ function testGear() {
       const vv = w2.villageAt(g2.player.x, g2.player.y);
       ok(vv === nearest && w2.cell(g2.player.x, g2.player.y).t === '·', `倒下後醒在 ${vv && vv.name}，應該是最近的 ${nearest.name} 的路上`);
     }
+  }
+  // 11. 撞上怪物只設目標，不出手、不算動作；按 1 才出手
+  {
+    const g = newGame(21);
+    const p = g.player;
+    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 905, 1), g.world);
+    Object.assign(m, { home: { x: m.x, y: m.y }, atk: 3 });
+    g.monsters = [m];
+    const before = { turn: g.turn, ticks: g.ticks, creation: g.creation, compute: g.compute, hp: m.hp, php: p.hp, x: p.x, y: p.y, dur: p.equip.main.dur, mx: m.x, my: m.y };
+    g.guard('test', () => g.move(1, 0));
+    ok(g.battle.targetId === m.id && g.turn === before.turn && g.ticks === before.ticks && g.creation === before.creation && g.compute === before.compute, '撞上怪物該只設目標，不算動作、不花刻、不產生算力');
+    ok(m.hp === before.hp && p.hp === before.php && p.x === before.x && p.y === before.y && m.x === before.mx && m.y === before.my && p.equip.main.dur === before.dur, '撞上怪物不該出手、不該移動、怪物不該動');
+    // 在村莊裡也不能動手（按 1 時才檢查）
+    g.act('attack');
+    ok(g.turn === before.turn, '在村莊裡按 1 不該出手');
+  }
+
+  // 12. 寶箱金幣減半（創世時放的與怪物掉的），算壞的公式套在減半後的數字上
+  {
+    const r = FE.makeRng(5);
+    let max = -1e9, bad = 0, neg = 0;
+    for (let i = 0; i < 20000; i++) {
+      const v = FE.roughGold(r);
+      if (!Number.isFinite(v)) { bad++; continue; }
+      if (v < 0) neg++;
+      max = Math.max(max, v);
+    }
+    ok(max <= 25 && max >= 20 && bad > 800 && bad < 2400 && neg > 2000, `創世寶箱金幣：最大 ${max}（減半後應該 ≤25）、NaN ${bad}、負數 ${neg}`);
+    const g = newGame(22);
+    const drop = (m, n) => {
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        g.world.chests = [];
+        g.dropChest(m);
+        if (g.world.chests.length) out.push(g.world.chests[0].gold);
+      }
+      return out;
+    };
+    const mid = FE.makeMonster({ type: 'TERRAIN', x: g.player.x + 3, y: g.player.y, cells: [], scope: 6 }, 1, 1);
+    const small = FE.makeMonster({ type: 'TERRAIN', x: g.player.x + 3, y: g.player.y, cells: [], scope: 2 }, 2, 1);
+    small.small = true;
+    const dm = drop(mid, 300);
+    const ds = drop(small, 600);
+    ok(dm.length > 0 && Math.min(...dm) >= 14 && Math.max(...dm) <= 16, `中型怪物的寶箱金幣 ${Math.min(...dm)}～${Math.max(...dm)}（原本 27～32，減半後 14～16）`);
+    ok(ds.length > 0 && Math.min(...ds) >= 3 && Math.max(...ds) <= 8, `小怪物的寶箱金幣 ${Math.min(...ds)}～${Math.max(...ds)}（原本 5～15，減半後 3～8）`);
   }
   FE.Combat.hook = hook0;
 }

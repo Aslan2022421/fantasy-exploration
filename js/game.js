@@ -249,10 +249,13 @@
       this.player.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
     }
 
-    // 背包裡有沒有這種工具（礦鎬、鐮刀），有就回傳那一件
+    // 背包裡有沒有這種工具（礦鎬、鐮刀），有就回傳要用的那一把：工具可以有好幾把，各自有耐久，先用耐久最低的，壞了換下一把
     toolOf(type) {
-      const e = this.player.bag.find((o) => o.id === 'gear' && o.gear.type === type);
-      return e ? e.gear : null;
+      let best = null;
+      for (const e of this.player.bag) {
+        if (e.id === 'gear' && e.gear.type === type && (!best || e.gear.dur < best.dur)) best = e.gear;
+      }
+      return best;
     }
 
     // 這件裝備從身上或背包拿掉（壞掉、賣掉時用）
@@ -530,8 +533,9 @@
       }
       const m = this.monsterAt(nx, ny);
       if (m) {
-        // 撞上怪物就是攻擊牠，並把牠設成目前的目標
-        this.strike('attack', m);
+        // 撞上怪物只把牠設成目前的目標，不出手，也不算動作（不花刻、怪物不動、不產生算力）；要按 1 一般攻擊、2 重擊才出手
+        if (this.battle.targetId !== m.id) this.say(`你盯上了${m.name}（按 1 攻擊、2 重擊、3 撤退）。`, 'sys');
+        this.battle.targetId = m.id;
         return;
       }
       const npc = this.world.npcAt(nx, ny) || this.soldierAt(nx, ny);
@@ -623,7 +627,7 @@
       FE.Stability.update(this);
     }
 
-    // 攻擊目前的目標（撞上去或按 1、2）：一個動作，打完所有怪物各做一件事
+    // 攻擊目前的目標（按 1、2；撞上怪物只設目標，不出手）：一個動作，打完所有怪物各做一件事
     strike(kind, m) {
       const p = this.player;
       // 村莊是安全區：站在聚落裡（包括邊緣）不能對外面的怪物動手
@@ -909,8 +913,7 @@
         }
         const opts = [];
         for (const e of all) {
-          if (FE.GEAR[e.type].cat === 'tool' && this.toolOf(e.type)) continue; // 工具已經有了就不再出現
-          const pr = price(e);
+          const pr = price(e); // 工具可以重複買，各自有耐久
           const short = pr - p.gold;
           opts.push({
             id: `buyItem:${e.type}:${e.q}`,
@@ -1015,7 +1018,7 @@
         const type = a;
         const q = Number(b);
         const pr = FE.Gear.shopPrice(type, q, v);
-        if (p.gold < pr || (FE.GEAR[type].cat === 'tool' && this.toolOf(type))) return stay;
+        if (p.gold < pr) return stay;
         p.gold -= pr;
         const g = FE.Gear.make(type, q, this.nextGearId++);
         this.bagAddGear(g);
@@ -1049,7 +1052,7 @@
     }
 
     // ---- 回合制戰鬥 ----
-    // 攻防判定在 combat.js。方向鍵撞上怪物就是攻擊牠並設成目標；按 1、2 打目前的目標（要貼著）；3 撤退。
+    // 攻防判定在 combat.js。方向鍵撞上怪物只設成目標（不出手、不算動作）；按 1、2 打目前的目標（要貼著）；3 撤退。
 
     // 從冒險者走得到的地方，找最近一格離那隻怪物超過視野、旁邊也沒有別的怪物的空地
     findRetreat(m) {
@@ -1227,6 +1230,7 @@
       } else {
         gold = C.DROP_GOLD_BASE + m.scope * C.DROP_GOLD_PER_SCOPE + FE.randInt(this.rng, 0, 5);
       }
+      gold = Math.round(gold * C.CHEST_GOLD_MUL); // 所有寶箱的金幣減半
       const w = this.world;
       let at = { x: m.x, y: m.y };
       if (w.chestAt(at.x, at.y) || w.inVillage(at.x, at.y) || !w.passable(at.x, at.y)) at = this.findFreeNear(m.x, m.y);

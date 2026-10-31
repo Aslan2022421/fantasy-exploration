@@ -48,13 +48,18 @@
       return ch ? ch.cells[y - ch.y0][x - ch.x0] : null;
     }
     // 換地形時保留高度
+    // ch.ver 是這塊區塊「走得過去的格子或高度」的版本：變了，checker.js 的連通性（reachable）就只重算這一塊
     setCell(x, y, t, biome) {
       const ch = this.chunkAt(x, y);
       const old = ch.cells[y - ch.y0][x - ch.x0];
       ch.cells[y - ch.y0][x - ch.x0] = { t, biome, h: old ? old.h : 0 };
+      if (!old || FE.TERRAIN[old.t].pass !== FE.TERRAIN[t].pass) ch.ver++;
     }
     setHeight(x, y, h) {
-      this.cell(x, y).h = h;
+      const c = this.cell(x, y);
+      if (c.h === h) return;
+      c.h = h;
+      this.chunkAt(x, y).ver++;
     }
     // 所有區塊合起來的外框（右、下不含）
     bounds() {
@@ -185,8 +190,8 @@
       return this.landmarks.find((l) => x >= l.x0 && x <= l.x1 && y >= l.y0 && y <= l.y1) || null;
     }
 
-    // 從起點們走到每一格要幾步（只走能走的格子）；給了 target（"x,y"）就走到那裡為止
-    stepMap(starts, target) {
+    // 從起點們走到每一格要幾步（只走能走的格子）；給了 target（"x,y"）就走到那裡為止；給了 limit 就只走到 limit 步為止（再遠的格子不記）
+    stepMap(starts, target, limit) {
       const dist = new Map();
       const q = [];
       for (const [x, y] of starts) {
@@ -197,6 +202,7 @@
       for (let h = 0; h < q.length; h++) {
         const [x, y] = q[h];
         const d = dist.get(x + ',' + y);
+        if (limit !== undefined && d >= limit) continue;
         for (const [dx, dy] of DIRS) {
           const nx = x + dx;
           const ny = y + dy;
@@ -210,10 +216,105 @@
       return dist;
     }
 
-    // 兩點之間的實際路程；走不到時用直線距離乘 1.5 估
+    // 跟 stepMap 一樣，從起點們往外走，只走到 limit 步為止，但用陣列記步數（快很多）。回傳 { at(x, y) }：走到的格子是步數，沒走到是 -1
+    stepGrid(starts, limit) {
+      const b = this.bounds();
+      const W = b.x1 - b.x0;
+      const H = b.y1 - b.y0;
+      const dist = new Int16Array(W * H).fill(-1);
+      const q = new Int32Array(W * H);
+      let qt = 0;
+      for (const [x, y] of starts) {
+        if (!this.passable(x, y)) continue;
+        dist[(y - b.y0) * W + (x - b.x0)] = 0;
+        q[qt++] = (y - b.y0) * W + (x - b.x0);
+      }
+      for (let qh = 0; qh < qt; qh++) {
+        const i = q[qh];
+        const d = dist[i];
+        if (d >= limit) continue;
+        const x = b.x0 + (i % W);
+        const y = b.y0 + Math.floor(i / W);
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < b.x0 || nx >= b.x1 || ny < b.y0 || ny >= b.y1) continue;
+          const j = (ny - b.y0) * W + (nx - b.x0);
+          if (dist[j] >= 0 || !this.canStep(x, y, nx, ny)) continue;
+          dist[j] = d + 1;
+          q[qt++] = j;
+        }
+      }
+      return { at: (x, y) => (x < b.x0 || x >= b.x1 || y < b.y0 || y >= b.y1 ? -1 : dist[(y - b.y0) * W + (x - b.x0)]) };
+    }
+
+    // 兩點之間的實際路程；走不到時用直線距離乘 1.5 估。
+    // 第二十五版起不再把世界一格一格全走一遍：先用 Checker.reachable 的連通塊看兩點走不走得到（走不到直接估），
+    // 走得到再用 A*（直線距離當估價）找最短路，步數跟原本一格一格走的結果一樣
     pathDistance(a, b) {
-      const d = this.stepMap([[a.x, a.y]], b.x + ',' + b.y).get(b.x + ',' + b.y);
-      return d !== undefined ? d : Math.round((Math.abs(a.x - b.x) + Math.abs(a.y - b.y)) * 1.5);
+      const est = () => Math.round((Math.abs(a.x - b.x) + Math.abs(a.y - b.y)) * 1.5);
+      if (!this.passable(a.x, a.y) || !this.passable(b.x, b.y)) return est();
+      if (a.x === b.x && a.y === b.y) return 0;
+      const reach = FE.Checker.reachable(this);
+      const ra = reach.rootAt(a.x, a.y);
+      if (ra < 0 || ra !== reach.rootAt(b.x, b.y)) return est();
+      const d = this.shortestSteps(a, b);
+      return d !== null ? d : est();
+    }
+
+    // A* 找 a 走到 b 最少幾步（b 一定走得到，呼叫前要確認連通）
+    shortestSteps(a, b) {
+      const OFF = 1048576;
+      const MUL = 2097152;
+      const key = (x, y) => (x + OFF) * MUL + (y + OFF);
+      const h = (x, y) => Math.abs(x - b.x) + Math.abs(y - b.y);
+      const best = new Map([[key(a.x, a.y), 0]]);
+      const heap = [[h(a.x, a.y), 0, a.x, a.y]];
+      const push = (it) => {
+        let i = heap.push(it) - 1;
+        while (i > 0) {
+          const p = (i - 1) >> 1;
+          if (heap[p][0] <= heap[i][0]) break;
+          [heap[p], heap[i]] = [heap[i], heap[p]];
+          i = p;
+        }
+      };
+      const pop = () => {
+        const top = heap[0];
+        const last = heap.pop();
+        if (heap.length) {
+          heap[0] = last;
+          let i = 0;
+          for (;;) {
+            const l = 2 * i + 1;
+            const r = l + 1;
+            let m = i;
+            if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+            if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+            if (m === i) break;
+            [heap[m], heap[i]] = [heap[i], heap[m]];
+            i = m;
+          }
+        }
+        return top;
+      };
+      while (heap.length) {
+        const [, g, x, y] = pop();
+        if (x === b.x && y === b.y) return g;
+        if (g > best.get(key(x, y))) continue;
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (!this.canStep(x, y, nx, ny)) continue;
+          const nk = key(nx, ny);
+          const old = best.get(nk);
+          if (old === undefined || g + 1 < old) {
+            best.set(nk, g + 1);
+            push([g + 1 + h(nx, ny), g + 1, nx, ny]);
+          }
+        }
+      }
+      return null;
     }
 
     // 在區塊座標 (cx, cy) 創出一塊新世界，回傳它的範圍（右、下不含）
@@ -228,7 +329,7 @@
         for (let x = rect.x0; x < rect.x1; x++) row.push({ t: '.', biome: 'plain', h: 0 });
         cells.push(row);
       }
-      const chunk = Object.assign({ index, cx, cy, cells }, rect);
+      const chunk = Object.assign({ index, cx, cy, cells, ver: 0 }, rect);
       this.chunkMap.set(cx + ',' + cy, chunk);
       this.chunks.push(chunk);
       const rough = paintBiomes(this, rng, rect, index);
@@ -390,17 +491,25 @@
       }
       box = best.box;
     } else {
-      const steps = world.stepMap(world.villages.map((v) => [v.cx, v.cy]));
+      // 只需要知道「是不是不到 VILLAGE_MIN_STEPS 步」，所以從現有村莊只往外走到 VILLAGE_MIN_STEPS - 1 步（第二十五版，不再把整個世界走一遍）；
+      // 範圍內一格都沒走到的位置，要分清是「很遠」還是「從現有村莊走不到」（中間被圍住）：後者才用直線距離估，
+      // 由 Checker.reachable 的連通塊判斷（候選位置的格子跟某個村莊中央在同一個連通塊，就是走得到、而且夠遠）
+      const steps = world.stepGrid(world.villages.map((v) => [v.cx, v.cy]), C.VILLAGE_MIN_STEPS - 1);
+      const reach = FE.Checker.reachable(world);
+      const villageRoots = new Set(world.villages.map((v) => reach.rootAt(v.cx, v.cy)).filter((r) => r >= 0));
       let bestScore = -Infinity;
       for (let tries = 0; tries < 8; tries++) {
         const cand = randomBox();
         let d = Infinity;
+        let linked = false;
         for (let y = cand.y0; y <= cand.y1; y++) {
           for (let x = cand.x0; x <= cand.x1; x++) {
-            const s = steps.get(x + ',' + y);
-            if (s !== undefined && s < d) d = s;
+            const s = steps.at(x, y);
+            if (s >= 0 && s < d) d = s;
+            if (!linked && villageRoots.has(reach.rootAt(x, y))) linked = true;
           }
         }
+        if (d === Infinity && linked) d = C.VILLAGE_MIN_STEPS; // 走得到，但超過 VILLAGE_MIN_STEPS - 1 步，夠遠
         if (d === Infinity) {
           // 從現有村莊走不到（中間被圍住），就用直線距離估；實際路程只會更長
           for (const v of world.villages) d = Math.min(d, Math.abs(v.cx - cand.cx) + Math.abs(v.cy - cand.cy));
@@ -485,10 +594,16 @@
   };
 
   function placeNpcs(world, rng, v) {
-    // 鐵匠固定站在工坊裡、貼著門內那一格；萬一沒蓋成工坊，站在廣場中央
+    // 鐵匠（城鎮裡叫武器匠）固定站在工坊裡、貼著門內那一格；萬一沒蓋成工坊，站在廣場中央。
+    // 城鎮另有盔甲匠，站在盔甲匠工坊裡（沒蓋成就站在廣場中央旁邊一格，不跟武器匠重疊）
     const si = (v.buildings || []).findIndex((b) => b.kind === 'smithy');
     const [sx, sy] = si >= 0 ? v.buildings[si].spots[0] : [v.cx, v.cy];
     world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'smith', villageId: v.id, x: sx, y: sy, quest: null, home: si >= 0 ? { b: si } : null });
+    if (v.kind === 'town') {
+      const ai = (v.buildings || []).findIndex((b) => b.kind === 'armory');
+      const [ax, ay] = ai >= 0 ? v.buildings[ai].spots[0] : [v.cx + 1, v.cy];
+      world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'armorer', villageId: v.id, x: ax, y: ay, quest: null, home: ai >= 0 ? { b: ai } : null });
+    }
 
     const candidates = [];
     const n = FE.Steading.villagerCount(rng, v);
@@ -513,7 +628,7 @@
 
     // 先決定每個候選人的委託對象，再刪掉站錯地方的人。
     // 順序是刻意的：被刪掉的人可能已經被別人的任務指到，留下懸空指標。
-    const pool = candidates.concat(world.npcs.filter((o) => o.role !== 'smith'));
+    const pool = candidates.concat(world.npcs.filter((o) => !FE.Gear.isShopkeeper(o)));
     const targets = new Map();
     for (const npc of candidates) {
       if (rng() >= 0.75) continue;

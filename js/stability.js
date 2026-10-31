@@ -141,7 +141,7 @@
     const kinds = game.rng() < 0.5 ? ['ref', 'val'] : ['val', 'ref'];
     for (const k of kinds) {
       if (k === 'ref') {
-        const list = w.npcs.filter((n) => n.role !== 'smith' && n.quest && n.quest.kind !== 'hunt' && !n.quest.accepted && !n.quest.done && w.npcById(n.quest.targetId));
+        const list = w.npcs.filter((n) => !FE.Gear.isShopkeeper(n) && n.quest && n.quest.kind !== 'hunt' && !n.quest.accepted && !n.quest.done && w.npcById(n.quest.targetId));
         if (!list.length) continue;
         const n = FE.pick(game.rng, list);
         const old = { targetId: n.quest.targetId, targetName: n.quest.targetName };

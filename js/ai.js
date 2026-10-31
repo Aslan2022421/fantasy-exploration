@@ -243,11 +243,11 @@
   }
 
   // 村民在自己的聚落裡走動，不出聚落，也不進別人的建築；走一走會回家，在家待一陣子再出門。
-  // 鐵匠固定站在工坊裡
+  // 鐵匠、武器匠、盔甲匠固定站在工坊裡
   function npcTurn(game) {
     const w = game.world;
     for (const n of w.npcs) {
-      if (n.role === 'smith' || game.rng() >= C.NPC_MOVE_CHANCE) continue;
+      if (FE.Gear.isShopkeeper(n) || game.rng() >= C.NPC_MOVE_CHANCE) continue;
       const v = w.villageById(n.villageId);
       if (!v) continue;
       const open = (fx, fy, x, y) =>

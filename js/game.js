@@ -31,6 +31,9 @@
       this.fixed = [];       // 修好的地形錯位與斷崖，動盪時可能復發
       this.fell = false;     // 這一個動作裡冒險者倒下了
       this.talking = null;   // 對話視窗開著時，對方的 id（不進存檔）
+      this.talkPage = 'main'; // 工匠的對話停在哪一層（'main'、'buy'、'buy:weapon'、'repair'⋯⋯），不進存檔
+      this.nextGearId = 1;   // 下一件裝備的編號
+      this.tickAcc = 0;      // 還沒湊滿 10 刻的零頭（怪物每 10 刻行動一次）
       this.player = null;
       this.history = FE.store.load('fe.history', []);
       this.reports = FE.store.load('fe.reports', []);
@@ -45,9 +48,9 @@
         y: s.y,
         hp: C.PLAYER_MAX_HP,
         maxHp: C.PLAYER_MAX_HP,
-        atk: C.PLAYER_ATK,
-        weaponLv: 0,
-        block: C.BLOCK_BASE,
+        // 裝備欄：主手、副手（盾牌或空著）、身上（防具）。起始是普通長劍、沒有防具（還沒有職業時的暫用值）
+        equip: { main: FE.Gear.make('sword', 0, this.nextGearId++), off: null, body: null },
+        block: null,         // 目前的格擋值，第一次需要時補成盾牌的格擋值上限（combat.js）
         gold: 0,
         carrying: null,      // 手上的委託（送貨或清除）；送貨的物品放在背包裡
         bag: [],             // 背包：不限格數，同一種東西疊放（{ id, name, n }；送貨的物品是 id 'goods'，另記 giverId）
@@ -89,7 +92,7 @@
             m.home = { x: m.x, y: m.y };
             continue;
           }
-          const free = this.findFreeNear(m.x, m.y, (x, y) => reach.has(x + ',' + y));
+          const free = this.findFreeNear(m.x, m.y, (x, y) => reach.at(x, y));
           if (free) Object.assign(m, { x: free.x, y: free.y, home: { x: free.x, y: free.y } });
         }
       }
@@ -102,9 +105,8 @@
       const reach = FE.Checker.reachable(this.world);
       const pending = new Set();
       const canReach = (x, y) => {
-        const k = x + ',' + y;
-        if (reach.has(k) || pending.has(k)) return true;
-        return DIRS.some(([dx, dy]) => reach.has(x + dx + ',' + (y + dy)) && this.world.heightOk(x, y, x + dx, y + dy));
+        if (reach.at(x, y) || pending.has(x + ',' + y)) return true;
+        return DIRS.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy));
       };
       const spawned = [];
       for (const d of found) {
@@ -224,7 +226,8 @@
     }
 
     // ---- 背包 ----
-    // 不限格數，同一種東西疊放。送貨的物品是 id 'goods'，名字照委託，記著是誰託的（giverId），不跟採來的東西疊在一起
+    // 不限格數，同一種東西疊放（藥草、礦石、送貨的物品）。送貨的物品是 id 'goods'，名字照委託，記著是誰託的（giverId），不跟採來的東西疊在一起。
+    // 裝備（含礦鎬、鐮刀）每件單獨一格、不疊放：{ id: 'gear', n: 1, gear }，穿上的裝備不在背包裡，在 player.equip
 
     bagEntry(id, giverId) {
       return this.player.bag.find((e) => e.id === id && (id !== 'goods' || e.giverId === giverId)) || null;
@@ -241,6 +244,50 @@
       else this.player.bag.push(Object.assign({ id, name: FE.BAG_ITEMS[id] ? FE.BAG_ITEMS[id].name : id, n }, extra || {}));
     }
 
+    // 一件裝備放進背包
+    bagAddGear(g) {
+      this.player.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
+    }
+
+    // 背包裡有沒有這種工具（礦鎬、鐮刀），有就回傳那一件
+    toolOf(type) {
+      const e = this.player.bag.find((o) => o.id === 'gear' && o.gear.type === type);
+      return e ? e.gear : null;
+    }
+
+    // 這件裝備從身上或背包拿掉（壞掉、賣掉時用）
+    removeGear(g) {
+      const p = this.player;
+      for (const slot of ['main', 'off', 'body']) {
+        if (p.equip[slot] === g) {
+          p.equip[slot] = null;
+          if (slot === 'off') p.block = null;
+          return;
+        }
+      }
+      p.bag = p.bag.filter((e) => e.gear !== g);
+    }
+
+    // 身上穿著的加背包裡的所有裝備（修復、賣裝備、列出要修的東西用）
+    allGear() {
+      const p = this.player;
+      return FE.Gear.equipped(p).concat(p.bag.filter((e) => e.id === 'gear').map((e) => e.gear));
+    }
+
+    // 負重（目前重量、上限）與超重的等級（0 沒超重，1 超過 2 以內，2 超過太多）
+    weight() {
+      return FE.Gear.weightOf(this.player);
+    }
+
+    loadTier() {
+      return FE.Gear.loadTier(this.player);
+    }
+
+    // 主手武器的攻擊力
+    playerAtk() {
+      return FE.Gear.atkOf(this.player);
+    }
+
     // 拿出 n 個；不夠就不拿，回傳 false
     bagTake(id, n, giverId) {
       const e = this.bagEntry(id, giverId);
@@ -255,26 +302,83 @@
       return c && c.kind !== 'hunt' ? this.bagEntry('goods', c.giverId) : null;
     }
 
-    // 背包視窗列的東西：{ id, name, n, use }，按數字用第幾樣（目前只有藥草能用）
+    // 背包視窗列的東西：{ id, name, n, use, gear, info }，按數字選第幾樣（藥草是吃，裝備是穿上或拿起，工具放著就能用）
     bagList() {
-      return this.player.bag.map((e) => ({
-        id: e.id,
-        giverId: e.giverId,
-        name: e.id === 'goods' ? `${e.name}（要送去的東西）` : e.name,
-        n: e.n,
-        use: !!(FE.BAG_ITEMS[e.id] && FE.BAG_ITEMS[e.id].use),
-      }));
+      return this.player.bag.map((e) => {
+        if (e.id === 'gear') {
+          const g = e.gear;
+          const tool = FE.Gear.def(g).cat === 'tool';
+          return { id: 'gear', name: FE.Gear.name(g), n: 1, gear: g, use: !tool, info: `${FE.Gear.statText(g)}、${FE.Gear.durText(g)}` };
+        }
+        return {
+          id: e.id,
+          giverId: e.giverId,
+          name: e.id === 'goods' ? `${e.name}（要送去的東西）` : e.name,
+          n: e.n,
+          use: !!(FE.BAG_ITEMS[e.id] && FE.BAG_ITEMS[e.id].use),
+          info: '',
+        };
+      });
     }
 
-    // 用背包裡的第 i 樣東西
+    // 用背包裡的第 i 樣東西：藥草是吃，裝備是穿上或拿起（算一個動作，換下的放回背包）
     useItem(i) {
       const e = this.bagList()[i];
       if (!e) return;
+      if (e.gear) {
+        this.equipItem(this.player.bag[i]);
+        return;
+      }
       if (!e.use) {
         this.say(`${e.name}不能直接用。`, 'sys');
         return;
       }
       if (e.id === 'herb') this.eatHerb();
+    }
+
+    // 穿上或拿起背包裡的一件裝備：武器放主手、盾牌放副手、防具穿在身上，換下的放回背包，算一個動作。
+    // 弓箭佔兩手：拿弓箭時副手的盾牌放回背包，拿著弓箭時拿不了盾牌
+    equipItem(entry) {
+      const p = this.player;
+      const g = entry.gear;
+      const d = FE.Gear.def(g);
+      if (d.cat === 'tool') {
+        this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
+        return;
+      }
+      const slot = d.cat === 'weapon' ? 'main' : d.cat === 'shield' ? 'off' : 'body';
+      if (slot === 'off' && p.equip.main && FE.Gear.def(p.equip.main).twoHand) {
+        this.say('弓箭要用兩隻手拿，先換下弓箭才拿得了盾牌。', 'sys');
+        return;
+      }
+      this.beginAction();
+      const old = p.equip[slot];
+      p.bag = p.bag.filter((e) => e !== entry);
+      p.equip[slot] = g;
+      if (old) this.bagAddGear(old);
+      let extra = '';
+      if (slot === 'main' && d.twoHand && p.equip.off) {
+        this.bagAddGear(p.equip.off);
+        extra = `${FE.Gear.name(p.equip.off)}放回背包。`;
+        p.equip.off = null;
+      }
+      if (slot === 'off' || extra) p.block = null; // 盾牌換了，格擋值從滿的開始
+      this.say(`你${slot === 'main' ? '拿起' : '穿上'}了${FE.Gear.name(g)}。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}${extra}`, 'good');
+      this.endTurn(false);
+    }
+
+    // 把背包裡的第 i 樣東西丟掉（整疊），直接消失，不算動作。送貨的物品不能丟（委託還在手上）；身上穿著的要先換下
+    dropItem(i) {
+      const p = this.player;
+      const e = p.bag[i];
+      if (!e) return;
+      if (e.id === 'goods') {
+        this.say(`${e.name}是別人託你送的東西，不能丟。`, 'sys');
+        return;
+      }
+      const name = e.id === 'gear' ? FE.Gear.name(e.gear) : `${e.name}${e.n > 1 ? ` ×${e.n}` : ''}`;
+      p.bag = p.bag.filter((o) => o !== e);
+      this.say(`你把${name}丟掉了（負重 ${this.weight()} / ${C.CARRY_LIMIT}）。`, 'sys');
     }
 
     // 吃一份藥草：回生命上限的 25%（無條件進位），算一個動作，戰鬥中也能吃
@@ -306,15 +410,18 @@
       return this.world.nodes.find((n) => n.x === x && n.y === y && !(n.regrowAt > t) && this.world.passable(x, y)) || null;
     }
 
+    // 採一次磨損工具一次（耐久 50，用完就壞）
     gather(node) {
       const def = FE.NODES[node.kind];
       const item = FE.BAG_ITEMS[def.item];
+      const tool = this.toolOf(def.tool);
       this.beginAction();
       const n = FE.randInt(this.rng, C.GATHER_YIELD[0], C.GATHER_YIELD[1]);
       this.bagAdd(def.item, n);
       node.regrowAt = (this.ticks || 0) + C.REGROW_TICKS;
       this.earn(C.COMPUTE_PER_GATHER);
-      this.say(`你用${FE.BAG_ITEMS[def.tool].name}${def.verb}下${item.name} ${n} 份（背包裡共 ${this.bagCount(def.item)} 份）。`, 'good');
+      this.say(`你用${FE.GEAR[def.tool].name}${def.verb}下${item.name} ${n} 份（背包裡共 ${this.bagCount(def.item)} 份）。`, 'good');
+      if (tool) FE.Gear.wear(this, tool);
       this.endTurn(false);
     }
 
@@ -435,11 +542,16 @@
       }
       // 採集點：拿著對的工具撞上去就採，不移動；沒有工具就照常走過去
       const node = this.nodeAt(nx, ny);
-      if (node && this.bagCount(FE.NODES[node.kind].tool)) {
+      if (node && this.toolOf(FE.NODES[node.kind].tool)) {
         this.gather(node);
         return;
       }
       if (!this.world.passable(nx, ny)) return;
+      // 超重太多（超過上限＋2）：不能移動，要先丟掉東西
+      if (this.loadTier() >= 2) {
+        this.say(`你背得太重了（${this.weight()} / ${C.CARRY_LIMIT}），邁不開腳步。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
+        return;
+      }
       this.beginAction();
       const leaving = this.adjacentMonsters();
       p.x = nx;
@@ -457,7 +569,7 @@
       }
       if (node) {
         const def = FE.NODES[node.kind];
-        this.say(`這裡有${def.name}，需要${FE.BAG_ITEMS[def.tool].name}才${def.verb}得下來（武器匠有賣）。`, 'sys');
+        this.say(`這裡有${def.name}，需要${FE.GEAR[def.tool].name}才${def.verb}得下來（鐵匠或武器匠有賣）。`, 'sys');
       }
       const chest = this.world.chestAt(nx, ny);
       if (chest) {
@@ -477,11 +589,12 @@
     // 時間用「刻」算（參考矮人要塞）：動作花幾刻，怪物每 10 刻行動一次；失序時每個動作的刻加倍，怪物多動一次。
     // 士兵跟冒險者同步：冒險者每做一個動作，士兵做一個動作（失序時怪物動兩次，士兵仍只動一次）
     endTurn(moved, ticks) {
+      const p = this.player;
       const chaos = FE.Stability.state(this) === 2 ? C.CHAOS_TIME : 1;
-      const t = (ticks || C.TICKS_MOVE) * chaos;
+      // 身上防具和超重讓每個動作多花幾刻（見 gear.js 的 extraTicks）
+      const t = ((ticks || C.TICKS_MOVE) + FE.Gear.extraTicks(p)) * chaos;
       this.turn++;
       this.ticks = (this.ticks || 0) + t;
-      const p = this.player;
       FE.Combat.regenBlock(this, p);
       this.addRepair(C.VIRTUAL_REPAIR);
       if (moved !== false) {
@@ -496,7 +609,11 @@
         this.soldierClock -= 1;
         FE.AI.soldierTurn(this);
       }
-      this.worldClock += Math.max(1, Math.round(t / C.TICKS_MOVE)) / this.worldEvery;
+      // 怪物每 10 刻行動一次：刻數累積起來，湊滿 10 刻就多動一次（防具多花的刻真的讓怪物多動，不被四捨五入吃掉）
+      this.tickAcc = (this.tickAcc || 0) + t;
+      const turns = Math.floor(this.tickAcc / C.TICKS_MOVE);
+      this.tickAcc -= turns * C.TICKS_MOVE;
+      this.worldClock += turns / this.worldEvery;
       while (this.worldClock >= 1 && !this.fell) {
         this.worldClock -= 1;
         FE.AI.worldTurn(this);
@@ -556,6 +673,12 @@
       p.hp = Math.min(p.maxHp, p.hp + 5);
       this.world.chests = this.world.chests.filter((c) => c !== chest);
       this.say(`打開寶箱：金幣 +${gold}，生命回復 5。`, 'good');
+      // 25% 機率多開出一件裝備（品質普通～傑作，每高一級機率減半），放進背包
+      if (this.rng() < C.CHEST_GEAR) {
+        const g = FE.Gear.randomDrop(this, 0, 5);
+        this.bagAddGear(g);
+        this.say(`寶箱裡還有一件${FE.Gear.name(g)}，你收進了背包。`, 'good');
+      }
     }
 
     // 清除委託指定的小怪物還剩幾隻；合體了的話，合體怪物還在就算還在
@@ -563,26 +686,16 @@
       return ids.filter((id) => this.monsters.some((m) => m.id === id || (m.members && m.members.some((o) => o.id === id)))).length;
     }
 
-    // 武器改良的價錢跟著聚落的經濟走：越富裕越便宜，有市場再便宜一成
-    smithPrice(v) {
-      const base = C.SMITH_PRICE + C.SMITH_PRICE_STEP * this.player.weaponLv;
-      return Math.round(base * FE.Steading.smithFactor(v));
-    }
-
-    // 改良下一級要幾顆礦石：Lv5→6 一顆，之後每級多一顆；Lv5 以下不用
-    oreNeeded() {
-      const lv = this.player.weaponLv;
-      return lv >= C.ORE_FROM_LV ? lv - C.ORE_FROM_LV + 1 : 0;
-    }
-
     // ---- 對話 ----
-    // 撞上村民或武器匠就打開對話視窗（畫面在 render.js，按鍵在 main.js）：打開算一個動作，不算步數，
-    // 怪物各做一件事；在對話裡選選項不再花動作（改良武器也一樣，一次對話改良一次，改完關掉）。
+    // 撞上村民、鐵匠、武器匠、盔甲匠或士兵就打開對話視窗（畫面在 render.js，按鍵在 main.js）：打開算一個動作，不算步數，
+    // 怪物各做一件事；在對話裡選選項不再花動作（買賣、修復、打造也一樣）。
+    // 工匠的選項分層（買、修、打造、賣礦石、賣裝備）：game.talkPage 記著停在哪一層，Esc 或「返回」回上一層，最上層再按就關掉。
     // 對話開著時 game.talking 記著對方的 id（不進存檔）
 
     openTalk(npc) {
       this.beginAction();
       this.talking = npc.id;
+      this.talkPage = 'main';
       this.endTurn(false);
     }
 
@@ -594,37 +707,18 @@
       const v = this.world.villageById(npc.villageId);
       const leave = { id: 'leave', label: '離開' };
       const goods = this.goodsFor(c);
+      const shop = FE.Gear.shopOf(npc, v);
       const out = (text, options) => ({
         name: npc.name,
-        role: npc.role === 'smith' ? '武器匠' : npc.role === 'soldier' ? '士兵' : '村民',
+        role: shop ? FE.Gear.SHOPS[shop].title : npc.role === 'soldier' ? '士兵' : '村民',
         village: v ? v.name : '',
         text,
         options,
       });
       // 士兵只有一句閒話
       if (npc.role === 'soldier') return out(FE.SOLDIER_LINES[(npc.id + this.turn) % FE.SOLDIER_LINES.length], [leave]);
-      // 武器匠：改良（Lv5 以上還要礦石），另外賣礦鎬、鐮刀（已有的不再出現）
-      if (npc.role === 'smith') {
-        const price = this.smithPrice(v);
-        const short = price - p.gold;
-        const ore = this.oreNeeded();
-        const oreShort = ore - this.bagCount('ore');
-        const lack = [short > 0 ? `${short} 金幣` : '', oreShort > 0 ? `${oreShort} 顆礦石` : ''].filter(Boolean).join('、');
-        const opts = [{ id: 'improve', label: '改良', note: lack ? `還差 ${lack}` : ore ? `${price} 金幣、${ore} 顆礦石` : `${price} 金幣`, disabled: !!lack }];
-        for (const [id, tool] of [['buyPick', 'pick'], ['buySickle', 'sickle']]) {
-          if (this.bagCount(tool)) continue;
-          const ts = C.TOOL_PRICE - p.gold;
-          opts.push({ id, label: `買${FE.BAG_ITEMS[tool].name}`, note: ts > 0 ? `還差 ${ts} 金幣` : `${C.TOOL_PRICE} 金幣`, disabled: ts > 0 });
-        }
-        opts.push(leave);
-        const oreText = ore
-          ? `和 ${ore} 顆礦石，你身上有 ${p.gold} 金幣、${this.bagCount('ore')} 顆礦石${oreShort > 0 ? `，還差 ${oreShort} 顆礦石` : ''}`
-          : `，你身上有 ${p.gold} 金幣`;
-        return out(
-          `你的武器是 Lv${p.weaponLv}，攻擊力 ${p.atk}。改良一級要 ${price} 金幣${oreText}；改良後攻擊力會加 1～2。礦鎬、鐮刀一把 ${C.TOOL_PRICE} 金幣，買了就一直能用，不會壞。`,
-          opts
-        );
-      }
+      // 工匠：買、修、打造、賣礦石、賣裝備（分層，見 shopTalk）
+      if (shop) return out(...this.shopTalk(npc, v, shop));
       if (c && c.kind === 'hunt' && c.giverId === npc.id) {
         const left = this.huntRemaining(c.monsterIds);
         if (left > 0) return out(`附近還有 ${left} 隻小怪物，拜託了。`, [leave]);
@@ -664,35 +758,12 @@
       const q = npc.quest;
       const c = p.carrying;
       let close = true;
-      if (o.id === 'improve') {
-        const price = this.smithPrice(this.world.villageById(npc.villageId));
-        const ore = this.oreNeeded();
-        if (p.gold < price || this.bagCount('ore') < ore) {
-          this.say(`${npc.name}：把武器改良一級要 ${price} 金幣${ore ? `和 ${ore} 顆礦石` : ''}，你現在有 ${p.gold} 金幣${ore ? `、${this.bagCount('ore')} 顆礦石` : ''}。`, 'npc');
-          close = false;
-        } else {
-          const gain = FE.randInt(this.rng, 1, 2);
-          p.gold -= price;
-          if (ore) this.bagTake('ore', ore);
-          p.atk += gain;
-          p.weaponLv++;
-          this.say(`${npc.name}幫你改良了武器：武器 Lv${p.weaponLv}，攻擊力 +${gain}（現在 ${p.atk}），花了 ${price} 金幣${ore ? `、${ore} 顆礦石` : ''}。`, 'good');
-        }
-      } else if (o.id === 'buyPick' || o.id === 'buySickle') {
-        // 工具買一次就一直有，不會壞；已有的選項不會出現
-        const tool = o.id === 'buyPick' ? 'pick' : 'sickle';
-        const name = FE.BAG_ITEMS[tool].name;
-        if (this.bagCount(tool)) {
-          close = false;
-        } else if (p.gold < C.TOOL_PRICE) {
-          this.say(`${npc.name}：一把${name}要 ${C.TOOL_PRICE} 金幣，你現在有 ${p.gold}。`, 'npc');
-          close = false;
-        } else {
-          p.gold -= C.TOOL_PRICE;
-          this.bagAdd(tool, 1);
-          this.say(`${npc.name}賣給你一把${name}，花了 ${C.TOOL_PRICE} 金幣。${tool === 'pick' ? '礦坑裡的礦脈挖得動了。' : '森林裡的藥草割得下來了。'}`, 'good');
-        }
-      } else if (o.id === 'report') {
+      if (FE.Gear.shopOf(npc, this.world.villageById(npc.villageId))) {
+        const r = this.shopChoose(npc, o);
+        if (r.close) this.talking = null;
+        return r;
+      }
+      if (o.id === 'report') {
         if (q) q.done = true;
         this.say(`${npc.name}：村子外面安靜多了，謝謝你。`, 'npc');
         this.say(`委託完成：經驗值 +${c.exp}、金幣 +${c.gold}。`, 'good');
@@ -741,6 +812,240 @@
 
     closeTalk() {
       this.talking = null;
+      this.talkPage = 'main';
+    }
+
+    // Esc：工匠的對話在第二層以下就回上一層（回傳 false，對話還開著），在最上層或不是工匠就關掉（回傳 true）
+    talkBack() {
+      const npc = this.talking != null ? this.talkTarget(this.talking) : null;
+      const v = npc ? this.world.villageById(npc.villageId) : null;
+      const shop = npc ? FE.Gear.shopOf(npc, v) : null;
+      if (shop && this.talkPage && this.talkPage !== 'main') {
+        this.talkPage = this.parentPage(FE.Gear.SHOPS[shop], this.talkPage);
+        return false;
+      }
+      this.closeTalk();
+      return true;
+    }
+
+    // ---- 工匠的對話 ----
+    // 鐵匠（村莊）什麼都賣、修、打造；城鎮分成武器匠（武器、礦鎬、鐮刀）和盔甲匠（防具與盾牌），各修自己那一類。
+    // 價錢：販售價＝原價×品質價值倍率×聚落經濟倍率；修復費＝修回的比例×原價×0.5×經濟倍率（至少 1）；
+    // 賣回＝半價×剩餘耐久比例；礦石一顆 5 金幣；打造要礦石加原價一半的工錢，品質在聚落的範圍內隨機（每高一級機率減半）
+
+    // 上一層：「買」只有一類東西時，那一類就是第一層，返回直接回最上層
+    parentPage(S, page) {
+      const parts = page.split(':');
+      if (parts.length >= 3) return `buy:${parts[1]}`;
+      if (parts[0] === 'buy' && parts.length === 2) return Object.keys(S.buy).length === 1 ? 'main' : 'buy';
+      return 'main';
+    }
+
+    // 這家店「買」的某一類東西：[{ type, q }]；工具只有普通品質，其他類每種品質各一筆
+    buyEntries(S, cat, q) {
+      const out = [];
+      for (const type of S.buy[cat]) {
+        const quals = FE.GEAR[type].cat === 'tool' ? [0] : S.quals;
+        for (const qq of quals) if (q === undefined || q === qq) out.push({ type, q: qq });
+      }
+      return out;
+    }
+
+    // 錢或礦石不夠時，選項的說明寫還差多少
+    shortText(gold, ore) {
+      const s = [gold > 0 ? `${gold} 金幣` : '', ore > 0 ? `${ore} 顆礦石` : ''].filter(Boolean).join('、');
+      return s ? `還差 ${s}` : '';
+    }
+
+    // 工匠對話目前這一層的內容：回傳 [text, options]
+    shopTalk(npc, v, shopKey) {
+      const p = this.player;
+      const S = FE.Gear.SHOPS[shopKey];
+      const back = { id: 'back', label: '返回' };
+      const have = `你身上有 ${p.gold} 金幣、${this.bagCount('ore')} 顆礦石。`;
+      const MAX = 8; // 一層最多列幾項（加上「返回」不超過 9，才按得到）
+      let page = this.talkPage || 'main';
+      if (page === 'buy' && Object.keys(S.buy).length === 1) page = 'buy:' + Object.keys(S.buy)[0];
+      const price = (e) => FE.Gear.shopPrice(e.type, e.q, v);
+      const gname = (e) => FE.Gear.name({ type: e.type, q: e.q });
+      const lines = {
+        blacksmith: '武器、盔甲、盾牌我都能賣、能修、能打。礦鎬和鐮刀也有。',
+        weaponsmith: '武器、礦鎬、鐮刀歸我管；盾牌和盔甲去找盔甲匠。',
+        armorer: '盔甲和盾牌歸我管；武器和工具去找武器匠。',
+      };
+
+      if (page === 'main') {
+        const repairs = this.allGear().filter((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max).length;
+        const sellable = p.bag.filter((e) => e.id === 'gear' && S.sell.includes(FE.GEAR[e.gear.type].cat)).length;
+        const ore = this.bagCount('ore');
+        return [
+          `${lines[shopKey]}${have}`,
+          [
+            { id: 'buy', label: '買' },
+            { id: 'repair', label: '修', note: repairs ? `${repairs} 件要修` : '沒有要修的' },
+            { id: 'craft', label: '打造', note: '用礦石' },
+            { id: 'sellOre', label: '賣礦石', note: ore ? `${ore} 顆，+${ore * C.ORE_PRICE} 金幣` : '沒有礦石', disabled: !ore },
+            { id: 'sell', label: '賣裝備', note: sellable ? `${sellable} 件` : '沒有可賣的', disabled: !sellable },
+            { id: 'leave', label: '離開' },
+          ],
+        ];
+      }
+
+      if (page === 'buy') {
+        return [
+          `要買哪一類？${have}`,
+          Object.keys(S.buy).map((cat) => ({ id: `cat:${cat}`, label: FE.Gear.CAT_NAMES[cat] })).concat([back]),
+        ];
+      }
+
+      const m = /^buy:(\w+)(?::(\d+))?$/.exec(page);
+      if (m) {
+        const cat = m[1];
+        const q = m[2] === undefined ? undefined : Number(m[2]);
+        const all = this.buyEntries(S, cat, q);
+        // 這一類的東西太多就先選品質
+        if (q === undefined && all.length > MAX) {
+          return [`要哪種做工的？${have}`, S.quals.map((qq) => ({ id: `qual:${cat}:${qq}`, label: FE.QUALITIES[qq].name })).concat([back])];
+        }
+        const opts = [];
+        for (const e of all) {
+          if (FE.GEAR[e.type].cat === 'tool' && this.toolOf(e.type)) continue; // 工具已經有了就不再出現
+          const pr = price(e);
+          const short = pr - p.gold;
+          opts.push({
+            id: `buyItem:${e.type}:${e.q}`,
+            label: `${gname(e)}（${FE.Gear.statText(e)}）`,
+            note: short > 0 ? this.shortText(short, 0) : `${pr} 金幣`,
+            disabled: short > 0,
+          });
+        }
+        opts.push(back);
+        return [`${FE.Gear.CAT_NAMES[cat]}。${have}`, opts];
+      }
+
+      if (page === 'repair') {
+        const list = this.allGear().filter((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max).slice(0, MAX);
+        const opts = list.map((g) => {
+          const qt = FE.Gear.repairQuote(g, v);
+          const short = qt.cost - p.gold;
+          const worn = p.equip.main === g || p.equip.off === g || p.equip.body === g ? '（穿著）' : '';
+          return {
+            id: `repairItem:${g.id}`,
+            label: `修${FE.Gear.name(g)}${worn}`,
+            note: short > 0 ? `${FE.Gear.durText(g)}，${this.shortText(short, 0)}` : `${FE.Gear.durText(g)}，修回 ${qt.restore} 點，${qt.cost} 金幣`,
+            disabled: short > 0,
+          };
+        });
+        opts.push(back);
+        const how = '我能修到完整。';
+        return [list.length ? `${how}${have}` : '沒有要修的東西。', opts];
+      }
+
+      if (page === 'craft') {
+        const opts = S.craft.map((type) => {
+          const qt = FE.Gear.craftQuote(type, v);
+          const lackOre = qt.ore - this.bagCount('ore');
+          const lackGold = qt.fee - p.gold;
+          const lack = this.shortText(lackGold, lackOre);
+          const lo = FE.QUALITIES[qt.range[0]];
+          const hi = FE.QUALITIES[qt.range[1]];
+          const ql = (qq) => `${qq.sym}${qq.name}${qq.sym}`;
+          return {
+            id: `craftItem:${type}`,
+            label: `打造${FE.GEAR[type].name}（${FE.Gear.statText({ type, q: 0 })}）`,
+            note: lack || `${qt.ore} 顆礦石、${qt.fee} 金幣，品質${ql(lo)}～${ql(hi)}`,
+            disabled: !!lack,
+          };
+        });
+        opts.push(back);
+        return [`用礦石打造新的，要礦石加一半原價的工錢，做出來的品質不一定。${have}`, opts];
+      }
+
+      if (page === 'sell') {
+        const list = p.bag.filter((e) => e.id === 'gear' && S.sell.includes(FE.GEAR[e.gear.type].cat)).slice(0, MAX);
+        const opts = list.map((e) => ({
+          id: `sellItem:${e.gear.id}`,
+          label: `賣${FE.Gear.name(e.gear)}`,
+          note: `${FE.Gear.durText(e.gear)}，+${FE.Gear.sellPrice(e.gear)} 金幣`,
+        }));
+        opts.push(back);
+        return [`背包裡的東西我照原價的一半、再看磨損收。穿在身上的要先換下來。${have}`, opts];
+      }
+      return ['……', [back]];
+    }
+
+    // 工匠對話選第 o 個選項：換層、買、修、打造、賣；錢或礦石不夠的選項（disabled）只說還差多少。回傳 { close }
+    shopChoose(npc, o) {
+      const p = this.player;
+      const v = this.world.villageById(npc.villageId);
+      const S = FE.Gear.SHOPS[FE.Gear.shopOf(npc, v)];
+      const stay = { close: false };
+      if (o.id === 'leave') {
+        this.talkPage = 'main';
+        return { close: true };
+      }
+      if (o.id === 'back') {
+        this.talkPage = this.parentPage(S, this.talkPage === 'buy' && Object.keys(S.buy).length === 1 ? 'buy:' + Object.keys(S.buy)[0] : this.talkPage);
+        return stay;
+      }
+      if (o.disabled) {
+        this.say(`${npc.name}：${o.label.replace(/（.*$/, '')}，${o.note}。`, 'npc');
+        return stay;
+      }
+      if (['buy', 'repair', 'craft', 'sell'].includes(o.id)) {
+        this.talkPage = o.id;
+        return stay;
+      }
+      if (o.id.startsWith('cat:')) {
+        this.talkPage = 'buy:' + o.id.slice(4);
+        return stay;
+      }
+      if (o.id.startsWith('qual:')) {
+        const [, cat, q] = o.id.split(':');
+        this.talkPage = `buy:${cat}:${q}`;
+        return stay;
+      }
+      const [kind, a, b] = o.id.split(':');
+      if (kind === 'sellOre') {
+        const n = this.bagCount('ore');
+        this.bagTake('ore', n);
+        p.gold += n * C.ORE_PRICE;
+        this.say(`${npc.name}收下 ${n} 顆礦石，給了你 ${n * C.ORE_PRICE} 金幣。`, 'good');
+      } else if (kind === 'buyItem') {
+        const type = a;
+        const q = Number(b);
+        const pr = FE.Gear.shopPrice(type, q, v);
+        if (p.gold < pr || (FE.GEAR[type].cat === 'tool' && this.toolOf(type))) return stay;
+        p.gold -= pr;
+        const g = FE.Gear.make(type, q, this.nextGearId++);
+        this.bagAddGear(g);
+        this.say(`${npc.name}賣給你${FE.Gear.name(g)}，花了 ${pr} 金幣。${type === 'pick' ? '礦坑裡的礦脈挖得動了。' : type === 'sickle' ? '森林裡的藥草割得下來了。' : ''}`, 'good');
+      } else if (kind === 'repairItem') {
+        const g = this.allGear().find((x) => x.id === Number(a));
+        if (!g || !S.repair.includes(FE.GEAR[g.type].cat) || g.dur >= g.max) return stay;
+        const qt = FE.Gear.repairQuote(g, v);
+        if (p.gold < qt.cost) return stay;
+        p.gold -= qt.cost;
+        g.dur += qt.restore;
+        FE.Gear.repaired(g);
+        this.say(`${npc.name}修好了你的${FE.Gear.name(g)}（${FE.Gear.durText(g)}），花了 ${qt.cost} 金幣。`, 'good');
+      } else if (kind === 'craftItem') {
+        const qt = FE.Gear.craftQuote(a, v);
+        if (!S.craft.includes(a) || p.gold < qt.fee || this.bagCount('ore') < qt.ore) return stay;
+        this.bagTake('ore', qt.ore);
+        p.gold -= qt.fee;
+        const g = FE.Gear.make(a, FE.Gear.rollQuality(this.rng, qt.range[0], qt.range[1]), this.nextGearId++);
+        this.bagAddGear(g);
+        this.say(`${npc.name}用 ${qt.ore} 顆礦石打造了${FE.Gear.name(g)}，工錢 ${qt.fee} 金幣，放進了你的背包。`, 'good');
+      } else if (kind === 'sellItem') {
+        const e = p.bag.find((x) => x.id === 'gear' && x.gear.id === Number(a));
+        if (!e || !S.sell.includes(FE.GEAR[e.gear.type].cat)) return stay;
+        const gain = FE.Gear.sellPrice(e.gear);
+        p.bag = p.bag.filter((x) => x !== e);
+        p.gold += gain;
+        this.say(`${npc.name}收下了你的${FE.Gear.name(e.gear)}，給了你 ${gain} 金幣。`, 'good');
+      }
+      return stay;
     }
 
     // ---- 回合制戰鬥 ----
@@ -775,6 +1080,11 @@
       const m = this.targetMonster();
       if (!m) {
         this.say('旁邊沒有怪物，不需要撤退。', 'sys');
+        return;
+      }
+      // 超重太多（超過上限＋2）：不能撤退
+      if (this.loadTier() >= 2) {
+        this.say(`你背得太重了（${this.weight()} / ${C.CARRY_LIMIT}），跑不動。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
         return;
       }
       this.beginAction();
@@ -813,7 +1123,7 @@
       this.strike(kind, m);
     }
 
-    // 倒下後在出生點醒來；世界上有神聖的聚落時，改在離倒下的地方最近的那一座醒來
+    // 倒下後在離倒下的地方最近的聚落（村莊或城鎮，不看神聖與否）醒來，沒有聚落才回出生點
     die(m) {
       const p = this.player;
       const w = this.world;
@@ -822,7 +1132,7 @@
       let at = w.spawn;
       let where = '出生點';
       const holy = w.villages
-        .filter((v) => FE.Steading.isHoly(v))
+        .slice()
         .sort((a, b) => Math.abs(a.cx - p.x) + Math.abs(a.cy - p.y) - (Math.abs(b.cx - p.x) + Math.abs(b.cy - p.y)))[0];
       if (holy) {
         // 在離聚落中央最近的路上醒來（不在別人家裡）
@@ -872,6 +1182,7 @@
       // 經驗值與打倒怪物的算力，打倒後一次結算
       this.say(`${m.name}倒下了，經驗值 +${m.exp}。${fix}`, 'good');
       this.dropChest(m);
+      this.dropGear(m);
       this.addExp(m.exp);
       this.earn(m.compute);
       const c = this.player.carrying;
@@ -896,6 +1207,15 @@
         this.say(`${this.player.name}擊敗${m.name}的事寫進了世界的歷史紀錄。`, 'world');
       }
       FE.Stability.update(this);
+    }
+
+    // 創世時的中型怪物與合體生出的中型怪物（不是事件與侵蝕生的 m.small），打倒時 30% 機率多掉一件裝備，
+    // 品質做工好～優秀（每高一級機率減半），直接放進背包
+    dropGear(m) {
+      if (m.tier !== 'mid' || m.small || this.rng() >= C.DROP_MID_GEAR) return;
+      const g = FE.Gear.randomDrop(this, 1, 3);
+      this.bagAddGear(g);
+      this.say(`${m.name}身上掉出一件${FE.Gear.name(g)}，你收進了背包。`, 'good');
     }
 
     // 掉寶箱：會追人的怪物（m.small）有機率掉、金幣少；其他怪物一定掉，影響範圍越大金幣越多
@@ -965,7 +1285,7 @@
       const reach = FE.Checker.reachable(this.world);
       const m = this.spawnMonster(
         { type: 'RUNTIME', x: where.x, y: where.y, cells: [[where.x, where.y]], scope: 3, data: { message } },
-        (x, y) => reach.has(x + ',' + y)
+        (x, y) => reach.at(x, y)
       );
       if (m) m.exp = C.RUNTIME_EXP;
       // 錯誤的細節只進開發者的錯誤報告，遊戲訊息只寫看得到的現象

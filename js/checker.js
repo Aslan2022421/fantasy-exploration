@@ -91,26 +91,163 @@
     });
   }
 
-  // 從出生點走得到的格子
-  function reachable(world) {
+  // 從出生點走得到的格子（全世界一格一格走，舊做法；第二十五版起只給測試對照新做法用，見 FE.Checker.full）。
+  // 回傳的物件跟 reachable() 一樣有 at(x, y) 與 has('x,y')
+  function reachableFull(world) {
     const seen = new Set();
     const s = world.spawn;
-    if (!s || !world.passable(s.x, s.y)) return seen;
-    const q = [[s.x, s.y]];
-    seen.add(key(s.x, s.y));
-    for (let h = 0; h < q.length; h++) {
-      const [x, y] = q[h];
-      for (const [dx, dy] of DIRS4) {
-        const nx = x + dx;
-        const ny = y + dy;
-        const nk = key(nx, ny);
-        if (!seen.has(nk) && world.canStep(x, y, nx, ny)) {
-          seen.add(nk);
-          q.push([nx, ny]);
+    if (s && world.passable(s.x, s.y)) {
+      const q = [[s.x, s.y]];
+      seen.add(key(s.x, s.y));
+      for (let h = 0; h < q.length; h++) {
+        const [x, y] = q[h];
+        for (const [dx, dy] of DIRS4) {
+          const nx = x + dx;
+          const ny = y + dy;
+          const nk = key(nx, ny);
+          if (!seen.has(nk) && world.canStep(x, y, nx, ny)) {
+            seen.add(nk);
+            q.push([nx, ny]);
+          }
         }
       }
     }
-    return seen;
+    // （舊做法沒有 rootAt，測試只用 at）
+    return { at: (x, y) => seen.has(key(x, y)), has: (k) => seen.has(k), size: seen.size };
+  }
+
+  // 從出生點走得到的格子（第二十五版起）：每塊區塊各自算一次「區塊內互相走得通的連通塊」（ch._cc，那一塊有格子的
+  // 走得過去或高度被改過才重算，World.setCell／setHeight 會記），再把相鄰區塊邊上走得通的連通塊併起來，
+  // 從出生點所在的連通塊走得到的就是走得到。世界變大，創世時只需重算新的那一塊（和被改到的區塊），不必整個世界再走一遍。
+  // 同一個世界狀態（每塊區塊的版本和出生點都沒變）只算一次，快取在 world._reach。
+  // 回傳的物件是當下的快照：at(x, y) 問這一格走不走得到，has('x,y') 是舊介面的相容寫法
+  function chunkComps(ch) {
+    const ver = ch.ver || 0;
+    if (ch._cc && ch._cc.ver === ver) return ch._cc;
+    const W = FE.CONFIG.CHUNK_W;
+    const H = FE.CONFIG.CHUNK_H;
+    const n = W * H;
+    const pass = new Uint8Array(n);
+    const hgt = new Int8Array(n);
+    for (let y = 0; y < H; y++) {
+      const row = ch.cells[y];
+      for (let x = 0; x < W; x++) {
+        pass[y * W + x] = FE.TERRAIN[row[x].t].pass ? 1 : 0;
+        hgt[y * W + x] = row[x].h;
+      }
+    }
+    const label = new Int32Array(n).fill(-1);
+    const stack = new Int32Array(n);
+    let count = 0;
+    let sp = 0;
+    const push = (j, k) => {
+      if (pass[k] && label[k] < 0 && Math.abs(hgt[j] - hgt[k]) <= 1) {
+        label[k] = count;
+        stack[sp++] = k;
+      }
+    };
+    for (let i = 0; i < n; i++) {
+      if (!pass[i] || label[i] >= 0) continue;
+      label[i] = count;
+      stack[sp++] = i;
+      while (sp) {
+        const j = stack[--sp];
+        const x = j % W;
+        if (x < W - 1) push(j, j + 1);
+        if (x > 0) push(j, j - 1);
+        if (j + W < n) push(j, j + W);
+        if (j - W >= 0) push(j, j - W);
+      }
+      count++;
+    }
+    ch._cc = { ver, label, n: count };
+    return ch._cc;
+  }
+
+  function reachable(world) {
+    const chunks = world.chunks;
+    const s = world.spawn;
+    const comps = chunks.map(chunkComps);
+    const sig = chunks.map((c, i) => c.cx + ':' + c.cy + ':' + comps[i].ver).join(',') + '|' + (s ? s.x + ',' + s.y : '');
+    if (world._reach && world._reach.sig === sig) return world._reach.info;
+    const W = FE.CONFIG.CHUNK_W;
+    const H = FE.CONFIG.CHUNK_H;
+    const bases = [];
+    let total = 0;
+    chunks.forEach((c, i) => {
+      c._ri = i;
+      bases.push(total);
+      total += comps[i].n;
+    });
+    const parent = new Int32Array(total);
+    for (let i = 0; i < total; i++) parent[i] = i;
+    const find = (a) => {
+      while (parent[a] !== a) {
+        parent[a] = parent[parent[a]];
+        a = parent[a];
+      }
+      return a;
+    };
+    const union = (a, b) => {
+      a = find(a);
+      b = find(b);
+      if (a !== b) parent[a] = b;
+    };
+    // 相鄰區塊的邊：兩邊的格子都走得過去、高度差在 1 以內，就把兩個連通塊併起來
+    for (let i = 0; i < chunks.length; i++) {
+      const ch = chunks[i];
+      const east = world.chunkMap.get(ch.cx + 1 + ',' + ch.cy);
+      if (east) {
+        const a = comps[i].label;
+        const b = comps[east._ri].label;
+        for (let y = 0; y < H; y++) {
+          const la = a[y * W + W - 1];
+          const lb = b[y * W];
+          if (la >= 0 && lb >= 0 && Math.abs(ch.cells[y][W - 1].h - east.cells[y][0].h) <= 1) union(bases[i] + la, bases[east._ri] + lb);
+        }
+      }
+      const south = world.chunkMap.get(ch.cx + ',' + (ch.cy + 1));
+      if (south) {
+        const a = comps[i].label;
+        const b = comps[south._ri].label;
+        for (let x = 0; x < W; x++) {
+          const la = a[(H - 1) * W + x];
+          const lb = b[x];
+          if (la >= 0 && lb >= 0 && Math.abs(ch.cells[H - 1][x].h - south.cells[0][x].h) <= 1) union(bases[i] + la, bases[south._ri] + lb);
+        }
+      }
+    }
+    // 出生點所在的連通塊
+    let root = -1;
+    const labels = comps.map((c) => c.label);
+    if (s) {
+      const sc = world.chunkAt(s.x, s.y);
+      if (sc) {
+        const l = labels[sc._ri][(s.y - sc.y0) * W + (s.x - sc.x0)];
+        if (l >= 0) root = find(bases[sc._ri] + l);
+      }
+    }
+    const info = {
+      at(x, y) {
+        const ch = world.chunkAt(x, y);
+        if (!ch || root < 0) return false;
+        const l = labels[ch._ri][(y - ch.y0) * W + (x - ch.x0)];
+        return l >= 0 && find(bases[ch._ri] + l) === root;
+      },
+      has(k) {
+        const i = k.indexOf(',');
+        return info.at(Number(k.slice(0, i)), Number(k.slice(i + 1)));
+      },
+      // 這一格所在的連通塊（走得通的一整片）的編號；走不過去的格子是 -1。兩格編號相同就走得到彼此
+      rootAt(x, y) {
+        const ch = world.chunkAt(x, y);
+        if (!ch) return -1;
+        const l = labels[ch._ri][(y - ch.y0) * W + (x - ch.x0)];
+        return l >= 0 ? find(bases[ch._ri] + l) : -1;
+      },
+    };
+    world._reach = { sig, info };
+    return info;
   }
 
   // 從被圍住的區域往外找最短的路，接到走得到的地方。
@@ -130,7 +267,7 @@
         const nk = key(nx, ny);
         if (!world.inBounds(nx, ny) || prev.has(nk)) continue;
         prev.set(nk, key(x, y));
-        if (reached.has(nk)) {
+        if (reached.at(nx, ny)) {
           const path = [];
           let k = key(x, y);
           while (prev.get(k) !== null) {
@@ -146,47 +283,73 @@
     return null;
   }
 
-  // 斷層：可以走的區域，從出生點卻走不到（被岩石、水或斷崖圍住）
-  function findUnreachable(world, covered) {
-    const reached = reachable(world);
+  // 斷層的核心：eachCell(fn) 依序給要看的格子（fn(x, y)），reached 是 { at(x, y) }，走得到的格子不算。
+  // 一片走不到的區域從出生點走不到、又沒有怪物負責，就生成一隻斷層（路口、打通的路見 bridgePath）。
+  // 結果依「區域裡創世順序最早的一格」（區塊、列、欄）排序，區域的格子也從那一格開始走，所以只掃一部分格子時，
+  // 掃到的區域跟掃整個世界的結果一模一樣（格子、順序、路口都相同）
+  function unreachableIn(world, covered, reached, eachCell) {
     const seen = new Set();
-    const bugs = [];
-    world.forEachCell((x, y) => {
-      {
-        const k = key(x, y);
-        if (!world.passable(x, y) || reached.has(k) || seen.has(k)) return;
-        const cells = [];
-        const stack = [[x, y]];
-        seen.add(k);
-        while (stack.length) {
-          const [cx, cy] = stack.pop();
-          cells.push([cx, cy]);
-          for (const [dx, dy] of DIRS4) {
-            const nx = cx + dx;
-            const ny = cy + dy;
-            const nk = key(nx, ny);
-            if (world.canStep(cx, cy, nx, ny) && !reached.has(nk) && !seen.has(nk)) {
-              seen.add(nk);
-              stack.push([nx, ny]);
-            }
+    const found = [];
+    const flood = (sx, sy) => {
+      const visited = new Set([key(sx, sy)]);
+      const cells = [];
+      const stack = [[sx, sy]];
+      while (stack.length) {
+        const [cx, cy] = stack.pop();
+        cells.push([cx, cy]);
+        for (const [dx, dy] of DIRS4) {
+          const nx = cx + dx;
+          const ny = cy + dy;
+          const nk = key(nx, ny);
+          if (world.canStep(cx, cy, nx, ny) && !reached.at(nx, ny) && !visited.has(nk)) {
+            visited.add(nk);
+            stack.push([nx, ny]);
           }
         }
-        if (cells.some(([cx, cy]) => covered.has(key(cx, cy)))) return;
-        const hasEntity = cells.some(([cx, cy]) => world.npcAt(cx, cy) || world.chestAt(cx, cy));
-        if (cells.length < 3 && !hasEntity) return; // 一兩格的小凹洞不算
-        const path = bridgePath(world, cells, reached);
-        if (!path) return;
-        bugs.push({
+      }
+      return cells;
+    };
+    // 創世順序的先後：區塊的創世順序，再來是列、欄
+    const before = (a, b) => {
+      const ia = world.chunkAt(a[0], a[1]).index;
+      const ib = world.chunkAt(b[0], b[1]).index;
+      return ia !== ib ? ia < ib : a[1] !== b[1] ? a[1] < b[1] : a[0] < b[0];
+    };
+    eachCell((x, y) => {
+      if (seen.has(key(x, y)) || !world.passable(x, y) || reached.at(x, y)) return;
+      let cells = flood(x, y);
+      for (const [cx, cy] of cells) seen.add(key(cx, cy));
+      let first = cells[0];
+      for (const c of cells) if (before(c, first)) first = c;
+      if (first !== cells[0]) cells = flood(first[0], first[1]);
+      if (cells.some(([cx, cy]) => covered.has(key(cx, cy)))) return;
+      const hasEntity = cells.some(([cx, cy]) => world.npcAt(cx, cy) || world.chestAt(cx, cy));
+      if (cells.length < 3 && !hasEntity) return; // 一兩格的小凹洞不算
+      const path = bridgePath(world, cells, reached);
+      if (!path) return;
+      found.push({
+        first,
+        bug: {
           type: 'UNREACHABLE',
           x: path.gate[0],
           y: path.gate[1],
           cells,
           scope: cells.length,
           data: { path: path.cells, ends: [path.gate, path.comp] },
-        });
-      }
+        },
+      });
     });
-    return bugs;
+    found.sort((a, b) => (before(a.first, b.first) ? -1 : 1));
+    return found.map((f) => f.bug);
+  }
+
+  // 斷層：可以走的區域，從出生點卻走不到（被岩石、水或斷崖圍住）。
+  // 第二十五版起只看新解出來的那一塊再往外一圈（接縫），不再掃整個世界；走得到走不到看 reachable() 的快取
+  function findUnreachable(world, covered, r) {
+    const reached = reachable(world);
+    return unreachableIn(world, covered, reached, (fn) => {
+      for (let y = r.y0 - 1; y <= r.y1; y++) for (let x = r.x0 - 1; x <= r.x1; x++) fn(x, y);
+    });
   }
 
   // 出入口不足：聚落能走出去的出入口少於 3 個（外面被巨石、水擋住，或排版開不出來）。
@@ -277,20 +440,21 @@
     return set;
   }
 
-  // r 是新解出來那一塊的範圍
-  function scan(world, r, monsters) {
+  // r 是新解出來那一塊的範圍。unreachable(covered) 找斷層：遊戲用只看新的一塊附近的做法，測試的 full.scan 換成全世界的舊做法
+  function scanWith(world, r, monsters, unreachable) {
     // 被斷崖圍住的區域交給斷崖怪物負責（修好斷崖就接通了），不再另外算成斷層
     const cliffs = findCliffs(world, r, coveredBy(monsters, 'CLIFF'));
     const cliffCells = cliffs.flatMap((d) => d.cells.map(([x, y]) => key(x, y)));
     return [].concat(
       findTerrain(world, r, coveredBy(monsters, 'TERRAIN')),
       cliffs,
-      findUnreachable(world, coveredBy(monsters, 'UNREACHABLE', coveredBy(monsters, 'CLIFF', cliffCells))),
+      unreachable(coveredBy(monsters, 'UNREACHABLE', coveredBy(monsters, 'CLIFF', cliffCells))),
       findGates(world, r, monsters),
       findValue(world, r),
       findReference(world, r)
     );
   }
+  const scan = (world, r, monsters) => scanWith(world, r, monsters, (covered) => findUnreachable(world, covered, r));
 
   // 整個世界找還沒有怪物負責的地形錯位與斷崖（侵蝕、地形重算造成的）
   function findGlitches(world, monsters, dormant) {
@@ -301,5 +465,13 @@
     );
   }
 
-  FE.Checker = { scan, reachable, checkChest, checkNpc, findGlitches };
+  // full：舊做法（整個世界走一遍、整個世界掃一遍），只給測試對照新做法用，遊戲本身不呼叫
+  const full = {
+    reachable: reachableFull,
+    findUnreachable: (world, covered) => unreachableIn(world, covered, reachableFull(world), (fn) => world.forEachCell(fn)),
+    scan: (world, r, monsters) =>
+      scanWith(world, r, monsters, (covered) => unreachableIn(world, covered, reachableFull(world), (fn) => world.forEachCell(fn))),
+  };
+
+  FE.Checker = { scan, reachable, checkChest, checkNpc, findGlitches, full };
 })();

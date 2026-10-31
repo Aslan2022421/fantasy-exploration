@@ -5,16 +5,10 @@
   const isPlayer = (game, o) => o === game.player;
   const isSoldier = (o) => !!o && o.role === 'soldier';
 
-  // 防禦數字：冒險者固定，怪物看異常、分級與世界等級（bugs.js 的 monsterDef），士兵閃避、格擋、反擊都是 0
+  // 防禦數字：冒險者看身上的防具（閃避）和副手的盾牌（格擋機率與格擋值，沒拿盾牌是 0，見 gear.js 的 playerDefense），
+  // 怪物看異常、分級與世界等級（bugs.js 的 monsterDef），士兵閃避、格擋、反擊都是 0
   function defense(game, o) {
-    if (isPlayer(game, o)) {
-      return {
-        dodge: C.PLAYER_DODGE,
-        counter: C.PLAYER_COUNTER,
-        block: C.PLAYER_BLOCK,
-        blockMax: C.BLOCK_BASE + C.BLOCK_PER_LV * (o.weaponLv || 0),
-      };
-    }
+    if (isPlayer(game, o)) return FE.Gear.playerDefense(o);
     if (isSoldier(o)) return { dodge: 0, counter: 0, block: 0, blockMax: 0 };
     return FE.monsterDef(o);
   }
@@ -29,10 +23,15 @@
     if (d.blockMax > 0) o.block = Math.min(d.blockMax, currentBlock(o, d.blockMax) + d.blockMax * C.BLOCK_REGEN);
   }
 
-  // 冒險者一般攻擊＝攻擊力＋0～3，重擊＝攻擊力×2＋1～5；怪物與士兵照自己的攻擊力（狂亂忽高忽低）
-  function baseDamage(game, A, kind) {
+  // 冒險者一般攻擊＝主手武器的攻擊力＋0～3，重擊＝攻擊力×2＋1～5（品質不加傷害）；怪物與士兵照自己的攻擊力（狂亂忽高忽低）
+  // 冒險者的反擊（opts.counter）固定造成 COUNTER_DAMAGE 點，不看武器
+  function baseDamage(game, A, kind, opts) {
     const r = game.rng;
-    if (isPlayer(game, A)) return kind === 'deep' ? A.atk * 2 + FE.randInt(r, 1, 5) : A.atk + FE.randInt(r, 0, 3);
+    if (isPlayer(game, A) && opts && opts.counter) return C.COUNTER_DAMAGE;
+    if (isPlayer(game, A)) {
+      const atk = FE.Gear.atkOf(A);
+      return kind === 'deep' ? atk * 2 + FE.randInt(r, 1, 5) : atk + FE.randInt(r, 0, 3);
+    }
     return A.type === 'VALUE' ? FE.randInt(r, 0, A.atk * 2) : FE.randInt(r, Math.max(1, A.atk - 1), A.atk + 1);
   }
 
@@ -54,8 +53,8 @@
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
 
-    // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋高處加值
-    let mod = aP ? FE.BIOMES[cA.biome].hit || 0 : 0;
+    // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者主手武器的品質命中加值（超重時扣 1 或 2）＋高處加值
+    let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + FE.Gear.hitMod(A) : 0;
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
     else if (cA.h < cD.h) mod -= C.HIGH_GROUND;
     const roll = FE.rollD20(r, mod);
@@ -66,21 +65,24 @@
     let crit = false;
     let resisted = false;
     let absorbed = 0;
+    let reduced = 0;
     if (roll.key !== 'miss') {
       // 2. 沒命中就沒有傷害；失手與命中都讓防守方擲閃避
-      const base = baseDamage(game, A, kind);
+      const base = baseDamage(game, A, kind, opts);
+      // 減半：一般無條件進位；冒險者固定 1 點的反擊減半後最少 0（無條件捨去）
+      const half = (n) => (aP && opts.counter ? Math.floor(n / 2) : Math.ceil(n / 2));
       dodged = r() < dd.dodge;
       if (roll.key === 'fumble') {
-        dmg = dodged ? 0 : Math.ceil(base / 2); // 失手：閃開沒傷害，沒閃開吃一半
+        dmg = dodged ? 0 : half(base); // 失手：閃開沒傷害，沒閃開吃一半
       } else if (dodged) {
-        dmg = Math.ceil(base / 2); // 命中但被閃開：吃一半
+        dmg = half(base); // 命中但被閃開：吃一半
       } else {
         crit = roll.key === 'crit';
         dmg = crit ? base * 2 : base; // 沒閃開：暴擊加倍
       }
       // 抗性在暴擊之後、格擋之前減半（冒險者打怪物時）
-      if (aP && dmg > 0 && FE.isResisted(D, kind, A.weaponLv)) {
-        dmg = Math.ceil(dmg / 2);
+      if (aP && dmg > 0 && FE.isResisted(D, kind, FE.Gear.clearLevel(A))) {
+        dmg = half(dmg);
         resisted = true;
       }
       // 格擋：成功就用格擋值吸收傷害
@@ -90,6 +92,14 @@
         if (absorbed > 0) {
           D.block = currentBlock(D, dd.blockMax) - absorbed;
           dmg -= absorbed;
+        }
+      }
+      // 防具：冒險者挨打時，格擋之後還剩的傷害固定扣身上防具的物理減傷（怪物目前都是物攻），扣完至少吃 1 點
+      if (dP && dmg > 0) {
+        const cut = FE.Gear.physReduce(D);
+        if (cut > 0 && dmg > 1) {
+          reduced = Math.min(cut, dmg - 1);
+          dmg -= reduced;
         }
       }
     }
@@ -109,7 +119,8 @@
             ? kind === 'deep' ? `你對${dName}使出重擊` : `你攻擊${dName}`
             : `${aName}攻擊${dName}`;
       // 擲出 6～10 的「對方必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中
-      const rollName = roll.key === 'hard' && !aP ? '命中' : roll.name;
+      // 反擊與趁機攻擊本身不能再被反擊，也只寫「命中」
+      const rollName = roll.key === 'hard' && (!aP || opts.counter || opts.opportunity) ? '命中' : roll.name;
       const tag = `（擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''}：${rollName}）`;
       let text;
       if (roll.key === 'miss') {
@@ -124,10 +135,17 @@
         let tail = dmg > 0 ? `造成 ${dmg} 點傷害` : absorbed > 0 ? '傷害全被擋下' : '沒有造成傷害';
         if (resisted) tail += '（有抗性，傷害減半）';
         if (absorbed > 0 && dmg > 0) tail += `（${pD}格擋，擋下 ${absorbed} 點）`;
+        if (reduced > 0) tail += `（護甲擋下 ${reduced} 點）`;
         text = `${head}${tag}，${parts.concat(tail).join('，')}。`;
       }
       game.say(text, dmg > 0 ? (aP ? 'good' : dP ? 'bad' : 'sys') : 'sys');
     }
+
+    // 磨損：冒險者出手一次磨主手武器一次，格擋成功一次磨盾牌一次，挨打時防具減傷有作用一次磨身上防具一次
+    // （每次磨損的機率＝1÷品質價值倍率，見 gear.js 的 wear）
+    if (aP && A.equip.main) FE.Gear.wear(game, A.equip.main);
+    if (dP && absorbed > 0 && FE.Gear.shieldOf(D)) FE.Gear.wear(game, FE.Gear.shieldOf(D));
+    if (dP && reduced > 0 && D.equip.body) FE.Gear.wear(game, D.equip.body);
 
     // 傷害與倒下
     let killed = false;
@@ -160,7 +178,7 @@
     if (alive && !dS && !opts.noCounter && adjacent(game, A, D) && ((aP && roll.key === 'hard') || r() < dd.counter)) countered = true;
     if (FE.Combat.hook) {
       FE.Combat.hook({
-        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, key: roll.key, dodged, crit, blocked: absorbed > 0, resisted, dmg,
+        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, key: roll.key, dodged, crit, blocked: absorbed > 0, resisted, reduced, dmg,
         counter: !!opts.counter, opportunity: !!opts.opportunity, countered, killed, a: A, d: D,
       });
     }

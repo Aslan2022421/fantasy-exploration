@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fantasy Exploration</title>
-  <link rel="stylesheet" href="css/style.css?v=16">
+  <link rel="stylesheet" href="css/style.css?v=17">
 </head>
 <body>
   <!-- 版面參考 Caves of Qud：上方狀態列、滿版地圖（小地圖疊在右上角、對話視窗蓋在中間）、下方列 -->
@@ -55,18 +55,19 @@
     <section id="win-legend" class="win hidden">
       <h2>圖例 <span class="dim">（L）</span><button class="x" data-close>Esc 關閉</button></h2>
       <div class="legend">
-        <div class="row"><span><b class="player">@</b> 冒險者</span><span><b class="npc">&amp;</b> 村民</span><span><b class="npc smith">&amp;</b> 武器匠</span><span><b class="npc soldier">&amp;</b> 士兵（城鎮才有）</span><span><b class="chest">$</b> 寶箱</span><span><b class="node-ore">◊</b> 礦脈（礦坑裡，要礦鎬）</span><span><b class="node-herb">♥</b> 藥草（森林裡，要鐮刀）</span></div>
+        <div class="row"><span><b class="player">@</b> 冒險者</span><span><b class="npc">&amp;</b> 村民</span><span><b class="npc smith">&amp;</b> 鐵匠（城鎮裡是武器匠）</span><span><b class="npc armorer">&amp;</b> 盔甲匠（城鎮才有）</span><span><b class="npc soldier">&amp;</b> 士兵（城鎮才有）</span><span><b class="chest">$</b> 寶箱</span><span><b class="node-ore">◊</b> 礦脈（礦坑裡，要礦鎬）</span><span><b class="node-herb">♥</b> 藥草（森林裡，要鐮刀）</span></div>
         <div class="row"><span><b class="npc has-quest">&amp;</b> 有委託</span><span><b class="npc recipient">&amp;</b> 你要找的人</span><span><b class="t-plain village">.</b> 村莊（安全區）</span><span><b class="t-plain town">.</b> 大城鎮（安全區，世界長大後才會出現）</span></div>
         <p>地形字元參考矮人要塞的字元表。<b>擋路的只有</b> <b class="t-water">≈</b> 水和 <b class="t-rock">#</b> 巨石，其他都能走。括號裡是站在那裡出手時擲骰的加減。</p>
         <div class="row"><span><b class="t-grass">"</b> 草原（+2）</span><span><b class="t-grass">,</b> 灌木地（0）</span><span><b class="t-forest">♣</b> 溫帶森林（-2）</span><span><b class="t-forest">↑</b> 針葉林（-2）</span></div>
         <div class="row"><span><b class="t-plain">.</b> 苔原（+1）</span><span><b class="t-snow">*</b> 冰川（-1）</span><span><b class="t-forest">♠</b> 熱帶雨林（-3）</span><span><b class="t-grass">,</b> 莽原（+2）</span></div>
         <div class="row"><span><b class="t-sand">:</b> 沙漠（+1）</span><span><b class="t-plain">;</b> 沼澤（-2）</span><span><b class="t-plain">;</b> 濕地（-3）</span><span><b class="t-mount">▲</b> 山坡（-1）</span></div>
         <p>村莊用 <b class="t-woodwall">┌─┐</b> 木牆圍起來，有 3 或 4 個出入口（東、西，再加南北其中一個或兩個）；城鎮用 <b class="t-stonewall">╔═╗</b> 石牆圍起來，東西南北各一個出入口（外面被水擋住的方向不開，至少 3 個）。出入口都寬 3 格。外牆貼著建築蓋，跟著建築凹凸；碰到水或巨石的那一側不蓋牆。外牆外一圈怪物不能進來，也不會冒出怪物：村莊 8 格、城鎮 12 格。</p>
-        <p>村莊和城鎮裡：<b class="t-road">·</b> 小路與廣場。建築有外牆和門 <b class="t-door">+</b>，從門走進室內：<b class="t-house">⌂</b> 民房與鐵匠工坊（武器匠在工坊裡）、<b class="t-temple">∩</b> 神殿（神聖的城鎮）、<b class="t-market">♦</b> 市場（有市場的城鎮）。每個村民有自己的家，會在聚落裡走動，也會走回家。</p>
+        <p>村莊和城鎮裡：<b class="t-road">·</b> 小路與廣場。建築有外牆和門 <b class="t-door">+</b>，從門走進室內：<b class="t-house">⌂</b> 民房與工坊（鐵匠或武器匠在工坊裡；城鎮另有一間盔甲匠工坊）、<b class="t-temple">∩</b> 神殿（神聖的城鎮）、<b class="t-market">♦</b> 市場（有市場的城鎮）。每個村民有自己的家，會在聚落裡走動，也會走回家。</p>
         <p>家具（還沒有作用）：<b class="t-bed">≡</b> 床（能走）、<b class="t-furniture">π</b> 桌子、<b class="t-furniture">▌</b> 物品櫃、<b class="t-furniture">╤</b> 工作台、<b class="t-furniture">¤</b> 祭台、<b class="t-furniture">╥</b> 市場攤位。</p>
         <p>每個村莊和城鎮附近有一處獨特的地貌（走得到的是 <b class="t-ruin">░</b> 碎石地、<b class="t-relic">‡</b> 墓碑和建築的室內，其他擋路）：</p>
         <div class="row"><span><b class="t-ruin">▓</b> 斷牆（廢棄的堡壘，隔成幾個房間）</span><span><b class="t-relic">Π</b> 立石</span><span><b class="t-relic">Θ</b> 法師塔</span><span><b class="t-relic">†</b> 聖所（裡面有祭台）</span><span><b class="t-relic">Ω</b> 礦坑（留著坑口）</span></div>
-        <p><b>採集點</b>：<b class="node-ore">◊</b> 礦脈在礦坑的空地上，<b class="node-herb">♥</b> 藥草長在溫帶森林、針葉林、熱帶雨林裡。都可以走過去；拿著礦鎬或鐮刀（武器匠有賣）撞上去就採，得到 1～2 份，採完那一格變回普通地面，過一陣子（2000 刻）長回來。藥草吃一份回生命上限的四分之一；武器 Lv5 起改良要礦石。</p>
+        <p><b>採集點</b>：<b class="node-ore">◊</b> 礦脈在礦坑的空地上，<b class="node-herb">♥</b> 藥草長在溫帶森林、針葉林、熱帶雨林裡。都可以走過去；拿著礦鎬或鐮刀（鐵匠、武器匠有賣）撞上去就採，得到 1～2 份，採完那一格變回普通地面，過一陣子（2000 刻）長回來；工具用 50 次就壞。藥草吃一份回生命上限的四分之一；礦石一顆賣 5 金幣，也能請工匠打造新的裝備。</p>
+        <p><b>裝備</b>：身上有主手（武器）、副手（盾牌）、身上（防具）三格。裝備有品質，名字兩邊的符號從低到高是：（普通不加）、<b>-做工好-</b>、<b>+精良+</b>、<b>*優秀*</b>、<b>≡卓越≡</b>、<b>☼傑作☼</b>。品質高的武器好打中，也能對付有抗性的怪物；防具和盾牌減傷與格擋值更高。每件裝備都會磨損，壞了就消失，剩兩成時會提醒；鐵匠、武器匠、盔甲匠能修。東西有重量，背太重會變慢，太重就走不動。</p>
         <p>▲ 是坡（矮人要塞的 ramp），能走。底色越亮的地方越高（高度 0～4）。相鄰兩格高度差 1 可以走；差 2 以上是斷崖，過不去，也打不到對面的怪物。</p>
         <p>時間用「刻」算：一般走一格 10 刻，怪物每 10 刻行動一次。紅色閃爍的格子是被怪物的異常扭曲過的地面，走一格要 30 刻，怪物會多動兩次。</p>
         <p>亮底的字母是怪物，<b class="bug mid">g</b> 深紅底的是中型怪物（影響範圍 5 以上，名字前面有「中型」）。血條在格子底下，綠、黃、紅跟著剩下的血量變。黃框的怪物正在追你，紫框是清除委託指定的怪物，白框是目前的目標。種族看所在環境：</p>
@@ -74,14 +75,15 @@
         <div class="row"><span><b class="bug">Y</b> 雪怪（苔原、冰川）</span><span><b class="bug">l</b> 蜥蜴人（熱帶雨林）</span><span><b class="bug">n</b> 豺狼人（莽原）</span></div>
         <div class="row"><span><b class="bug">s</b> 骷髏（沙漠）</span><span><b class="bug">R</b> 沼澤巨魔（沼澤、濕地）</span><span><b class="bug">k</b> 狗頭人（山地）</span></div>
         <p>怪物身上的異常會讓字母閃成別的字元：數字是狂亂，問號是虛影，<code>*</code> <code>:</code> 是氣候錯位，<code>▲</code> <code>▼</code> 是斷崖，<code>%</code> <code>#</code> 是斷層，<code>!</code> 是碎裂。紅色閃爍的格子是被異常扭曲的地面，變淡的區域是走不到的地方。</p>
-        <p><b>小地圖</b>（右上角，按 M 收起或打開）：白點是你，紅點是怪物，亮紫色的點是剛被創世神重新算過的地面（100 刻後消失），粉紅是村民，藍點是武器匠，鋼灰色的點是士兵，綠色大點是你要找的人，黃點是寶箱，土黃色是聚落附近的地貌，白框是主畫面的範圍，紫色虛線框是下一塊世界會長出來的位置（離你最近的邊界），黑色是還沒創出來的地方。</p>
+        <p><b>小地圖</b>（右上角，按 M 收起或打開）：白點是你，紅點是怪物，亮紫色的點是剛被創世神重新算過的地面（100 刻後消失），粉紅是村民，藍點是鐵匠或武器匠，橘點是盔甲匠，鋼灰色的點是士兵，綠色大點是你要找的人，黃點是寶箱，土黃色是聚落附近的地貌，白框是主畫面的範圍，紫色虛線框是下一塊世界會長出來的位置（離你最近的邊界），黑色是還沒創出來的地方。</p>
         <p><b>按鍵</b>：方向鍵或 WASD 移動，R 休息，1 攻擊、2 重擊、3 撤退，B 背包（按數字使用），－／＋ 縮放，M 小地圖，L 圖例，H 世界的歷史紀錄，J 完整訊息紀錄，I 聚落資訊，<code>`</code>（反引號）錯誤報告，Esc 關掉視窗（沒有視窗時打開設定）。</p>
       </div>
     </section>
 
     <section id="win-backpack" class="win hidden">
       <h2>背包 <span class="dim">（B）</span><button class="x" data-close>Esc 關閉</button></h2>
-      <p class="dim">同一種東西疊在一起，不限格數。按數字鍵或點一下使用（目前能用的只有藥草：回生命上限的四分之一，算一個動作，戰鬥中也能吃）。</p>
+      <div id="bagInfo"></div>
+      <p class="dim">藥草等東西疊在一起，不限格數，裝備一件一格。按數字鍵或點一下：藥草是吃（回生命上限的四分之一），裝備是穿上或拿起（換下的放回背包），都算一個動作，戰鬥中也能做。按 X 切到「丟掉」，選到的整疊直接消失，不算動作。礦鎬、鐮刀放在背包裡，撞上礦脈或藥草就會用。東西越多越重，超過負重上限會變慢。</p>
       <ol id="backpack" class="bag"></ol>
     </section>
 
@@ -134,24 +136,25 @@
         <button id="btnMini">小地圖 M</button>
       </div>
       <h3>操作說明</h3>
-      <p class="hint">方向鍵或 WASD 移動，R 休息（回 1 點生命，在村莊裡回滿；旁邊有怪物時不能休息）。你每做一件事，所有怪物各做一件事。撞上怪物就是攻擊牠並設成目標，1 攻擊、2 重擊、3 撤退，都對目前的目標；貼著你的怪物每回合都會攻擊，從牠旁邊走開時牠有機會趁機打你。撞上村民或武器匠會打開對話視窗（算一個動作），按數字鍵或用滑鼠選選項，Esc 關掉；不接的委託會留著，之後回來還接得到；要送的東西放在背包裡。B 打開背包，按數字使用（藥草回生命上限的四分之一）。武器匠賣礦鎬和鐮刀，拿著它們撞上礦脈 ◊ 或藥草 ♥ 就能採。藍色的 &amp; 是武器匠，鋼灰色的 &amp; 是城鎮的士兵（世界失序時會出城清掃怪物）。底色較亮的區域是村莊，怪物進不了聚落和它周圍那一圈（村莊 8 格、城鎮 12 格），在村莊裡也不能戰鬥。黃框的怪物正在追你，紫框是清除委託指定的怪物，白框是目前的目標。狀態列的「世界」是安穩、動盪、失序：越亂，新的異常越大、越多，失序時你每個動作都讓怪物多動一次，士兵不會。F9 模擬一次執行錯誤。</p>
+      <p class="hint">方向鍵或 WASD 移動，R 休息（回 1 點生命，在村莊裡回滿；旁邊有怪物時不能休息）。你每做一件事，所有怪物各做一件事。撞上怪物就是攻擊牠並設成目標，1 攻擊、2 重擊、3 撤退，都對目前的目標；貼著你的怪物每回合都會攻擊，從牠旁邊走開時牠有機會趁機打你。撞上村民或工匠會打開對話視窗（算一個動作），按數字鍵或用滑鼠選選項，Esc 返回上一層或關掉；不接的委託會留著，之後回來還接得到；要送的東西放在背包裡。工匠的選項是買、修、打造、賣礦石、賣裝備。B 打開背包，按數字選：藥草是吃（回生命上限的四分之一），裝備是穿上或拿起，X 切到「丟掉」；背太重會變慢。鐵匠和武器匠賣礦鎬和鐮刀，拿著它們撞上礦脈 ◊ 或藥草 ♥ 就能採。藍色的 &amp; 是鐵匠（城鎮裡是武器匠），橘色的 &amp; 是城鎮的盔甲匠，鋼灰色的 &amp; 是城鎮的士兵（世界失序時會出城清掃怪物）。底色較亮的區域是村莊，怪物進不了聚落和它周圍那一圈（村莊 8 格、城鎮 12 格），在村莊裡也不能戰鬥。黃框的怪物正在追你，紫框是清除委託指定的怪物，白框是目前的目標。狀態列的「世界」是安穩、動盪、失序：越亂，新的異常越大、越多，失序時你每個動作都讓怪物多動一次，士兵不會。F9 模擬一次執行錯誤。</p>
     </section>
   </div>
 
   <!-- ?v= 只是為了讓瀏覽器丟掉換伺服器之前的舊快取 -->
-  <script src="js/config.js?v=16"></script>
-  <script src="js/rng.js?v=16"></script>
-  <script src="js/world.js?v=16"></script>
-  <script src="js/checker.js?v=16"></script>
-  <script src="js/bugs.js?v=16"></script>
-  <script src="js/steading.js?v=16"></script>
-  <script src="js/combat.js?v=16"></script>
-  <script src="js/stability.js?v=16"></script>
-  <script src="js/events.js?v=16"></script>
-  <script src="js/ai.js?v=16"></script>
-  <script src="js/game.js?v=16"></script>
-  <script src="js/save.js?v=16"></script>
-  <script src="js/render.js?v=16"></script>
-  <script src="js/main.js?v=16"></script>
+  <script src="js/config.js?v=17"></script>
+  <script src="js/rng.js?v=17"></script>
+  <script src="js/world.js?v=17"></script>
+  <script src="js/checker.js?v=17"></script>
+  <script src="js/bugs.js?v=17"></script>
+  <script src="js/steading.js?v=17"></script>
+  <script src="js/gear.js?v=17"></script>
+  <script src="js/combat.js?v=17"></script>
+  <script src="js/stability.js?v=17"></script>
+  <script src="js/events.js?v=17"></script>
+  <script src="js/ai.js?v=17"></script>
+  <script src="js/game.js?v=17"></script>
+  <script src="js/save.js?v=17"></script>
+  <script src="js/render.js?v=17"></script>
+  <script src="js/main.js?v=17"></script>
 </body>
 </html>

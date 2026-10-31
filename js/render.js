@@ -10,7 +10,7 @@
   let game = null;
 
   // 畫面狀態（不進存檔）：開著哪個視窗、小地圖收起或打開（記在這台瀏覽器）、地圖的版面
-  const ui = { win: null, mini: FE.store.load('fe.minimap', true), cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+  const ui = { win: null, bagDrop: false, mini: FE.store.load('fe.minimap', true), cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
 
   // ---- 版面：地圖填滿狀態列與下方列之間的空間 ----
   // 格數＝可用空間 ÷ 每格像素，寬高各取奇數（冒險者才在正中央）；短邊至少 VIEW_MIN 格，不夠就把格子縮小
@@ -175,6 +175,7 @@
           bg = baseBg;
           alpha = 1;
           if (n.role === 'smith') fg = '#79c0ff';
+          else if (n.role === 'armorer') fg = '#ffa657';
           else {
             const cr = p.carrying;
             const carrying =
@@ -303,7 +304,7 @@
     for (const ch of W.chests) dot(ch.x, ch.y, '#e3b341');
     for (const n of W.npcs) {
       const target = c && (c.kind === 'hunt' ? c.giverId === n.id && game.huntRemaining(c.monsterIds) === 0 : c.targetId === n.id);
-      dot(n.x, n.y, target ? '#3fb950' : n.role === 'smith' ? '#79c0ff' : '#f778ba', target ? big : S);
+      dot(n.x, n.y, target ? '#3fb950' : n.role === 'smith' ? '#79c0ff' : n.role === 'armorer' ? '#ffa657' : '#f778ba', target ? big : S);
     }
     // 地形重算的地方：亮紫色的點，100 刻後消失
     for (const s of game.soldiers) dot(s.x, s.y, '#b8c0cc');
@@ -356,7 +357,10 @@
     $('lvText').textContent = game.level;
     $('cpText').textContent = `${game.exp - lo} / ${hi - lo}`;
     setBar('cpFill', game.exp - lo, hi - lo);
-    $('stWeapon').textContent = `武器 Lv${p.weaponLv}（攻擊力 ${p.atk}）`;
+    // 主手武器的名字（含品質符號）與攻擊力；超重時標出負重
+    const main = p.equip.main;
+    $('stWeapon').textContent =
+      `武器 ${main ? FE.Gear.name(main) : '徒手'}（攻擊力 ${game.playerAtk()}）` + (game.loadTier() ? `　超重 ${game.weight()} / ${C.CARRY_LIMIT}` : '');
     $('stGold').textContent = `金幣 ${p.gold}`;
     const n = unseenReports();
     $('reportBadge').classList.toggle('hidden', n === 0);
@@ -383,7 +387,7 @@
       el.innerHTML = `
         <div class="t-head"><b>目標：${esc(m.name)}</b><span class="dim">體型 ${FE.sizeName(m)}</span></div>
         <div class="t-hp"><div class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></div><span>${m.hp} / ${m.maxHp}</span></div>
-        <p class="t-extra">異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, game.player.weaponLv))}</p>
+        <p class="t-extra">異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</p>
         <div class="actions">
           <button data-act="attack">1 攻擊</button>
           <button data-act="deep" ${cd > 0 ? 'disabled' : ''}>2 重擊${cd > 0 ? `（${cd}）` : ''}</button>
@@ -399,7 +403,7 @@
       el.innerHTML = `
         <div class="t-head"><b style="color:var(--accent)">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）</b><span class="dim">安全區</span></div>
         <p>經濟 ${FE.PROSPERITY[s.prosperity]}　人口 ${FE.POPULATION[s.population]}</p>
-        <p class="t-extra dim">改良武器 ${game.smithPrice(v)} 金幣。按 I 看聚落資訊，撞上村民或武器匠可以對話。</p>`;
+        <p class="t-extra dim">裝備售價是原價的 ${FE.Steading.shopFactor(v).toFixed(2)} 倍。按 I 看聚落資訊，撞上村民或工匠可以對話、買賣、修理。</p>`;
       return;
     }
     const c = W.cell(p.x, p.y);
@@ -455,7 +459,7 @@
             `<button data-opt="${i}" ${o.disabled ? 'disabled' : ''}><kbd>${i + 1}</kbd>${esc(o.label)}${o.note ? ` <span class="dim">（${esc(o.note)}）</span>` : ''}</button>`
         )
         .join('')}</div>
-      <p class="dim dlg-hint">按數字鍵選擇，Esc 關閉</p>`;
+      <p class="dim dlg-hint">按數字鍵選擇，Esc ${game.talkPage && game.talkPage !== 'main' ? '返回上一層' : '關閉'}</p>`;
   }
 
   // ---- 按鍵視窗：同時只開一個 ----
@@ -515,22 +519,39 @@
       .join('');
     el.innerHTML = `
       <h3 style="margin-top:0">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）${inside ? '' : `<span class="dim">　你不在這裡，這是離你最近的聚落，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
-      <div class="row"><span>經濟</span><span>${FE.PROSPERITY[s.prosperity]}（改良武器 ${game.smithPrice(v)} 金幣）</span></div>
+      <div class="row"><span>經濟</span><span>${FE.PROSPERITY[s.prosperity]}（裝備售價 ×${FE.Steading.shopFactor(v).toFixed(2)}）</span></div>
       <div class="row"><span>人口</span><span>${FE.POPULATION[s.population]}</span></div>
       <div class="row"><span>由來</span><span>${esc(s.option)}；${esc(s.problem)}</span></div>
       <ul class="tags">${tags}</ul>
       <div class="row"><span>附近的地貌</span><span>${esc(lmText)}</span></div>`;
   }
 
-  // 背包：列出每樣東西與數量，按數字使用（目前能用的只有藥草）
+  // 背包：上面是目前的負重和穿著的裝備（主手、副手、身上），下面列出每樣東西與數量，按數字選：
+  // 藥草是吃、裝備是穿上或拿起（算一個動作，換下的放回背包）；按 X 或點按鈕切到「丟掉」，選到的整疊直接消失
   function drawBackpack() {
+    const p = game.player;
+    const G = FE.Gear;
     const list = game.bagList();
+    const drop = ui.bagDrop;
+    const tier = game.loadTier();
+    const slot = (label, g) =>
+      `<li><span class="dim">${label}</span> ${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）</span>` : '<span class="dim">空著</span>'}</li>`;
+    $('bagInfo').innerHTML = `
+      <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${C.CARRY_LIMIT}</b>${
+        tier === 1 ? '　超重：每個動作多 2 刻、出手 -1' : tier === 2 ? '　超重太多：不能移動、不能撤退、出手 -2，先丟掉東西' : ''
+      }</p>
+      <ul class="equipped">${slot('主手', p.equip.main)}${slot('副手', p.equip.off)}${slot('身上', p.equip.body)}</ul>
+      <p><button data-dropmode class="${drop ? 'on' : ''}">${drop ? '現在是「丟掉」：選到的整疊直接消失（按 X 切回）' : '切到「丟掉」（X）'}</button></p>`;
     $('backpack').innerHTML = list.length
       ? list
-          .map(
-            (e, i) =>
-              `<li><button data-use="${i}" ${e.use ? '' : 'disabled'}><kbd>${i + 1}</kbd>${esc(e.name)} ×${e.n}${e.use ? ' <span class="dim">（使用）</span>' : ''}</button></li>`
-          )
+          .map((e, i) => {
+            const can = drop ? e.id !== 'goods' : e.use;
+            const act = drop ? '丟掉' : e.id === 'gear' ? '穿上或拿起' : '使用';
+            const note = e.id === 'gear' && !e.use && !drop ? '放在背包裡，撞上礦脈或藥草就會用' : can ? act : '';
+            return `<li><button data-use="${i}" ${can ? '' : 'disabled'}><kbd>${i + 1}</kbd>${esc(e.name)}${e.n > 1 ? ` ×${e.n}` : ''}${
+              e.info ? ` <span class="dim">（${esc(e.info)}）</span>` : ''
+            }${note ? ` <span class="dim">【${esc(note)}】</span>` : ''}</button></li>`;
+          })
           .join('')
       : '<li class="dim">背包是空的。</li>';
   }
@@ -584,8 +605,14 @@
     update,
     relayout,
     win: () => ui.win,
+    bagDrop: () => ui.bagDrop,
+    toggleBagDrop() {
+      ui.bagDrop = !ui.bagDrop;
+      update();
+    },
     openWindow(name) {
       ui.win = name;
+      if (name === 'backpack') ui.bagDrop = false;
       if (name === 'reports' && game.reports.length) FE.store.save('fe.reportSeen', reportId(game.reports[0]));
       update();
     },

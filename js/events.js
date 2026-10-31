@@ -55,7 +55,7 @@
   function questEvent(game, canReach) {
     const w = game.world;
     const p = game.player;
-    const free = (n) => n.role !== 'smith' && !game.monsterAt(n.x, n.y) && canReach(n.x, n.y);
+    const free = (n) => !FE.Gear.isShopkeeper(n) &&!game.monsterAt(n.x, n.y) && canReach(n.x, n.y);
     const givers = w.npcs.filter((n) => (!n.quest || n.quest.done) && free(n));
     if (!givers.length) return null;
     if (huntQuest(game, givers)) return { found: null };
@@ -129,7 +129,7 @@
   // 算力夠付哪些事件就從裡面挑，付不起或挑的都做不成就停，剩下的算力留到下一次
   function tick(game) {
     const reach = FE.Checker.reachable(game.world);
-    const canReach = (x, y) => reach.has(x + ',' + y);
+    const canReach = (x, y) => reach.at(x, y);
     detectGlitches(game, canReach);
     // 世界動盪起，BUG 與系統爭鬥（失序時由城鎮的士兵出城清小怪物，見 ai.js 的 soldierTurn）
     FE.Stability.struggle(game, canReach);

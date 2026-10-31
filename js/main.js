@@ -39,7 +39,7 @@
     }
     playlog.push({
       t: game.turn, k: game.ticks || 0, a: label, x: p.x, y: p.y, hp: p.hp, mhp: p.maxHp, lv: game.level, exp: game.exp,
-      wpn: p.weaponLv, atk: p.atk, g: p.gold, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
+      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.playerAtk(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: p.gold, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
       m: msgs.reverse(),
     });
     if (playlog.length > PLAYLOG_MAX) playlog = playlog.slice(-PLAYLOG_MAX);
@@ -73,6 +73,12 @@
     dispatch('對話', () => game.choose(npc, i));
   }
 
+  // 背包裡選第 i 樣：平常是用（吃藥草、穿上或拿起裝備），切到「丟掉」就是丟掉
+  function useBag(i) {
+    if (FE.UI.bagDrop()) dispatch('背包：丟掉', () => game.dropItem(i));
+    else dispatch('背包', () => game.useItem(i));
+  }
+
   function toggleWindow(name) {
     if (FE.UI.win() === name) FE.UI.closeWindow();
     else FE.UI.openWindow(name);
@@ -96,11 +102,11 @@
       });
       return;
     }
-    // 對話視窗開著：數字鍵只選選項，Esc 關掉，方向鍵不移動，也不會出手攻擊
+    // 對話視窗開著：數字鍵只選選項，Esc 回上一層（工匠的對話）或關掉，方向鍵不移動，也不會出手攻擊
     if (game.talking != null) {
       if (k === 'escape') {
         e.preventDefault();
-        game.closeTalk();
+        game.talkBack();
         FE.UI.update();
       } else if (/^[1-9]$/.test(k)) {
         e.preventDefault();
@@ -132,10 +138,15 @@
       applyZoom();
       return;
     }
-    // 背包視窗開著：數字鍵用第幾樣東西（算一個動作）
+    // 背包視窗開著：數字鍵選第幾樣東西（吃藥草、穿上或拿起裝備算一個動作；丟掉不算），X 切換「丟掉」
+    if (FE.UI.win() === 'backpack' && k === 'x') {
+      e.preventDefault();
+      FE.UI.toggleBagDrop();
+      return;
+    }
     if (FE.UI.win() === 'backpack' && /^[1-9]$/.test(k)) {
       e.preventDefault();
-      dispatch('背包', () => game.useItem(Number(k) - 1));
+      useBag(Number(k) - 1);
       return;
     }
     // 視窗開著時，方向鍵與戰鬥鍵都不作用
@@ -174,7 +185,8 @@
   document.getElementById('btnMini').addEventListener('click', () => FE.UI.toggleMinimap());
   document.getElementById('overlay').addEventListener('click', (e) => {
     const use = e.target.closest && e.target.closest('[data-use]');
-    if (use && !use.disabled) dispatch('背包', () => game.useItem(Number(use.dataset.use)));
+    if (e.target.closest && e.target.closest('[data-dropmode]')) FE.UI.toggleBagDrop();
+    else if (use && !use.disabled) useBag(Number(use.dataset.use));
     else if (e.target.id === 'overlay' || (e.target.dataset && 'close' in e.target.dataset)) FE.UI.closeWindow();
     else if (e.target.dataset && e.target.dataset.open) FE.UI.openWindow(e.target.dataset.open);
   });

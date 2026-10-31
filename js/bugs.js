@@ -4,7 +4,7 @@
 (function () {
   // 遊戲內的字（name、desc）只寫世界裡看得到的現象，不寫程式用語；
   // 程式裡的種類代碼（TERRAIN、VALUE⋯⋯）對應的程式錯誤寫在旁邊的註解。
-  // name 是異常的名字；glyphs 是異常發作時閃出來的字元；resist：對哪一種招式有抗性（傷害減半），武器到幾級就不再減半；
+  // name 是異常的名字；glyphs 是異常發作時閃出來的字元；resist：對哪一種招式有抗性（傷害減半），主手武器的清除等級（品質，見 FE.QUALITIES）到 until 就不再減半；
   // def 是攻防判定（combat.js）裡的防禦：dodge 閃避、counter 反擊、block 格擋機率、blockMax 格擋值上限，沒寫的是 0
   FE.BUG_TYPES = {
     // 生態區冷熱直接相鄰
@@ -24,7 +24,7 @@
       desc: '大地裂出一道斷層，把一塊土地跟世界隔開了。',
       hpMul: 1.3,
       atkMod: -1,
-      resist: { kind: 'attack', until: 3 },
+      resist: { kind: 'attack', until: 2 },
       def: { block: 0.4, blockMax: 6 },
     },
     // 寶箱金幣算成負數或 NaN
@@ -34,7 +34,7 @@
       desc: '牠守著一個被扭曲的寶箱，力氣時強時弱，捉摸不定。',
       hpMul: 0.9,
       atkMod: 0,
-      resist: { kind: 'attack', until: 2 },
+      resist: { kind: 'attack', until: 1 },
       def: { counter: 0.2 },
     },
     // 任務指向不存在的村民
@@ -44,7 +44,7 @@
       desc: '牠纏著一個不在這世上的人，身形虛實不定，很難打中。',
       hpMul: 1,
       atkMod: 0,
-      resist: { kind: 'deep', until: 2 },
+      resist: { kind: 'deep', until: 1 },
       def: { dodge: 0.3 },
     },
     // 相鄰兩格高度差 2 以上
@@ -122,17 +122,18 @@
     return m;
   };
 
-  // 這一擊會不會被抗性減半
-  FE.isResisted = (m, kind, weaponLv) => {
+  // 這一擊會不會被抗性減半。clear 是主手武器的清除等級（普通 0 ～ 傑作 5、傳說物 6，空手 0）
+  FE.isResisted = (m, kind, clear) => {
     const r = FE.BUG_TYPES[m.type].resist;
-    return !!r && r.kind === kind && weaponLv < r.until;
+    return !!r && r.kind === kind && clear < r.until;
   };
 
-  FE.resistText = (m, weaponLv) => {
+  FE.resistText = (m, clear) => {
     const r = FE.BUG_TYPES[m.type].resist;
     if (!r) return '沒有抗性';
-    if (weaponLv >= r.until) return `原本抗${FE.KIND_NAMES[r.kind]}，你的武器已經對付得了`;
-    return `${FE.KIND_NAMES[r.kind]}傷害減半（武器 Lv${r.until} 起不再減半）`;
+    if (clear >= r.until) return `原本抗${FE.KIND_NAMES[r.kind]}，你的武器已經對付得了`;
+    const q = FE.QUALITIES[r.until];
+    return `${FE.KIND_NAMES[r.kind]}傷害減半（武器要${q.sym}${q.name}${q.sym}以上才不減半）`;
   };
 
   // wl 是生成當下的世界等級：血量、攻擊力、打倒時的經驗值與算力照等級加成，之後不再變
@@ -184,7 +185,7 @@
     if (!v) return null;
     // 村莊住滿了就不放，改由現有的村民接手，不然事件一直補人，村莊會擠滿
     const cap = v.kind === 'town' ? FE.CONFIG.TOWN_MAX_NPC : FE.CONFIG.VILLAGE_MAX_NPC;
-    if (w.npcs.filter((n) => n.villageId === v.id && n.role !== 'smith').length >= cap) return null;
+    if (w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n)).length >= cap) return null;
     // 每個村民有自己的家：沒有空床也不放
     const h = FE.Steading.freeHome(w, game.rng, v);
     if (!h) return null;
@@ -263,7 +264,7 @@
         // 冒險者手上如果正拿著這個任務，那份也要跟著改，不然會送不出去
         const c = game.player && game.player.carrying;
         const mine = c && c.kind !== 'hunt' && c.giverId === n.id;
-        const others = w.npcs.filter((o) => o.id !== n.id && o.role !== 'smith');
+        const others = w.npcs.filter((o) => o.id !== n.id && !FE.Gear.isShopkeeper(o));
         if (others.length) {
           const t = FE.pick(game.rng, others);
           const v = w.villageById(t.villageId);

@@ -1100,7 +1100,8 @@
     }
 
     // 撤退算一個動作，有 30% 機率失敗；失敗時這一回合照常過（貼著的怪物照樣攻擊）。
-    // 成功就直接移到離目標怪物 9 步外、旁邊沒有怪物的最近空地，那隻怪物走回生成點；四周沒有這樣的空地也算失敗
+    // 成功就直接移到離目標怪物 9 步外、旁邊沒有怪物的最近空地，那隻怪物走回生成點。
+    // 四周沒有這樣的空地時只出訊息，不算動作（跟撞上斷崖一樣）
     flee() {
       const m = this.targetMonster();
       if (!m) {
@@ -1112,11 +1113,14 @@
         this.say(`你背得太重了（${this.weight()} / ${C.CARRY_LIMIT}），跑不動。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
         return;
       }
-      this.beginAction();
-      const failed = this.rng() < C.FLEE_FAIL;
-      const spot = failed ? null : this.findRetreat(m);
+      const spot = this.findRetreat(m);
       if (!spot) {
-        this.say(failed ? '撤退失敗！' : '四周沒有退路，撤退失敗！', 'bad');
+        this.say('四周沒有退路，撤不走。', 'sys');
+        return;
+      }
+      this.beginAction();
+      if (this.rng() < C.FLEE_FAIL) {
+        this.say('撤退失敗！', 'bad');
         this.endTurn(false);
         return;
       }

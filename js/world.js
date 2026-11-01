@@ -357,9 +357,9 @@
         landmark = FE.Steading.placeLandmark(this, rng, rect, village);
         placeNpcs(this, rng, village);
       }
-      placeChests(this, rng, rect);
-      // 採集點最後放，前面的生成照舊
+      // 採集點先放，寶箱再避開礦脈放進地貌裡
       placeNodes(this, rng, rect, landmark);
+      placeChests(this, rng, landmark);
       return { index, rect, village, landmark };
     }
   }
@@ -663,16 +663,27 @@
   };
 
   // 創世時固定放幾個寶箱，拿了就沒有，不會重生
-  function placeChests(world, rng, r) {
-    const n = FE.randInt(rng, C.CHESTS[0], C.CHESTS[1]);
-    for (let i = 0; i < n; i++) {
-      for (let tries = 0; tries < 60; tries++) {
-        const x = FE.randInt(rng, r.x0, r.x1 - 1);
-        const y = FE.randInt(rng, r.y0, r.y1 - 1);
-        if (!world.passable(x, y) || world.npcAt(x, y) || world.chestAt(x, y) || world.inVillage(x, y)) continue;
-        world.chests.push({ id: world.nextId++, x, y, gold: FE.roughGold(rng) });
-        break;
+  // 創世時的寶箱只放在聚落附近的地貌裡（第二十七版）：廢棄的堡壘、古老立石、墓地、法師塔、聖所、礦坑各 1～3 個，
+  // 古老森林不放；沒有聚落（也就沒有地貌）的那塊世界沒有固定寶箱，只剩怪物掉的。
+  // 只放在「裡面」：圖案上的室內地板 o，或上下左右都還是地貌圖案的碎石地 ░（牆、石圈、墓碑圍住的那一片），門外的路不算
+  function placeChests(world, rng, landmark) {
+    if (!landmark || !C.CHEST_LANDMARKS.includes(landmark.kind)) return;
+    const art = FE.LANDMARKS[landmark.kind].art;
+    const at = (dx, dy) => (dy >= 0 && dy < art.length && dx >= 0 && dx < art[dy].length ? art[dy][dx] : '.');
+    const inside = (dx, dy) => at(dx, dy) === 'o' || (at(dx, dy) === '░' && [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([ax, ay]) => at(dx + ax, dy + ay) !== '.'));
+    const spots = [];
+    for (let y = landmark.y0; y <= landmark.y1; y++) {
+      for (let x = landmark.x0; x <= landmark.x1; x++) {
+        if (!inside(x - landmark.x0, y - landmark.y0)) continue;
+        if (!world.passable(x, y) || world.npcAt(x, y) || world.chestAt(x, y)) continue;
+        if (world.nodes.some((o) => o.x === x && o.y === y)) continue;
+        spots.push([x, y]);
       }
+    }
+    const n = Math.min(spots.length, FE.randInt(rng, C.CHESTS[0], C.CHESTS[1]));
+    for (let i = 0; i < n; i++) {
+      const [x, y] = spots.splice(Math.floor(rng() * spots.length), 1)[0];
+      world.chests.push({ id: world.nextId++, x, y, gold: FE.roughGold(rng) });
     }
   }
 

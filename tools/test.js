@@ -1100,7 +1100,7 @@ let soldierChecks = 0;
 function testSoldiers() {
   const ok = (cond, msg) => { soldierChecks++; if (!cond) fail('士兵 ' + msg); };
   // 種子 5150 在第二十五版城鎮多蓋盔甲匠工坊、排版改變之後，3 位士兵出城會在 1 格寬的通道卡成一列（隊長被隊友擋在後面），
-  // 這個場景測的是出城清怪，所以換用 5151（士兵卡住的情形留給第二十九版重寫士兵時處理）
+  // 這個場景測的是出城清怪，所以換用 5151（士兵卡住的情形留給第三十版重寫士兵時處理）
   const g = new FE.Game(5151);
   g.start();
   for (let i = 0; i < 12 && !g.world.villages.some((v) => v.kind === 'town'); i++) g.createChunk(false);

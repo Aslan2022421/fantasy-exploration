@@ -1,15 +1,108 @@
+/* ---- 配色（第二十七版）：深青綠底、低彩度的字，框線比底色亮一階。
+   顏色都集中在這一段；地圖 Canvas 的顏色由 render.js 啟動時讀這裡的變數（--t-*、--m-*、--map-*），改色只改這裡 ---- */
 :root {
-  --bg: #0d1117;
-  --panel: #161b22;
-  --line: #30363d;
-  --text: #c9d1d9;
-  --dim: #8b949e;
-  --accent: #58a6ff;
-  --good: #3fb950;
-  --bad: #f85149;
-  --bug: #ff7b72;
-  --world: #d2a8ff;
-  --npc: #f778ba;
+  /* 底色與框線 */
+  --void: #06181a;      /* 最深：地圖外的空白、輸入框、條的底 */
+  --bg: #0d2a2c;        /* 地圖與面板的底 */
+  --panel: #0d2a2c;
+  --panel2: #143a3d;    /* 按鈕、游標那一行 */
+  --line: #2b5558;      /* 細框線 */
+  --line2: #3f7377;     /* 視窗與面板的外框 */
+  /* 文字 */
+  --text: #a8c3bd;
+  --dim: #6c8e8a;
+  --head: #c9bb7a;      /* 標題、任務（淡黃） */
+  --accent: #c9bb7a;
+  --good: #7fa874;
+  --bad: #b8675c;
+  --bug: #c4685a;
+  --world: #9a90b4;
+  --npc: #bd8ca6;
+  /* 長條 */
+  --hp: #4f8a55;
+  --hp-mid: #bfa95f;
+  --hp-low: #b8675c;
+  --exp: #4a7f8c;
+
+  /* 地圖上的地形字元（cls 見 FE.TERRAIN） */
+  --t-plain: #5f7f7c;
+  --t-grass: #6f9a5f;
+  --t-forest: #4f8a5a;
+  --t-snow: #d4e0de;
+  --t-sand: #c0a560;
+  --t-mount: #9fb0ac;
+  --t-water: #5f93b0;
+  --t-rock: #5d6e6c;
+  --t-stonewall: #b6c4c0;
+  --t-woodwall: #a98458;
+  --t-house: #c49a66;
+  --t-road: #82775a;
+  --t-market: #cdb060;
+  --t-temple: #a99cc0;
+  --t-door: #d4bd7a;
+  --t-bed: #8f9fc0;
+  --t-furniture: #b5976a;
+  --t-ruin: #8d8a78;
+  --t-relic: #cdb37a;
+  /* 地圖上的東西 */
+  --map-node-ore: #6fc2c2;
+  --map-node-herb: #a6cf86;
+  --map-chest: #d4bd7a;
+  --map-npc: #c58aa5;
+  --map-smith: #7fb0cf;
+  --map-armorer: #d09a60;
+  --map-soldier: #aab8b6;
+  --map-player-fg: #f6f3de;
+  --map-player-bg: #3d8b8f;
+  --map-mon-fg: #1b0d0b;       /* 小怪物 */
+  --map-mon-bg: #c9705f;
+  --map-mid-fg: #f6e9e4;       /* 中型怪物 */
+  --map-mid-bg: #8e2a24;
+  --map-boss-bg: #5a1410;
+  --map-glitch-fg: #c4685a;
+  --map-glitch-bg: #3a1b1a;
+  --map-ol-target: #f6f3de;    /* 外框：目標、清除委託、追擊中 */
+  --map-ol-hunt: #a99cc0;
+  --map-ol-chase: #d4bd7a;
+  /* 地圖底色（越高越亮）、聚落、室內、小路、有委託、收貨人 */
+  --map-h0: #081b1d;
+  --map-h1: #0b2426;
+  --map-h2: #0f2d30;
+  --map-h3: #143639;
+  --map-h4: #1a4044;
+  --map-village: #17383b;
+  --map-town: #1c3a48;
+  --map-indoor: #2b2e22;
+  --map-road: #2f3a30;
+  --map-quest: #4a2a40;
+  --map-recipient: #254a30;
+  /* 小地圖：各生態區、巨石、牆與建築、聚落、地貌 */
+  --m-plain: #566a69;
+  --m-grassland: #5d8a52;
+  --m-shrubland: #7a8548;
+  --m-forest: #3d6f48;
+  --m-taiga: #3d6f62;
+  --m-tundra: #8fa9b0;
+  --m-glacier: #d4e0de;
+  --m-jungle: #31804a;
+  --m-savanna: #a8914a;
+  --m-desert: #c0a560;
+  --m-marsh: #4d8a82;
+  --m-swamp: #4d6e5c;
+  --m-mountain: #7f8c8a;
+  --m-lake: #4f82a6;
+  --m-rock: #20373a;
+  --m-stonewall: #b6c4c0;
+  --m-woodwall: #a98458;
+  --m-building: #c49a66;
+  --m-village: #3d6a6c;
+  --m-town: #7a6aa0;
+  --m-relic: #a8916a;
+  --m-flash: #c58fd6;
+  --m-mon: #c4685a;
+  --m-boss: #e0503f;
+  --m-view: rgba(246, 243, 222, 0.6);
+  --m-slot: rgba(154, 144, 180, 0.9);
 }
 
 * { box-sizing: border-box; }
@@ -18,108 +111,112 @@ html, body { height: 100%; }
 body {
   margin: 0;
   overflow: hidden;
-  background: #010409;
+  background: var(--void);
   color: var(--text);
   font-family: "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
   font-size: 14px;
 }
 .dim { color: var(--dim); }
 .hidden { display: none !important; }
+b { font-weight: bold; }
 
-/* 版面：上方狀態列、滿版地圖、下方列（手機另外多一排方向鍵） */
+/* ---- 版面（參考 Caves of Qud 的文字模式）：
+   上：一行狀態＋右上圖示列，下面生命與經驗兩條長條；中：左邊地圖、右邊一整欄訊息；下：狀態效果、目標、地點資訊與快捷列 ---- */
 #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 
 #status { flex: none; background: var(--panel); border-bottom: 1px solid var(--line); }
-.srow {
+#toprow { display: flex; align-items: center; gap: 10px; padding: 4px 10px 3px; }
+#stat { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px 14px; font-size: 13px; }
+#stat > span { white-space: nowrap; }
+#stat b { color: var(--head); }
+.badge { color: var(--bug); font-weight: bold; }
+.ws-0 { color: var(--good); }
+.ws-1 { color: var(--hp-mid); }
+.ws-2 { color: var(--bad); }
+.over { color: var(--bad); }
+
+#iconbar { flex: none; display: flex; gap: 4px; }
+.ib {
+  position: relative;
+  width: 32px;
+  height: 28px;
+  padding: 0;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 3px 10px;
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
+  justify-content: center;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 0;
 }
-#row2 { color: var(--dim); }
-#row2 .keys { margin-left: auto; }
-.menu { display: none; padding: 0 8px; }
-.meter {
-  position: relative;
-  display: inline-block;
-  width: 130px;
-  height: 16px;
-  overflow: hidden;
-  background: #21262d;
-  border-radius: 4px;
-  flex: none;
-}
-.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--good); transition: width 0.2s; }
-.meter.exp > i { background: #1f6feb; }
-.meter > span { position: relative; display: block; text-align: center; font-size: 11px; line-height: 16px; color: #fff; text-shadow: 0 0 2px #000; }
-.badge { color: var(--bug); font-weight: bold; }
-
-/* 地圖：Canvas 滿版，小地圖與對話視窗疊在上面 */
-#mapwrap { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; background: #010409; }
-#map { position: absolute; left: 0; top: 0; display: block; }
-#minimap {
+.ib svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.ib.on { color: var(--head); border-color: var(--head); }
+.ib::after {
+  content: attr(data-tip);
+  display: none;
   position: absolute;
-  top: 8px;
-  right: 8px;
-  display: block;
-  image-rendering: pixelated;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  opacity: 0.92;
-  background: #010409;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 90;
+  padding: 2px 8px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--void);
+  border: 1px solid var(--line2);
   pointer-events: none;
 }
+.ib:hover::after { display: block; }
 
-#dialog {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(440px, calc(100% - 24px));
-  padding: 12px 16px;
-  background: var(--panel);
-  border: 2px solid var(--accent);
-  border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
-}
-.dlg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-.dlg-head b { color: var(--npc); font-size: 16px; }
-.dlg-text { margin: 0 0 10px; line-height: 1.6; }
-.dlg-opts { display: flex; flex-direction: column; gap: 6px; }
-.dlg-opts button { text-align: left; }
-.dlg-hint { margin: 8px 0 0; font-size: 12px; }
-kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; background: #0d1117; border: 1px solid var(--line); border-radius: 3px; font: 12px Consolas, monospace; }
+.bars { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 5px; }
+.meter { position: relative; height: 17px; overflow: hidden; background: var(--void); border: 1px solid var(--line); }
+.meter > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--hp); transition: width 0.2s; }
+.meter.exp > i { background: var(--exp); }
+.meter > span { position: relative; display: block; text-align: center; font-size: 12px; line-height: 15px; color: #e8efe9; text-shadow: 0 0 2px #000; }
 
-/* 下方列：左邊目標，右邊任務與最近 3 行訊息（最新的在下） */
-#bottom {
-  flex: none;
-  display: grid;
-  grid-template-columns: minmax(240px, 360px) 1fr;
-  gap: 10px;
-  height: 118px;
-  padding: 6px 10px;
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-  overflow: hidden;
-}
-#target, #msgs { min-width: 0; overflow: hidden; }
-#target { padding-right: 10px; border-right: 1px solid var(--line); }
-#target .t-head { display: flex; justify-content: space-between; gap: 8px; }
-#target .t-head b { color: var(--bug); }
-#target p { margin: 2px 0; font-size: 12px; }
-.bar { height: 8px; margin: 4px 0; overflow: hidden; background: #21262d; border-radius: 4px; }
+#main { flex: 1 1 0; min-height: 0; display: flex; }
+#mapcol { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+
+/* 地圖：Canvas 滿版，對話視窗疊在上面 */
+#mapwrap { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; background: var(--void); }
+#map { position: absolute; left: 0; top: 0; display: block; }
+
+/* 右側：目前的任務在最上面，下面是訊息紀錄（最新的在最下面，放不下的從上面切掉） */
+#side { flex: none; width: clamp(200px, 25vw, 340px); display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--line); }
+#questText { flex: none; margin: 0; padding: 6px 10px; font-size: 13px; line-height: 1.5; color: var(--head); border-bottom: 1px solid var(--line); }
+#log { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; list-style: none; margin: 0; padding: 6px 10px; font-size: 13px; line-height: 1.5; }
+#log li { flex: none; margin: 0 0 4px; opacity: 0.78; }
+#log li:last-child { margin-bottom: 0; opacity: 1; }
+
+/* 底部：狀態效果、目標各一行，下面左邊是地點資訊、右邊是快捷列 */
+#bottom { flex: none; display: flex; flex-direction: column; gap: 1px; padding: 4px 10px 6px; font-size: 13px; background: var(--panel); border-top: 1px solid var(--line); }
+.brow { display: flex; align-items: center; gap: 6px; height: 20px; white-space: nowrap; overflow: hidden; }
+.brow .lbl { flex: none; color: var(--dim); }
+.brow .tname { color: var(--bug); font-weight: bold; }
+.tgt { display: inline-flex; align-items: center; gap: 14px; min-width: 0; }
+.t-hp { display: inline-flex; align-items: center; gap: 6px; }
+.bar { width: 110px; height: 8px; overflow: hidden; background: var(--void); border: 1px solid var(--line); }
 .bar > i { display: block; height: 100%; background: var(--bad); transition: width 0.2s; }
-.t-hp { display: flex; align-items: center; gap: 8px; }
-.t-hp .bar { flex: 1; }
-.t-hp span { font-size: 12px; }
-.actions { display: flex; gap: 6px; margin-top: 4px; }
-.actions button { padding: 2px 8px; font-size: 12px; }
-#questText { margin: 0 0 4px; font-size: 13px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#log { list-style: none; margin: 0; padding: 0; font-size: 13px; }
-#log li { margin: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.6; }
-#log li:last-child { opacity: 1; font-weight: bold; }
+#lowrow { display: flex; align-items: stretch; gap: 12px; margin-top: 3px; }
+#place { flex: 1 1 0; min-width: 0; height: 64px; overflow: hidden; padding-right: 10px; border-right: 1px solid var(--line); }
+#place .t-head { display: flex; justify-content: space-between; gap: 8px; }
+#place p { margin: 2px 0; font-size: 12px; }
+#quick { flex: none; display: flex; align-items: center; gap: 6px; }
+.qs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line2);
+  border-radius: 0;
+  white-space: nowrap;
+}
+.qs svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.qs .qk { color: var(--head); }
+.qs .qcd { color: var(--bad); }
+.qs:disabled { opacity: 0.4; }
 
 .log-good { color: var(--good); }
 .log-bad { color: var(--bad); }
@@ -127,6 +224,50 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px
 .log-world { color: var(--world); }
 .log-npc { color: var(--npc); }
 .log-sys { color: var(--dim); }
+
+/* ---- 同一套框線：標題嵌在框線上。視窗、對話、建角都用 ---- */
+.win {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  background: var(--panel);
+  border: 1px solid var(--line2);
+}
+.win > h2, .frame > .ft {
+  position: absolute;
+  z-index: 1;
+  top: -0.85em;
+  left: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 0 8px;
+  font-size: 15px;
+  font-weight: normal;
+  color: var(--head);
+  background: var(--panel);
+}
+.win > .x {
+  position: absolute;
+  z-index: 1;
+  top: -0.95em;
+  right: 14px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--dim);
+  background: var(--panel);
+  border: 0;
+}
+.win > .x:hover { color: var(--head); }
+.winbody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 20px 16px 14px; }
+.win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--head); }
+.win p { margin: 6px 0; }
+.frame { position: relative; min-height: 0; background: var(--panel); border: 1px solid var(--line2); }
+.frame > .fb { height: 100%; overflow: auto; padding: 20px 16px 12px; }
 
 /* 按鍵視窗與設定視窗 */
 #overlay {
@@ -136,20 +277,10 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  background: rgba(1, 4, 9, 0.78);
+  padding: 24px 12px;
+  background: rgba(3, 14, 16, 0.8);
 }
-.win {
-  width: min(720px, 100%);
-  max-height: calc(100vh - 24px);
-  max-height: calc(100dvh - 24px);
-  overflow: auto;
-  padding: 12px 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-/* 必須先處理的視窗（選職業、升級加點）：蓋在按鍵視窗上面 */
+/* 必須先處理的視窗（建角、升級加點）：蓋在按鍵視窗上面 */
 #modal {
   position: fixed;
   inset: 0;
@@ -157,114 +288,168 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  background: rgba(1, 4, 9, 0.88);
+  padding: 24px 12px;
+  background: rgba(3, 14, 16, 0.88);
 }
-#modalBody { border: 2px solid var(--accent); }
+#modal.full { padding: 12px 16px; background: var(--bg); }
+#modalBody.win { border-color: var(--line2); }
 #modalBody .dlg-opts button { line-height: 1.5; }
 #modalBody .dlg-opts button.on { border-color: var(--good); }
+
+/* 對話視窗：蓋在地圖中間，標題（名字與身分）嵌在框線上 */
+#dialog {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100% - 24px));
+  padding: 22px 16px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line2);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+.dlg-head { position: absolute; top: -0.85em; left: 14px; display: flex; align-items: baseline; gap: 8px; padding: 0 8px; background: var(--panel); }
+.dlg-head b { color: var(--npc); font-size: 15px; }
+.dlg-text { margin: 0 0 10px; line-height: 1.6; }
+.dlg-opts { display: flex; flex-direction: column; gap: 6px; }
+.dlg-opts button { text-align: left; }
+.dlg-hint { margin: 8px 0 0; font-size: 12px; }
+kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; background: var(--void); border: 1px solid var(--line); font: 12px Consolas, monospace; }
+
+/* 建角畫面（全螢幕）：路徑、標題與副標、兩個框、底部提示 */
+.cc { width: 100%; height: 100%; max-width: 1100px; display: flex; flex-direction: column; }
+.cc-path { align-self: flex-start; font-size: 13px; color: var(--dim); }
+.cc h1 { margin: 6px 0 0; text-align: center; font-size: 28px; font-weight: normal; letter-spacing: 0.4em; text-indent: 0.4em; color: var(--head); }
+.cc-sub { margin: 2px 0 22px; text-align: center; color: var(--dim); }
+.cc-cols { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(200px, 36%) 1fr; gap: 24px; }
+.cc-keys { padding-top: 14px; text-align: center; font-size: 13px; color: var(--dim); }
+.cc-list { list-style: none; margin: 0; padding: 0; }
+.cc-list li { margin: 0; padding: 4px 6px; cursor: pointer; white-space: nowrap; }
+.cc-list li.cur { background: var(--panel2); color: var(--head); }
+.cc-list li .mk { display: inline-block; width: 1.3em; }
+.cc-list li .box { display: inline-block; margin-right: 6px; font-family: Consolas, monospace; }
+.cc-list li.got .box { color: var(--good); }
+.cc-note { margin: 14px 0 0; font-size: 12px; color: var(--dim); line-height: 1.6; }
+.cc-detail h3 { margin: 0 0 8px; font-size: 18px; font-weight: normal; color: var(--head); }
+.cc-detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 16px; margin: 0 0 10px; }
+.cc-detail dt { color: var(--dim); }
+.cc-detail dd { margin: 0; }
+.cc-detail p { margin: 8px 0; line-height: 1.6; }
+
 .stats { width: 100%; border-collapse: collapse; font-size: 13px; }
 .stats th { text-align: left; color: var(--dim); font-weight: normal; }
 .stats td, .stats th { padding: 2px 10px 2px 0; }
-#charInfo .over { color: var(--bad); }
-.win h2 { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 16px; color: var(--accent); }
-.win h2 .x { margin-left: auto; padding: 2px 8px; font-size: 12px; }
-.win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--accent); }
-.win p { margin: 6px 0; }
 .setrow { justify-content: flex-start; align-items: center; margin: 8px 0; }
 .logall { list-style: none; padding: 0; }
 .bag { list-style: none; padding: 0; }
 .bag button { width: 100%; text-align: left; }
 .bag kbd { margin-right: 6px; color: var(--dim); }
 #bagInfo p { margin: 4px 0; }
-#bagInfo .over { color: #f85149; }
 #bagInfo .equipped { list-style: none; padding: 0; margin: 4px 0 8px; }
-#bagInfo button.on { border-color: #f85149; color: #f85149; }
+#bagInfo button.on { border-color: var(--bad); color: var(--bad); }
 #reports pre { margin: 4px 0; white-space: pre-wrap; color: var(--dim); font-size: 12px; }
 ul.tags { list-style: none; margin: 6px 0; padding: 0; font-size: 13px; }
 ul.tags li { margin: 2px 0; }
 ol { margin: 0; padding-left: 20px; }
 li { margin: 2px 0; }
 .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+#miniwrap { display: flex; justify-content: center; }
+#minimap { display: block; max-width: 100%; image-rendering: pixelated; border: 1px solid var(--line); background: var(--void); }
 
 button {
   padding: 6px 10px;
-  background: #21262d;
+  background: var(--panel2);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0;
   font: inherit;
   cursor: pointer;
 }
-button:hover { border-color: var(--accent); }
+button:hover { border-color: var(--head); }
 button:disabled { opacity: 0.4; cursor: default; }
 
 input {
   width: 9em;
   padding: 2px 6px;
-  background: var(--bg);
+  background: var(--void);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   font: inherit;
 }
 
-/* 圖例用的顏色（跟地圖上畫的一致，地圖本身畫在 Canvas，顏色表在 render.js） */
-.t-plain { color: #6e7681; }
-.t-grass { color: #3fb950; }
-.t-forest { color: #2ea043; font-weight: bold; }
-.t-snow { color: #f0f6fc; }
-.t-sand { color: #d29922; }
-.t-mount { color: #adbac7; font-weight: bold; }
-.t-water { color: #388bfd; }
-.t-rock { color: #5a6270 !important; }
-.t-stonewall { color: #c9ced6 !important; font-weight: bold; }
-.t-woodwall { color: #b5865a !important; font-weight: bold; }
-.t-house { color: #d6a46b !important; font-weight: bold; }
-.t-road { color: #8b7a5e !important; }
-.t-market { color: #e3b341 !important; font-weight: bold; }
-.t-temple { color: #d2a8ff !important; font-weight: bold; }
-.t-door { color: #f0c674 !important; font-weight: bold; }
-.t-bed { color: #a5b4fc !important; }
-.t-furniture { color: #c9a26b !important; }
-.t-ruin { color: #9a8f7c !important; }
-.t-relic { color: #e3c07a !important; font-weight: bold; }
+/* 圖例用的顏色（跟地圖上畫的一致，地圖本身畫在 Canvas，顏色來自上面的變數） */
+.t-plain { color: var(--t-plain); }
+.t-grass { color: var(--t-grass); }
+.t-forest { color: var(--t-forest); font-weight: bold; }
+.t-snow { color: var(--t-snow); }
+.t-sand { color: var(--t-sand); }
+.t-mount { color: var(--t-mount); font-weight: bold; }
+.t-water { color: var(--t-water); }
+.t-rock { color: var(--t-rock) !important; }
+.t-stonewall { color: var(--t-stonewall) !important; font-weight: bold; }
+.t-woodwall { color: var(--t-woodwall) !important; font-weight: bold; }
+.t-house { color: var(--t-house) !important; font-weight: bold; }
+.t-road { color: var(--t-road) !important; }
+.t-market { color: var(--t-market) !important; font-weight: bold; }
+.t-temple { color: var(--t-temple) !important; font-weight: bold; }
+.t-door { color: var(--t-door) !important; font-weight: bold; }
+.t-bed { color: var(--t-bed) !important; }
+.t-furniture { color: var(--t-furniture) !important; }
+.t-ruin { color: var(--t-ruin) !important; }
+.t-relic { color: var(--t-relic) !important; font-weight: bold; }
 
-.player { color: #fff; background: #1f6feb; font-weight: bold; }
-.npc { color: var(--npc); font-weight: bold; }
-.npc.has-quest { background: #4a1d3a; }
-.npc.recipient { background: #1a4d2a; }
-.npc.smith { color: #79c0ff; }
-.npc.armorer { color: #ffa657; }
-.npc.soldier { color: #b8c0cc; }
-.village { background: #1c2333; }
-.legend b.town { background: #2a2140; }
-.chest { color: #e3b341; font-weight: bold; }
-.node-ore { color: #56d4dd; font-weight: bold; }
-.node-herb { color: #c3e88d; font-weight: bold; }
-.bug { color: #0d1117; background: var(--bug); font-weight: bold; }
-.bug.mid { color: #fff; background: #8e1519; }
+.player { color: var(--map-player-fg); background: var(--map-player-bg); font-weight: bold; }
+.npc { color: var(--map-npc); font-weight: bold; }
+.npc.has-quest { background: var(--map-quest); }
+.npc.recipient { background: var(--map-recipient); }
+.npc.smith { color: var(--map-smith); }
+.npc.armorer { color: var(--map-armorer); }
+.npc.soldier { color: var(--map-soldier); }
+.village { background: var(--map-village); }
+.legend b.town { background: var(--map-town); }
+.chest { color: var(--map-chest); font-weight: bold; }
+.node-ore { color: var(--map-node-ore); font-weight: bold; }
+.node-herb { color: var(--map-node-herb); font-weight: bold; }
+.bug { color: var(--map-mon-fg); background: var(--map-mon-bg); font-weight: bold; }
+.bug.mid { color: var(--map-mid-fg); background: var(--map-mid-bg); }
 .legend b { font-family: Consolas, monospace; padding: 0 2px; }
 
 /* 觸控裝置顯示方向鍵 */
 #dpad { display: none; flex: none; grid-template-columns: repeat(3, 52px); gap: 4px; justify-content: center; padding: 4px 0 6px; background: var(--panel); }
 #dpad button { height: 40px; }
-@media (pointer: coarse) { #dpad { display: grid; } .menu { display: block; margin-left: 8px; } }
+@media (pointer: coarse) { #dpad { display: grid; } }
 
-/* 手機（視窗寬小於 520px）：狀態列縮成兩行小字，地圖照樣滿版（變直的），下方列只留目標與一行訊息 */
+/* 寬度不夠（例如 800×600）：訊息欄變窄，快捷列只留圖示＋按鍵，地點資訊少一行 */
+@media (max-width: 899px) {
+  #side { width: 190px; }
+  .qs .qn { display: none; }
+  .qs { padding: 5px 8px; }
+  .t-extra { display: none; }
+}
+
+/* 手機（視窗寬小於 520px）：訊息欄移到地圖下面變成兩三行，建角改單欄 */
 @media (max-width: 519px) {
   body { font-size: 12px; }
-  .srow { gap: 6px; padding: 2px 6px; font-size: 11px; }
-  .meter { width: 64px; height: 14px; }
-  .meter > span { font-size: 10px; line-height: 14px; }
-  #row2 .keys { display: none; }
-  #row2 .menu { display: block; margin-left: auto; }
-  #bottom { grid-template-columns: 1fr; gap: 2px; height: 76px; padding: 4px 6px; }
-  #target { padding-right: 0; border-right: 0; }
-  #target .t-extra { display: none; }
+  #stat { gap: 1px 8px; font-size: 11px; }
+  #toprow { gap: 6px; padding: 3px 6px 2px; }
+  #iconbar { gap: 2px; }
+  .ib { width: 26px; height: 26px; }
+  .ib svg { width: 17px; height: 17px; }
+  .bars { padding: 0 6px 4px; }
+  .meter { height: 15px; }
+  .meter > span { font-size: 11px; line-height: 13px; }
+  #main { flex-direction: column; }
+  #side { width: auto; height: 64px; border-left: 0; border-top: 1px solid var(--line); }
   #questText { display: none; }
-  #log li { display: none; }
-  #log li:last-child { display: block; }
-  #minimap { top: 4px; right: 4px; }
-  .win { padding: 10px; }
+  #log { font-size: 12px; padding: 3px 6px; }
+  #log li { margin-bottom: 1px; }
+  #bottom { padding: 3px 6px 4px; }
+  #place { display: none; }
+  #lowrow { justify-content: center; }
+  .bar { width: 70px; }
+  .win { max-height: calc(100dvh - 40px); }
+  .winbody { padding: 18px 10px 10px; }
+  .cc h1 { font-size: 22px; }
+  .cc-cols { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
 }

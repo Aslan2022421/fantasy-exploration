@@ -58,7 +58,7 @@
   };
   const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee' };
   // 按鍵視窗：同時只開一個
-  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', c: 'character', '`': 'reports' };
+  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', c: 'character', m: 'minimap', '`': 'reports' };
 
   // 在對話視窗裡選第 i 個選項（選項本身不再花動作）
   function choose(i) {
@@ -136,11 +136,6 @@
       toggleWindow(WINDOW_KEYS[k]);
       return;
     }
-    if (k === 'm') {
-      e.preventDefault();
-      FE.UI.toggleMinimap();
-      return;
-    }
     if (k === '-' || k === '_' || k === '=' || k === '+') {
       e.preventDefault();
       zoom += k === '-' || k === '_' ? -1 : 1;
@@ -177,7 +172,10 @@
     }
   });
 
-  // 選職業與升級加點的視窗（蓋在所有東西上面，開著的時候別的按鈕都點不到）
+  // 建角與升級加點的視窗（蓋在所有東西上面，開著的時候別的按鈕都點不到）；建角畫面滑鼠移到哪行，游標跟到哪行
+  document.getElementById('modal').addEventListener('mouseover', (e) => {
+    if (!ready) FE.UI.startHover(e.target);
+  });
   document.getElementById('modal').addEventListener('click', (e) => {
     if (!ready) {
       FE.UI.startClick(e.target);
@@ -192,9 +190,11 @@
     if (b && !b.disabled) choose(Number(b.dataset.opt));
   });
 
-  document.getElementById('target').addEventListener('click', (e) => {
-    const act = e.target.dataset && e.target.dataset.act;
-    if (act && game.talking == null && !FE.UI.win()) dispatch('戰鬥：' + act, () => game.act(act));
+  // 底部快捷列：攻擊、重擊、撤退
+  document.getElementById('quick').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-act]');
+    const act = b && b.dataset.act;
+    if (act && !b.disabled && ready && game.talking == null && !FE.UI.win()) dispatch('戰鬥：' + act, () => game.act(act));
   });
 
   document.getElementById('dpad').addEventListener('click', (e) => {
@@ -204,9 +204,11 @@
     else dispatch('移動', () => game.move(DIRS[dir][0], DIRS[dir][1]));
   });
 
-  // 視窗：右上角的 ☰ 開設定；設定裡有各視窗的按鈕；點視窗外面或「Esc 關閉」關掉
-  document.getElementById('btnMenu').addEventListener('click', () => toggleWindow('settings'));
-  document.getElementById('btnMini').addEventListener('click', () => FE.UI.toggleMinimap());
+  // 視窗：右上角的圖示列開關各視窗；設定裡也有各視窗的按鈕；點視窗外面或「Esc 關閉」關掉
+  document.getElementById('iconbar').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-win]');
+    if (b && ready && game.talking == null && game.player.points <= 0) toggleWindow(b.dataset.win);
+  });
   document.getElementById('overlay').addEventListener('click', (e) => {
     const use = e.target.closest && e.target.closest('[data-use]');
     if (e.target.closest && e.target.closest('[data-dropmode]')) FE.UI.toggleBagDrop();

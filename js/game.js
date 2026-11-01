@@ -772,9 +772,8 @@
       const p = this.player;
       const gold = Math.max(0, chest.gold | 0);
       p.gold += gold;
-      p.hp = Math.min(p.maxHp, p.hp + 5);
       this.world.chests = this.world.chests.filter((c) => c !== chest);
-      this.say(`打開寶箱：金幣 +${gold}，生命回復 5。`, 'good');
+      this.say(`打開寶箱：金幣 +${gold}。`, 'good');
       // 25% 機率多開出一件裝備（品質普通～傑作，每高一級機率減半），放進背包
       if (this.rng() < C.CHEST_GEAR) {
         const g = FE.Gear.randomDrop(this, 0, 5);

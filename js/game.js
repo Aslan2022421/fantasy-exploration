@@ -646,7 +646,22 @@
       }
       if (this.fell) this.worldClock -= Math.floor(this.worldClock); // 冒險者倒下了，沒走完的回合不補
       this.fell = false;
+      this.unstrand();
       FE.Stability.update(this);
+    }
+
+    // 怪物一定打得到：地形重算、斷崖復發這類改高度的事，可能把怪物困在四面斷崖的台子或坑裡。
+    // 每回合檢查，上下左右沒有一格走得過去、高度又接得上的怪物，腳下的高度改成跟旁邊最接近的那格一樣（牠滑下台子）
+    unstrand() {
+      const w = this.world;
+      for (const m of this.monsters) {
+        const near = DIRS.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(([x, y]) => w.passable(x, y));
+        if (!near.length || near.some(([x, y]) => w.heightOk(m.x, m.y, x, y))) continue;
+        const h = w.cell(m.x, m.y).h;
+        const [nx, ny] = near.sort((a, b) => Math.abs(w.cell(a[0], a[1]).h - h) - Math.abs(w.cell(b[0], b[1]).h - h))[0];
+        w.setHeight(m.x, m.y, w.cell(nx, ny).h);
+        if (Math.abs(m.x - this.player.x) + Math.abs(m.y - this.player.y) <= C.SIGHT) this.say(`${m.name}腳下的地面塌了下來。`, 'bug');
+      }
     }
 
     // 攻擊目前的目標（按 1、2；撞上怪物只設目標，不出手）：一個動作，打完所有怪物各做一件事

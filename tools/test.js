@@ -2032,6 +2032,29 @@ function testGear() {
     ok(dm.length > 0 && Math.min(...dm) >= 14 && Math.max(...dm) <= 16, `中型怪物的寶箱金幣 ${Math.min(...dm)}～${Math.max(...dm)}（原本 27～32，減半後 14～16）`);
     ok(ds.length > 0 && Math.min(...ds) >= 3 && Math.max(...ds) <= 8, `小怪物的寶箱金幣 ${Math.min(...ds)}～${Math.max(...ds)}（原本 5～15，減半後 3～8）`);
   }
+
+  // 怪物一定打得到：被抬到四面斷崖的台子上，回合結束時腳下的高度改成跟旁邊一樣；本來就接得上的不動
+  {
+    const g = newGame(23);
+    const w = g.world;
+    const p = g.player;
+    let spot = null;
+    w.forEachCell((x, y) => {
+      if (spot || Math.abs(x - p.x) + Math.abs(y - p.y) < 4 || w.inBuffer(x, y) || !w.passable(x, y)) return;
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => w.passable(x + dx, y + dy))) spot = { x, y };
+    });
+    const m = g.spawnMonster({ type: 'TERRAIN', x: spot.x, y: spot.y, cells: [], scope: 2, data: {} }, null);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) w.setHeight(m.x + dx, m.y + dy, 0);
+    w.setHeight(m.x, m.y, 2);
+    g.unstrand();
+    ok(w.cell(m.x, m.y).h === 0, `被抬上台子的怪物滑下來（腳下高度 ${w.cell(m.x, m.y).h}，應該是 0）`);
+    w.setHeight(m.x, m.y, 1);
+    g.unstrand();
+    ok(w.cell(m.x, m.y).h === 1, '高度接得上的怪物腳下不動');
+    w.setHeight(m.x, m.y, 2);
+    g.endTurn(false);
+    ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => w.heightOk(m.x, m.y, m.x + dx, m.y + dy)), '回合結束時怪物旁邊一定有一格高度接得上');
+  }
   FE.Combat.hook = hook0;
 }
 try { testGear(); } catch (e) { fail('裝備測試拋出例外：' + e.stack); }

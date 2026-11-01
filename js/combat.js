@@ -23,14 +23,16 @@
     if (d.blockMax > 0) o.block = Math.min(d.blockMax, currentBlock(o, d.blockMax) + d.blockMax * C.BLOCK_REGEN);
   }
 
-  // 冒險者一般攻擊＝主手武器的攻擊力＋0～3，重擊＝攻擊力×2＋1～5（品質不加傷害）；怪物與士兵照自己的攻擊力（狂亂忽高忽低）
-  // 冒險者的反擊（opts.counter）固定造成 COUNTER_DAMAGE 點，不看武器
+  // 冒險者一般攻擊＝主手武器的攻擊力＋0～3，重擊＝攻擊力×2＋1～5（品質不加傷害），再加力量修正值（可為負）與武器技能（每 3 級 +1），
+  // 最少 1 點；怪物與士兵照自己的攻擊力（狂亂忽高忽低）
+  // 冒險者的反擊（opts.counter）固定造成 COUNTER_DAMAGE 點，不看武器與力量
   function baseDamage(game, A, kind, opts) {
     const r = game.rng;
     if (isPlayer(game, A) && opts && opts.counter) return C.COUNTER_DAMAGE;
     if (isPlayer(game, A)) {
       const atk = FE.Gear.atkOf(A);
-      return kind === 'deep' ? atk * 2 + FE.randInt(r, 1, 5) : atk + FE.randInt(r, 0, 3);
+      const raw = kind === 'deep' ? atk * 2 + FE.randInt(r, 1, 5) : atk + FE.randInt(r, 0, 3);
+      return Math.max(1, raw + FE.Char.dmgBonus(A));
     }
     return A.type === 'VALUE' ? FE.randInt(r, 0, A.atk * 2) : FE.randInt(r, Math.max(1, A.atk - 1), A.atk + 1);
   }
@@ -52,6 +54,8 @@
     const dS = isSoldier(D);
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
+    // 冒險者出手練的是主手武器的技能（反擊是固定傷害，不算）；先記下，免得這一下把武器磨壞了找不到
+    const trained = aP && !opts.counter ? FE.Char.weaponSkill(A) : null;
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者主手武器的品質命中加值（超重時扣 1 或 2）＋高處加值
     let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + FE.Gear.hitMod(A) : 0;
@@ -160,6 +164,10 @@
     if (aP && A.equip.main) FE.Gear.wear(game, A.equip.main);
     if (dP && absorbed > 0 && FE.Gear.shieldOf(D)) FE.Gear.wear(game, FE.Gear.shieldOf(D));
     if (dP && reduced > 0 && D.equip.body) FE.Gear.wear(game, D.equip.body);
+    // 技能用了就成長：近戰武器出手一次（打中沒打中都算）、閃開一次、格擋成功一次各練一次
+    if (trained) FE.Char.useSkill(game, trained);
+    if (dP && dodged) FE.Char.useSkill(game, 'dodge');
+    if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield');
 
     // 傷害與倒下
     let killed = false;

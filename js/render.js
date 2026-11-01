@@ -348,7 +348,7 @@
   function drawStatus() {
     const p = game.player;
     const W = game.world;
-    $('stName').textContent = p.name;
+    $('stName').textContent = `${p.name}（${FE.Char.cls(p).name}）`;
     $('hpText').textContent = `${p.hp} / ${p.maxHp}`;
     setBar('hpFill', p.hp, p.maxHp);
     // 經驗值條只顯示這一級的進度；創世門檻由創世神決定，不顯示
@@ -360,7 +360,7 @@
     // 主手武器的名字（含品質符號）與攻擊力；超重時標出負重
     const main = p.equip.main;
     $('stWeapon').textContent =
-      `武器 ${main ? FE.Gear.name(main) : '徒手'}（攻擊力 ${game.playerAtk()}）` + (game.loadTier() ? `　超重 ${game.weight()} / ${C.CARRY_LIMIT}` : '');
+      `武器 ${main ? FE.Gear.name(main) : '徒手'}（攻擊力 ${game.playerAtk()}）` + (game.loadTier() ? `　超重 ${game.weight()} / ${game.carryLimit()}` : '');
     $('stGold').textContent = `金幣 ${p.gold}`;
     const n = unseenReports();
     $('reportBadge').classList.toggle('hidden', n === 0);
@@ -421,11 +421,11 @@
     if (c && c.kind === 'hunt') {
       const left = game.huntRemaining(c.monsterIds);
       text = left
-        ? `任務：清掉${c.village}附近的小怪物，還剩 ${left} / ${c.total} 隻（紫框）。獎勵 經驗值 ${c.exp}、金幣 ${c.gold}`
+        ? `任務：清掉${c.village}附近的小怪物，還剩 ${left} / ${c.total} 隻（紫框）。獎勵 經驗值 ${c.exp}、金幣 ${game.questGold(c.gold)}`
         : `任務：小怪物都清掉了，回${c.village}找委託人（綠底的 &）領獎勵`;
     } else if (c) {
       const g = game.goodsFor(c);
-      text = `任務：把${g ? g.name : '東西'}送到${c.targetVillage}的${c.targetName}${c.steps ? `（約 ${c.steps} 步）` : ''}，收貨人是綠底的 &。獎勵 經驗值 ${c.exp}、金幣 ${c.gold}`;
+      text = `任務：把${g ? g.name : '東西'}送到${c.targetVillage}的${c.targetName}${c.steps ? `（約 ${c.steps} 步）` : ''}，收貨人是綠底的 &。獎勵 經驗值 ${c.exp}、金幣 ${game.questGold(c.gold)}`;
     }
     $('questText').textContent = text;
   }
@@ -537,7 +537,7 @@
     const slot = (label, g) =>
       `<li><span class="dim">${label}</span> ${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）</span>` : '<span class="dim">空著</span>'}</li>`;
     $('bagInfo').innerHTML = `
-      <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${C.CARRY_LIMIT}</b>${
+      <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()}</b>${
         tier === 1 ? '　超重：每個動作多 2 刻、出手 -1' : tier === 2 ? '　超重太多：不能移動、不能撤退、出手 -2，先丟掉東西' : ''
       }</p>
       <ul class="equipped">${slot('主手', p.equip.main)}${slot('副手', p.equip.off)}${slot('身上', p.equip.body)}</ul>
@@ -556,9 +556,147 @@
       : '<li class="dim">背包是空的。</li>';
   }
 
+  // 角色視窗（C）：職業與等級、生命與負重上限、六項屬性與修正值、各技能的等級與到下一級的進度、目前的加成
+  function drawCharacter() {
+    const p = game.player;
+    const Ch = FE.Char;
+    const c = Ch.cls(p);
+    const sign = (n) => (n > 0 ? '+' : '') + n;
+    const lo = FE.levelExp(game.level);
+    const hi = FE.levelExp(game.level + 1);
+    const attrRows = FE.ATTRS.map((a) => {
+      const v = p.attr[a.key];
+      return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td></tr>`;
+    }).join('');
+    const effect = (id, lv) => {
+      if (FE.SKILLS[id].weapon) return `出手 +${Math.floor(lv / C.SKILL_HIT_EVERY)}、傷害 +${Math.floor(lv / C.SKILL_DMG_EVERY)}`;
+      if (id === 'dodge') return `閃避機率 +${lv}%`;
+      if (id === 'shield') return `格擋機率 +${lv * 2}%`;
+      return lv >= 20 ? '中甲、重甲都不多花刻，重甲不再扣閃避' : lv >= 10 ? '中甲、重甲都不多花刻' : lv >= 5 ? '中甲不多花刻，重甲少 1 刻' : '中甲多 1 刻、重甲多 2 刻';
+    };
+    const skillRows = Object.keys(FE.SKILLS).map((id) => {
+      const s = p.skills[id];
+      const prog = s.lv >= C.SKILL_MAX ? '最高等級' : `${s.n} / ${Ch.skillNeed(s.lv)}`;
+      return `<tr><td>${FE.SKILLS[id].name}</td><td><b>${s.lv}</b></td><td>${prog}</td><td class="dim">${effect(id, s.lv)}</td></tr>`;
+    }).join('');
+    const d = FE.Gear.playerDefense(p);
+    const heal = Math.max(1, C.REST_HEAL + Ch.attrMod(p, 'con'));
+    $('charInfo').innerHTML = `
+      <p><b>${esc(p.name)}</b>　${esc(c.name)}　Lv${game.level}　經驗值 ${game.exp - lo} / ${hi - lo}${p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加</b>` : ''}</p>
+      <p>生命 ${p.hp} / ${p.maxHp}　負重上限 ${game.carryLimit()}（目前 ${game.weight()}）　休息一次回復 ${heal}</p>
+      <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
+      <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th></tr>${attrRows}</table>
+      <h3>技能（用了就成長，0～${C.SKILL_MAX} 級）</h3>
+      <table class="stats"><tr><th>技能</th><th>等級</th><th>到下一級</th><th>目前的效果</th></tr>${skillRows}</table>
+      <h3>目前的數字</h3>
+      <p>近戰傷害加值 ${sign(Ch.dmgBonus(p))}　出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　閃避 ${Math.round(d.dodge * 100)}%${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}</p>`;
+  }
+
+  // ---- 模態視窗：開新世界選職業與起始裝備、升級加點。開著的時候不能做別的事 ----
+  // 選職業的畫面不需要遊戲（這時還沒有世界），選完才呼叫 onDone(職業, 挑的裝備)
+  const classKeys = Object.keys(FE.CLASSES);
+  function startGroups() {
+    return FE.CLASSES[ui.start.cls].groups;
+  }
+  const optLabel = (id) => FE.START_OPTS[id].label;
+  function drawStart() {
+    const s = ui.start;
+    if (s.step === 'class') {
+      $('modalBody').innerHTML = `
+        <h2>選職業 <span class="dim">（按數字或點一下）</span></h2>
+        <div class="dlg-opts">${classKeys
+          .map((k, i) => {
+            const c = FE.CLASSES[k];
+            const tmp = { cls: k, attr: c.attr };
+            const attrs = FE.ATTRS.map((a) => `${a.name} ${c.attr[a.key]}`).join('　');
+            const fixed = c.fixed.length ? `固定給：${c.fixed.map(optLabel).join('、')}` : '裝備都自己挑';
+            return `<button data-cls="${k}"><kbd>${i + 1}</kbd><b>${esc(c.name)}</b>　生命 ${FE.Char.maxHp(tmp, 1)}、負重上限 ${FE.Char.carryLimit(tmp)}<br><span class="dim">${attrs}</span><br><span class="dim">${esc(c.desc)}${esc(fixed)}</span></button>`;
+          })
+          .join('')}</div>`;
+      return;
+    }
+    const c = FE.CLASSES[s.cls];
+    const g = startGroups()[s.gi];
+    const have = s.picks.map(optLabel).concat(s.sel.map(optLabel));
+    $('modalBody').innerHTML = `
+      <h2>${esc(c.name)}的起始裝備 <span class="dim">（第 ${s.gi + 1} / ${startGroups().length} 組）</span></h2>
+      <p>${c.fixed.length ? `固定給你：${c.fixed.map(optLabel).join('、')}。` : ''}${have.length ? `已經挑了：${have.map(esc).join('、')}。` : ''}</p>
+      <p>${g.pick > 1 ? `這一組從 ${g.of.length} 樣裡挑 ${g.pick} 樣（挑到 ${g.pick} 樣就進下一組）：` : `這一組 ${g.of.length} 樣挑 1 樣：`}</p>
+      <div class="dlg-opts">${g.of
+        .map((id, i) => `<button data-gear="${id}" class="${s.sel.includes(id) ? 'on' : ''}"><kbd>${i + 1}</kbd>${esc(optLabel(id))}${s.sel.includes(id) ? '　✓' : ''}</button>`)
+        .join('')}</div>
+      <p class="dim dlg-hint">Esc 回上一步</p>`;
+  }
+  function startFinish() {
+    const done = ui.start.done;
+    const { cls, picks } = ui.start;
+    ui.start = null;
+    $('modal').classList.add('hidden');
+    done(cls, picks);
+  }
+  function startChoose(id) {
+    const s = ui.start;
+    if (s.step === 'class') {
+      s.cls = id;
+      s.step = 'gear';
+      s.gi = 0;
+      s.picks = [];
+      s.sel = [];
+    } else {
+      const g = startGroups()[s.gi];
+      if (!g.of.includes(id)) return;
+      s.sel = s.sel.includes(id) ? s.sel.filter((x) => x !== id) : s.sel.concat(id);
+      if (s.sel.length >= g.pick) {
+        s.picks = s.picks.concat(s.sel);
+        s.sel = [];
+        s.gi++;
+        if (s.gi >= startGroups().length) {
+          startFinish();
+          return;
+        }
+      }
+    }
+    drawStart();
+  }
+  function startBack() {
+    const s = ui.start;
+    if (s.step === 'class') return;
+    if (s.sel.length) s.sel = [];
+    else if (s.gi > 0) {
+      s.gi--;
+      s.picks = s.picks.filter((id) => !startGroups()[s.gi].of.includes(id));
+    } else s.step = 'class';
+    drawStart();
+  }
+
+  // 升級加點：還有沒分配的屬性點就跳出來，選一項還沒到上限的屬性加 1 點（按 1～6 或點一下）
+  function drawLevelUp() {
+    const p = game.player;
+    $('modalBody').innerHTML = `
+      <h2>升到 Lv${game.level}　<span class="dim">選一項屬性加 1 點${p.points > 1 ? `（還有 ${p.points} 點）` : ''}</span></h2>
+      <div class="dlg-opts">${FE.ATTRS.map((a, i) => {
+        const v = p.attr[a.key];
+        const full = v >= C.ATTR_CAP;
+        const m0 = FE.Char.mod(v);
+        const m1 = FE.Char.mod(v + 1);
+        const note = full ? `已到上限 ${C.ATTR_CAP}` : `${v} → ${v + 1}${m1 !== m0 ? `，修正值 ${m0 > 0 ? '+' : ''}${m0} → ${m1 > 0 ? '+' : ''}${m1}` : `，修正值不變（${m0 > 0 ? '+' : ''}${m0}）`}`;
+        return `<button data-attr="${a.key}" ${full ? 'disabled' : ''}><kbd>${i + 1}</kbd><b>${a.name}</b>　${esc(note)}<br><span class="dim">${esc(a.info)}</span></button>`;
+      }).join('')}</div>
+      <p class="dim dlg-hint">加完才能繼續。生命 ${p.hp} / ${p.maxHp}</p>`;
+  }
+
+  function drawModal() {
+    const open = !!ui.start || (game && game.player && game.player.points > 0);
+    $('modal').classList.toggle('hidden', !open);
+    if (!open) return;
+    if (ui.start) drawStart();
+    else drawLevelUp();
+  }
+
   const WINDOWS = {
     legend: null,
     backpack: drawBackpack,
+    character: drawCharacter,
     history: drawHistory,
     messages: drawLogAll,
     steading: drawSteading,
@@ -581,6 +719,7 @@
     drawLog();
     drawDialog();
     drawWindow();
+    drawModal();
   }
 
   function relayout() {
@@ -604,6 +743,30 @@
     },
     update,
     relayout,
+    // 開新世界時選職業與起始裝備：選完呼叫 done(職業, 挑的裝備)
+    startMenu(done) {
+      ui.start = { step: 'class', cls: null, gi: 0, picks: [], sel: [], done };
+      $('modal').classList.remove('hidden');
+      drawStart();
+    },
+    // 選職業的畫面開著時是不是吃掉這個鍵（數字選、Esc 回上一步）；回傳 true 表示已經處理
+    startKey(k) {
+      if (!ui.start) return false;
+      if (k === 'escape' || k === 'backspace') startBack();
+      else if (/^[1-9]$/.test(k)) {
+        const i = Number(k) - 1;
+        const list = ui.start.step === 'class' ? classKeys : startGroups()[ui.start.gi].of;
+        if (list[i]) startChoose(list[i]);
+      }
+      return true;
+    },
+    startClick(target) {
+      if (!ui.start || !target.closest) return;
+      const b = target.closest('[data-cls],[data-gear]');
+      if (b) startChoose(b.dataset.cls || b.dataset.gear);
+    },
+    // 有沒有跳出必須先處理的視窗（選職業、升級加點）
+    modal: () => !!ui.start || !!(game && game.player && game.player.points > 0),
     win: () => ui.win,
     bagDrop: () => ui.bagDrop,
     toggleBagDrop() {

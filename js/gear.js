@@ -26,31 +26,37 @@
   // 原價（含品質，不含聚落經濟）：賣回與修復的基準
   const value = (g) => def(g).price * qual(g).value;
 
-  // 販售價：普通原價×品質價值倍率×聚落經濟倍率（有市場再便宜一成，見 Steading.shopFactor），四捨五入；礦鎬、鐮刀固定 20 金幣、不看經濟
-  function shopPrice(type, q, v) {
-    if (G[type].cat === 'tool') return C.TOOL_PRICE;
-    return Math.round(G[type].price * Q[q].value * FE.Steading.shopFactor(v));
+  // 魅力（cha 是魅力修正值，沒給就是 0）：每點修正值，向工匠買東西（含修復費、打造工錢）−5%，賣東西 +5%，疊在聚落經濟倍率上
+  const buyFactor = (cha) => Math.max(0.1, 1 - C.CHA_PRICE * (cha || 0));
+  const sellFactor = (cha) => Math.max(0.1, 1 + C.CHA_PRICE * (cha || 0));
+
+  // 販售價：普通原價×品質價值倍率×聚落經濟倍率（有市場再便宜一成，見 Steading.shopFactor）×魅力，四捨五入；礦鎬、鐮刀固定 20 金幣、不看經濟
+  function shopPrice(type, q, v, cha) {
+    if (G[type].cat === 'tool') return Math.round(C.TOOL_PRICE * buyFactor(cha));
+    return Math.round(G[type].price * Q[q].value * FE.Steading.shopFactor(v) * buyFactor(cha));
   }
 
-  // 賣回：原價（含品質）的半價×剩餘耐久比例
-  const sellPrice = (g) => Math.max(1, Math.round(value(g) * C.SELL_RATE * (g.dur / g.max)));
+  // 賣回：原價（含品質）的半價×剩餘耐久比例×魅力
+  const sellPrice = (g, cha) => Math.max(1, Math.round(value(g) * C.SELL_RATE * (g.dur / g.max) * sellFactor(cha)));
+  // 礦石賣給工匠：一顆 5 金幣×魅力
+  const orePrice = (n, cha) => Math.round(n * C.ORE_PRICE * sellFactor(cha));
 
   // 修復：鐵匠、武器匠、盔甲匠都修到完整（REPAIR_ALL 設成 false 就只修回損失的一半）。回傳 { restore: 修回幾點耐久, cost: 費用 }；耐久已滿 restore 是 0。
   // 費用＝修回的比例×原價×0.5×經濟倍率（至少 1）；工具不看經濟
-  function repairQuote(g, v) {
+  function repairQuote(g, v, cha) {
     const missing = g.max - g.dur;
     if (missing <= 0) return { restore: 0, cost: 0 };
     const all = v && v.kind === 'town' ? C.REPAIR_ALL.town : C.REPAIR_ALL.village;
     const restore = all ? missing : Math.ceil(missing / 2);
     const econ = def(g).cat === 'tool' ? 1 : FE.Steading.shopFactor(v);
-    return { restore, cost: Math.max(1, Math.round((restore / g.max) * value(g) * C.REPAIR_RATE * econ)) };
+    return { restore, cost: Math.max(1, Math.round((restore / g.max) * value(g) * C.REPAIR_RATE * econ * buyFactor(cha))) };
   }
 
-  // 打造：礦石數、工錢（原價一半，乘聚落經濟）、品質範圍（村莊鐵匠普通～精良，城鎮做工好～優秀）
-  function craftQuote(type, v) {
+  // 打造：礦石數、工錢（原價一半，乘聚落經濟與魅力）、品質範圍（村莊鐵匠普通～精良，城鎮做工好～優秀）
+  function craftQuote(type, v, cha) {
     const d = G[type];
     const kind = v && v.kind === 'town' ? 'town' : 'village';
-    return { ore: d.ore, fee: Math.round(d.price * C.CRAFT_FEE_RATE * FE.Steading.shopFactor(v)), range: C.CRAFT_RANGE[kind] };
+    return { ore: d.ore, fee: Math.round(d.price * C.CRAFT_FEE_RATE * FE.Steading.shopFactor(v) * buyFactor(cha)), range: C.CRAFT_RANGE[kind] };
   }
 
   // 隨機品質：範圍 lo～hi（含），每高一級機率減半
@@ -84,14 +90,19 @@
   // 盾牌在副手才擋得住：格擋機率與格擋值（值乘品質倍率，四捨五入）；沒拿盾牌是 0
   const shieldOf = (p) => (p.equip.off && def(p.equip.off).cat === 'shield' ? p.equip.off : null);
 
+  // 冒險者的防禦數字：
+  //   閃避＝PLAYER_DODGE＋敏捷修正值×2%＋閃避技能每級 1%＋防具的閃避加減（重甲 -5%，穿甲行動 20 級起不再扣），最低 0
+  //   格擋機率＝盾牌的機率＋盾牌使用每級 2%；格擋值＝盾牌與品質的格擋值，戰士再加力量修正值（其他職業只照盾牌）；沒拿盾牌都是 0
   function playerDefense(p) {
     const body = p.equip.body ? def(p.equip.body) : null;
     const sh = shieldOf(p);
+    const armorDodge = body && body.dodge ? (FE.Char.armorDodgeFree(p) && body.dodge < 0 ? 0 : body.dodge) : 0;
+    const blockMax = sh ? Math.max(0, Math.round(def(sh).value * qual(sh).armor) + (p.cls === 'warrior' ? FE.Char.attrMod(p, 'str') : 0)) : 0;
     return {
-      dodge: C.PLAYER_DODGE + (body ? body.dodge || 0 : 0),
+      dodge: Math.max(0, C.PLAYER_DODGE + C.DEX_DODGE * FE.Char.attrMod(p, 'dex') + C.SKILL_DODGE * FE.Char.skillLv(p, 'dodge') + armorDodge),
       counter: C.PLAYER_COUNTER,
-      block: sh ? def(sh).block : 0,
-      blockMax: sh ? Math.round(def(sh).value * qual(sh).armor) : 0,
+      block: sh ? def(sh).block + C.SKILL_BLOCK * FE.Char.skillLv(p, 'shield') : 0,
+      blockMax,
     };
   }
 
@@ -106,17 +117,17 @@
   }
   // 0 沒超重；1 超過上限 OVER_NEAR 以內（每個動作多 2 刻、出手 -1）；2 再超過（不能移動、不能撤退、出手 -2）
   function loadTier(p) {
-    const over = weightOf(p) - C.CARRY_LIMIT;
+    const over = weightOf(p) - FE.Char.carryLimit(p);
     return over <= 0 ? 0 : over <= C.OVER_NEAR ? 1 : 2;
   }
-  // 每個動作多花的刻：身上防具的 ticks，加上超重
+  // 每個動作多花的刻：身上防具的 ticks（穿甲行動 5 級起少 1 刻、10 級起再少 1 刻，最少 0），加上超重
   function extraTicks(p) {
-    const body = p.equip.body ? def(p.equip.body).ticks || 0 : 0;
+    const body = p.equip.body ? FE.Char.armorTicks(p, def(p.equip.body).ticks || 0) : 0;
     return body + (loadTier(p) >= 1 ? C.OVER_TICKS : 0);
   }
-  // 出手擲 d20 的裝備加減：主手武器的命中加值，扣掉超重的減值
+  // 出手擲 d20 的角色加減：主手武器的命中加值，加敏捷修正值與武器技能（每 5 級 +1），扣掉超重的減值
   function hitMod(p) {
-    return hitBonus(p) - loadTier(p);
+    return hitBonus(p) + FE.Char.attrMod(p, 'dex') + FE.Char.skillHit(p) - loadTier(p);
   }
 
   // ---- 磨損 ----
@@ -197,7 +208,7 @@
   const isShopkeeper = (n) => !!n && (n.role === 'smith' || n.role === 'armorer');
 
   FE.Gear = {
-    def, qual, name, make, value, shopPrice, sellPrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
+    def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
     equipped, atkOf, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, wear, repaired, durText, statText,
     SHOPS, CAT_NAMES, shopOf, isShopkeeper,

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fantasy Exploration</title>
-  <link rel="stylesheet" href="css/style.css?v=17">
+  <link rel="stylesheet" href="css/style.css?v=18">
 </head>
 <body>
   <!-- 版面參考 Caves of Qud：上方狀態列、滿版地圖（小地圖疊在右上角、對話視窗蓋在中間）、下方列 -->
@@ -24,7 +24,7 @@
         <span id="stTime"></span>
         <span id="stWhere"></span>
         <span id="stEnv"></span>
-        <span class="keys dim">Esc 設定　B 背包　L 圖例　H 歷史　J 訊息　I 聚落　M 小地圖</span>
+        <span class="keys dim">Esc 設定　B 背包　C 角色　L 圖例　H 歷史　J 訊息　I 聚落　M 小地圖</span>
         <button id="btnMenu" class="menu" aria-label="設定與視窗">☰</button>
       </div>
     </header>
@@ -49,6 +49,9 @@
       <span></span><button data-dir="arrowdown">↓</button><span></span>
     </div>
   </div>
+
+  <!-- 必須先處理的視窗：開新世界選職業與起始裝備、升級加點。開著的時候不能做別的事 -->
+  <div id="modal" class="hidden"><section id="modalBody" class="win"></section></div>
 
   <!-- 按鍵視窗：同時只開一個，Esc 關掉 -->
   <div id="overlay" class="hidden">
@@ -76,7 +79,7 @@
         <div class="row"><span><b class="bug">s</b> 骷髏（沙漠）</span><span><b class="bug">R</b> 沼澤巨魔（沼澤、濕地）</span><span><b class="bug">k</b> 狗頭人（山地）</span></div>
         <p>怪物身上的異常會讓字母閃成別的字元：數字是狂亂，問號是虛影，<code>*</code> <code>:</code> 是氣候錯位，<code>▲</code> <code>▼</code> 是斷崖，<code>%</code> <code>#</code> 是斷層，<code>!</code> 是碎裂。紅色閃爍的格子是被異常扭曲的地面，變淡的區域是走不到的地方。</p>
         <p><b>小地圖</b>（右上角，按 M 收起或打開）：白點是你，紅點是怪物，亮紫色的點是剛被創世神重新算過的地面（100 刻後消失），粉紅是村民，藍點是鐵匠或武器匠，橘點是盔甲匠，鋼灰色的點是士兵，綠色大點是你要找的人，黃點是寶箱，土黃色是聚落附近的地貌，白框是主畫面的範圍，紫色虛線框是下一塊世界會長出來的位置（離你最近的邊界），黑色是還沒創出來的地方。</p>
-        <p><b>按鍵</b>：方向鍵或 WASD 移動，R 休息，1 攻擊、2 重擊、3 撤退，B 背包（按數字使用），－／＋ 縮放，M 小地圖，L 圖例，H 世界的歷史紀錄，J 完整訊息紀錄，I 聚落資訊，<code>`</code>（反引號）錯誤報告，Esc 關掉視窗（沒有視窗時打開設定）。</p>
+        <p><b>按鍵</b>：方向鍵或 WASD 移動，R 休息，1 攻擊、2 重擊、3 撤退，B 背包（按數字使用），C 角色（職業、屬性、技能），－／＋ 縮放，M 小地圖，L 圖例，H 世界的歷史紀錄，J 完整訊息紀錄，I 聚落資訊，<code>`</code>（反引號）錯誤報告，Esc 關掉視窗（沒有視窗時打開設定）。</p>
       </div>
     </section>
 
@@ -85,6 +88,11 @@
       <div id="bagInfo"></div>
       <p class="dim">藥草等東西疊在一起，不限格數，裝備一件一格。按數字鍵或點一下：藥草是吃（回生命上限的四分之一），裝備是穿上或拿起（換下的放回背包），都算一個動作，戰鬥中也能做。按 X 切到「丟掉」，選到的整疊直接消失，不算動作。礦鎬、鐮刀放在背包裡，撞上礦脈或藥草就會用。東西越多越重，超過負重上限會變慢。</p>
       <ol id="backpack" class="bag"></ol>
+    </section>
+
+    <section id="win-character" class="win hidden">
+      <h2>角色 <span class="dim">（C）</span><button class="x" data-close>Esc 關閉</button></h2>
+      <div id="charInfo"></div>
     </section>
 
     <section id="win-history" class="win hidden">
@@ -128,6 +136,7 @@
       <p class="dim">縮放改的是每格的大小（也可以按 - 和 = 鍵）：格子小，看得到的格數多；格子大，字變大、格數變少。地圖短邊至少看得到 17 格（四個方向各 8 格，跟小怪物的視野一樣遠）。</p>
       <div class="row setrow">
         <button data-open="backpack">背包 B</button>
+        <button data-open="character">角色 C</button>
         <button data-open="legend">圖例 L</button>
         <button data-open="history">歷史紀錄 H</button>
         <button data-open="messages">訊息 J</button>
@@ -136,25 +145,26 @@
         <button id="btnMini">小地圖 M</button>
       </div>
       <h3>操作說明</h3>
-      <p class="hint">方向鍵或 WASD 移動，R 休息（回 1 點生命，在村莊裡回滿；旁邊有怪物時不能休息）。你每做一件事，所有怪物各做一件事。撞上怪物只會把牠設成目標（不出手、不算動作），要按 1 攻擊、2 重擊（或點下方的按鈕）才出手，3 撤退，都對目前的目標；貼著你的怪物每回合都會攻擊，被你設成目標的怪物會纏上你，你走到哪牠跟到哪；你從牠旁邊走開（包括後退）牠一定趁機出手一下（不擲命中，只看你閃不閃得開），其他貼著的怪物則有機會趁機打你。撤退成功才甩得掉目標。撞上村民或工匠會打開對話視窗（算一個動作），按數字鍵或用滑鼠選選項，Esc 返回上一層或關掉；不接的委託會留著，之後回來還接得到；要送的東西放在背包裡。工匠的選項是買、修、打造、賣礦石、賣裝備。B 打開背包，按數字選：藥草是吃（回生命上限的四分之一），裝備是穿上或拿起，X 切到「丟掉」；背太重會變慢。鐵匠和武器匠賣礦鎬和鐮刀，拿著它們撞上礦脈 ◊ 或藥草 ♥ 就能採。藍色的 &amp; 是鐵匠（城鎮裡是武器匠），橘色的 &amp; 是城鎮的盔甲匠，鋼灰色的 &amp; 是城鎮的士兵（世界失序時會出城清掃怪物）。底色較亮的區域是村莊，怪物進不了聚落和它周圍那一圈（村莊 8 格、城鎮 12 格），在村莊裡也不能戰鬥。黃框的怪物正在追你，紫框是清除委託指定的怪物，白框是目前的目標。狀態列的「世界」是安穩、動盪、失序：越亂，新的異常越大、越多，失序時你每個動作都讓怪物多動一次，士兵不會。F9 模擬一次執行錯誤。</p>
+      <p class="hint">開新世界時先選職業（戰士、遊俠、法師、牧師）和起始裝備；C 打開角色視窗，看六項屬性、技能和各項加成。每升一級跳出視窗，選一項屬性加 1 點（上限 18），視窗開著不能做別的事。技能用了就成長：出手、閃開、格擋、穿中甲或重甲走動，都會讓對應的技能慢慢升級。方向鍵或 WASD 移動，R 休息（回 1 點生命加體質修正值，最少 1，在村莊裡回滿；旁邊有怪物時不能休息）。你每做一件事，所有怪物各做一件事。撞上怪物只會把牠設成目標（不出手、不算動作），要按 1 攻擊、2 重擊（或點下方的按鈕）才出手，3 撤退，都對目前的目標；貼著你的怪物每回合都會攻擊，被你設成目標的怪物會纏上你，你走到哪牠跟到哪；你從牠旁邊走開（包括後退）牠一定趁機出手一下（不擲命中，只看你閃不閃得開），其他貼著的怪物則有機會趁機打你。撤退成功才甩得掉目標。撞上村民或工匠會打開對話視窗（算一個動作），按數字鍵或用滑鼠選選項，Esc 返回上一層或關掉；不接的委託會留著，之後回來還接得到；要送的東西放在背包裡。工匠的選項是買、修、打造、賣礦石、賣裝備。B 打開背包，按數字選：藥草是吃（回生命上限的四分之一），裝備是穿上或拿起，X 切到「丟掉」；背太重會變慢。鐵匠和武器匠賣礦鎬和鐮刀，拿著它們撞上礦脈 ◊ 或藥草 ♥ 就能採。藍色的 &amp; 是鐵匠（城鎮裡是武器匠），橘色的 &amp; 是城鎮的盔甲匠，鋼灰色的 &amp; 是城鎮的士兵（世界失序時會出城清掃怪物）。底色較亮的區域是村莊，怪物進不了聚落和它周圍那一圈（村莊 8 格、城鎮 12 格），在村莊裡也不能戰鬥。黃框的怪物正在追你，紫框是清除委託指定的怪物，白框是目前的目標。狀態列的「世界」是安穩、動盪、失序：越亂，新的異常越大、越多，失序時你每個動作都讓怪物多動一次，士兵不會。F9 模擬一次執行錯誤。</p>
     </section>
   </div>
 
   <!-- ?v= 只是為了讓瀏覽器丟掉換伺服器之前的舊快取 -->
-  <script src="js/config.js?v=17"></script>
-  <script src="js/rng.js?v=17"></script>
-  <script src="js/world.js?v=17"></script>
-  <script src="js/checker.js?v=17"></script>
-  <script src="js/bugs.js?v=17"></script>
-  <script src="js/steading.js?v=17"></script>
-  <script src="js/gear.js?v=17"></script>
-  <script src="js/combat.js?v=17"></script>
-  <script src="js/stability.js?v=17"></script>
-  <script src="js/events.js?v=17"></script>
-  <script src="js/ai.js?v=17"></script>
-  <script src="js/game.js?v=17"></script>
-  <script src="js/save.js?v=17"></script>
-  <script src="js/render.js?v=17"></script>
-  <script src="js/main.js?v=17"></script>
+  <script src="js/config.js?v=18"></script>
+  <script src="js/rng.js?v=18"></script>
+  <script src="js/world.js?v=18"></script>
+  <script src="js/checker.js?v=18"></script>
+  <script src="js/bugs.js?v=18"></script>
+  <script src="js/steading.js?v=18"></script>
+  <script src="js/char.js?v=18"></script>
+  <script src="js/gear.js?v=18"></script>
+  <script src="js/combat.js?v=18"></script>
+  <script src="js/stability.js?v=18"></script>
+  <script src="js/events.js?v=18"></script>
+  <script src="js/ai.js?v=18"></script>
+  <script src="js/game.js?v=18"></script>
+  <script src="js/save.js?v=18"></script>
+  <script src="js/render.js?v=18"></script>
+  <script src="js/main.js?v=18"></script>
 </body>
 </html>

@@ -22,7 +22,8 @@
       this.creation = 0;     // 創世力（不顯示）：累計的算力裡進創世的那一份
       this.nextChunkAt = 0;  // 創世力累計到這裡，創世神解出下一塊（不顯示）
       this.compute = 0;      // 修補力（不顯示）：算力裡進修補的那一份，用來演算事件、維持穩定
-      this.battle = { targetId: null, cooldown: 0 }; // 目前的目標與重擊冷卻
+      this.battle = { targetId: null, cooldown: 0, healCd: 0 }; // 目前的目標、重擊冷卻、治療冷卻（牧師）
+      this.aim = null;       // 按 F 瞄準時：{ mode, ids 看得到的怪物（近的在前）, i 目前選的 }（不進存檔）
       this.worldState = 0;   // 世界狀態：0 安穩、1 動盪、2 失序（stability.js）；世界等級另外算，見 FE.Stability.worldLevel
       this.soldiers = [];    // 城鎮的士兵（role 'soldier'），不在 world.npcs 裡
       this.worldEvery = 1;   // 冒險者每做幾個動作，世界（怪物、士兵）才走一回合；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
@@ -225,24 +226,41 @@
     // 不限格數，同一種東西疊放（藥草、礦石、送貨的物品）。送貨的物品是 id 'goods'，名字照委託，記著是誰託的（giverId），不跟採來的東西疊在一起。
     // 裝備（含礦鎬、鐮刀）每件單獨一格、不疊放：{ id: 'gear', n: 1, gear }，穿上的裝備不在背包裡，在 player.equip
 
-    bagEntry(id, giverId) {
-      return this.player.bag.find((e) => e.id === id && (id !== 'goods' || e.giverId === giverId)) || null;
+    // 箭矢分品質，同品質的疊在一起（key 是品質 q）；送貨的物品照託付的人分開（key 是 giverId）
+    bagEntry(id, key) {
+      return this.player.bag.find((e) => e.id === id && (id === 'goods' ? e.giverId === key : id === 'arrow' && key !== undefined ? e.q === key : true)) || null;
     }
 
+    // 有幾份；箭矢是各品質加起來的支數
     bagCount(id) {
-      const e = this.bagEntry(id);
-      return e ? e.n : 0;
+      return this.player.bag.filter((e) => e.id === id).reduce((s, e) => s + e.n, 0);
     }
 
     bagAdd(id, n, extra) {
-      const e = this.bagEntry(id, extra && extra.giverId);
+      const e = this.bagEntry(id, id === 'goods' ? extra && extra.giverId : id === 'arrow' ? (extra && extra.q) || 0 : undefined);
       if (e) e.n += n;
-      else this.player.bag.push(Object.assign({ id, name: FE.BAG_ITEMS[id] ? FE.BAG_ITEMS[id].name : id, n }, extra || {}));
+      else {
+        const name = id === 'arrow' ? FE.Gear.name({ type: 'arrow', q: (extra && extra.q) || 0 }) : FE.BAG_ITEMS[id] ? FE.BAG_ITEMS[id].name : id;
+        this.player.bag.push(Object.assign({ id, name, n }, id === 'arrow' ? { q: 0 } : {}, extra || {}));
+      }
     }
 
-    // 一件裝備放進背包
+    // 一件裝備放進背包；箭矢（買來的、掉的）是一捆，疊進同品質的箭矢裡
     bagAddGear(g) {
+      const d = FE.Gear.def(g);
+      if (d.cat === 'ammo') {
+        this.bagAdd('arrow', d.bundle, { q: g.q || 0 });
+        return;
+      }
       this.player.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
+    }
+
+    // 射一支箭：先用品質最高的，回傳那支箭的品質；沒有箭回傳 null
+    takeArrow() {
+      const e = this.player.bag.filter((x) => x.id === 'arrow' && x.n > 0).sort((a, b) => b.q - a.q)[0];
+      if (!e) return null;
+      this.bagTake('arrow', 1, e.q);
+      return e.q;
     }
 
     // 背包裡有沒有這種工具（礦鎬、鐮刀），有就回傳要用的那一把：工具可以有好幾把，各自有耐久，先用耐久最低的，壞了換下一把
@@ -297,12 +315,12 @@
       return Math.max(0, Math.round(gold * (1 + C.CHA_PRICE * this.chaMod())));
     }
 
-    // 主手武器的攻擊力
-    playerAtk() {
-      return FE.Gear.atkOf(this.player);
+    // 主手武器現在的傷害寫法（狀態列用），例如「1d8+3 揮砍」
+    attackText() {
+      return FE.Gear.dmgText(this.player);
     }
 
-    // 拿出 n 個；不夠就不拿，回傳 false
+    // 拿出 n 個；不夠就不拿，回傳 false（key：送貨的物品是託付的人，箭矢是品質）
     bagTake(id, n, giverId) {
       const e = this.bagEntry(id, giverId);
       if (!e || e.n < n) return false;
@@ -330,7 +348,7 @@
           name: e.id === 'goods' ? `${e.name}（要送去的東西）` : e.name,
           n: e.n,
           use: !!(FE.BAG_ITEMS[e.id] && FE.BAG_ITEMS[e.id].use),
-          info: '',
+          info: e.id === 'arrow' ? '拿著弓箭按 F 射擊，一次用一支' : '',
         };
       });
     }
@@ -352,8 +370,8 @@
     }
 
     // 穿上或拿起背包裡的一件裝備：武器放主手、盾牌放副手、防具穿在身上，換下的放回背包，算一個動作。
-    // 弓箭佔兩手：拿弓箭時副手的盾牌放回背包，拿著弓箭時拿不了盾牌
-    // 雙持：副手可以拿第二把短刀（只限短刀），副手放了短刀就不能拿盾牌，反之亦然（副手只有一格，放進去就把原本的換下來）
+    // 雙手武器（長槍、弓箭）佔兩手：拿起來時副手的東西放回背包，拿著時副手拿不了東西
+    // 雙持：副手只能拿輕型武器（短刀），副手放了短刀就不能拿盾牌，反之亦然（副手只有一格，放進去就把原本的換下來）
     equipItem(entry, toOff) {
       const p = this.player;
       const g = entry.gear;
@@ -362,9 +380,10 @@
         this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
         return;
       }
-      const slot = d.cat === 'weapon' ? (toOff && d.finesse ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
+      const slot = d.cat === 'weapon' ? (toOff && d.light ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
       if (slot === 'off' && p.equip.main && FE.Gear.def(p.equip.main).twoHand) {
-        this.say(`弓箭要用兩隻手拿，先換下弓箭才拿得了${d.cat === 'shield' ? '盾牌' : '副手的武器'}。`, 'sys');
+        const mn = FE.Gear.def(p.equip.main).name;
+        this.say(`${mn}要用兩隻手拿，先換下${mn}才拿得了${d.cat === 'shield' ? '盾牌' : '副手的武器'}。`, 'sys');
         return;
       }
       this.beginAction();
@@ -560,9 +579,11 @@
       return adj.find((m) => m.id === this.battle.targetId) || adj.slice().sort((a, b) => a.hp - b.hp)[0];
     }
 
-    // 每做一個動作，重擊的冷卻少一回合
+    // 每做一個動作，重擊與治療的冷卻少一回合；瞄準取消
     beginAction() {
       if (this.battle.cooldown > 0) this.battle.cooldown--;
+      if (this.battle.healCd > 0) this.battle.healCd--;
+      this.aim = null;
     }
 
     // 累積修補力：世界越亂，創世神分到演算事件的修補力越少（創世力不受影響）
@@ -649,6 +670,7 @@
         const def = FE.NODES[node.kind];
         this.say(`這裡有${def.name}，需要${FE.GEAR[def.tool].name}才${def.verb}得下來（鐵匠或武器匠有賣）。`, 'sys');
       }
+      this.pickUp(nx, ny);
       const chest = this.world.chestAt(nx, ny);
       if (chest) {
         // 數值暴走體徘徊離開後，寶箱還是壞的，要打倒牠才修得好
@@ -675,6 +697,8 @@
       this.ticks = (this.ticks || 0) + t;
       FE.Combat.regenBlock(this, p);
       this.addRepair(C.VIRTUAL_REPAIR);
+      // 冒險者脫離戰鬥（被射過的怪物離冒險者超過視野，撤退、倒下醒來都算）：自動撿回射向牠的箭的一半
+      for (const m of this.monsters) if (m.arrows && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) > C.SIGHT) this.recoverArrows(m);
       FE.Char.armorAct(this); // 穿中甲或重甲做滿 10 個動作，穿甲行動算用一次
       if (moved !== false) {
         p.steps++;
@@ -717,8 +741,9 @@
       }
     }
 
-    // 攻擊目前的目標（按 1、2；撞上怪物只設目標，不出手）：一個動作，打完所有怪物各做一件事
-    strike(kind, m) {
+    // 攻擊目前的目標（按 1、2；撞上怪物只設目標，不出手）：一個動作，打完所有怪物各做一件事。
+    // extra.reach：長槍打直線 2 格外的目標（觸及）
+    strike(kind, m, extra) {
       const p = this.player;
       // 村莊是安全區：站在聚落裡（包括邊緣）不能對外面的怪物動手
       if (this.world.inVillage(p.x, p.y)) {
@@ -729,15 +754,255 @@
       this.battle.targetId = m.id;
       // 打怪的過程是在提供算力給創世神：每次出手跟走一步一樣累積算力（經驗值與打倒怪物的算力等打倒才結算）
       this.earn(C.COMPUTE_PER_ATTACK);
-      if (kind === 'deep') this.battle.cooldown = 3;
-      // 雙持：副手也拿著武器（只限短刀）時，按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20、各扣雙持減值；
-      // 重擊只用主手、不扣減值。目標在第一下倒下（或冒險者倒下）就不出第二下
+      if (kind === 'deep') this.battle.cooldown = C.DEEP_COOLDOWN;
+      // 拿著弓箭按 1、2 是徒手（弓箭要按 F 射擊）
+      const main = p.equip.main && FE.Gear.def(p.equip.main).ammo ? null : p.equip.main;
+      // 雙持：副手也拿著輕型武器（短刀）時，按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20；
+      // 副手那一下不加屬性修正值（負的照扣）。重擊只用主手。目標在第一下倒下（或冒險者倒下）就不出第二下
       const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
-      const dual = kind === 'attack' && !!off && !!p.equip.main;
-      const first = FE.Combat.resolveAttack(this, p, m, kind, dual ? { dual: true } : undefined);
+      const dual = kind === 'attack' && !!off && !!main && !(extra && extra.reach);
+      // 攻擊動作的刻：輕型 8、一般 10、重型 12，減敏捷修正值（最少 6）；雙持沒有迅切時多 5 刻
+      const nick = dual && (FE.Char.mastery(p, main) === 'nick' || FE.Char.mastery(p, off) === 'nick');
+      const ticks = FE.Char.attackTicks(p, main) + (dual && !nick ? C.DUAL_TICKS : 0);
+      // 牧師：每個動作第一下命中時，目標多受 1d8 神聖傷害（雙持只算第一下命中的）
+      let holy = !!FE.Char.cls(p).holy;
+      const first = FE.Combat.resolveAttack(this, p, m, kind, { weapon: main, holy });
+      if (first.hit) holy = false;
       // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手已經觸發，副手那一下擲出 6～10 只算命中
-      if (dual && !this.fell && this.monsters.includes(m)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, noForced: first.forced });
+      if (dual && !this.fell && this.monsters.includes(m)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, off: true, noForced: first.forced, holy });
+      this.endTurn(false, ticks);
+    }
+
+    // 觸及：主手是長槍、旁邊沒有目標時，上下左右直線 2 格外、中間是空格的怪物打得到（目前的目標優先）
+    reachTarget() {
+      const p = this.player;
+      const w = p.equip.main;
+      if (!w || !FE.Gear.def(w).reach) return null;
+      const w0 = this.world;
+      const ok = (m) => {
+        const dx = m.x - p.x;
+        const dy = m.y - p.y;
+        if (!((Math.abs(dx) === C.REACH && dy === 0) || (Math.abs(dy) === C.REACH && dx === 0))) return false;
+        const mx = p.x + Math.sign(dx);
+        const my = p.y + Math.sign(dy);
+        return w0.passable(mx, my) && !this.monsterAt(mx, my) && !w0.npcAt(mx, my) && !this.soldierAt(mx, my) && !w0.chestAt(mx, my) &&
+          w0.heightOk(p.x, p.y, mx, my) && w0.heightOk(mx, my, m.x, m.y);
+      };
+      const list = this.monsters.filter(ok);
+      return list.find((m) => m.id === this.battle.targetId) || list.sort((a, b) => a.hp - b.hp)[0] || null;
+    }
+
+    // ---- 遠程：按 F 瞄準，Tab 換目標，F 或 Enter 出手，Esc 取消 ----
+    // 拿弓箭（要箭矢）是射擊，拿短刀、短矛是投擲，法師拿法杖是範圍魔攻。回傳 { mode, weapon, range } 或 null（順便寫出為什麼不行）
+    rangedMode(quiet) {
+      const p = this.player;
+      const w = p.equip.main;
+      const d = w ? FE.Gear.def(w) : null;
+      const no = (text) => {
+        if (!quiet) this.say(text, 'sys');
+        return null;
+      };
+      if (d && d.ammo) {
+        if (!this.bagCount('arrow')) return no('沒有箭矢了（鐵匠、武器匠有賣）。');
+        return { mode: 'shoot', weapon: w, range: FE.Char.range(p, d.range) };
+      }
+      if (d && d.thrown) return { mode: 'throw', weapon: w, range: FE.Char.range(p, d.thrown) };
+      if (d && w.type === 'staff' && FE.Char.cls(p).spell) return { mode: 'spell', weapon: w, range: FE.Char.range(p, C.SPELL_RANGE) };
+      if (d && w.type === 'staff') return no('法杖在你手上只能近戰（只有法師施得出法術）。');
+      return no(w ? `${FE.Gear.name(w)}不能遠程攻擊。拿弓箭可以射擊，短刀、短矛可以擲出去。` : '手上沒有武器，不能遠程攻擊。');
+    }
+
+    // 射程內、看得到的怪物，近的在前
+    shootTargets(range) {
+      const p = this.player;
+      return this.monsters
+        .filter((m) => FE.Combat.canShoot(this, p, m, range))
+        .sort((a, b) => FE.Combat.dist(a, p) - FE.Combat.dist(b, p) || a.id - b.id);
+    }
+
+    // 按 F：進入瞄準，自動選最近、看得到的怪物（不算動作）
+    aimStart() {
+      const p = this.player;
+      if (this.world.inVillage(p.x, p.y)) {
+        this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
+        return;
+      }
+      const r = this.rangedMode();
+      if (!r) return;
+      const list = this.shootTargets(r.range);
+      if (!list.length) {
+        this.say(`射程內（最遠 ${r.range[1]} 格）看不到怪物。`, 'sys');
+        return;
+      }
+      // 目前的目標在射程內就先選牠
+      const i = Math.max(0, list.findIndex((m) => m.id === this.battle.targetId));
+      this.aim = { mode: r.mode, ids: list.map((m) => m.id), i };
+    }
+
+    // 瞄準中的怪物（不在了就是 null）
+    aimTarget() {
+      if (!this.aim) return null;
+      return this.monsters.find((m) => m.id === this.aim.ids[this.aim.i]) || null;
+    }
+
+    // Tab：換下一個目標
+    aimNext() {
+      if (!this.aim) return;
+      this.aim.i = (this.aim.i + 1) % this.aim.ids.length;
+    }
+
+    aimCancel() {
+      this.aim = null;
+    }
+
+    // F 或 Enter：對瞄準的怪物出手
+    aimFire() {
+      const m = this.aimTarget();
+      this.aim = null;
+      if (m) this.fireAt(m);
+    }
+
+    // 遠程出手（一個動作）：射擊用掉 1 支箭；投擲的武器掉在目標那格；範圍魔攻打目標與周圍的怪物。
+    // 出手的目標設成目前的目標（牠會纏上來）。測試的機器人直接叫這個
+    fireAt(m) {
+      const p = this.player;
+      if (this.world.inVillage(p.x, p.y)) {
+        this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
+        return false;
+      }
+      const r = this.rangedMode();
+      if (!r) return false;
+      if (!this.monsters.includes(m) || !FE.Combat.canShoot(this, p, m, r.range)) {
+        this.say(`${m.name}不在射程內，或中間有東西擋著。`, 'sys');
+        return false;
+      }
+      this.beginAction();
+      this.battle.targetId = m.id;
+      this.earn(C.COMPUTE_PER_ATTACK);
+      const w = r.weapon;
+      const ticks = FE.Char.attackTicks(p, w);
+      let holy = !!FE.Char.cls(p).holy;
+      if (r.mode === 'shoot') {
+        // 先記在怪物身上：牠倒下或冒險者脫離戰鬥時撿回一半（見 recoverArrows）
+        const q = this.takeArrow();
+        m.arrows = m.arrows || {};
+        m.arrows[q] = (m.arrows[q] || 0) + 1;
+        FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'shoot', weapon: w, range: r.range, ammoQ: q, holy });
+      } else if (r.mode === 'throw') {
+        const at = { x: m.x, y: m.y };
+        FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'throw', weapon: w, range: r.range, holy });
+        // 擲出去的武器（沒在出手時磨壞的話）掉在目標那格，走過去就撿回來；副手拿著輕型武器時換到主手
+        if (p.equip.main === w) {
+          p.equip.main = null;
+          this.world.items.push({ x: at.x, y: at.y, gear: w });
+          if (p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon') {
+            p.equip.main = p.equip.off;
+            p.equip.off = null;
+          }
+        }
+      } else {
+        // 範圍魔攻：目標與周圍 1 格（智力修正值 +3 起 2 格）的所有怪物，每隻各擲命中；法杖只磨一次、技能只練一次
+        const rad = FE.Char.attrMod(p, 'int') >= C.SPELL_BIG_INT ? C.SPELL_RADIUS[1] : C.SPELL_RADIUS[0];
+        const hit = this.monsters
+          .filter((o) => Math.max(Math.abs(o.x - m.x), Math.abs(o.y - m.y)) <= rad)
+          .sort((a, b) => (a === m ? -1 : b === m ? 1 : a.id - b.id));
+        hit.forEach((o, i) => {
+          if (this.fell || !this.monsters.includes(o)) return;
+          FE.Combat.resolveAttack(this, p, o, 'attack', { mode: 'spell', weapon: w, range: r.range, noWear: i > 0, noTrain: i > 0 });
+        });
+      }
+      this.endTurn(false, ticks);
+      return true;
+    }
+
+    // 射向這隻怪物的箭撿回一半（捨去，照射出去的品質放回背包）：牠倒下、或冒險者脫離戰鬥時
+    recoverArrows(m) {
+      const spent = m.arrows;
+      m.arrows = null;
+      if (!spent) return;
+      const total = Object.values(spent).reduce((s, n) => s + n, 0);
+      let back = Math.floor(total * C.ARROW_BACK);
+      if (back <= 0) return;
+      const n0 = back;
+      // 品質高的先撿回
+      for (const q of Object.keys(spent).map(Number).sort((a, b) => b - a)) {
+        const k = Math.min(back, spent[q]);
+        if (k > 0) this.bagAdd('arrow', k, { q });
+        back -= k;
+      }
+      this.say(`你撿回了 ${n0} 支箭矢（射出 ${total} 支）。`, 'sys');
+    }
+
+    // 走到有東西的那一格（擲出去的武器）就撿回來：主手空著就拿在主手，不然放進背包（不算動作）
+    pickUp(x, y) {
+      const p = this.player;
+      const here = this.world.itemsAt(x, y);
+      if (!here.length) return;
+      this.world.items = this.world.items.filter((it) => !here.includes(it));
+      for (const it of here) {
+        if (!p.equip.main && FE.Gear.def(it.gear).cat === 'weapon') {
+          p.equip.main = it.gear;
+          if (FE.Gear.def(it.gear).twoHand && p.equip.off) {
+            this.bagAddGear(p.equip.off);
+            p.equip.off = null;
+            p.block = null;
+          }
+          this.say(`你撿回了${FE.Gear.name(it.gear)}，拿在手上。`, 'good');
+        } else {
+          this.bagAddGear(it.gear);
+          this.say(`你撿回了${FE.Gear.name(it.gear)}，收進背包。`, 'good');
+        }
+      }
+    }
+
+    // 牧師按 4：治療自己，回 1d8＋魅力修正值（最少 1），冷卻 3 回合，算一個動作
+    heal() {
+      const p = this.player;
+      if (!FE.Char.cls(p).heal) {
+        this.say('只有牧師會治療。', 'sys');
+        return;
+      }
+      if (this.battle.healCd > 0) {
+        this.say(`治療還要 ${this.battle.healCd} 回合才能再用。`, 'sys');
+        return;
+      }
+      if (p.hp >= p.maxHp) {
+        this.say('生命是滿的，不用治療。', 'sys');
+        return;
+      }
+      this.beginAction();
+      this.battle.healCd = C.HEAL_COOLDOWN;
+      const got = Math.min(p.maxHp - p.hp, Math.max(1, FE.rollDice(this.rng, C.HEAL_DIE, 1) + FE.Char.attrMod(p, 'cha')));
+      p.hp += got;
+      this.say(`你低聲祈禱，傷口癒合了，生命回復 ${got}。`, 'good');
       this.endTurn(false);
+    }
+
+    // 戰士拿盾牌按 5：盾擊目前的目標，1d4 鈍擊＋力量修正值，算一個動作；沒有精通、不算技能
+    bash() {
+      const p = this.player;
+      if (!FE.Char.cls(p).bash) {
+        this.say('只有戰士會用盾牌撞人。', 'sys');
+        return;
+      }
+      if (!FE.Gear.shieldOf(p)) {
+        this.say('副手要拿著盾牌才能盾擊。', 'sys');
+        return;
+      }
+      const m = this.targetMonster();
+      if (!m) {
+        this.say('旁邊沒有怪物可以打。', 'sys');
+        return;
+      }
+      if (this.world.inVillage(p.x, p.y)) {
+        this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
+        return;
+      }
+      this.beginAction();
+      this.battle.targetId = m.id;
+      this.earn(C.COMPUTE_PER_ATTACK);
+      FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'bash' });
+      this.endTurn(false, FE.Char.attackTicks(p, null));
     }
 
     // 被怪物的異常扭曲過的地面（氣候錯位、斷崖影響的格子）很難走
@@ -778,7 +1043,7 @@
       if (this.rng() < C.CHEST_GEAR) {
         const g = FE.Gear.randomDrop(this, 0, 5);
         this.bagAddGear(g);
-        this.say(`寶箱裡還有一件${FE.Gear.name(g)}，你收進了背包。`, 'good');
+        this.say(`寶箱裡還有${FE.Gear.lootName(g)}，你收進了背包。`, 'good');
       }
     }
 
@@ -1124,7 +1389,7 @@
         p.gold -= pr;
         const g = FE.Gear.make(type, q, this.nextGearId++);
         this.bagAddGear(g);
-        this.say(`${npc.name}賣給你${FE.Gear.name(g)}，花了 ${pr} 金幣。${type === 'pick' ? '礦坑裡的礦脈挖得動了。' : type === 'sickle' ? '森林裡的藥草割得下來了。' : ''}`, 'good');
+        this.say(`${npc.name}賣給你${FE.Gear.lootName(g).replace(/^一件/, '')}，花了 ${pr} 金幣。${type === 'pick' ? '礦坑裡的礦脈挖得動了。' : type === 'sickle' ? '森林裡的藥草割得下來了。' : ''}`, 'good');
       } else if (kind === 'repairItem') {
         const g = this.allGear().find((x) => x.id === Number(a));
         if (!g || !S.repair.includes(FE.GEAR[g.type].cat) || g.dur >= g.max) return stay;
@@ -1214,14 +1479,28 @@
       this.endTurn(false);
     }
 
-    // 按鍵 1、2、3：一般攻擊、重擊、撤退，打目前的目標
+    // 按鍵 1、2、3、4、5：一般攻擊、重擊、撤退、治療（牧師）、盾擊（戰士），打目前的目標；F 是遠程（見 aimStart）
     act(kind) {
       if (kind === 'flee') {
         this.flee();
         return;
       }
-      const m = this.targetMonster();
-      if (!m) {
+      if (kind === 'heal') {
+        this.heal();
+        return;
+      }
+      if (kind === 'bash') {
+        this.bash();
+        return;
+      }
+      if (kind === 'fire') {
+        this.aimStart();
+        return;
+      }
+      let m = this.targetMonster();
+      // 觸及：按 1 時旁邊沒有目標，打直線 2 格外的目標
+      const reach = !m && kind === 'attack' ? this.reachTarget() : null;
+      if (!m && !reach) {
         this.say('旁邊沒有怪物可以打。', 'sys');
         return;
       }
@@ -1229,7 +1508,8 @@
         this.say(`重擊還要 ${this.battle.cooldown} 回合才能再用。`, 'sys');
         return;
       }
-      this.strike(kind, m);
+      if (reach) this.strike(kind, reach, { reach: true });
+      else this.strike(kind, m);
     }
 
     // 倒下後在離倒下的地方最近的聚落（村莊或城鎮，不看神聖與否）醒來，沒有聚落才回出生點
@@ -1280,6 +1560,7 @@
     defeat(m, by) {
       this.monsters = this.monsters.filter((o) => o !== m);
       if (this.battle.targetId === m.id) this.battle.targetId = null;
+      if (m.arrows) this.recoverArrows(m); // 射向牠的箭撿回一半
       if (by) {
         const fix = FE.repairBug(this, m, { noExp: true });
         FE.Stability.stat(this).soldierKills++;
@@ -1324,7 +1605,7 @@
       if (m.tier !== 'mid' || m.small || this.rng() >= C.DROP_MID_GEAR) return;
       const g = FE.Gear.randomDrop(this, 1, 3);
       this.bagAddGear(g);
-      this.say(`${m.name}身上掉出一件${FE.Gear.name(g)}，你收進了背包。`, 'good');
+      this.say(`${m.name}身上掉出${FE.Gear.lootName(g)}，你收進了背包。`, 'good');
     }
 
     // 掉寶箱：會追人的怪物（m.small）20% 機率掉、金幣少；其他怪物 50% 機率掉，影響範圍越大金幣越多。

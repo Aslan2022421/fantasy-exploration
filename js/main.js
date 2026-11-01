@@ -37,7 +37,7 @@
     }
     playlog.push({
       t: game.turn, k: game.ticks || 0, a: label, x: p.x, y: p.y, hp: p.hp, mhp: p.maxHp, lv: game.level, exp: game.exp,
-      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.playerAtk(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: p.gold, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
+      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.attackText(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: p.gold, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
       m: msgs.reverse(),
     });
     if (playlog.length > PLAYLOG_MAX) playlog = playlog.slice(-PLAYLOG_MAX);
@@ -56,7 +56,8 @@
     arrowup: [0, -1], arrowdown: [0, 1], arrowleft: [-1, 0], arrowright: [1, 0],
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
   };
-  const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee' };
+  // 1 攻擊、2 重擊、3 撤退、4 治療（牧師）、5 盾擊（戰士）、F 遠程（射擊、投擲、施法：先進入瞄準）
+  const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', f: 'fire' };
   // 按鍵視窗：同時只開一個
   const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', c: 'character', m: 'minimap', '`': 'reports' };
 
@@ -125,6 +126,20 @@
       }
       return;
     }
+    // 瞄準中（按了 F）：Tab 換目標，F 或 Enter 出手，Esc 取消；其他鍵不作用
+    if (game.aim) {
+      e.preventDefault();
+      if (k === 'tab') {
+        game.aimNext();
+        FE.UI.update();
+      } else if (k === 'f' || k === 'enter') {
+        dispatch('戰鬥：遠程', () => game.aimFire());
+      } else if (k === 'escape') {
+        game.aimCancel();
+        FE.UI.update();
+      }
+      return;
+    }
     if (k === 'escape') {
       e.preventDefault();
       if (FE.UI.win()) FE.UI.closeWindow();
@@ -162,6 +177,12 @@
     if (FE.UI.win()) return;
     if (ACTS[k]) {
       e.preventDefault();
+      // F 只是進入瞄準，不算動作、不存檔
+      if (ACTS[k] === 'fire') {
+        game.act('fire');
+        FE.UI.update();
+        return;
+      }
       dispatch('戰鬥：' + ACTS[k], () => game.act(ACTS[k]));
     } else if (DIRS[k]) {
       e.preventDefault();
@@ -190,11 +211,21 @@
     if (b && !b.disabled) choose(Number(b.dataset.opt));
   });
 
-  // 底部快捷列：攻擊、重擊、撤退
+  // 底部快捷列：攻擊、重擊、撤退、射擊／施法、治療、盾擊。瞄準中再點射擊就是出手
   document.getElementById('quick').addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-act]');
     const act = b && b.dataset.act;
-    if (act && !b.disabled && ready && game.talking == null && !FE.UI.win()) dispatch('戰鬥：' + act, () => game.act(act));
+    if (!act || b.disabled || !ready || game.talking != null || FE.UI.win()) return;
+    if (act === 'fire') {
+      if (game.aim) dispatch('戰鬥：遠程', () => game.aimFire());
+      else {
+        game.act('fire');
+        FE.UI.update();
+      }
+      return;
+    }
+    game.aimCancel();
+    dispatch('戰鬥：' + act, () => game.act(act));
   });
 
   document.getElementById('dpad').addEventListener('click', (e) => {

@@ -12,19 +12,17 @@
     FE.store.remove = () => {};
   }
 
-  // 有存檔、而且網址沒指定別的世界，就接著上次玩
+  // 有存檔、而且網址沒指定別的世界，就接著上次玩；不然開新世界，先跳出視窗選職業與起始裝備（選完才生出世界）
   const saved = FE.Save.load();
   let game;
-  if (saved && saved.game && (!Number.isFinite(urlSeed) || urlSeed === saved.game.seed)) {
+  let ready = false; // 遊戲開始了沒有（選職業的視窗開著時還沒有）
+  const resume = saved && saved.game && (!Number.isFinite(urlSeed) || urlSeed === saved.game.seed);
+  if (resume) {
     game = saved.game;
     game.say('讀取存檔，接著上次的進度。', 'sys');
   } else {
     game = new FE.Game(Number.isFinite(urlSeed) ? urlSeed : Math.floor(Math.random() * 1e9));
-    game.start();
-    if (saved && saved.stale) game.say('遊戲版本更新，舊存檔、歷史紀錄與錯誤報告已清除，從新世界開始。', 'sys');
   }
-  FE.game = game;
-  FE.Save.save(game);
 
   // 試玩紀錄：每個動作記一筆（動作、位置、生命、等級、武器、世界狀態、這個動作新增的訊息），
   // 存在這台瀏覽器（fe.playlog，最多留最近 PLAYLOG_MAX 筆），設定視窗可以匯出成檔案給開發者分析；不上傳
@@ -60,7 +58,7 @@
   };
   const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee' };
   // 按鍵視窗：同時只開一個
-  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', '`': 'reports' };
+  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', c: 'character', '`': 'reports' };
 
   // 在對話視窗裡選第 i 個選項（選項本身不再花動作）
   function choose(i) {
@@ -76,7 +74,7 @@
   // 背包裡選第 i 樣：平常是用（吃藥草、穿上或拿起裝備），切到「丟掉」就是丟掉
   function useBag(i) {
     if (FE.UI.bagDrop()) dispatch('背包：丟掉', () => game.dropItem(i));
-    else dispatch('背包', () => game.useItem(i));
+    else dispatch('背包', () => game.useItem(i, FE.UI.bagOff()));
   }
 
   function toggleWindow(name) {
@@ -87,6 +85,17 @@
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.code === 'Backquote' ? '`' : e.key.toLowerCase();
+    // 開新世界的選職業視窗（這時還沒有世界）：數字鍵選，Esc 回上一步
+    if (!ready) {
+      if (FE.UI.startKey(k)) e.preventDefault();
+      return;
+    }
+    // 升級加點視窗開著：只能按 1～6 選屬性，其他鍵都不作用
+    if (game.player.points > 0) {
+      e.preventDefault();
+      if (/^[1-6]$/.test(k)) dispatch('升級加點', () => game.spendPoint(FE.ATTRS[Number(k) - 1].key));
+      return;
+    }
     // 在輸入框裡打字時只認 Esc（關掉設定視窗）
     if (e.target.tagName === 'INPUT') {
       if (k === 'escape') {
@@ -144,6 +153,11 @@
       FE.UI.toggleBagDrop();
       return;
     }
+    if (FE.UI.win() === 'backpack' && k === 'v') {
+      e.preventDefault();
+      FE.UI.toggleBagOff();
+      return;
+    }
     if (FE.UI.win() === 'backpack' && /^[1-9]$/.test(k)) {
       e.preventDefault();
       useBag(Number(k) - 1);
@@ -161,6 +175,16 @@
       e.preventDefault();
       dispatch('休息', () => game.rest());
     }
+  });
+
+  // 選職業與升級加點的視窗（蓋在所有東西上面，開著的時候別的按鈕都點不到）
+  document.getElementById('modal').addEventListener('click', (e) => {
+    if (!ready) {
+      FE.UI.startClick(e.target);
+      return;
+    }
+    const b = e.target.closest && e.target.closest('[data-attr]');
+    if (b && !b.disabled) dispatch('升級加點', () => game.spendPoint(b.dataset.attr));
   });
 
   document.getElementById('dialog').addEventListener('click', (e) => {
@@ -186,6 +210,7 @@
   document.getElementById('overlay').addEventListener('click', (e) => {
     const use = e.target.closest && e.target.closest('[data-use]');
     if (e.target.closest && e.target.closest('[data-dropmode]')) FE.UI.toggleBagDrop();
+    else if (e.target.closest && e.target.closest('[data-offmode]')) FE.UI.toggleBagOff();
     else if (use && !use.disabled) useBag(Number(use.dataset.use));
     else if (e.target.id === 'overlay' || (e.target.dataset && 'close' in e.target.dataset)) FE.UI.closeWindow();
     else if (e.target.dataset && e.target.dataset.open) FE.UI.openWindow(e.target.dataset.open);
@@ -240,6 +265,19 @@
     URL.revokeObjectURL(a.href);
   });
 
-  FE.UI.init(game);
-  applyZoom();
+  function launch() {
+    ready = true;
+    FE.game = game;
+    FE.Save.save(game);
+    FE.UI.init(game);
+    applyZoom();
+  }
+  if (resume) launch();
+  else {
+    FE.UI.startMenu((cls, picks) => {
+      game.start({ cls, picks });
+      if (saved && saved.stale) game.say('遊戲版本更新，舊存檔、歷史紀錄與錯誤報告已清除，從新世界開始。', 'sys');
+      launch();
+    });
+  }
 })();

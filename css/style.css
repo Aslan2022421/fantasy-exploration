@@ -149,6 +149,24 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+/* 必須先處理的視窗（選職業、升級加點）：蓋在按鍵視窗上面 */
+#modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(1, 4, 9, 0.88);
+}
+#modalBody { border: 2px solid var(--accent); }
+#modalBody .dlg-opts button { line-height: 1.5; }
+#modalBody .dlg-opts button.on { border-color: var(--good); }
+.stats { width: 100%; border-collapse: collapse; font-size: 13px; }
+.stats th { text-align: left; color: var(--dim); font-weight: normal; }
+.stats td, .stats th { padding: 2px 10px 2px 0; }
+#charInfo .over { color: var(--bad); }
 .win h2 { display: flex; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 16px; color: var(--accent); }
 .win h2 .x { margin-left: auto; padding: 2px 8px; font-size: 12px; }
 .win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--accent); }

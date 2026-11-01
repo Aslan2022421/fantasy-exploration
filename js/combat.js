@@ -23,14 +23,20 @@
     if (d.blockMax > 0) o.block = Math.min(d.blockMax, currentBlock(o, d.blockMax) + d.blockMax * C.BLOCK_REGEN);
   }
 
-  // 冒險者一般攻擊＝主手武器的攻擊力＋0～3，重擊＝攻擊力×2＋1～5（品質不加傷害）；怪物與士兵照自己的攻擊力（狂亂忽高忽低）
-  // 冒險者的反擊（opts.counter）固定造成 COUNTER_DAMAGE 點，不看武器
+  // 冒險者一般攻擊＝主手武器的攻擊力＋0～3，重擊＝攻擊力×2＋1～5（品質不加傷害），再加力量修正值（可為負）與武器技能（每 3 級 +1），
+  // 最少 1 點；怪物與士兵照自己的攻擊力（狂亂忽高忽低）
+  // 冒險者的反擊（opts.counter）固定造成 COUNTER_DAMAGE 點，不看武器與力量
   function baseDamage(game, A, kind, opts) {
     const r = game.rng;
     if (isPlayer(game, A) && opts && opts.counter) return C.COUNTER_DAMAGE;
     if (isPlayer(game, A)) {
-      const atk = FE.Gear.atkOf(A);
-      return kind === 'deep' ? atk * 2 + FE.randInt(r, 1, 5) : atk + FE.randInt(r, 0, 3);
+      // opts.weapon：這一下用的武器（雙持時副手的短刀）；沒給就是主手
+      const w = opts && opts.weapon !== undefined ? opts.weapon : A.equip.main;
+      const atk = w ? FE.GEAR[w.type].atk : C.BARE_ATK;
+      const raw = kind === 'deep' ? atk * 2 + FE.randInt(r, 1, 5) : atk + FE.randInt(r, 0, 3);
+      const total = raw + FE.Char.dmgBonus(A, w);
+      // 靈巧武器（短刀）：算完再 ÷2 無條件進位（重擊也一樣）
+      return Math.max(1, FE.Char.isFinesse(w) ? Math.ceil(total / 2) : total);
     }
     return A.type === 'VALUE' ? FE.randInt(r, 0, A.atk * 2) : FE.randInt(r, Math.max(1, A.atk - 1), A.atk + 1);
   }
@@ -52,9 +58,13 @@
     const dS = isSoldier(D);
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
+    // 冒險者出手練的是主手武器的技能（反擊是固定傷害，不算）；先記下，免得這一下把武器磨壞了找不到
+    // opts.weapon：雙持時副手的短刀（沒給就是主手；反擊也用主手）
+    const wpn = aP ? (opts.weapon !== undefined && !opts.counter ? opts.weapon : A.equip.main) : null;
+    const trained = aP && !opts.counter ? FE.Char.weaponSkill(A, wpn) : null;
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者主手武器的品質命中加值（超重時扣 1 或 2）＋高處加值
-    let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + FE.Gear.hitMod(A) : 0;
+    let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + FE.Gear.hitMod(A, wpn) - (opts.dual ? C.DUAL_WIELD_PENALTY : 0) : 0;
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
     else if (cA.h < cD.h) mod -= C.HIGH_GROUND;
     // opts.cling：纏著冒險者的目標趁冒險者移開或換目標時出手，不擲 d20 命中，只看冒險者的閃避（閃開就沒事），
@@ -93,7 +103,7 @@
         dmg = crit ? base * 2 : base; // 沒閃開：暴擊加倍
       }
       // 抗性在暴擊之後、格擋之前減半（冒險者打怪物時）
-      if (aP && dmg > 0 && FE.isResisted(D, kind, FE.Gear.clearLevel(A))) {
+      if (aP && dmg > 0 && FE.isResisted(D, kind, FE.Gear.clearLevel(A, wpn))) {
         dmg = half(dmg);
         resisted = true;
       }
@@ -128,11 +138,11 @@
         : opts.opportunity
           ? `${aName}趁你轉身出手`
           : aP
-            ? kind === 'deep' ? `你對${dName}使出重擊` : `你攻擊${dName}`
+            ? kind === 'deep' ? `你對${dName}使出重擊` : wpn && wpn === A.equip.off ? `你用副手攻擊${dName}` : `你攻擊${dName}`
             : `${aName}攻擊${dName}`;
       // 擲出 6～10 的「對方必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中
       // 反擊與趁機攻擊本身不能再被反擊，也只寫「命中」
-      const rollName = roll.key === 'hard' && (!aP || opts.counter || opts.opportunity) ? '命中' : roll.name;
+      const rollName = roll.key === 'hard' && (!aP || opts.counter || opts.opportunity || opts.noForced) ? '命中' : roll.name;
       const tag = `（擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''}：${rollName}）`;
       let text;
       if (opts.cling) {
@@ -157,9 +167,13 @@
 
     // 磨損：冒險者出手一次磨主手武器一次，格擋成功一次磨盾牌一次，挨打時防具減傷有作用一次磨身上防具一次
     // （每次磨損的機率＝1÷品質價值倍率，見 gear.js 的 wear）
-    if (aP && A.equip.main) FE.Gear.wear(game, A.equip.main);
+    if (aP && wpn) FE.Gear.wear(game, wpn);
     if (dP && absorbed > 0 && FE.Gear.shieldOf(D)) FE.Gear.wear(game, FE.Gear.shieldOf(D));
     if (dP && reduced > 0 && D.equip.body) FE.Gear.wear(game, D.equip.body);
+    // 技能用了就成長：近戰武器出手一次（打中沒打中都算）、閃開一次、格擋成功一次各練一次
+    if (trained) FE.Char.useSkill(game, trained);
+    if (dP && dodged) FE.Char.useSkill(game, 'dodge');
+    if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield');
 
     // 傷害與倒下
     let killed = false;
@@ -189,7 +203,9 @@
     // 「必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中，對方照自己的反擊機率擲。士兵不反擊（反擊機率 0）
     const alive = !killed && (dP || (dS ? game.soldiers.includes(D) : game.monsters.includes(D)));
     let countered = false;
-    if (alive && !dS && !opts.noCounter && adjacent(game, A, D) && ((aP && roll.key === 'hard') || r() < dd.counter)) countered = true;
+    if (alive && !dS && !opts.noCounter && adjacent(game, A, D) && ((aP && roll.key === 'hard' && !opts.noForced) || r() < dd.counter)) countered = true;
+    // 必定反擊（擲出 6～10）是不是這一下觸發的；雙持時主手已經觸發就不再觸發第二次（opts.noForced）
+    const forced = countered && aP && roll.key === 'hard' && !opts.noForced;
     if (FE.Combat.hook) {
       FE.Combat.hook({
         by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, key: roll.key, dodged, crit, blocked: absorbed > 0, resisted, reduced, dmg,
@@ -197,7 +213,7 @@
       });
     }
     if (countered) resolveAttack(game, D, A, 'attack', { noCounter: true, counter: true });
-    return { dmg, killed, roll };
+    return { dmg, killed, roll, forced };
   }
 
   FE.Combat = { resolveAttack, defense, regenBlock, currentBlock, adjacent, hook: null };

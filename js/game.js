@@ -39,24 +39,20 @@
       this.reports = FE.store.load('fe.reports', []);
     }
 
-    start() {
+    // 開新世界。opts.cls 是職業（warrior、ranger、mage、priest），opts.picks 是自己挑的起始裝備（選項 id 的清單，見 FE.CLASSES）；
+    // 沒給就用戰士和預設的挑法（測試用，遊戲裡一定由選職業的視窗給）
+    start(opts) {
+      opts = opts || {};
+      const clsKey = opts.cls || 'warrior';
+      const picks = opts.picks || FE.Char.defaultPicks(clsKey);
+      if (!FE.Char.validPicks(clsKey, picks)) throw new Error('起始裝備的挑法不對');
       this.say('創世神正在創世。你是冒險者：走遍世界、打倒怪物、完成任務，世界會跟著長下去。', 'sys');
       this.createChunk(true);
       const s = this.world.spawn;
-      this.player = {
-        x: s.x,
-        y: s.y,
-        hp: C.PLAYER_MAX_HP,
-        maxHp: C.PLAYER_MAX_HP,
-        // 裝備欄：主手、副手（盾牌或空著）、身上（防具）。起始是普通長劍、沒有防具（還沒有職業時的暫用值）
-        equip: { main: FE.Gear.make('sword', 0, this.nextGearId++), off: null, body: null },
-        block: null,         // 目前的格擋值，第一次需要時補成盾牌的格擋值上限（combat.js）
-        gold: 0,
-        carrying: null,      // 手上的委託（送貨或清除）；送貨的物品放在背包裡
-        bag: [],             // 背包：不限格數，同一種東西疊放（{ id, name, n }；送貨的物品是 id 'goods'，另記 giverId）
-        name: FE.store.load('fe.name', '冒險者'),
-        steps: 0,
-      };
+      // 職業、六項屬性、起始裝備（裝備欄：主手、副手（盾牌或空著）、身上（防具））、生命都在 FE.Char.create 裡配好
+      this.player = FE.Char.create(this, clsKey, picks, FE.store.load('fe.name', '冒險者'));
+      this.player.x = s.x;
+      this.player.y = s.y;
       this.lastSafe = { x: s.x, y: s.y };
     }
 
@@ -286,6 +282,21 @@
       return FE.Gear.loadTier(this.player);
     }
 
+    // 負重上限＝職業基礎＋力量修正值
+    carryLimit() {
+      return FE.Char.carryLimit(this.player);
+    }
+
+    // 魅力修正值（價錢、金幣獎勵用）
+    chaMod() {
+      return FE.Char.attrMod(this.player, 'cha');
+    }
+
+    // 委託與任務的金幣獎勵：魅力每點修正值 +5%，四捨五入
+    questGold(gold) {
+      return Math.max(0, Math.round(gold * (1 + C.CHA_PRICE * this.chaMod())));
+    }
+
     // 主手武器的攻擊力
     playerAtk() {
       return FE.Gear.atkOf(this.player);
@@ -325,11 +336,12 @@
     }
 
     // 用背包裡的第 i 樣東西：藥草是吃，裝備是穿上或拿起（算一個動作，換下的放回背包）
-    useItem(i) {
+    // toOff：短刀放副手（雙持）；不是短刀就照平常的位置
+    useItem(i, toOff) {
       const e = this.bagList()[i];
       if (!e) return;
       if (e.gear) {
-        this.equipItem(this.player.bag[i]);
+        this.equipItem(this.player.bag[i], toOff);
         return;
       }
       if (!e.use) {
@@ -341,7 +353,8 @@
 
     // 穿上或拿起背包裡的一件裝備：武器放主手、盾牌放副手、防具穿在身上，換下的放回背包，算一個動作。
     // 弓箭佔兩手：拿弓箭時副手的盾牌放回背包，拿著弓箭時拿不了盾牌
-    equipItem(entry) {
+    // 雙持：副手可以拿第二把短刀（只限短刀），副手放了短刀就不能拿盾牌，反之亦然（副手只有一格，放進去就把原本的換下來）
+    equipItem(entry, toOff) {
       const p = this.player;
       const g = entry.gear;
       const d = FE.Gear.def(g);
@@ -349,9 +362,9 @@
         this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
         return;
       }
-      const slot = d.cat === 'weapon' ? 'main' : d.cat === 'shield' ? 'off' : 'body';
+      const slot = d.cat === 'weapon' ? (toOff && d.finesse ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
       if (slot === 'off' && p.equip.main && FE.Gear.def(p.equip.main).twoHand) {
-        this.say('弓箭要用兩隻手拿，先換下弓箭才拿得了盾牌。', 'sys');
+        this.say(`弓箭要用兩隻手拿，先換下弓箭才拿得了${d.cat === 'shield' ? '盾牌' : '副手的武器'}。`, 'sys');
         return;
       }
       this.beginAction();
@@ -366,7 +379,7 @@
         p.equip.off = null;
       }
       if (slot === 'off' || extra) p.block = null; // 盾牌換了，格擋值從滿的開始
-      this.say(`你${slot === 'main' ? '拿起' : '穿上'}了${FE.Gear.name(g)}。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}${extra}`, 'good');
+      this.say(`你${slot === 'main' || d.cat === 'weapon' ? '拿起' : '穿上'}了${FE.Gear.name(g)}${slot === 'off' && d.cat === 'weapon' ? '（副手）' : ''}。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}${extra}`, 'good');
       this.endTurn(false);
     }
 
@@ -381,7 +394,7 @@
       }
       const name = e.id === 'gear' ? FE.Gear.name(e.gear) : `${e.name}${e.n > 1 ? ` ×${e.n}` : ''}`;
       p.bag = p.bag.filter((o) => o !== e);
-      this.say(`你把${name}丟掉了（負重 ${this.weight()} / ${C.CARRY_LIMIT}）。`, 'sys');
+      this.say(`你把${name}丟掉了（負重 ${this.weight()} / ${this.carryLimit()}）。`, 'sys');
     }
 
     // 吃一份藥草：回生命上限的 25%（無條件進位），算一個動作，戰鬥中也能吃
@@ -469,9 +482,48 @@
       const p = this.player;
       while (p && this.exp >= FE.levelExp(this.level + 1)) {
         this.level++;
-        p.maxHp += C.LEVEL_HP;
-        p.hp += C.LEVEL_HP;
-        this.say(`升到 Lv${this.level}！生命上限 +${C.LEVEL_HP}（現在 ${p.maxHp}）。`, 'world');
+        p.points += C.LEVEL_POINTS; // 每升一級 1 點屬性，畫面會跳出加點視窗（視窗開著不能做別的事）
+        const gain = this.recalc();
+        this.say(`升到 Lv${this.level}！生命上限 +${gain}（現在 ${p.maxHp}），可以加 ${C.LEVEL_POINTS} 點屬性。`, 'world');
+      }
+      this.dropLostPoints();
+    }
+
+    // 生命上限照公式重算（職業基礎、體質、等級），多出來的部分同時補到目前的生命；回傳多了幾點
+    recalc() {
+      const p = this.player;
+      const max = FE.Char.maxHp(p, this.level);
+      const gain = max - p.maxHp;
+      p.maxHp = max;
+      if (gain > 0) p.hp += gain;
+      p.hp = Math.min(p.hp, p.maxHp);
+      return gain;
+    }
+
+    // 升級的屬性點：選一項還沒到上限（18）的屬性加 1。回傳有沒有加成功
+    spendPoint(key) {
+      const p = this.player;
+      const a = FE.ATTRS.find((x) => x.key === key);
+      if (!a || !(p.points > 0)) return false;
+      if (p.attr[key] >= C.ATTR_CAP) {
+        this.say(`${a.name}已經到 ${C.ATTR_CAP} 了，不能再加。`, 'sys');
+        return false;
+      }
+      p.attr[key]++;
+      p.points--;
+      const gain = this.recalc();
+      const m = FE.Char.mod(p.attr[key]);
+      this.say(`${a.name}加到 ${p.attr[key]}（修正值 ${m > 0 ? '+' : ''}${m}）${gain > 0 ? `，生命上限 +${gain}（現在 ${p.maxHp}）` : ''}。`, 'good');
+      this.dropLostPoints();
+      return true;
+    }
+
+    // 六項屬性都到上限了，沒地方加的點數就不留
+    dropLostPoints() {
+      const p = this.player;
+      if (p && p.points > 0 && FE.ATTRS.every((a) => p.attr[a.key] >= C.ATTR_CAP)) {
+        p.points = 0;
+        this.say('六項屬性都到上限了。', 'sys');
       }
     }
 
@@ -569,7 +621,7 @@
       if (!this.world.passable(nx, ny)) return;
       // 超重太多（超過上限＋2）：不能移動，要先丟掉東西
       if (this.loadTier() >= 2) {
-        this.say(`你背得太重了（${this.weight()} / ${C.CARRY_LIMIT}），邁不開腳步。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
+        this.say(`你背得太重了（${this.weight()} / ${this.carryLimit()}），邁不開腳步。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
         return;
       }
       this.beginAction();
@@ -623,6 +675,7 @@
       this.ticks = (this.ticks || 0) + t;
       FE.Combat.regenBlock(this, p);
       this.addRepair(C.VIRTUAL_REPAIR);
+      FE.Char.armorAct(this); // 穿中甲或重甲做滿 10 個動作，穿甲行動算用一次
       if (moved !== false) {
         p.steps++;
         this.earn(C.COMPUTE_PER_MOVE);
@@ -677,7 +730,13 @@
       // 打怪的過程是在提供算力給創世神：每次出手跟走一步一樣累積算力（經驗值與打倒怪物的算力等打倒才結算）
       this.earn(C.COMPUTE_PER_ATTACK);
       if (kind === 'deep') this.battle.cooldown = 3;
-      FE.Combat.resolveAttack(this, p, m, kind);
+      // 雙持：副手也拿著武器（只限短刀）時，按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20、各扣雙持減值；
+      // 重擊只用主手、不扣減值。目標在第一下倒下（或冒險者倒下）就不出第二下
+      const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
+      const dual = kind === 'attack' && !!off && !!p.equip.main;
+      const first = FE.Combat.resolveAttack(this, p, m, kind, dual ? { dual: true } : undefined);
+      // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手已經觸發，副手那一下擲出 6～10 只算命中
+      if (dual && !this.fell && this.monsters.includes(m)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, noForced: first.forced });
       this.endTurn(false);
     }
 
@@ -700,8 +759,10 @@
         p.hp = p.maxHp;
         this.say(`你在${v.name}好好休息了一晚，生命回滿。`, 'good');
       } else {
-        p.hp = Math.min(p.maxHp, p.hp + C.REST_HEAL);
-        this.say(`你休息了一下，生命回復 ${C.REST_HEAL}。`, 'sys');
+        // 回復量＝基本 1 點加體質修正值，最少 1
+        const heal = Math.max(1, C.REST_HEAL + FE.Char.attrMod(p, 'con'));
+        p.hp = Math.min(p.maxHp, p.hp + heal);
+        this.say(`你休息了一下，生命回復 ${heal}。`, 'sys');
       }
       this.earn(C.REST_COMPUTE, { repairOnly: true });
       this.endTurn(false);
@@ -763,16 +824,16 @@
       if (c && c.kind === 'hunt' && c.giverId === npc.id) {
         const left = this.huntRemaining(c.monsterIds);
         if (left > 0) return out(`附近還有 ${left} 隻小怪物，拜託了。`, [leave]);
-        return out('村子外面安靜多了，謝謝你。', [{ id: 'report', label: '回報，領取獎勵', note: `經驗值 +${c.exp}、金幣 +${c.gold}` }, leave]);
+        return out('村子外面安靜多了，謝謝你。', [{ id: 'report', label: '回報，領取獎勵', note: `經驗值 +${c.exp}、金幣 +${this.questGold(c.gold)}` }, leave]);
       }
       // 先處理交件，再處理接委託：收貨人身上自己也有委託時，貨照樣交得出去
       if (c && c.kind !== 'hunt' && c.targetId === npc.id && goods) {
-        return out(`你是把${goods.name}送來的人吧？`, [{ id: 'deliver', label: '交給他', note: `經驗值 +${c.exp}、金幣 +${c.gold}` }, leave]);
+        return out(`你是把${goods.name}送來的人吧？`, [{ id: 'deliver', label: '交給他', note: `經驗值 +${c.exp}、金幣 +${this.questGold(c.gold)}` }, leave]);
       }
       if (q && q.kind === 'hunt' && !q.accepted && !q.done) {
         if (c) return out('你手上已經有委託了，辦完再來找我。', [leave]);
         return out(`${q.village}附近冒出了 ${q.total} 隻小怪物，可以幫忙清掉嗎？清完回來找我。`, [
-          { id: 'accept', label: '接下', note: `經驗值 +${q.exp}、金幣 +${q.gold}` },
+          { id: 'accept', label: '接下', note: `經驗值 +${q.exp}、金幣 +${this.questGold(q.gold)}` },
           { id: 'decline', label: '不接' },
         ]);
       }
@@ -781,7 +842,7 @@
         if (c) return out('你手上已經有東西要送了，送完再來找我。', [leave]);
         const line = FE.fill(q.line, { giver: npc.name, target: q.targetName, village: q.targetVillage, item: q.item }).replace(/^[^：]*：/, '');
         return out(line, [
-          { id: 'accept', label: '接下', note: `經驗值 +${q.exp}、金幣 +${q.gold}` },
+          { id: 'accept', label: '接下', note: `經驗值 +${q.exp}、金幣 +${this.questGold(q.gold)}` },
           { id: 'decline', label: '不接' },
         ]);
       }
@@ -807,15 +868,17 @@
       if (o.id === 'report') {
         if (q) q.done = true;
         this.say(`${npc.name}：村子外面安靜多了，謝謝你。`, 'npc');
-        this.say(`委託完成：經驗值 +${c.exp}、金幣 +${c.gold}。`, 'good');
-        p.gold += c.gold;
+        const gold = this.questGold(c.gold); // 魅力每點修正值，金幣獎勵 +5%
+        this.say(`委託完成：經驗值 +${c.exp}、金幣 +${gold}。`, 'good');
+        p.gold += gold;
         p.carrying = null;
         this.addExp(c.exp);
         this.earn(c.compute); // 完成委託的算力
       } else if (o.id === 'deliver') {
         const giver = this.world.npcById(c.giverId);
         if (giver && giver.quest) giver.quest.done = true;
-        const { exp, gold, compute } = c;
+        const { exp, compute } = c;
+        const gold = this.questGold(c.gold);
         const item = this.goodsFor(c).name;
         this.bagTake('goods', 1, c.giverId); // 從背包拿出來交給他
         this.say(`${npc.name}：謝謝你把${item}送來。`, 'npc');
@@ -907,7 +970,8 @@
       const MAX = 8; // 一層最多列幾項（加上「返回」不超過 9，才按得到）
       let page = this.talkPage || 'main';
       if (page === 'buy' && Object.keys(S.buy).length === 1) page = 'buy:' + Object.keys(S.buy)[0];
-      const price = (e) => FE.Gear.shopPrice(e.type, e.q, v);
+      const cha = this.chaMod(); // 魅力：買東西每點修正值 −5%，賣東西 +5%
+      const price = (e) => FE.Gear.shopPrice(e.type, e.q, v, cha);
       const gname = (e) => FE.Gear.name({ type: e.type, q: e.q });
       const lines = {
         blacksmith: '武器、盔甲、盾牌我都能賣、能修、能打。礦鎬和鐮刀也有。',
@@ -925,7 +989,7 @@
             { id: 'buy', label: '買' },
             { id: 'repair', label: '修', note: repairs ? `${repairs} 件要修` : '沒有要修的' },
             { id: 'craft', label: '打造', note: '用礦石' },
-            { id: 'sellOre', label: '賣礦石', note: ore ? `${ore} 顆，+${ore * C.ORE_PRICE} 金幣` : '沒有礦石', disabled: !ore },
+            { id: 'sellOre', label: '賣礦石', note: ore ? `${ore} 顆，+${FE.Gear.orePrice(ore, cha)} 金幣` : '沒有礦石', disabled: !ore },
             { id: 'sell', label: '賣裝備', note: sellable ? `${sellable} 件` : '沒有可賣的', disabled: !sellable },
             { id: 'leave', label: '離開' },
           ],
@@ -966,7 +1030,7 @@
       if (page === 'repair') {
         const list = this.allGear().filter((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max).slice(0, MAX);
         const opts = list.map((g) => {
-          const qt = FE.Gear.repairQuote(g, v);
+          const qt = FE.Gear.repairQuote(g, v, cha);
           const short = qt.cost - p.gold;
           const worn = p.equip.main === g || p.equip.off === g || p.equip.body === g ? '（穿著）' : '';
           return {
@@ -983,7 +1047,7 @@
 
       if (page === 'craft') {
         const opts = S.craft.map((type) => {
-          const qt = FE.Gear.craftQuote(type, v);
+          const qt = FE.Gear.craftQuote(type, v, cha);
           const lackOre = qt.ore - this.bagCount('ore');
           const lackGold = qt.fee - p.gold;
           const lack = this.shortText(lackGold, lackOre);
@@ -1006,7 +1070,7 @@
         const opts = list.map((e) => ({
           id: `sellItem:${e.gear.id}`,
           label: `賣${FE.Gear.name(e.gear)}`,
-          note: `${FE.Gear.durText(e.gear)}，+${FE.Gear.sellPrice(e.gear)} 金幣`,
+          note: `${FE.Gear.durText(e.gear)}，+${FE.Gear.sellPrice(e.gear, cha)} 金幣`,
         }));
         opts.push(back);
         return [`背包裡的東西我照原價的一半、再看磨損收。穿在身上的要先換下來。${have}`, opts];
@@ -1046,15 +1110,17 @@
         return stay;
       }
       const [kind, a, b] = o.id.split(':');
+      const cha = this.chaMod();
       if (kind === 'sellOre') {
         const n = this.bagCount('ore');
+        const gain = FE.Gear.orePrice(n, cha);
         this.bagTake('ore', n);
-        p.gold += n * C.ORE_PRICE;
-        this.say(`${npc.name}收下 ${n} 顆礦石，給了你 ${n * C.ORE_PRICE} 金幣。`, 'good');
+        p.gold += gain;
+        this.say(`${npc.name}收下 ${n} 顆礦石，給了你 ${gain} 金幣。`, 'good');
       } else if (kind === 'buyItem') {
         const type = a;
         const q = Number(b);
-        const pr = FE.Gear.shopPrice(type, q, v);
+        const pr = FE.Gear.shopPrice(type, q, v, cha);
         if (p.gold < pr) return stay;
         p.gold -= pr;
         const g = FE.Gear.make(type, q, this.nextGearId++);
@@ -1063,14 +1129,14 @@
       } else if (kind === 'repairItem') {
         const g = this.allGear().find((x) => x.id === Number(a));
         if (!g || !S.repair.includes(FE.GEAR[g.type].cat) || g.dur >= g.max) return stay;
-        const qt = FE.Gear.repairQuote(g, v);
+        const qt = FE.Gear.repairQuote(g, v, cha);
         if (p.gold < qt.cost) return stay;
         p.gold -= qt.cost;
         g.dur += qt.restore;
         FE.Gear.repaired(g);
         this.say(`${npc.name}修好了你的${FE.Gear.name(g)}（${FE.Gear.durText(g)}），花了 ${qt.cost} 金幣。`, 'good');
       } else if (kind === 'craftItem') {
-        const qt = FE.Gear.craftQuote(a, v);
+        const qt = FE.Gear.craftQuote(a, v, cha);
         if (!S.craft.includes(a) || p.gold < qt.fee || this.bagCount('ore') < qt.ore) return stay;
         this.bagTake('ore', qt.ore);
         p.gold -= qt.fee;
@@ -1080,7 +1146,7 @@
       } else if (kind === 'sellItem') {
         const e = p.bag.find((x) => x.id === 'gear' && x.gear.id === Number(a));
         if (!e || !S.sell.includes(FE.GEAR[e.gear.type].cat)) return stay;
-        const gain = FE.Gear.sellPrice(e.gear);
+        const gain = FE.Gear.sellPrice(e.gear, cha);
         p.bag = p.bag.filter((x) => x !== e);
         p.gold += gain;
         this.say(`${npc.name}收下了你的${FE.Gear.name(e.gear)}，給了你 ${gain} 金幣。`, 'good');
@@ -1125,7 +1191,7 @@
       }
       // 超重太多（超過上限＋2）：不能撤退
       if (this.loadTier() >= 2) {
-        this.say(`你背得太重了（${this.weight()} / ${C.CARRY_LIMIT}），跑不動。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
+        this.say(`你背得太重了（${this.weight()} / ${this.carryLimit()}），跑不動。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
         return;
       }
       const spot = this.findRetreat(m);

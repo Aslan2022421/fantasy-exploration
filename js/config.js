@@ -317,7 +317,7 @@ FE.TOWN_NAMES = ['銀橋城', '石冠城', '白塔城', '風語城', '金麥城'
 FE.VILLAGE_NAMES = ['石橋村', '鐵杉村', '白霧村', '灰岩村', '長風村', '柳溪村', '赤土村', '雲杉村', '青苔村', '銅鈴村'];
 FE.NAMES = ['艾德', '蜜拉', '洛恩', '希雅', '巴頓', '妮可', '托爾', '葵', '歐文', '莉絲', '加隆', '芙蘭', '塞斯', '茉莉', '雷恩', '朵拉'];
 // 背包裡疊放的東西：use 是能在背包裡直接用的（只有藥草）；weight 是一份的重量；送貨的物品另外用 id 'goods'、名字照委託（重量 1）。
-// 箭矢只建資料（一捆 20 支、重量 1），商店不賣、寶箱與怪物不掉，第二十七版跟遠距離攻擊一起開放
+// 箭矢只建資料（一捆 20 支、重量 1），商店不賣、寶箱與怪物不掉，第二十八版跟遠距離攻擊一起開放
 FE.BAG_ITEMS = {
   herb: { name: '藥草', use: true, weight: 0.05 },
   ore: { name: '礦石', weight: 0.5 },
@@ -325,7 +325,7 @@ FE.BAG_ITEMS = {
   arrow: { name: '箭矢', weight: 1, bundle: 20 },
 };
 // 品質（參考矮人要塞的物品品質）：value 價值倍率；hit 武器命中 d20 加值；armor 防具減傷與盾牌格擋值倍率（乘完四捨五入）；
-// pierce 刃類（長劍、短刀、長槍）的穿甲（本版只存數值，沒有作用，怪物到第二十八版才有減傷）；clear 清除等級（抗性門檻看它）；
+// pierce 刃類（長劍、短刀、長槍）的穿甲（本版只存數值，沒有作用，怪物到第二十九版才有減傷）；clear 清除等級（抗性門檻看它）；
 // sym 畫在名字兩邊的符號；weight 隨機品質時的相對機率（每高一級減半，各範圍用 FE.Gear.rollQuality 算）。傳說物（索引 6）有獨有的名字，本版不會生出
 FE.QUALITIES = [
   { name: '普通', sym: '', value: 1, hit: 0, armor: 1, pierce: 0, clear: 0 },
@@ -343,7 +343,7 @@ FE.QUALITIES = [
 // sold 商店有沒有賣（弓箭、法杖只建資料；魔法衣袍只從掉落來，price 是賣回與修復用的暫定值）；drop 寶箱與怪物會不會掉
 FE.GEAR = {
   sword: { cat: 'weapon', name: '長劍', atk: 4, blade: true, weight: 2, price: 30, ore: 3, dur: 200, sold: true, drop: true },
-  spear: { cat: 'weapon', name: '長槍', atk: 4, blade: true, weight: 1, price: 25, ore: 3, dur: 200, sold: true, drop: true }, // 打 2 格等第二十七版
+  spear: { cat: 'weapon', name: '長槍', atk: 4, blade: true, weight: 1, price: 25, ore: 3, dur: 200, sold: true, drop: true }, // 打 2 格等第二十八版
   dagger: { cat: 'weapon', name: '短刀', atk: 3, blade: true, finesse: true, weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
   bow: { cat: 'weapon', name: '弓箭', atk: 3, weight: 1, price: 30, dur: 200, twoHand: true, sold: false, drop: false },
   staff: { cat: 'weapon', name: '法杖', atk: 3, weight: 1, price: 30, dur: 200, sold: false, drop: false },
@@ -363,7 +363,7 @@ FE.NODES = {
 };
 // 六項屬性（順序固定：力量、敏捷、體質、智力、感知、魅力）。修正值＝(屬性－10)÷2 無條件捨去（9 和 8 都算 -1）。
 // 這一版有效果的：力量（近戰傷害、戰士的格擋值、負重）、敏捷（出手 d20、閃避）、體質（生命、休息回復）、魅力（價錢、金幣獎勵）；
-// 智力、感知這一版沒有效果（第二十七版的魔攻、範圍、射程、暴擊、視野才用），數值照樣存、顯示、能加點
+// 智力、感知這一版沒有效果（第二十八版的魔攻、範圍、射程、暴擊、視野才用），數值照樣存、顯示、能加點
 FE.ATTRS = [
   { key: 'str', name: '力量', info: '近戰傷害、負重上限；戰士拿盾牌時格擋值也加' },
   { key: 'dex', name: '敏捷', info: '出手擲骰、閃避機率' },
@@ -372,7 +372,7 @@ FE.ATTRS = [
   { key: 'wis', name: '感知', info: '還沒有用處' },
   { key: 'cha', name: '魅力', info: '向工匠買東西更便宜、賣東西更貴，委託的金幣獎勵更多' },
 ];
-// 技能（用了就成長，等級 0～20）。weapon 的四項對應 FE.GEAR 的武器種類（主手拿著哪一種，就練哪一項）；弓箭的射擊技能等第二十七版
+// 技能（用了就成長，等級 0～20）。weapon 的四項對應 FE.GEAR 的武器種類（主手拿著哪一種，就練哪一項）；弓箭的射擊技能等第二十八版
 FE.SKILLS = {
   sword: { name: '長劍', weapon: true },
   spear: { name: '長槍', weapon: true },
@@ -383,17 +383,18 @@ FE.SKILLS = {
   shield: { name: '盾牌使用' },
 };
 // 開新世界時可挑的起始裝備與物品（id 跟 FE.GEAR 的種類同名；herb、gold 是藥草與金幣）。品質都是普通
+// desc 是建角畫面右欄顯示的說明（只是文字，不影響規則）
 FE.START_OPTS = {
-  sword: { label: '長劍', gear: 'sword' },
-  spear: { label: '長槍', gear: 'spear' },
-  dagger: { label: '短刀', gear: 'dagger' },
-  staff: { label: '法杖', gear: 'staff' },
-  shield: { label: '盾牌', gear: 'shield' },
-  medium: { label: '中甲', gear: 'medium' },
-  light: { label: '輕甲', gear: 'light' },
-  robe: { label: '一般衣袍', gear: 'robe' },
-  herb: { label: '2 份藥草', herb: 2 },
-  gold: { label: '20 金幣', gold: 20 },
+  sword: { label: '長劍', gear: 'sword', desc: '近戰單體的標準武器，出手穩定。' },
+  spear: { label: '長槍', gear: 'spear', desc: '近戰單體，比長劍輕。' },
+  dagger: { label: '短刀', gear: 'dagger', desc: '輕巧靈活。副手也拿短刀可以雙持，一個動作兩手各出手一次。' },
+  staff: { label: '法杖', gear: 'staff', desc: '細長的木杖，目前當近戰武器用。' },
+  shield: { label: '盾牌', gear: 'shield', desc: '拿在副手，有機率擋下一部分傷害。' },
+  medium: { label: '中甲', gear: 'medium', desc: '物理與魔法都擋得住一些，每個動作多花 1 刻。' },
+  light: { label: '輕甲', gear: 'light', desc: '擋得不多，但不拖慢動作。' },
+  robe: { label: '一般衣袍', gear: 'robe', desc: '幾乎擋不住傷害，輕得不占負重。' },
+  herb: { label: '2 份藥草', herb: 2, desc: '放進背包，每份吃下去回復生命上限的四分之一。' },
+  gold: { label: '20 金幣', gold: 20, desc: '到聚落向工匠買裝備或修理。' },
 };
 // 職業：base 職業基礎（生命、負重用）、attr 起始屬性、fixed 固定給的裝備、groups 自己選的（每組從 of 裡挑 pick 樣）、
 // bot 是測試機器人加點的順序（主屬性，其次體質；不是玩家的限制）。職業不綁攻擊方式和防具，裝備欄沒有職業限制

@@ -9,8 +9,24 @@
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
   let game = null;
 
-  // 畫面狀態（不進存檔）：開著哪個視窗、小地圖收起或打開（記在這台瀏覽器）、地圖的版面
-  const ui = { win: null, bagDrop: false, bagOff: false, mini: FE.store.load('fe.minimap', true), cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+  // 畫面狀態（不進存檔）：開著哪個視窗（小地圖也是視窗）、地圖的版面
+  const ui = { win: null, bagDrop: false, bagOff: false, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+
+  // ---- 配色：Canvas 畫的顏色全部讀 css/style.css 的變數，改色只改那裡 ----
+  const P = {};
+  const PAL_NAMES = [
+    't-plain', 't-grass', 't-forest', 't-snow', 't-sand', 't-mount', 't-water', 't-rock', 't-stonewall', 't-woodwall', 't-house', 't-road', 't-market', 't-temple', 't-door', 't-bed', 't-furniture', 't-ruin', 't-relic',
+    'void', 'hp', 'hp-mid', 'hp-low', 'bug', 'good', 'bad', 'world',
+    'map-node-ore', 'map-node-herb', 'map-chest', 'map-npc', 'map-smith', 'map-armorer', 'map-soldier', 'map-player-fg', 'map-player-bg',
+    'map-mon-fg', 'map-mon-bg', 'map-mid-fg', 'map-mid-bg', 'map-boss-bg', 'map-glitch-fg', 'map-glitch-bg', 'map-ol-target', 'map-ol-hunt', 'map-ol-chase',
+    'map-h0', 'map-h1', 'map-h2', 'map-h3', 'map-h4', 'map-village', 'map-town', 'map-indoor', 'map-road', 'map-quest', 'map-recipient',
+    'm-plain', 'm-grassland', 'm-shrubland', 'm-forest', 'm-taiga', 'm-tundra', 'm-glacier', 'm-jungle', 'm-savanna', 'm-desert', 'm-marsh', 'm-swamp', 'm-mountain', 'm-lake', 'm-rock',
+    'm-stonewall', 'm-woodwall', 'm-building', 'm-village', 'm-town', 'm-relic', 'm-flash', 'm-mon', 'm-boss', 'm-view', 'm-slot',
+  ];
+  function loadPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const n of PAL_NAMES) P[n] = cs.getPropertyValue('--' + n).trim() || '#888';
+  }
 
   // ---- 版面：地圖填滿狀態列與下方列之間的空間 ----
   // 格數＝可用空間 ÷ 每格像素，寬高各取奇數（冒險者才在正中央）；短邊至少 VIEW_MIN 格，不夠就把格子縮小
@@ -66,16 +82,8 @@
     return WALL_GLYPHS[t][bits];
   }
 
-  // 地形字元的顏色（FE.TERRAIN 的 cls → 文字顏色與粗體）、底色（越亮越高）、各種特殊底色
-  const TERRAIN_FG = {
-    't-plain': ['#6e7681'], 't-grass': ['#3fb950'], 't-forest': ['#2ea043', true], 't-snow': ['#f0f6fc'], 't-sand': ['#d29922'],
-    't-mount': ['#adbac7', true], 't-water': ['#388bfd'], 't-rock': ['#5a6270'], 't-stonewall': ['#c9ced6', true], 't-woodwall': ['#b5865a', true],
-    't-house': ['#d6a46b', true], 't-road': ['#8b7a5e'], 't-market': ['#e3b341', true], 't-temple': ['#d2a8ff', true], 't-door': ['#f0c674', true],
-    't-bed': ['#a5b4fc'], 't-furniture': ['#c9a26b'], 't-ruin': ['#9a8f7c'], 't-relic': ['#e3c07a', true],
-  };
-  const NODE_FG = { ore: '#56d4dd', herb: '#c3e88d' }; // 礦脈青色、藥草淺綠
-  const HEIGHT_BG = ['#070a0e', '#0e131a', '#151c26', '#1e2733', '#283442'];
-  const BG = { village: '#1c2333', town: '#2a2140', indoor: '#2a2218', road: '#3a3122', glitch: '#2d1214', hasQuest: '#4a1d3a', recipient: '#1a4d2a' };
+  // 地形字元要不要粗體（FE.TERRAIN 的 cls；顏色是同名的 CSS 變數）。底色越亮越高，聚落、室內、小路、有委託、收貨人各有底色，也都在 CSS 變數裡
+  const TERRAIN_BOLD = new Set(['t-forest', 't-mount', 't-stonewall', 't-woodwall', 't-house', 't-market', 't-temple', 't-door', 't-relic']);
 
   function drawMap() {
     const cv = $('map');
@@ -85,7 +93,7 @@
     const p = game.player;
     const { cell, cols, rows, ox, oy } = ui;
     ctx.setTransform(ui.dpr, 0, 0, ui.dpr, 0, 0);
-    ctx.fillStyle = '#010409';
+    ctx.fillStyle = P.void;
     ctx.fillRect(0, 0, ui.w, ui.h);
     const { x: camX, y: camY } = camera();
 
@@ -136,21 +144,21 @@
         const ph = Math.round(oy + (gy + 1) * cell) - py0;
 
         let glyph = WALL_GLYPHS[c.t] ? wallGlyph(W, x, y, c.t) : c.t;
-        const tfg = TERRAIN_FG[FE.TERRAIN[c.t].cls] || ['#6e7681'];
-        let fg = tfg[0];
-        let bold = !!tfg[1];
+        const tcls = FE.TERRAIN[c.t].cls;
+        let fg = P[tcls] || P['t-plain'];
+        let bold = TERRAIN_BOLD.has(tcls);
         // 底色越亮越高；聚落、室內、路各有底色
         const vv = W.villageAt(x, y);
         const indoor = vv && FE.Steading.roomAt(vv, x, y) >= 0;
-        let bg = c.t === '·' ? BG.road : indoor ? BG.indoor : vv ? (vv.kind === 'town' ? BG.town : BG.village) : HEIGHT_BG[c.h] || HEIGHT_BG[0];
+        let bg = c.t === '·' ? P['map-road'] : indoor ? P['map-indoor'] : vv ? (vv.kind === 'town' ? P['map-town'] : P['map-village']) : P['map-h' + c.h] || P['map-h0'];
         const baseBg = bg;
         let alpha = 1;
         const o = overlay.get(k);
         if (o) {
           if (o.glyph) glyph = o.glyph;
           if (o.cls === 'glitch') {
-            fg = '#ff7b72';
-            bg = BG.glitch;
+            fg = P['map-glitch-fg'];
+            bg = P['map-glitch-bg'];
           } else if (o.cls === 'faded') alpha = 0.35;
         }
         let outline = null;
@@ -158,12 +166,12 @@
         const nd = nodes.get(k);
         if (nd && FE.TERRAIN[c.t].pass) {
           glyph = FE.NODES[nd.kind].glyph;
-          fg = NODE_FG[nd.kind];
+          fg = P['map-node-' + nd.kind];
           bold = true;
         }
         if (chests.has(k)) {
           glyph = '$';
-          fg = '#e3b341';
+          fg = P['map-chest'];
           bold = true;
           bg = baseBg;
           alpha = 1;
@@ -174,22 +182,22 @@
           bold = true;
           bg = baseBg;
           alpha = 1;
-          if (n.role === 'smith') fg = '#79c0ff';
-          else if (n.role === 'armorer') fg = '#ffa657';
+          if (n.role === 'smith') fg = P['map-smith'];
+          else if (n.role === 'armorer') fg = P['map-armorer'];
           else {
             const cr = p.carrying;
             const carrying =
               cr && (cr.kind === 'hunt' ? cr.giverId === n.id && game.huntRemaining(cr.monsterIds) === 0 : cr.targetId === n.id);
-            fg = '#f778ba';
-            if (carrying) bg = BG.recipient;
-            else if (n.quest && !n.quest.accepted && !n.quest.done) bg = BG.hasQuest;
+            fg = P['map-npc'];
+            if (carrying) bg = P['map-recipient'];
+            else if (n.quest && !n.quest.accepted && !n.quest.done) bg = P['map-quest'];
           }
         }
         // 士兵：鋼灰色的 &，格子底下有血條
         const sol = soldiers.get(k);
         if (sol) {
           glyph = '&';
-          fg = '#b8c0cc';
+          fg = P['map-soldier'];
           bold = true;
           bg = baseBg;
           alpha = 1;
@@ -202,17 +210,17 @@
           glyph = Math.random() < 0.6 ? race.glyph : flicker(FE.BUG_TYPES[m.type].glyphs);
           bold = true;
           alpha = 1;
-          if (m.boss) { fg = '#fff'; bg = '#5a0b0e'; }
-          else if (m.tier === 'mid') { fg = '#fff'; bg = '#8e1519'; }
-          else { fg = '#0d1117'; bg = '#ff7b72'; }
+          if (m.boss) { fg = P['map-mid-fg']; bg = P['map-boss-bg']; }
+          else if (m.tier === 'mid') { fg = P['map-mid-fg']; bg = P['map-mid-bg']; }
+          else { fg = P['map-mon-fg']; bg = P['map-mon-bg']; }
           // 外框：目前的目標（白）＞清除委託指定（紫）＞正在追你（黃）
-          outline = m === target ? '#fff' : hunted.has(m) ? '#d2a8ff' : m.chase > 0 ? '#e3b341' : null;
+          outline = m === target ? P['map-ol-target'] : hunted.has(m) ? P['map-ol-hunt'] : m.chase > 0 ? P['map-ol-chase'] : null;
           hpPct = Math.round((m.hp / m.maxHp) * 100);
         }
         if (p.x === x && p.y === y) {
           glyph = '@';
-          fg = '#fff';
-          bg = '#1f6feb';
+          fg = P['map-player-fg'];
+          bg = P['map-player-bg'];
           bold = true;
           alpha = 1;
           outline = null;
@@ -238,7 +246,7 @@
         }
         // 血條：格子底下一條細線，綠、黃、紅跟著剩下的血量變
         if (hpPct >= 0) {
-          ctx.fillStyle = hpPct > 60 ? '#3fb950' : hpPct > 30 ? '#e3b341' : '#f85149';
+          ctx.fillStyle = hpPct > 60 ? P.hp : hpPct > 30 ? P['hp-mid'] : P['hp-low'];
           ctx.fillRect(px0 + pw * 0.1, py0 + ph - 1 - barH, (pw * 0.8 * hpPct) / 100, barH);
         }
         ctx.globalAlpha = 1;
@@ -246,13 +254,8 @@
     }
   }
 
-  // 小地圖（疊在地圖右上角）：冒險者附近 MINIMAP_W×MINIMAP_H 格，一格畫成 S×S 像素；白框是主畫面看得到的範圍
-  // 按生態區上色，巨石另外畫深色
-  const MINI_COLORS = {
-    plain: '#5b6470', grassland: '#4f9a4f', shrubland: '#7f8f45', forest: '#2d7a35', taiga: '#2f7a62', tundra: '#93b3c0',
-    glacier: '#e8f1f8', jungle: '#1f8a34', savanna: '#b8973f', desert: '#d6a537', marsh: '#3c9690', swamp: '#3f6e55',
-    mountain: '#8b8f99', lake: '#2f6fd6',
-  };
+  // 小地圖（M 開的視窗）：冒險者附近 MINIMAP_W×MINIMAP_H 格，一格畫成 S×S 像素；白框是主畫面看得到的範圍
+  // 按生態區上色（顏色是 CSS 的 --m-生態區），巨石另外畫深色
   function shade(hex, h) {
     const n = parseInt(hex.slice(1), 16);
     const f = 0.75 + h * 0.08; // 越高越亮
@@ -261,12 +264,12 @@
   }
 
   function drawMinimap() {
+    if (ui.win !== 'minimap') return;
     const cv = $('minimap');
-    cv.classList.toggle('hidden', !ui.mini);
-    if (!ui.mini) return;
     const W = game.world;
     const p = game.player;
-    const S = window.innerWidth < 520 ? 1 : 2;
+    // 一格幾像素：視窗放得下的最大值（最多 4）
+    const S = Math.max(1, Math.min(4, Math.floor((window.innerWidth - 80) / C.MINIMAP_W), Math.floor((window.innerHeight - 140) / C.MINIMAP_H)));
     const MW = C.MINIMAP_W;
     const MH = C.MINIMAP_H;
     const b = W.bounds();
@@ -277,19 +280,19 @@
       cv.height = MH * S;
     }
     const ctx = cv.getContext('2d');
-    ctx.fillStyle = '#010409'; // 還沒創出來的地方
+    ctx.fillStyle = P.void; // 還沒創出來的地方
     ctx.fillRect(0, 0, cv.width, cv.height);
     for (let y = y0; y < y0 + MH; y++) {
       for (let x = x0; x < x0 + MW; x++) {
         const c = W.cell(x, y);
         if (!c) continue;
-        const base = c.t === '#' ? '#262b33' : MINI_COLORS[c.biome] || '#444444';
+        const base = c.t === '#' ? P['m-rock'] : P['m-' + c.biome] || '#444444';
         const vv = W.villageAt(x, y);
         // 地貌上的人造物（斷牆、立石、塔⋯⋯）畫成土黃色
         const relic = /[▓░ΠΘ†Ω‡+¤]/.test(c.t);
         const building = /[⌂∩♦]/.test(c.t);
         const wall = c.t === 'W' || c.t === 'w';
-        ctx.fillStyle = wall ? (c.t === 'W' ? '#c9ced6' : '#a0784a') : building ? '#d6a46b' : vv ? (vv.kind === 'town' ? '#8a5fb0' : '#3b4a6b') : relic ? '#b8956a' : shade(base, c.h);
+        ctx.fillStyle = wall ? (c.t === 'W' ? P['m-stonewall'] : P['m-woodwall']) : building ? P['m-building'] : vv ? (vv.kind === 'town' ? P['m-town'] : P['m-village']) : relic ? P['m-relic'] : shade(base, c.h);
         ctx.fillRect((x - x0) * S, (y - y0) * S, S, S);
       }
     }
@@ -301,37 +304,30 @@
     };
     const big = S === 1 ? 3 : 5;
     const c = p.carrying;
-    for (const ch of W.chests) dot(ch.x, ch.y, '#e3b341');
+    for (const ch of W.chests) dot(ch.x, ch.y, P['map-chest']);
     for (const n of W.npcs) {
       const target = c && (c.kind === 'hunt' ? c.giverId === n.id && game.huntRemaining(c.monsterIds) === 0 : c.targetId === n.id);
-      dot(n.x, n.y, target ? '#3fb950' : n.role === 'smith' ? '#79c0ff' : n.role === 'armorer' ? '#ffa657' : '#f778ba', target ? big : S);
+      dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : P['map-npc'], target ? big : S);
     }
     // 地形重算的地方：亮紫色的點，100 刻後消失
-    for (const s of game.soldiers) dot(s.x, s.y, '#b8c0cc');
-    for (const f of game.flashes || []) if (f.until > (game.ticks || 0)) dot(f.x, f.y, '#e879f9', big);
-    for (const m of game.monsters) dot(m.x, m.y, m.tier !== 'small' ? '#ff4040' : '#ff7b72', m.tier !== 'small' ? big : S);
-    dot(p.x, p.y, '#ffffff', big);
+    for (const s of game.soldiers) dot(s.x, s.y, P['map-soldier']);
+    for (const f of game.flashes || []) if (f.until > (game.ticks || 0)) dot(f.x, f.y, P['m-flash'], big);
+    for (const m of game.monsters) dot(m.x, m.y, m.tier !== 'small' ? P['m-boss'] : P['m-mon'], m.tier !== 'small' ? big : S);
+    dot(p.x, p.y, P['map-player-fg'], big);
     const cam = camera();
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.strokeStyle = P['m-view'];
     ctx.strokeRect((cam.x - x0) * S + 0.5, (cam.y - y0) * S + 0.5, C.VIEW_W * S - 1, C.VIEW_H * S - 1);
     // 下一塊會長在哪：離冒險者最近的邊界，用虛線框標出來
     const slot = W.nearestFrontier(p.x, p.y);
     if (slot) {
       ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = 'rgba(210,168,255,0.8)';
+      ctx.strokeStyle = P['m-slot'];
       ctx.strokeRect((slot.cx * C.CHUNK_W - x0) * S + 0.5, (slot.cy * C.CHUNK_H - y0) * S + 0.5, C.CHUNK_W * S - 1, C.CHUNK_H * S - 1);
       ctx.setLineDash([]);
     }
   }
 
-  // ---- 上方狀態列 ----
-
-  // 環境：生態區名稱、高度、在這裡出手的擲骰加減
-  function envText(c) {
-    const b = FE.BIOMES[c.biome];
-    const hit = b.hit ? `，出手 ${b.hit > 0 ? '+' : ''}${b.hit}` : '';
-    return `${b.name}，高度 ${c.h}${hit}`;
-  }
+  // ---- 上方：一行狀態、生命與經驗兩條長條 ----
 
   function setBar(id, value, max) {
     $(id).style.width = Math.max(0, Math.min(100, (value / max) * 100)) + '%';
@@ -348,53 +344,60 @@
   function drawStatus() {
     const p = game.player;
     const W = game.world;
-    $('stName').textContent = `${p.name}（${FE.Char.cls(p).name}）`;
-    $('hpText').textContent = `${p.hp} / ${p.maxHp}`;
-    setBar('hpFill', p.hp, p.maxHp);
-    // 經驗值條只顯示這一級的進度；創世門檻由創世神決定，不顯示
-    const lo = FE.levelExp(game.level);
-    const hi = FE.levelExp(game.level + 1);
-    $('lvText').textContent = game.level;
-    $('cpText').textContent = `${game.exp - lo} / ${hi - lo}`;
-    setBar('cpFill', game.exp - lo, hi - lo);
-    // 主手武器的名字（含品質符號）與攻擊力；超重時標出負重
-    const main = p.equip.main;
-    $('stWeapon').textContent =
-      `武器 ${main ? FE.Gear.name(main) : '徒手'}（攻擊力 ${game.playerAtk()}）` + (p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? `＋副手${FE.Gear.name(p.equip.off)}` : '') + (game.loadTier() ? `　超重 ${game.weight()} / ${game.carryLimit()}` : '');
+    // 名字與職業、時間（刻）、世界狀態、金幣，後面是戰鬥數字：攻擊力、物理／魔法減傷、閃避 %、格擋機率
+    $('stName').innerHTML = `<b>${esc(p.name)}</b>（${esc(FE.Char.cls(p).name)}）`;
+    $('stTime').textContent = `${game.ticks || 0} 刻`;
+    const lvl = FE.Stability.state(game);
+    $('stWorld').innerHTML = `世界 <b class="ws-${lvl}">${FE.Stability.names[lvl]}</b>`;
     $('stGold').textContent = `金幣 ${p.gold}`;
+    const d = FE.Gear.playerDefense(p);
+    $('stAtk').textContent = `攻擊力 ${game.playerAtk()}`;
+    $('stPhys').textContent = `物理減傷 ${FE.Gear.physReduce(p)}`;
+    $('stMagic').textContent = `魔法減傷 ${FE.Gear.magicReduce(p)}`;
+    $('stDodge').textContent = `閃避 ${Math.round(d.dodge * 100)}%`;
+    $('stBlock').textContent = `格擋 ${Math.round(d.block * 100)}%`;
+    $('stLoad').textContent = game.loadTier() ? `超重 ${game.weight()} / ${game.carryLimit()}` : '';
+    $('stLoad').classList.toggle('hidden', !game.loadTier());
     const n = unseenReports();
     $('reportBadge').classList.toggle('hidden', n === 0);
     $('reportBadge').textContent = `⚠${n}`;
 
-    const v = W.villageAt(p.x, p.y);
-    const lm = W.landmarkAt(p.x, p.y);
-    const lvl = FE.Stability.state(game);
-    $('stWorld').innerHTML = `世界 <b style="color:${['#3fb950', '#e3b341', '#f85149'][lvl]}">${FE.Stability.names[lvl]}</b>`;
-    $('stTime').textContent = `${game.ticks || 0} 刻`;
-    $('stWhere').textContent = v ? `${v.name}（${v.kind === 'town' ? '城鎮' : '村莊'}）` : `第 ${W.chunkNumber(p.x, p.y)} 塊世界`;
-    $('stEnv').textContent = envText(W.cell(p.x, p.y)) + (lm ? `，${lm.name}` : '');
+    // 兩條整寬長條：生命；等級與經驗值（只顯示這一級的進度，創世門檻由創世神決定，不顯示）
+    $('hpText').textContent = `生命 ${p.hp} / ${p.maxHp}`;
+    setBar('hpFill', p.hp, p.maxHp);
+    const lo = FE.levelExp(game.level);
+    const hi = FE.levelExp(game.level + 1);
+    $('cpText').textContent = `Lv ${game.level} 經驗 ${game.exp - lo} / ${hi - lo}`;
+    setBar('cpFill', game.exp - lo, hi - lo);
   }
 
-  // ---- 下方列 ----
+  // ---- 下方：狀態效果、目標、地點資訊、快捷列 ----
 
-  // 目標：貼著的怪物或目前的目標；旁邊沒有怪物時改顯示所在聚落或環境的簡短資訊
+  // 狀態效果：這一版還沒有狀態，一律顯示「無」
+  function drawEffects() {
+    $('fxText').textContent = '無';
+  }
+
+  // 目標那一行：目前的目標（名字、血條、生命，後面是體型、異常、抗性）；沒有就寫「無」
   function drawTarget() {
-    const el = $('target');
     const m = game.targetMonster();
     if (m) {
       const T = FE.BUG_TYPES[m.type];
-      const cd = game.battle.cooldown;
-      el.innerHTML = `
-        <div class="t-head"><b>目標：${esc(m.name)}</b><span class="dim">體型 ${FE.sizeName(m)}</span></div>
-        <div class="t-hp"><div class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></div><span>${m.hp} / ${m.maxHp}</span></div>
-        <p class="t-extra">異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</p>
-        <div class="actions">
-          <button data-act="attack">1 攻擊</button>
-          <button data-act="deep" ${cd > 0 ? 'disabled' : ''}>2 重擊${cd > 0 ? `（${cd}）` : ''}</button>
-          <button data-act="flee">3 撤退</button>
-        </div>`;
-      return;
-    }
+      $('tgtText').innerHTML = `<span class="tname">${esc(m.name)}</span><span class="t-hp"><span class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></span>生命 ${m.hp} / ${m.maxHp}</span><span class="dim t-extra">體型 ${FE.sizeName(m)}　異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</span>`;
+    } else $('tgtText').textContent = '無';
+    $('tgtText').className = m ? 'tgt' : '';
+    // 快捷列：攻擊 <1>、重擊 <2>（冷卻中顯示剩幾回合、變暗）、撤退 <3>；旁邊沒有怪物時都變暗
+    const cd = game.battle.cooldown;
+    const qs = document.querySelectorAll('#quick .qs');
+    qs.forEach((b) => {
+      b.disabled = !m || (b.dataset.act === 'deep' && cd > 0);
+    });
+    document.querySelector('#quick [data-act="deep"] .qcd').textContent = m && cd > 0 ? `冷卻 ${cd}` : '';
+  }
+
+  // 地點資訊（左下）：所在的聚落，或環境的簡短資訊
+  function drawPlace() {
+    const el = $('place');
     const W = game.world;
     const p = game.player;
     const v = W.villageAt(p.x, p.y);
@@ -412,7 +415,7 @@
     el.innerHTML = `
       <div class="t-head"><b style="color:var(--accent)">${esc(b.name)}</b><span class="dim">高度 ${c.h}</span></div>
       <p>${b.hit ? `在這裡出手 ${b.hit > 0 ? '+' : ''}${b.hit}` : '在這裡出手沒有加減'}${lm ? `，${esc(lm.name)}` : ''}</p>
-      <p class="t-extra dim">旁邊沒有怪物。撞上怪物只會把牠設成目標，按 1 攻擊、2 重擊。</p>`;
+      ${game.targetMonster() ? '' : '<p class="t-extra dim">旁邊沒有怪物。撞上怪物只會把牠設成目標，按 1 攻擊、2 重擊。</p>'}`;
   }
 
   function drawQuest() {
@@ -430,10 +433,10 @@
     $('questText').textContent = text;
   }
 
-  // 最近 3 行訊息，最新的在最下面
+  // 右側欄的訊息紀錄：由上到下，最新的在最下面（放不下的從最上面切掉）
   function drawLog() {
     $('log').innerHTML = game.log
-      .slice(0, 3)
+      .slice()
       .reverse()
       .map((l) => `<li class="log-${l.kind}">${esc(l.text)}</li>`)
       .join('');
@@ -602,33 +605,67 @@
     return FE.CLASSES[ui.start.cls].groups;
   }
   const optLabel = (id) => FE.START_OPTS[id].label;
+  const signed = (n) => (n > 0 ? '+' : '') + n;
+  // 目前這一步左欄的選項（職業，或這一組的起始裝備）
+  const startList = () => (ui.start.step === 'class' ? classKeys : startGroups()[ui.start.gi].of);
+
+  // 右欄：游標那一項的詳細內容。職業看屬性、生命、負重、說明；裝備看數值、重量、說明
+  function startDetail(id) {
+    if (ui.start.step === 'class') {
+      const c = FE.CLASSES[id];
+      const tmp = { cls: id, attr: c.attr };
+      const attrs = FE.ATTRS.map((a) => `<dt>${a.name}</dt><dd>${c.attr[a.key]}（修正值 ${signed(FE.Char.mod(c.attr[a.key]))}）</dd>`).join('');
+      return `<dl>${attrs}<dt>生命</dt><dd>${FE.Char.maxHp(tmp, 1)}</dd><dt>負重上限</dt><dd>${FE.Char.carryLimit(tmp)}</dd><dt>固定給</dt><dd>${c.fixed.length ? c.fixed.map(optLabel).join('、') : '沒有，裝備都自己挑'}</dd></dl><p>${esc(c.desc)}</p>`;
+    }
+    const o = FE.START_OPTS[id];
+    let rows = '';
+    if (o.gear) {
+      const g = FE.Gear.make(o.gear, 0, 0);
+      const d = FE.Gear.def(g);
+      const stat = FE.Gear.statText(g).split('、').filter((t) => !t.startsWith('重 ')).join('、');
+      rows = `<dt>種類</dt><dd>${d.cat === 'weapon' ? '武器' : d.cat === 'shield' ? '盾牌' : '防具'}</dd><dt>數值</dt><dd>${esc(stat || '無')}</dd><dt>重量</dt><dd>${d.weight}</dd>`;
+    } else rows = `<dt>內容</dt><dd>${esc(o.label)}</dd>`;
+    return `<dl>${rows}</dl><p>${esc(o.desc || '')}</p>`;
+  }
+
+  // 建角畫面（全螢幕）：左上角路徑、置中標題與副標、中間兩欄（左選項清單、右游標那一項的內容）、底部按鍵提示
   function drawStart() {
     const s = ui.start;
-    if (s.step === 'class') {
-      $('modalBody').innerHTML = `
-        <h2>選職業 <span class="dim">（按數字或點一下）</span></h2>
-        <div class="dlg-opts">${classKeys
-          .map((k, i) => {
-            const c = FE.CLASSES[k];
-            const tmp = { cls: k, attr: c.attr };
-            const attrs = FE.ATTRS.map((a) => `${a.name} ${c.attr[a.key]}`).join('　');
-            const fixed = c.fixed.length ? `固定給：${c.fixed.map(optLabel).join('、')}` : '裝備都自己挑';
-            return `<button data-cls="${k}"><kbd>${i + 1}</kbd><b>${esc(c.name)}</b>　生命 ${FE.Char.maxHp(tmp, 1)}、負重上限 ${FE.Char.carryLimit(tmp)}<br><span class="dim">${attrs}</span><br><span class="dim">${esc(c.desc)}${esc(fixed)}</span></button>`;
-          })
-          .join('')}</div>`;
-      return;
+    const list = startList();
+    if (s.cur >= list.length) s.cur = list.length - 1;
+    const isClass = s.step === 'class';
+    const g = isClass ? null : startGroups()[s.gi];
+    const attr = isClass ? 'data-cls' : 'data-gear';
+    const rows = list
+      .map((id, i) => {
+        const got = !isClass && s.sel.includes(id);
+        const label = isClass ? FE.CLASSES[id].name : optLabel(id);
+        return `<li ${attr}="${id}" data-i="${i}" class="${i === s.cur ? 'cur' : ''} ${got ? 'got' : ''}"><span class="mk">${i === s.cur ? '&gt;' : ''}</span><span class="box">${got ? '[■]' : '[ ]'}</span>${esc(label)}</li>`;
+      })
+      .join('');
+    let note = '';
+    let title = '職業';
+    let path = '新世界';
+    if (!isClass) {
+      const c = FE.CLASSES[s.cls];
+      const have = s.picks.map(optLabel);
+      title = `起始裝備　第 ${s.gi + 1} / ${startGroups().length} 組`;
+      path = `新世界 › ${c.name} › 起始裝備`;
+      note = `${g.pick > 1 ? `這一組從 ${g.of.length} 樣裡挑 ${g.pick} 樣，挑到 ${g.pick} 樣就進下一組。` : `這一組 ${g.of.length} 樣挑 1 樣。`}${c.fixed.length ? `<br>固定給：${c.fixed.map(optLabel).map(esc).join('、')}` : ''}${have.length ? `<br>已挑：${have.map(esc).join('、')}` : ''}`;
     }
-    const c = FE.CLASSES[s.cls];
-    const g = startGroups()[s.gi];
-    const have = s.picks.map(optLabel).concat(s.sel.map(optLabel));
+    const cur = list[s.cur];
+    const curName = isClass ? FE.CLASSES[cur].name : optLabel(cur);
+    $('modalBody').className = 'cc';
+    $('modal').classList.add('full');
     $('modalBody').innerHTML = `
-      <h2>${esc(c.name)}的起始裝備 <span class="dim">（第 ${s.gi + 1} / ${startGroups().length} 組）</span></h2>
-      <p>${c.fixed.length ? `固定給你：${c.fixed.map(optLabel).join('、')}。` : ''}${have.length ? `已經挑了：${have.map(esc).join('、')}。` : ''}</p>
-      <p>${g.pick > 1 ? `這一組從 ${g.of.length} 樣裡挑 ${g.pick} 樣（挑到 ${g.pick} 樣就進下一組）：` : `這一組 ${g.of.length} 樣挑 1 樣：`}</p>
-      <div class="dlg-opts">${g.of
-        .map((id, i) => `<button data-gear="${id}" class="${s.sel.includes(id) ? 'on' : ''}"><kbd>${i + 1}</kbd>${esc(optLabel(id))}${s.sel.includes(id) ? '　✓' : ''}</button>`)
-        .join('')}</div>
-      <p class="dim dlg-hint">Esc 回上一步</p>`;
+      <div class="cc-path">${esc(path)}</div>
+      <h1>建立角色</h1>
+      <div class="cc-sub">${isClass ? ':選職業:' : ':選起始裝備:'}</div>
+      <div class="cc-cols">
+        <div class="frame"><span class="ft">${esc(title)}</span><div class="fb"><ul class="cc-list">${rows}</ul>${note ? `<p class="cc-note">${note}</p>` : ''}</div></div>
+        <div class="frame"><span class="ft">${esc(curName)}</span><div class="fb cc-detail">${startDetail(cur)}</div></div>
+      </div>
+      <div class="cc-keys">[Esc] 返回　[Enter／Space] 選擇　[R] 隨機　方向鍵移動　數字鍵直接選</div>`;
   }
   function startFinish() {
     const done = ui.start.done;
@@ -643,6 +680,7 @@
       s.cls = id;
       s.step = 'gear';
       s.gi = 0;
+      s.cur = 0;
       s.picks = [];
       s.sel = [];
     } else {
@@ -653,6 +691,7 @@
         s.picks = s.picks.concat(s.sel);
         s.sel = [];
         s.gi++;
+        s.cur = 0;
         if (s.gi >= startGroups().length) {
           startFinish();
           return;
@@ -668,16 +707,21 @@
     else if (s.gi > 0) {
       s.gi--;
       s.picks = s.picks.filter((id) => !startGroups()[s.gi].of.includes(id));
-    } else s.step = 'class';
+    } else {
+      s.step = 'class';
+      s.cur = classKeys.indexOf(s.cls);
+    }
     drawStart();
   }
 
   // 升級加點：還有沒分配的屬性點就跳出來，選一項還沒到上限的屬性加 1 點（按 1～6 或點一下）
   function drawLevelUp() {
     const p = game.player;
+    $('modalBody').className = 'win';
+    $('modal').classList.remove('full');
     $('modalBody').innerHTML = `
       <h2>升到 Lv${game.level}　<span class="dim">選一項屬性加 1 點${p.points > 1 ? `（還有 ${p.points} 點）` : ''}</span></h2>
-      <div class="dlg-opts">${FE.ATTRS.map((a, i) => {
+      <div class="winbody"><div class="dlg-opts">${FE.ATTRS.map((a, i) => {
         const v = p.attr[a.key];
         const full = v >= C.ATTR_CAP;
         const m0 = FE.Char.mod(v);
@@ -685,7 +729,7 @@
         const note = full ? `已到上限 ${C.ATTR_CAP}` : `${v} → ${v + 1}${m1 !== m0 ? `，修正值 ${m0 > 0 ? '+' : ''}${m0} → ${m1 > 0 ? '+' : ''}${m1}` : `，修正值不變（${m0 > 0 ? '+' : ''}${m0}）`}`;
         return `<button data-attr="${a.key}" ${full ? 'disabled' : ''}><kbd>${i + 1}</kbd><b>${a.name}</b>　${esc(note)}<br><span class="dim">${esc(a.info)}</span></button>`;
       }).join('')}</div>
-      <p class="dim dlg-hint">加完才能繼續。生命 ${p.hp} / ${p.maxHp}</p>`;
+      <p class="dim dlg-hint">加完才能繼續。生命 ${p.hp} / ${p.maxHp}</p></div>`;
   }
 
   function drawModal() {
@@ -704,20 +748,24 @@
     messages: drawLogAll,
     steading: drawSteading,
     reports: drawReports,
+    minimap: drawMinimap,
     settings: null,
   };
 
   function drawWindow() {
     $('overlay').classList.toggle('hidden', !ui.win);
     for (const name of Object.keys(WINDOWS)) $('win-' + name).classList.toggle('hidden', name !== ui.win);
+    // 右上角圖示列：開著的視窗那顆亮起來
+    document.querySelectorAll('#iconbar .ib').forEach((b) => b.classList.toggle('on', b.dataset.win === ui.win));
     if (ui.win && WINDOWS[ui.win]) WINDOWS[ui.win]();
   }
 
   function update() {
     drawMap();
-    drawMinimap();
     drawStatus();
+    drawEffects();
     drawTarget();
+    drawPlace();
     drawQuest();
     drawLog();
     drawDialog();
@@ -736,6 +784,7 @@
   FE.UI = {
     init(g) {
       game = g;
+      loadPalette();
       $('seed').textContent = `世界種子 ${g.seed}`;
       $('playerName').value = g.player.name;
       layout();
@@ -748,17 +797,29 @@
     relayout,
     // 開新世界時選職業與起始裝備：選完呼叫 done(職業, 挑的裝備)
     startMenu(done) {
-      ui.start = { step: 'class', cls: null, gi: 0, picks: [], sel: [], done };
+      ui.start = { step: 'class', cls: null, gi: 0, cur: 0, picks: [], sel: [], done };
       $('modal').classList.remove('hidden');
       drawStart();
     },
-    // 選職業的畫面開著時是不是吃掉這個鍵（數字選、Esc 回上一步）；回傳 true 表示已經處理
+    // 建角畫面開著時是不是吃掉這個鍵（方向鍵移游標、Enter／Space 選、R 隨機、數字直接選、Esc 回上一步）；回傳 true 表示已經處理
     startKey(k) {
-      if (!ui.start) return false;
+      const s = ui.start;
+      if (!s) return false;
+      const list = startList();
       if (k === 'escape' || k === 'backspace') startBack();
-      else if (/^[1-9]$/.test(k)) {
+      else if (k === 'arrowup' || k === 'w') {
+        s.cur = (s.cur + list.length - 1) % list.length;
+        drawStart();
+      } else if (k === 'arrowdown' || k === 's') {
+        s.cur = (s.cur + 1) % list.length;
+        drawStart();
+      } else if (k === 'enter' || k === ' ') startChoose(list[s.cur]);
+      else if (k === 'r') {
+        // 隨機：從還沒選的裡面抽一樣，等於選下去
+        const open = list.filter((id) => !s.sel.includes(id));
+        startChoose(open[Math.floor(Math.random() * open.length)]);
+      } else if (/^[1-9]$/.test(k)) {
         const i = Number(k) - 1;
-        const list = ui.start.step === 'class' ? classKeys : startGroups()[ui.start.gi].of;
         if (list[i]) startChoose(list[i]);
       }
       return true;
@@ -767,6 +828,15 @@
       if (!ui.start || !target.closest) return;
       const b = target.closest('[data-cls],[data-gear]');
       if (b) startChoose(b.dataset.cls || b.dataset.gear);
+    },
+    // 滑鼠移到哪一行，游標就跟到哪一行
+    startHover(target) {
+      if (!ui.start || !target.closest) return;
+      const b = target.closest('[data-i]');
+      if (b && Number(b.dataset.i) !== ui.start.cur) {
+        ui.start.cur = Number(b.dataset.i);
+        drawStart();
+      }
     },
     // 有沒有跳出必須先處理的視窗（選職業、升級加點）
     modal: () => !!ui.start || !!(game && game.player && game.player.points > 0),
@@ -790,11 +860,6 @@
     closeWindow() {
       ui.win = null;
       update();
-    },
-    toggleMinimap() {
-      ui.mini = !ui.mini;
-      FE.store.save('fe.minimap', ui.mini);
-      drawMinimap();
     },
   };
 })();

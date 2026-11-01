@@ -29,7 +29,8 @@
   }
 
   // ---- 版面：地圖填滿狀態列與下方列之間的空間 ----
-  // 格數＝可用空間 ÷ 每格像素，寬高各取奇數（冒險者才在正中央）；短邊至少 VIEW_MIN 格，不夠就把格子縮小
+  // 格數＝可用空間 ÷ 每格像素，寬高各取奇數（冒險者才在正中央）；短邊至少 VIEW_MIN 格，不夠就把格子縮小。
+  // 格子大小只看視窗大小決定，不為了填滿再微調：底部、頂部內容變了高度差幾像素時，只增減格數，字不會跟著縮放
   function layout() {
     const wrap = $('mapwrap');
     const cv = $('map');
@@ -37,10 +38,9 @@
     const h = wrap.clientHeight;
     if (w <= 0 || h <= 0) return;
     const odd = (n) => Math.max(1, n % 2 ? n : n - 1);
-    let cell = Math.min(C.CELL_PX, Math.min(w, h) / C.VIEW_MIN);
+    const cell = Math.max(8, Math.min(C.CELL_PX, Math.floor(Math.min(w, h) / C.VIEW_MIN)));
     const cols = odd(Math.floor(w / cell + 1e-6));
     const rows = odd(Math.floor(h / cell + 1e-6));
-    cell = Math.min(w / cols, h / rows); // 取好格數後讓格子盡量填滿，仍是正方形
     const dpr = window.devicePixelRatio || 1;
     cv.style.width = w + 'px';
     cv.style.height = h + 'px';

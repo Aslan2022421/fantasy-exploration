@@ -198,7 +198,7 @@ b { font-weight: bold; }
 .bar { width: 110px; height: 8px; overflow: hidden; background: var(--void); border: 1px solid var(--line); }
 .bar > i { display: block; height: 100%; background: var(--bad); transition: width 0.2s; }
 #lowrow { display: flex; align-items: stretch; gap: 12px; margin-top: 3px; }
-#place { flex: 1 1 0; min-width: 0; max-height: 64px; overflow: hidden; padding-right: 10px; border-right: 1px solid var(--line); }
+#place { flex: 1 1 0; min-width: 0; height: 64px; overflow: hidden; padding-right: 10px; border-right: 1px solid var(--line); }
 #place .t-head { display: flex; justify-content: space-between; gap: 8px; }
 #place p { margin: 2px 0; font-size: 12px; }
 #quick { flex: none; display: flex; align-items: center; gap: 6px; }

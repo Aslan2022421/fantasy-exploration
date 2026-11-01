@@ -25,21 +25,28 @@
   const freshSkills = () => Object.fromEntries(Object.keys(FE.SKILLS).map((k) => [k, { lv: 0, n: 0 }]));
 
   // 主手武器對應的技能（長劍、長槍、短刀、法杖）；空手、弓箭沒有
-  function weaponSkill(p) {
-    const g = p.equip.main;
+  // w 是哪一把武器（沒給就是主手；副手的短刀要傳進來）
+  function weaponSkill(p, w) {
+    const g = w === undefined ? p.equip.main : w;
     return g && FE.SKILLS[g.type] && FE.SKILLS[g.type].weapon ? g.type : null;
   }
   // 近戰武器技能：命中每 5 級 +1（出手 d20）、傷害每 3 級 +1
-  function skillHit(p) {
-    const s = weaponSkill(p);
+  function skillHit(p, w) {
+    const s = weaponSkill(p, w);
     return s ? Math.floor(skillLv(p, s) / C.SKILL_HIT_EVERY) : 0;
   }
-  function skillDmg(p) {
-    const s = weaponSkill(p);
+  function skillDmg(p, w) {
+    const s = weaponSkill(p, w);
     return s ? Math.floor(skillLv(p, s) / C.SKILL_DMG_EVERY) : 0;
   }
-  // 冒險者一般攻擊、重擊的傷害加值：力量修正值（可為負）加武器技能
-  const dmgBonus = (p) => attrMod(p, 'str') + skillDmg(p);
+  // 靈巧武器（短刀）：傷害吃力量與敏捷修正值裡較高的那個，算完再 ÷2 無條件進位（見 combat.js 的 baseDamage）
+  const isFinesse = (w) => !!w && !!FE.GEAR[w.type].finesse;
+  // 冒險者一般攻擊、重擊的傷害加值：力量修正值（可為負；靈巧武器取力量與敏捷較高者）加武器技能
+  function dmgBonus(p, w) {
+    const g = w === undefined ? p.equip.main : w;
+    const str = attrMod(p, 'str');
+    return (isFinesse(g) ? Math.max(str, attrMod(p, 'dex')) : str) + skillDmg(p, g);
+  }
 
   // 用了一次：這一級的次數滿了就升級，訊息寫出來。20 級就不再累積
   function useSkill(game, id) {
@@ -129,7 +136,7 @@
 
   FE.Char = {
     mod, attrMod, cls, maxHp, carryLimit,
-    skillLv, skillNeed, freshSkills, weaponSkill, skillHit, skillDmg, dmgBonus, useSkill, armorAct, armorTicks, armorDodgeFree,
+    skillLv, skillNeed, freshSkills, weaponSkill, skillHit, skillDmg, isFinesse, dmgBonus, useSkill, armorAct, armorTicks, armorDodgeFree,
     validPicks, defaultPicks, create,
   };
 })();

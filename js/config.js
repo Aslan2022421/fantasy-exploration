@@ -144,7 +144,8 @@ FE.CONFIG = {
   OPPORTUNITY_CHANCE: 0.5,                // 從貼著的怪物旁走開，那隻怪物趁機出手的機率
   PLAYER_DODGE: 0.1,                      // 冒險者的閃避、反擊機率（格擋機率與格擋值看盾牌，沒拿盾牌是 0；見 FE.GEAR.shield）
   PLAYER_COUNTER: 0,                      // 冒險者的反擊機率先歸 0（第二十五版），之後由裝備提升，本版沒有任何來源
-  COUNTER_DAMAGE: 1,                      // 冒險者反擊命中時固定造成的傷害
+  DUAL_WIELD_PENALTY: 2,                  // 雙持（副手也拿短刀）按 1 一般攻擊時，主手、副手兩下的 d20 各 -2；之後由雙持技能抵銷，這一版還沒有這項技能
+  COUNTER_DAMAGE: 1,                     // 冒險者反擊命中時固定造成的傷害
   BLOCK_REGEN: 0.2,                      // 格擋值每回合回最大值的幾成
   MID_DEF: { dodge: 0.05, block: 0.1, blockMax: 3 }, // 中型怪物的防禦在異常本身的數字上再加這些
 
@@ -163,9 +164,11 @@ FE.CONFIG = {
 
   // 世界等級（隱藏，不顯示給玩家）：＝1＋floor((創出的塊數－1)／CHUNKS_PER_WORLD_LEVEL)。
   // 每升一級（以等級 1 為基準，線性加上去）：下面每一項加上對應的比例或數值
-  CHUNKS_PER_WORLD_LEVEL: 2,              // 每創出幾塊世界，世界等級加一（規格預設 3；調成 2，失序才落在世界等級 4～5 左右）
+  SMALL_HP_MUL: 1.5,                      // 小怪物血量倍率（第二十六版以戰士校準）
+  MID_HP_MUL: 1.2,                        // 中型以上怪物血量倍率
+  CHUNKS_PER_WORLD_LEVEL: 2,             // 每創出幾塊世界，世界等級加一（規格預設 3；調成 2，失序才落在世界等級 4～5 左右）
   WL_BONUS: {
-    HP: 0.2,        // 怪物血量（第二十四版從 0.1 加大：以基準冒險者校準，小怪物約 3 下、中型怪物約 6 下打倒，見 DESIGN.md「世界等級」）
+    HP: 0.3,        // 怪物血量（第二十四版 0.1→0.2；第二十六版以戰士校準再加到 0.3：技能與加點讓傷害成長，小怪物約 3 下、中型怪物約 6 下打倒，見 DESIGN.md「世界等級」）
     ATK: 0.1,       // 怪物攻擊力
     DODGE: 0.01,    // 怪物閃避機率
     BLOCK: 0.01,    // 怪物格擋機率
@@ -341,7 +344,7 @@ FE.QUALITIES = [
 FE.GEAR = {
   sword: { cat: 'weapon', name: '長劍', atk: 4, blade: true, weight: 2, price: 30, ore: 3, dur: 200, sold: true, drop: true },
   spear: { cat: 'weapon', name: '長槍', atk: 4, blade: true, weight: 1, price: 25, ore: 3, dur: 200, sold: true, drop: true }, // 打 2 格等第二十七版
-  dagger: { cat: 'weapon', name: '短刀', atk: 3, blade: true, weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
+  dagger: { cat: 'weapon', name: '短刀', atk: 3, blade: true, finesse: true, weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
   bow: { cat: 'weapon', name: '弓箭', atk: 3, weight: 1, price: 30, dur: 200, twoHand: true, sold: false, drop: false },
   staff: { cat: 'weapon', name: '法杖', atk: 3, weight: 1, price: 30, dur: 200, sold: false, drop: false },
   heavy: { cat: 'armor', name: '重甲', phys: 3, magic: 1, ticks: 2, dodge: -0.05, weight: 4, price: 60, ore: 5, dur: 150, sold: true, drop: true },

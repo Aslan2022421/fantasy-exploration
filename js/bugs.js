@@ -144,7 +144,9 @@
     // 這一版創世時的大錯也只算中型；大怪物（tier 'big'）要由世界級事件指定，d.tier 是留給第 2 階段用的
     const tier = d.tier || (d.scope >= FE.CONFIG.MID_SCOPE ? 'mid' : 'small');
     const boss = tier === 'big';
-    const maxHp = Math.max(1, Math.round(Math.min(100, Math.round((8 + d.scope * 2) * T.hpMul)) * FE.wlScale(wl, B.HP)));
+    // 第二十六版有了職業與技能，冒險者傷害變高：小怪物血量 ×1.5、中型 ×1.2（以戰士校準）
+    const tierMul = tier === 'small' ? FE.CONFIG.SMALL_HP_MUL : FE.CONFIG.MID_HP_MUL;
+    const maxHp = Math.max(1, Math.round(Math.min(100, Math.round((8 + d.scope * 2) * T.hpMul * tierMul)) * FE.wlScale(wl, B.HP)));
     const atk = Math.max(1, Math.round(Math.max(1, Math.min(8, 2 + Math.floor(Math.sqrt(d.scope)) + T.atkMod)) * FE.wlScale(wl, B.ATK)));
     return {
       id,

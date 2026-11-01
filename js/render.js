@@ -10,7 +10,7 @@
   let game = null;
 
   // 畫面狀態（不進存檔）：開著哪個視窗、小地圖收起或打開（記在這台瀏覽器）、地圖的版面
-  const ui = { win: null, bagDrop: false, mini: FE.store.load('fe.minimap', true), cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+  const ui = { win: null, bagDrop: false, bagOff: false, mini: FE.store.load('fe.minimap', true), cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
 
   // ---- 版面：地圖填滿狀態列與下方列之間的空間 ----
   // 格數＝可用空間 ÷ 每格像素，寬高各取奇數（冒險者才在正中央）；短邊至少 VIEW_MIN 格，不夠就把格子縮小
@@ -360,7 +360,7 @@
     // 主手武器的名字（含品質符號）與攻擊力；超重時標出負重
     const main = p.equip.main;
     $('stWeapon').textContent =
-      `武器 ${main ? FE.Gear.name(main) : '徒手'}（攻擊力 ${game.playerAtk()}）` + (game.loadTier() ? `　超重 ${game.weight()} / ${game.carryLimit()}` : '');
+      `武器 ${main ? FE.Gear.name(main) : '徒手'}（攻擊力 ${game.playerAtk()}）` + (p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? `＋副手${FE.Gear.name(p.equip.off)}` : '') + (game.loadTier() ? `　超重 ${game.weight()} / ${game.carryLimit()}` : '');
     $('stGold').textContent = `金幣 ${p.gold}`;
     const n = unseenReports();
     $('reportBadge').classList.toggle('hidden', n === 0);
@@ -541,12 +541,14 @@
         tier === 1 ? '　超重：每個動作多 2 刻、出手 -1' : tier === 2 ? '　超重太多：不能移動、不能撤退、出手 -2，先丟掉東西' : ''
       }</p>
       <ul class="equipped">${slot('主手', p.equip.main)}${slot('副手', p.equip.off)}${slot('身上', p.equip.body)}</ul>
-      <p><button data-dropmode class="${drop ? 'on' : ''}">${drop ? '現在是「丟掉」：選到的整疊直接消失（按 X 切回）' : '切到「丟掉」（X）'}</button></p>`;
+      <p><button data-dropmode class="${drop ? 'on' : ''}">${drop ? '現在是「丟掉」：選到的整疊直接消失（按 X 切回）' : '切到「丟掉」（X）'}</button>
+      <button data-offmode class="${ui.bagOff ? 'on' : ''}">${ui.bagOff ? '現在短刀放副手（雙持，按 V 切回）' : '短刀改放副手（V）'}</button></p>
+      <p class="dim">雙持：副手也拿短刀時，按 1 攻擊會主手、副手各出手一次，兩下的擲骰各 -2；重擊只用主手。副手拿了短刀就不能拿盾牌。</p>`;
     $('backpack').innerHTML = list.length
       ? list
           .map((e, i) => {
             const can = drop ? e.id !== 'goods' : e.use;
-            const act = drop ? '丟掉' : e.id === 'gear' ? '穿上或拿起' : '使用';
+            const act = drop ? '丟掉' : e.id === 'gear' ? (ui.bagOff && e.gear && FE.Gear.def(e.gear).finesse ? '拿在副手' : '穿上或拿起') : '使用';
             const note = e.id === 'gear' && !e.use && !drop ? '放在背包裡，撞上礦脈或藥草就會用' : can ? act : '';
             return `<li><button data-use="${i}" ${can ? '' : 'disabled'}><kbd>${i + 1}</kbd>${esc(e.name)}${e.n > 1 ? ` ×${e.n}` : ''}${
               e.info ? ` <span class="dim">（${esc(e.info)}）</span>` : ''
@@ -583,6 +585,7 @@
     const heal = Math.max(1, C.REST_HEAL + Ch.attrMod(p, 'con'));
     $('charInfo').innerHTML = `
       <p><b>${esc(p.name)}</b>　${esc(c.name)}　Lv${game.level}　經驗值 ${game.exp - lo} / ${hi - lo}${p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加</b>` : ''}</p>
+      <p>主手 ${p.equip.main ? esc(FE.Gear.name(p.equip.main)) : '空著'}　副手 ${p.equip.off ? esc(FE.Gear.name(p.equip.off)) : '空著'}${p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''}　身上 ${p.equip.body ? esc(FE.Gear.name(p.equip.body)) : '空著'}</p>
       <p>生命 ${p.hp} / ${p.maxHp}　負重上限 ${game.carryLimit()}（目前 ${game.weight()}）　休息一次回復 ${heal}</p>
       <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
       <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th></tr>${attrRows}</table>
@@ -769,13 +772,18 @@
     modal: () => !!ui.start || !!(game && game.player && game.player.points > 0),
     win: () => ui.win,
     bagDrop: () => ui.bagDrop,
+    bagOff: () => ui.bagOff,
+    toggleBagOff() {
+      ui.bagOff = !ui.bagOff;
+      update();
+    },
     toggleBagDrop() {
       ui.bagDrop = !ui.bagDrop;
       update();
     },
     openWindow(name) {
       ui.win = name;
-      if (name === 'backpack') ui.bagDrop = false;
+      if (name === 'backpack') ui.bagDrop = ui.bagOff = false;
       if (name === 'reports' && game.reports.length) FE.store.save('fe.reportSeen', reportId(game.reports[0]));
       update();
     },

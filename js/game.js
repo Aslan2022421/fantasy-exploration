@@ -336,11 +336,12 @@
     }
 
     // 用背包裡的第 i 樣東西：藥草是吃，裝備是穿上或拿起（算一個動作，換下的放回背包）
-    useItem(i) {
+    // toOff：短刀放副手（雙持）；不是短刀就照平常的位置
+    useItem(i, toOff) {
       const e = this.bagList()[i];
       if (!e) return;
       if (e.gear) {
-        this.equipItem(this.player.bag[i]);
+        this.equipItem(this.player.bag[i], toOff);
         return;
       }
       if (!e.use) {
@@ -352,7 +353,8 @@
 
     // 穿上或拿起背包裡的一件裝備：武器放主手、盾牌放副手、防具穿在身上，換下的放回背包，算一個動作。
     // 弓箭佔兩手：拿弓箭時副手的盾牌放回背包，拿著弓箭時拿不了盾牌
-    equipItem(entry) {
+    // 雙持：副手可以拿第二把短刀（只限短刀），副手放了短刀就不能拿盾牌，反之亦然（副手只有一格，放進去就把原本的換下來）
+    equipItem(entry, toOff) {
       const p = this.player;
       const g = entry.gear;
       const d = FE.Gear.def(g);
@@ -360,9 +362,9 @@
         this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
         return;
       }
-      const slot = d.cat === 'weapon' ? 'main' : d.cat === 'shield' ? 'off' : 'body';
+      const slot = d.cat === 'weapon' ? (toOff && d.finesse ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
       if (slot === 'off' && p.equip.main && FE.Gear.def(p.equip.main).twoHand) {
-        this.say('弓箭要用兩隻手拿，先換下弓箭才拿得了盾牌。', 'sys');
+        this.say(`弓箭要用兩隻手拿，先換下弓箭才拿得了${d.cat === 'shield' ? '盾牌' : '副手的武器'}。`, 'sys');
         return;
       }
       this.beginAction();
@@ -377,7 +379,7 @@
         p.equip.off = null;
       }
       if (slot === 'off' || extra) p.block = null; // 盾牌換了，格擋值從滿的開始
-      this.say(`你${slot === 'main' ? '拿起' : '穿上'}了${FE.Gear.name(g)}。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}${extra}`, 'good');
+      this.say(`你${slot === 'main' || d.cat === 'weapon' ? '拿起' : '穿上'}了${FE.Gear.name(g)}${slot === 'off' && d.cat === 'weapon' ? '（副手）' : ''}。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}${extra}`, 'good');
       this.endTurn(false);
     }
 
@@ -728,7 +730,13 @@
       // 打怪的過程是在提供算力給創世神：每次出手跟走一步一樣累積算力（經驗值與打倒怪物的算力等打倒才結算）
       this.earn(C.COMPUTE_PER_ATTACK);
       if (kind === 'deep') this.battle.cooldown = 3;
-      FE.Combat.resolveAttack(this, p, m, kind);
+      // 雙持：副手也拿著武器（只限短刀）時，按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20、各扣雙持減值；
+      // 重擊只用主手、不扣減值。目標在第一下倒下（或冒險者倒下）就不出第二下
+      const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
+      const dual = kind === 'attack' && !!off && !!p.equip.main;
+      const first = FE.Combat.resolveAttack(this, p, m, kind, dual ? { dual: true } : undefined);
+      // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手已經觸發，副手那一下擲出 6～10 只算命中
+      if (dual && !this.fell && this.monsters.includes(m)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, noForced: first.forced });
       this.endTurn(false);
     }
 

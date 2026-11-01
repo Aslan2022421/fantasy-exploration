@@ -743,7 +743,7 @@ function simulate(seed, opts) {
     if (opts.cond === 'heavy' && p.equip.body) p.equip.body.dur = p.equip.body.max;
     // 裝備的狀態永遠合法：耐久在 1～上限之間、穿的位置對、重量算得出來
     for (const g of FE.Gear.equipped(p)) if (!(g.dur >= 1 && g.dur <= g.max)) fail(`模擬 seed${seed} 第${i}步 ${FE.Gear.name(g)} 耐久 ${g.dur}/${g.max}`);
-    if ((p.equip.main && FE.GEAR[p.equip.main.type].cat !== 'weapon') || (p.equip.off && FE.GEAR[p.equip.off.type].cat !== 'shield') || (p.equip.body && FE.GEAR[p.equip.body.type].cat !== 'armor')) fail(`模擬 seed${seed} 第${i}步 裝備穿錯位置`);
+    if ((p.equip.main && FE.GEAR[p.equip.main.type].cat !== 'weapon') || (p.equip.off && !['shield', 'weapon'].includes(FE.GEAR[p.equip.off.type].cat)) || (p.equip.body && FE.GEAR[p.equip.body.type].cat !== 'armor')) fail(`模擬 seed${seed} 第${i}步 裝備穿錯位置`);
     if (!Number.isFinite(game.weight())) fail(`模擬 seed${seed} 重量算不出來`);
     // 角色的狀態永遠合法：生命上限照公式、屬性不超過上限、沒分配的點數不是負的、技能等級 0～20 而且次數沒超過門檻
     if (p.maxHp !== FE.Char.maxHp(p, game.level) || p.hp > p.maxHp || p.hp < 1) fail(`模擬 seed${seed} 第${i}步 生命 ${p.hp}/${p.maxHp}，公式是 ${FE.Char.maxHp(p, game.level)}`);
@@ -2317,9 +2317,22 @@ function testCharacter() {
     r = range(500);
     ok(r[0] === 3 && r[1] === 6, `力量 8（-1）拿長劍一般攻擊的傷害該是 3～6，量到 ${r}`);
     p.equip.main = G.make('dagger', 0, g.nextGearId++);
-    p.attr.str = 1; // 修正值 -5：短刀 3＋0～3 再 -5，最少 1
+    p.attr.str = 1; // 修正值 -5，但短刀取力量與敏捷較高者（敏捷 13 是 +1）：(3＋0～3＋1)÷2 進位 ＝ 2～4
     r = range(500);
-    ok(r[0] === 1 && r[1] === 1, `力量 1 拿短刀傷害該是最少 1，量到 ${r}`);
+    ok(r[0] === 2 && r[1] === 4, `力量 1、敏捷 13 拿短刀該是 2～4（靈巧取較高者再 ÷2 進位），量到 ${r}`);
+    p.attr.str = 16;
+    p.attr.dex = 13; // 力量 +3 較高：(3＋0～3＋3)÷2 進位 ＝ 3～5
+    r = range(500);
+    ok(r[0] === 3 && r[1] === 5, `力量 16 拿短刀該是 3～5，量到 ${r}`);
+    p.attr.str = 8;
+    p.attr.dex = 18; // 敏捷 +4 較高：(3＋0～3＋4)÷2 進位 ＝ 4～5
+    r = range(500);
+    ok(r[0] === 4 && r[1] === 5, `敏捷 18 拿短刀該是 4～5，量到 ${r}`);
+    p.attr.str = 1;
+    p.attr.dex = 1; // 兩個都 -5：最少 1
+    r = range(500);
+    ok(r[0] === 1 && r[1] === 1, `力量、敏捷都 1 拿短刀傷害該是最少 1，量到 ${r}`);
+    p.attr.dex = 13;
     p.attr.str = 12;
     // 重擊也加
     const seen = [];
@@ -2642,6 +2655,161 @@ function testCharacter() {
     p.skills.armor.lv = 0;
     p.equip.body = G.make('heavy', 0, 93);
     ok(near(G.playerDefense(p).dodge, 0.12 - 0.05) && (p.skills.armor.lv = 19, near(G.playerDefense(p).dodge, 0.12 - 0.05)) && (p.skills.armor.lv = 20, near(G.playerDefense(p).dodge, 0.12)), '重甲扣 5% 閃避，20 級起不扣');
+  }
+  // 12. 短刀是靈巧武器（力量與敏捷取較高者、算完 ÷2 進位）；雙持：副手也能拿短刀，按 1 兩下各扣 2，重擊只用主手
+  {
+    const outside = (g) => {
+      const w = g.world;
+      for (const ch of w.chunks) for (let y = 0; y < ch.cells.length; y++) for (let x = 0; x < ch.cells[y].length; x++) {
+        const X = ch.x0 + x, Y = ch.y0 + y;
+        if (w.passable(X, Y) && !w.villageAt(X, Y) && !w.inBuffer(X, Y) && w.passable(X + 1, Y) && w.heightOk(X, Y, X + 1, Y)) return { x: X, y: Y };
+      }
+      return null;
+    };
+    const setup = () => {
+      const g = mk(50, 'ranger', ['dagger']);
+      const p = g.player;
+      const at = outside(g);
+      p.x = at.x; p.y = at.y;
+      const m = arena(g, 'RUNTIME');
+      m.type = 'RUNTIME';
+      m.atk = 0;
+      p.equip.main.dur = p.equip.main.max = 1000;
+      return { g, p, m };
+    };
+    const lines = (g, re) => g.log.filter((l) => re.test(l.text));
+    const modOf = (l) => { const r = /擲出 \d+([+-]\d+)?：/.exec(l.text); return r && r[1] ? Number(r[1]) : 0; };
+    // 重擊：(攻擊力×2＋1～5＋較高修正值)÷2 進位。遊俠敏捷 16（+3）、力量 12（+1）：(6＋1～5＋3)÷2 ＝ 5～7
+    {
+      const { g, p, m } = setup();
+      const seen = [];
+      FE.Combat.hook = (e) => { if (e.by === 'player' && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted && !e.counter) seen.push(e.dmg); };
+      for (let i = 0; i < 400; i++) { p.hp = p.maxHp = 1e9; p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, 'deep', { noCounter: true }); }
+      FE.Combat.hook = hook0;
+      ok(Math.min(...seen) === 5 && Math.max(...seen) === 7, `短刀重擊該是 5～7（照重擊公式算完 ÷2 進位），量到 ${Math.min(...seen)}～${Math.max(...seen)}`);
+    }
+    // 雙持的一般攻擊：兩下各擲一次、各扣 2，各算一次短刀技能、各磨損一次
+    {
+      const { g, p, m } = setup();
+      p.hp = p.maxHp = 1e9;
+      g.strike('attack', m);
+      const base = modOf(lines(g, /^你攻擊/)[0]);
+      const u0 = uses(p, 'dagger');
+      p.equip.off = G.make('dagger', 0, g.nextGearId++);
+      p.equip.off.dur = p.equip.off.max = 1000;
+      const d0 = p.equip.main.dur;
+      g.log.length = 0;
+      g.strike('attack', m);
+      const a = lines(g, /^你攻擊/);
+      const b = lines(g, /^你用副手攻擊/);
+      ok(a.length === 1 && b.length === 1, `雙持按 1 該主手、副手各出手一次：${a.length}、${b.length}`);
+      ok(a.length && b.length && modOf(a[0]) === base - 2 && modOf(b[0]) === base - 2, `雙持兩下的擲骰各扣 2：單手 ${base}、主手 ${a.length && modOf(a[0])}、副手 ${b.length && modOf(b[0])}`);
+      ok(uses(p, 'dagger') === u0 + 2, `兩把各算一次短刀技能：${uses(p, 'dagger') - u0}`);
+      ok(p.equip.main.dur === d0 - 1 && p.equip.off.dur === 999, `兩把各磨損一次：主手 ${d0 - p.equip.main.dur}、副手 ${1000 - p.equip.off.dur}`);
+      // 重擊只用主手、不扣減值
+      g.log.length = 0;
+      g.battle.cooldown = 0;
+      const u1 = uses(p, 'dagger');
+      g.strike('deep', m);
+      const dl = lines(g, /^你對.*重擊/);
+      ok(dl.length === 1 && lines(g, /^你用副手/).length === 0 && modOf(dl[0]) === base && uses(p, 'dagger') === u1 + 1 && p.equip.off.dur === 999, `重擊只用主手、不扣雙持減值：${dl.length} 行、擲骰 ${dl.length && modOf(dl[0])}（單手 ${base}）`);
+      // 副手也吃自己的命中加值（品質）
+      p.equip.off = G.make('dagger', 3, g.nextGearId++);
+      p.equip.off.dur = p.equip.off.max = 1000;
+      g.log.length = 0;
+      g.battle.cooldown = 0;
+      g.strike('attack', m);
+      const a2 = lines(g, /^你攻擊/)[0];
+      const b2 = lines(g, /^你用副手攻擊/)[0];
+      ok(a2 && b2 && modOf(b2) - modOf(a2) === 3, `副手優秀短刀的命中加值 +3：主手 ${a2 && modOf(a2)}、副手 ${b2 && modOf(b2)}`);
+    }
+    // 目標在第一下倒下，第二下就不出手
+    {
+      const { g, p, m } = setup();
+      p.equip.off = G.make('dagger', 0, g.nextGearId++);
+      p.equip.off.dur = p.equip.off.max = 1000;
+      let early = 0;
+      let both = 0;
+      let bad = 0;
+      let ev = [];
+      FE.Combat.hook = (e) => { if (e.by === 'player') ev.push(e); };
+      for (let i = 0; i < 300; i++) {
+        p.hp = p.maxHp = 1e9;
+        const t = arena(g, 'RUNTIME');
+        t.hp = 1;
+        ev = [];
+        g.battle.targetId = null;
+        g.strike('attack', t);
+        const main = ev.filter((e) => !e.counter);
+        if (main[0] && main[0].killed) { if (main.length !== 1) bad++; early++; } else if (main.length === 2) both++;
+        else if (main.length !== 2) bad++;
+      }
+      FE.Combat.hook = hook0;
+      ok(early > 20 && both > 20 && bad === 0, `第一下打倒就不出第二下：第一下倒 ${early} 次、兩下都出 ${both} 次、不對 ${bad} 次`);
+    }
+    // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手觸發過，副手擲出 6～10 只算命中；主手沒觸發，副手照常觸發
+    {
+      const { g, p, m } = setup();
+      m.type = 'CLIFF'; // 沒有自己的反擊機率，反擊只可能來自必定反擊
+      p.equip.off = G.make('dagger', 0, g.nextGearId++);
+      let ev = [];
+      FE.Combat.hook = (e) => { if (e.by === 'player' && !e.counter) ev.push(e); };
+      let firstThenHard = 0;
+      let freshHard = 0;
+      let bad = 0;
+      let wordBad = 0;
+      for (let i = 0; i < 600; i++) {
+        p.hp = p.maxHp = 1e9;
+        p.equip.main.dur = p.equip.main.max = 1000;
+        p.equip.off.dur = p.equip.off.max = 1000;
+        m.hp = m.maxHp = 1e9;
+        ev = [];
+        g.log.length = 0;
+        g.strike('attack', m);
+        if (ev.length !== 2) { bad++; continue; }
+        const [a, b] = ev;
+        const forcedA = a.key === 'hard' && a.countered;
+        if (a.key === 'hard' && !a.countered) bad++;
+        if (forcedA && b.key === 'hard') {
+          firstThenHard++;
+          if (b.countered) bad++;
+          const bl = g.log.find((l) => /^你用副手攻擊/.test(l.text));
+          if (!bl || /必定反擊/.test(bl.text) || !/命中/.test(bl.text)) wordBad++;
+        } else if (!forcedA && b.key === 'hard') {
+          freshHard++;
+          if (!b.countered) bad++;
+        } else if (b.countered) bad++;
+      }
+      FE.Combat.hook = hook0;
+      ok(firstThenHard > 10 && freshHard > 10 && bad === 0 && wordBad === 0, `必定反擊最多一次：主手觸發後副手 6～10 ${firstThenHard} 次、主手沒觸發副手 6～10 ${freshHard} 次、不對 ${bad}、訊息不對 ${wordBad}`);
+    }
+    // 副手短刀與盾牌互斥；弓箭佔兩手；非短刀的武器不能放副手
+    {
+      const g = mk(51, 'warrior', ['sword', 'shield', 'herb']);
+      const p = g.player;
+      const dag = G.make('dagger', 0, g.nextGearId++);
+      g.bagAddGear(dag);
+      g.equipItem(p.bag.find((e) => e.gear === dag), true);
+      ok(p.equip.off === dag && p.bag.some((e) => e.gear && e.gear.type === 'shield') && !G.shieldOf(p) && G.playerDefense(p).blockMax === 0, '副手拿短刀，盾牌該放回背包、不能格擋');
+      const sh = p.bag.find((e) => e.gear && e.gear.type === 'shield');
+      g.equipItem(sh);
+      ok(p.equip.off && p.equip.off.type === 'shield' && p.bag.some((e) => e.gear === dag), '副手拿盾牌，短刀該放回背包');
+      const sw2 = G.make('sword', 0, g.nextGearId++);
+      g.bagAddGear(sw2);
+      g.equipItem(p.bag.find((e) => e.gear === sw2), true);
+      ok(p.equip.main === sw2 && p.equip.off.type === 'shield', '長劍不能放副手，照舊放主手');
+      p.equip.main = G.make('bow', 0, g.nextGearId++);
+      const t0 = g.turn;
+      g.equipItem(p.bag.find((e) => e.gear === dag), true);
+      ok(p.equip.off.type === 'shield' && g.turn === t0 && p.bag.some((e) => e.gear === dag), '拿著弓箭不能把短刀放副手');
+      // 拿弓箭時副手的短刀放回背包
+      p.equip.main = p.equip.main.type === 'bow' ? G.make('sword', 0, g.nextGearId++) : p.equip.main;
+      p.equip.off = G.make('dagger', 0, g.nextGearId++);
+      const bow = G.make('bow', 0, g.nextGearId++);
+      g.bagAddGear(bow);
+      g.equipItem(p.bag.find((e) => e.gear === bow));
+      ok(p.equip.main === bow && p.equip.off === null, '拿弓箭時副手的短刀該放回背包');
+    }
   }
   FE.Combat.hook = hook0;
 }

@@ -74,7 +74,7 @@
   // 背包裡選第 i 樣：平常是用（吃藥草、穿上或拿起裝備），切到「丟掉」就是丟掉
   function useBag(i) {
     if (FE.UI.bagDrop()) dispatch('背包：丟掉', () => game.dropItem(i));
-    else dispatch('背包', () => game.useItem(i));
+    else dispatch('背包', () => game.useItem(i, FE.UI.bagOff()));
   }
 
   function toggleWindow(name) {
@@ -153,6 +153,11 @@
       FE.UI.toggleBagDrop();
       return;
     }
+    if (FE.UI.win() === 'backpack' && k === 'v') {
+      e.preventDefault();
+      FE.UI.toggleBagOff();
+      return;
+    }
     if (FE.UI.win() === 'backpack' && /^[1-9]$/.test(k)) {
       e.preventDefault();
       useBag(Number(k) - 1);
@@ -205,6 +210,7 @@
   document.getElementById('overlay').addEventListener('click', (e) => {
     const use = e.target.closest && e.target.closest('[data-use]');
     if (e.target.closest && e.target.closest('[data-dropmode]')) FE.UI.toggleBagDrop();
+    else if (e.target.closest && e.target.closest('[data-offmode]')) FE.UI.toggleBagOff();
     else if (use && !use.disabled) useBag(Number(use.dataset.use));
     else if (e.target.id === 'overlay' || (e.target.dataset && 'close' in e.target.dataset)) FE.UI.closeWindow();
     else if (e.target.dataset && e.target.dataset.open) FE.UI.openWindow(e.target.dataset.open);

@@ -81,9 +81,11 @@
   // ---- 冒險者的裝備數字 ----
   const equipped = (p) => [p.equip.main, p.equip.off, p.equip.body].filter(Boolean);
   const atkOf = (p) => (p.equip.main ? def(p.equip.main).atk : C.BARE_ATK);
-  const hitBonus = (p) => (p.equip.main ? qual(p.equip.main).hit : 0);
-  // 主手武器的清除等級（普通 0 ～ 傑作 5、傳說物 6），抗性門檻看它；空手是 0
-  const clearLevel = (p) => (p.equip.main ? qual(p.equip.main).clear : 0);
+  // w 是哪一把武器（沒給就是主手；雙持時副手的短刀要傳進來）
+  const wOf = (p, w) => (w === undefined ? p.equip.main : w);
+  const hitBonus = (p, w) => (wOf(p, w) ? qual(wOf(p, w)).hit : 0);
+  // 武器的清除等級（普通 0 ～ 傑作 5、傳說物 6），抗性門檻看它；空手是 0
+  const clearLevel = (p, w) => (wOf(p, w) ? qual(wOf(p, w)).clear : 0);
   // 身上防具的物理減傷（乘品質倍率，四捨五入）
   const physReduce = (p) => (p.equip.body ? Math.round(def(p.equip.body).phys * qual(p.equip.body).armor) : 0);
   const magicReduce = (p) => (p.equip.body ? Math.round(def(p.equip.body).magic * qual(p.equip.body).armor) : 0);
@@ -126,8 +128,8 @@
     return body + (loadTier(p) >= 1 ? C.OVER_TICKS : 0);
   }
   // 出手擲 d20 的角色加減：主手武器的命中加值，加敏捷修正值與武器技能（每 5 級 +1），扣掉超重的減值
-  function hitMod(p) {
-    return hitBonus(p) + FE.Char.attrMod(p, 'dex') + FE.Char.skillHit(p) - loadTier(p);
+  function hitMod(p, w) {
+    return hitBonus(p, w) + FE.Char.attrMod(p, 'dex') + FE.Char.skillHit(p, w) - loadTier(p);
   }
 
   // ---- 磨損 ----
@@ -159,7 +161,7 @@
     const d = def(g);
     const q = qual(g);
     const w = `重 ${d.weight}`;
-    if (d.cat === 'weapon') return `攻擊力 ${d.atk}${q.hit ? `、命中 +${q.hit}` : ''}、${w}`;
+    if (d.cat === 'weapon') return `攻擊力 ${d.atk}${q.hit ? `、命中 +${q.hit}` : ''}、${w}${d.finesse ? '、靈巧（傷害吃力量或敏捷較高的，再減半）' : ''}`;
     if (d.cat === 'armor') {
       const ex = (d.ticks ? `、每個動作多 ${d.ticks} 刻` : '') + (d.dodge ? `、閃避 ${Math.round(d.dodge * 100)}%` : '');
       return `物理減傷 ${Math.round(d.phys * q.armor)}、魔法減傷 ${Math.round(d.magic * q.armor)}、${w}${ex}`;

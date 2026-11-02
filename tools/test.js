@@ -4402,14 +4402,14 @@ let growthChecks = 0;
 const jobSecs = [];    // 主行程：每項工作的耗時
 function runJob(id) {
   const [kind, a, b] = id.split(':');
-  const steps = QUICK ? 600 : 1500;
+  const steps = QUICK ? 1000 : 1500;
   if (kind === 'gen') {
     const [lo, hi] = a.split('-').map(Number);
     runGen(lo, hi);
   } else if (kind === 'sim') simResults.push(simulate(Number(b), { steps, cls: a }));
   else if (kind === 'lazy') simResults.push(simulate(SEEDS[0], { steps, lazy: true }));
   else if (kind === 'sim4') {
-    simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 1500 : 3000, untilChunks: QUICK ? 6 : 15, maxActions: QUICK ? 3000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
+    simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 2000 : 3000, untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
   else if (kind === 'unit') UNITS[a]();
   else if (kind === 'arena') runArena(a);
@@ -4468,6 +4468,8 @@ function buildJobs() {
     if (QUICK) {
       for (const cls of BOT_CLASSES) add(`sim:${cls}:${SEEDS[0]}`, 20);
       add('sim4:warrior:' + SEEDS[0], 40);
+      add('sim4:mage:' + SEEDS[0], 40);
+      add('gen:1-4', 30);
     } else {
       for (let lo = 1; lo <= GEN_SEEDS; lo += 10) add(`gen:${lo}-${lo + 9}`, 40);
       for (const cls of BOT_CLASSES) for (const seed of SEEDS) add(`sim:${cls}:${seed}`, 30);

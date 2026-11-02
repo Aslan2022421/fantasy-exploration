@@ -354,7 +354,7 @@
     }
 
     // 用背包裡的第 i 樣東西：藥草是吃，裝備是穿上或拿起（算一個動作，換下的放回背包）
-    // toOff：短刀放副手（雙持）；不是短刀就照平常的位置
+    // toOff：武器放副手（雙持；暫時弓箭以外的武器都可以）；弓箭照平常放主手
     useItem(i, toOff) {
       const e = this.bagList()[i];
       if (!e) return;
@@ -371,7 +371,8 @@
 
     // 穿上或拿起背包裡的一件裝備：武器放主手、盾牌放副手、防具穿在身上，換下的放回背包，算一個動作。
     // 雙手武器（長槍、弓箭）佔兩手：拿起來時副手的東西放回背包，拿著時副手拿不了東西
-    // 雙持：副手只能拿輕型武器（短刀），副手放了短刀就不能拿盾牌，反之亦然（副手只有一格，放進去就把原本的換下來）
+    // 雙持：副手暫時可以拿弓箭以外的任何武器（之後再定哪些只能單手、哪些要雙手），副手放了武器就不能拿盾牌，
+    // 反之亦然（副手只有一格，放進去就把原本的換下來）
     equipItem(entry, toOff) {
       const p = this.player;
       const g = entry.gear;
@@ -380,7 +381,7 @@
         this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
         return;
       }
-      const slot = d.cat === 'weapon' ? (toOff && d.light ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
+      const slot = d.cat === 'weapon' ? (toOff && FE.Gear.offOk(d) ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
       if (slot === 'off' && p.equip.main && FE.Gear.def(p.equip.main).twoHand) {
         const mn = FE.Gear.def(p.equip.main).name;
         this.say(`${mn}要用兩隻手拿，先換下${mn}才拿得了${d.cat === 'shield' ? '盾牌' : '副手的武器'}。`, 'sys');
@@ -755,14 +756,14 @@
       // 打怪的過程是在提供算力給創世神：每次出手跟走一步一樣累積算力（經驗值與打倒怪物的算力等打倒才結算）
       this.earn(C.COMPUTE_PER_ATTACK);
       if (kind === 'deep') this.battle.cooldown = C.DEEP_COOLDOWN;
-      // 拿著弓箭按 1、2 是徒手（弓箭要按 F 射擊）
-      const main = p.equip.main && FE.Gear.def(p.equip.main).ammo ? null : p.equip.main;
-      // 雙持：副手也拿著輕型武器（短刀）時，按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20；
+      // 拿著弓箭按 1、2 是拿弓打人：1d4 鈍擊（見 char.js 的 profile）；射擊要按 F
+      const main = p.equip.main;
+      // 雙持：副手也拿著武器時（暫時弓箭以外都能放副手），按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20；
       // 副手那一下不加屬性修正值（負的照扣）。重擊只用主手。目標在第一下倒下（或冒險者倒下）就不出第二下
       const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
       const dual = kind === 'attack' && !!off && !!main && !(extra && extra.reach);
-      // 攻擊動作的刻：輕型 8、一般 10、重型 12，減敏捷修正值（最少 6）；雙持沒有迅切時多 5 刻
-      const nick = dual && (FE.Char.mastery(p, main) === 'nick' || FE.Char.mastery(p, off) === 'nick');
+      // 攻擊動作的刻：輕型 8、一般 10、重型 12，減敏捷修正值（最少 6）；雙持時副手那把沒有迅切（短刀以外、或還沒解鎖）就多 5 刻
+      const nick = dual && FE.Char.mastery(p, off) === 'nick';
       const ticks = FE.Char.attackTicks(p, main) + (dual && !nick ? C.DUAL_TICKS : 0);
       // 牧師：每個動作第一下命中時，目標多受 1d8 神聖傷害（雙持只算第一下命中的）
       let holy = !!FE.Char.cls(p).holy;

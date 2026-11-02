@@ -594,13 +594,13 @@
       }</p>
       <ul class="equipped">${slot('主手', p.equip.main)}${slot('副手', p.equip.off)}${slot('身上', p.equip.body)}</ul>
       <p><button data-dropmode class="${drop ? 'on' : ''}">${drop ? '現在是「丟掉」：選到的整疊直接消失（按 X 切回）' : '切到「丟掉」（X）'}</button>
-      <button data-offmode class="${ui.bagOff ? 'on' : ''}">${ui.bagOff ? '現在短刀放副手（雙持，按 V 切回）' : '短刀改放副手（V）'}</button></p>
+      <button data-offmode class="${ui.bagOff ? 'on' : ''}">${ui.bagOff ? '現在武器放副手（雙持，按 V 切回）' : '武器改放副手（V）'}</button></p>
       <p class="dim">雙持：副手只能拿輕型武器（短刀）。按 1 攻擊會主手、副手各出手一次，副手那一下不加屬性修正值；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了短刀就不能拿盾牌；長槍、弓箭要用兩手。</p>`;
     $('backpack').innerHTML = list.length
       ? list
           .map((e, i) => {
             const can = drop ? e.id !== 'goods' : e.use;
-            const act = drop ? '丟掉' : e.id === 'gear' ? (ui.bagOff && e.gear && FE.Gear.def(e.gear).light ? '拿在副手' : '穿上或拿起') : '使用';
+            const act = drop ? '丟掉' : e.id === 'gear' ? (ui.bagOff && e.gear && FE.Gear.offOk(FE.Gear.def(e.gear)) ? '拿在副手' : '穿上或拿起') : '使用';
             const note = e.id === 'gear' && !e.use && !drop ? '放在背包裡，撞上礦脈或藥草就會用' : can ? act : '';
             return `<li><button data-use="${i}" ${can ? '' : 'disabled'}><kbd>${i + 1}</kbd>${esc(e.name)}${e.n > 1 ? ` ×${e.n}` : ''}${
               e.info ? ` <span class="dim">（${esc(e.info)}）</span>` : ''

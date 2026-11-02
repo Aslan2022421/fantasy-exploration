@@ -37,7 +37,7 @@ FE.CONFIG = {
   SKILL_DODGE: 0.01,    // 閃避技能每級，閃避機率 +1%
   SKILL_BLOCK: 0.02,    // 盾牌使用每級，格擋機率 +2%
   ARMOR_ACTS: 10,       // 穿中甲或重甲做幾個動作，穿甲行動算用一次
-  BARE_DMG: 1,          // 徒手（主手空著、拿著弓箭按 1）固定造成幾點鈍擊傷害（再加力量修正值，最少 1）；武器的傷害骰見 FE.GEAR
+  BARE_DMG: 1,          // 徒手（主手空著）固定造成幾點鈍擊傷害（再加力量修正值，最少 1）；武器的傷害骰見 FE.GEAR
   QUEST_EXP: 15,       // 一個任務的基本經驗值
   QUEST_GOLD: 10,       // 一個任務的基本金幣
   QUEST_STEPS_PER_EXP: 8,   // 送貨路程每幾步多 1 經驗值（路程變兩倍，獎勵不跟著翻倍）
@@ -157,6 +157,7 @@ FE.CONFIG = {
   DUAL_TICKS: 5,                          // 雙持的動作沒有迅切時多花幾刻
   DEEP_COOLDOWN: 3,                       // 重擊用完冷卻幾回合
   BASH_DIE: [1, 4],                       // 戰士盾擊的傷害骰（鈍擊，加力量修正值）
+  BOW_MELEE_DIE: [1, 4],                  // 拿弓近戰打人的傷害骰（鈍擊，加力量修正值；當臨時武器，沒有精通、不算技能）
   HOLY_DIE: [1, 8],                       // 牧師：每個動作第一下命中時，目標多受的神聖傷害
   HEAL_DIE: [1, 8],                       // 牧師治療：回 1d8＋魅力修正值（最少 1），只治自己
   HEAL_COOLDOWN: 3,                       // 治療用完冷卻幾回合
@@ -365,7 +366,8 @@ FE.QUALITIES = [
 // sold 商店有沒有賣（魔法衣袍只從掉落來，price 是賣回與修復用的暫定值）；drop 寶箱與怪物會不會掉
 FE.GEAR = {
   sword: { cat: 'weapon', name: '長劍', die: [1, 8], type: 'slash', versatile: 10, mastery: 'sap', weight: 2, price: 30, ore: 3, dur: 200, sold: true, drop: true },
-  spear: { cat: 'weapon', name: '長槍', die: [1, 10], type: 'pierce', heavy: true, reach: true, twoHand: true, mastery: 'push', weight: 3, price: 25, ore: 3, dur: 200, sold: true, drop: true },
+  // 長槍原本是雙手武器；暫時拿掉雙手限制（可配盾、可放副手），之後再定哪些武器只能單手、哪些要雙手
+  spear: { cat: 'weapon', name: '長槍', die: [1, 10], type: 'pierce', heavy: true, reach: true, mastery: 'push', weight: 3, price: 25, ore: 3, dur: 200, sold: true, drop: true },
   shortspear: { cat: 'weapon', name: '短矛', die: [1, 6], type: 'pierce', thrown: [4, 12], versatile: 8, mastery: 'sap', weight: 1, price: 20, ore: 3, dur: 200, sold: true, drop: true },
   dagger: { cat: 'weapon', name: '短刀', die: [1, 4], type: 'pierce', finesse: true, light: true, thrown: [4, 12], mastery: 'nick', weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
   bow: { cat: 'weapon', name: '弓箭', die: [1, 6], type: 'pierce', ammo: true, range: [5, 20], twoHand: true, mastery: 'vex', weight: 1, price: 30, dur: 200, sold: true, drop: true },

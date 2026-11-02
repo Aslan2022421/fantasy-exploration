@@ -232,11 +232,13 @@
     return null;
   }
   const isShopkeeper = (n) => !!n && (n.role === 'smith' || n.role === 'armorer');
+  // 能不能放副手（雙持）：暫時弓箭以外的武器都可以，之後再一把一把定哪些只能單手、哪些要雙手
+  const offOk = (d) => !!d && d.cat === 'weapon' && !d.ammo;
 
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
     equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, wear, repaired, durText, statText,
-    SHOPS, CAT_NAMES, shopOf, isShopkeeper,
+    SHOPS, CAT_NAMES, shopOf, isShopkeeper, offOk,
   };
 })();

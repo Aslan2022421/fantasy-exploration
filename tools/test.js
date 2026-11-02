@@ -1427,7 +1427,7 @@ function testGear() {
     // 第二十八版：武器的傷害骰、傷害種類、特質、精通、重量、價錢
     const wd = (t) => [W[t].die.join('d'), W[t].type, W[t].mastery, W[t].weight, W[t].price].join('/');
     ok(wd('sword') === '1d8/slash/sap/2/30' && W.sword.versatile === 10 && !W.sword.twoHand, `長劍 ${wd('sword')}`);
-    ok(wd('spear') === '1d10/pierce/push/3/25' && W.spear.heavy && W.spear.reach && W.spear.twoHand && !W.spear.versatile, `長槍 ${wd('spear')}`);
+    ok(wd('spear') === '1d10/pierce/push/3/25' && W.spear.heavy && W.spear.reach && !W.spear.twoHand && !W.spear.versatile, `長槍 ${wd('spear')}（雙手限制暫時拿掉）`);
     ok(wd('shortspear') === '1d6/pierce/sap/1/20' && W.shortspear.versatile === 8 && W.shortspear.thrown.join() === '4,12' && W.shortspear.ore === 3 && W.shortspear.dur === 200 && W.shortspear.sold && W.shortspear.drop, `短矛 ${wd('shortspear')}`);
     ok(wd('dagger') === '1d4/pierce/nick/1/15' && W.dagger.finesse && W.dagger.light && W.dagger.thrown.join() === '4,12', `短刀 ${wd('dagger')}`);
     ok(wd('bow') === '1d6/pierce/vex/1/30' && W.bow.ammo && W.bow.range.join() === '5,20' && W.bow.twoHand && W.bow.sold && W.bow.drop && !W.bow.ore, `弓箭 ${wd('bow')}`);
@@ -1894,13 +1894,12 @@ function testGear() {
     g.bagAddGear(bow);
     g.useItem(p.bag.findIndex((e) => e.gear === bow));
     ok(p.equip.main === bow && p.equip.off === null && p.bag.some((e) => e.gear === sh2), '拿弓箭時副手的盾牌該放回背包');
-    // 長槍也要用兩手
+    // 長槍的雙手限制暫時拿掉：拿著長槍可以配盾
     const sp2 = G.make('spear', 0, g.nextGearId++);
     g.bagAddGear(sp2);
     g.useItem(p.bag.findIndex((e) => e.gear === sp2));
-    const t2 = g.turn;
     g.useItem(p.bag.findIndex((e) => e.gear === sh2));
-    ok(p.equip.main === sp2 && p.equip.off === null && g.turn === t2 && g.log[0].text.includes('長槍要用兩隻手拿'), `拿著長槍不能拿盾牌：${g.log[0].text}`);
+    ok(p.equip.main === sp2 && p.equip.off === sh2, `拿著長槍可以配盾（暫時）：${g.log[0].text}`);
     g.useItem(p.bag.findIndex((e) => e.gear === bow));
     const turn1 = g.turn;
     g.useItem(p.bag.findIndex((e) => e.gear === sh2));
@@ -2666,6 +2665,8 @@ function testCharacter() {
     p.equip.main.dur = p.equip.main.max = 1e9;
     for (let i = 0; i < 10; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, weapon: null });
     ok(Object.keys(FE.SKILLS).every((k) => k === 'sword' || uses(p, k) === 0) && uses(p, 'sword') === 60, '徒手出手不該練任何技能');
+    for (let i = 0; i < 10; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
+    ok(Object.keys(FE.SKILLS).every((k) => k === 'sword' || uses(p, k) === 0), '拿弓近戰打人不該練任何技能');
     for (let i = 0; i < 7; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, mode: 'shoot', range: [5, 20] });
     ok(uses(p, 'bow') === 7 && uses(p, 'shoot') === 7, `射擊 7 次：弓箭 ${uses(p, 'bow')}、射擊 ${uses(p, 'shoot')}`);
     for (let i = 0; i < 5; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, mode: 'bash' });
@@ -2898,11 +2899,11 @@ function testCharacter() {
       const sw2 = G.make('sword', 0, g.nextGearId++);
       g.bagAddGear(sw2);
       g.equipItem(p.bag.find((e) => e.gear === sw2), true);
-      ok(p.equip.main === sw2 && p.equip.off.type === 'shield', '長劍不能放副手，照舊放主手');
+      ok(p.equip.off === sw2 && p.bag.some((e) => e.gear && e.gear.type === 'shield'), '長劍也能放副手（暫時弓箭以外都可以），盾牌放回背包');
       p.equip.main = G.make('bow', 0, g.nextGearId++);
       const t0 = g.turn;
       g.equipItem(p.bag.find((e) => e.gear === dag), true);
-      ok(p.equip.off.type === 'shield' && g.turn === t0 && p.bag.some((e) => e.gear === dag), '拿著弓箭不能把短刀放副手');
+      ok(p.equip.off === sw2 && g.turn === t0 && p.bag.some((e) => e.gear === dag), '拿著弓箭不能把短刀放副手');
       // 拿弓箭時副手的短刀放回背包
       p.equip.main = p.equip.main.type === 'bow' ? G.make('sword', 0, g.nextGearId++) : p.equip.main;
       p.equip.off = G.make('dagger', 0, g.nextGearId++);
@@ -3113,12 +3114,16 @@ function testCombat28() {
     ok(Ch.profile(p, p.equip.main, 'melee').die.join() === '1,8' && Ch.profile(p, p.equip.main, 'throw').die.join() === '1,6', '短矛：副手空著 1d8，投擲 1d6');
     p.equip.off = G.make('shield', 0, 21);
     ok(Ch.profile(p, p.equip.main, 'melee').die.join() === '1,6', '短矛：拿盾牌 1d6');
-    // 輕型：副手只能拿輕型（短刀）；短矛不能放副手
+    // 副手：暫時弓箭以外的武器都能放副手；弓箭選「放副手」照樣拿在主手
     p.equip.off = null;
     const ss = G.make('shortspear', 0, 22);
     g.bagAddGear(ss);
     g.equipItem(p.bag.find((e) => e.gear === ss), true);
-    ok(p.equip.main === ss && !p.equip.off, '短矛不是輕型，選「放副手」也該拿在主手');
+    ok(p.equip.off === ss, '短矛選「放副手」該拿在副手');
+    const bw = G.make('bow', 0, 23);
+    g.bagAddGear(bw);
+    g.equipItem(p.bag.find((e) => e.gear === bw), true);
+    ok(p.equip.main === bw && !p.equip.off, '弓箭選「放副手」該拿在主手，副手的東西放回背包');
   }
 
   // 5. 觸及：長槍按 1 時旁邊沒有目標，打直線 2 格外、中間是空格的目標；中間有東西、斜的都打不到；不會被反擊
@@ -3220,11 +3225,12 @@ function testCombat28() {
     p.bag = p.bag.filter((e) => e.id !== 'arrow');
     const t0 = g.turn;
     ok(!g.fireAt(m2) && g.turn === t0 && g.log[0].text.includes('沒有箭矢'), '沒有箭不能射');
-    // 拿著弓箭按 1 是徒手（1＋力量修正值，鈍擊）
+    // 拿著弓箭按 1 是拿弓打人：1d4 鈍擊＋力量修正值
     m2.x = p.x + 1; m2.y = p.y;
     const ev = events(() => { for (let i = 0; i < 40; i++) g.act('attack'); });
     const pe = ev.filter((e) => e.by === 'player' && clean(e));
-    ok(pe.length > 5 && pe.every((e) => e.dmg === Math.max(1, C.BARE_DMG + Ch.attrMod(p, 'str')) && e.dmgType === 'blunt' && e.weapon === null), `拿弓箭按 1 是徒手：${spread(pe.map((e) => e.dmg))}`);
+    const sm = Ch.attrMod(p, 'str');
+    ok(pe.length > 5 && pe.every((e) => e.dmg >= Math.max(1, 1 + sm) && e.dmg <= Math.max(1, 4 + sm) && e.dmgType === 'blunt'), `拿弓箭按 1 是 1d4 鈍擊＋力量：${spread(pe.map((e) => e.dmg))}`);
     // 箭矢分品質：買來的一捆疊進同品質的；射擊先用品質高的
     g.bagAddGear(G.make('arrow', 2, 99));
     g.bagAdd('arrow', 3, { q: 0 });

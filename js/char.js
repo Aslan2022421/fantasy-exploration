@@ -89,6 +89,11 @@
       Object.assign(out, { hit: dex - load, dmg: str, attr: str, clear: 0, pierce: 0 });
       return out;
     }
+    if (mode === 'melee' && d.ammo) {
+      // 拿弓近戰打人：當臨時武器，1d4 鈍擊＋力量修正值；沒有精通、不算技能，命中只加敏捷
+      Object.assign(out, { die: C.BOW_MELEE_DIE, type: 'blunt', hit: dex - load, dmg: str, attr: str, crit: critMin(p, null), clear: 0, pierce: 0 });
+      return out;
+    }
     out.type = d.type;
     out.mastery = mastery(p, w);
     if (mode === 'spell') {

@@ -7,8 +7,9 @@
 // 第二十五版：新的可達性檢查跟全世界檢查的結果一致、品質倍率與四捨五入、清除等級與抗性門檻、防具減傷至少吃 1 點、
 // 磨損與壞掉、鐵匠／武器匠／盔甲匠的買修打造賣、盾牌歸盔甲匠、負重兩段減值、打造與掉落的品質範圍。
 // 機器人會買防具與盾牌、穿上、耐久低時回去修、錢夠時換更好的品質、超重時賣礦石或丟東西。
-// 另外量測：各世界等級機器人打倒小怪物、中型怪物平均用了幾下，以及主手武器清除等級的中間值（校準怪物血量的世界等級加成用），
-// 和沒有防具與穿重甲時冒險者平均每下受到多少傷害。
+// 另外量測：競技場（各職業、世界等級 1～7、角色等級 1／5／10／15 打倒小怪物、中型怪物平均用了幾下和被打一下的平均傷害，校準怪物血量的世界等級加成用）、
+// 沒有防具與穿重甲時冒險者平均每下受到多少傷害。
+// 第二十九版：種族與體型、技能經驗、屬性效果、升級表、擴充武器第一批與弩矢、負重改磅數的場景檢查在 testGrowth29。
 // 只跑四人等效模擬（調數字用）：node tools/test.js sim4
 // 第二十九版：測試分成很多項「工作」（生成統計的種子區間、每一場模擬、每一組場景檢查、競技場量測），
 // 用子行程同時跑（同時幾個看環境變數 FE_JOBS，預設 4），最後把各項結果合起來印報告，並印出每一段耗時。
@@ -38,7 +39,7 @@ for (const f of ['config', 'rng', 'world', 'checker', 'bugs', 'steading', 'char'
 }
 const C = FE.CONFIG;
 // 第二十六版：沒指定職業的 game.start() 給中性角色（場景測試與對照組用）：六項屬性都是 10（修正值 0）、沒有技能、
-// 裝備照第二十五版（普通長劍、沒有防具與盾牌）、背包空的、沒有金幣，生命上限 30、負重上限 12，
+// 裝備照第二十五版（普通長劍、沒有防具與盾牌）、背包空的、沒有金幣，生命上限 30、能背 150 磅（力量 10）、普通體型的人類（70,000），
 // 這樣舊的場景檢查（傷害、閃避 10%、出手加減⋯⋯）數字不變。要測職業就明確傳 { cls, picks }
 function neutralChar(g) {
   const p = g.player;
@@ -206,10 +207,9 @@ function compareReach(world, r, monsters, res) {
 }
 
 // ---- 戰鬥統計 ----
-// 量測：on 時才記（機器人模擬）；kills[世界等級] = { small: [幾下...], mid: [...] }，clear[世界等級] = [每個動作時主手武器的清除等級...]；
-// cond 是對照組的名字（'none' 沒有防具、'heavy' 穿重甲），armorCmp[cond] = 怪物出手打冒險者的次數與總傷害
-// 第二十六版起 kills、clear、taken 再依職業分開（measure.cls 是目前模擬的職業；中性角色的模擬沒有職業，不記）
-const measure = { on: false, hits: new Map(), kills: {}, clear: {}, taken: {}, cls: null, cond: null, armorCmp: {} };
+// 量測：on 時才記（機器人模擬）；cond 是對照組的名字（'none' 沒有防具、'heavy' 穿重甲），armorCmp[cond] = 怪物出手打冒險者的次數與總傷害
+// （第二十九版起，打倒怪物要幾下和各職業被打一下的傷害改在競技場量，見 runArena，不再從世界模擬統計）
+const measure = { on: false, cond: null, armorCmp: {} };
 const combat = { player: {}, monster: {}, soldier: {}, reduced: 0, soldierHits: 0, onSoldier: 0, dodged: 0, blocked: 0, resisted: 0, crit: 0, counters: 0, opportunity: 0, opportunityHit: 0, chain: 0, negative: 0, events: 0, pdmg: 0, mdmg: 0, pn: 0, mn: 0 };
 FE.Combat.hook = (e) => {
   combat.events++;
@@ -229,26 +229,6 @@ FE.Combat.hook = (e) => {
   // 對照組：怪物出手打冒險者，每一下受到的傷害
   if (measure.on && measure.cond && e.by === 'monster' && e.d && e.d.equip) {
     const r = measure.armorCmp[measure.cond] || (measure.armorCmp[measure.cond] = { n: 0, dmg: 0, hit: 0 });
-    r.n++;
-    r.dmg += e.dmg;
-    if (e.dmg > 0) r.hit++;
-  }
-  // 量測：冒險者自己出手（不含反擊）打同一隻怪物幾下；冒險者打倒牠時記下（世界等級看怪物生成時的 wl）
-  if (measure.on && e.by === 'player') {
-    if (!e.counter) measure.hits.set(e.d.id, (measure.hits.get(e.d.id) || 0) + 1);
-    if (e.killed) {
-      const tier = e.d.tier === 'small' ? 'small' : 'mid';
-      if (measure.cls) {
-        const byCls = measure.kills[measure.cls] || (measure.kills[measure.cls] = {});
-        const r = byCls[e.d.wl] || (byCls[e.d.wl] = { small: [], mid: [] });
-        r[tier].push(measure.hits.get(e.d.id) || 0);
-      }
-      measure.hits.delete(e.d.id);
-    }
-  }
-  // 各職業：怪物出手打冒險者，每一下受到的傷害（只算職業模擬）
-  if (measure.on && measure.cls && !measure.cond && e.by === 'monster' && e.d && e.d.equip) {
-    const r = measure.taken[measure.cls] || (measure.taken[measure.cls] = { n: 0, dmg: 0, hit: 0 });
     r.n++;
     r.dmg += e.dmg;
     if (e.dmg > 0) r.hit++;
@@ -767,8 +747,6 @@ function simulate(seed, opts) {
   const firstWL = [null, null, null]; // 第一次進動盪、失序時的世界等級
   const byWL = {};                    // 世界等級 → { n: 動作數, s: [安穩, 動盪, 失序] 的動作數 }
   measure.on = !lazy;
-  measure.cls = opts.cls || null;
-  measure.hits.clear();
   const stopAt = (i) => (opts.untilChunks ? i >= opts.maxActions || (i >= opts.minActions && game.world.chunks.length >= opts.untilChunks) : i >= opts.steps);
   let i = 0;
   for (; !stopAt(i); i++) {
@@ -799,7 +777,6 @@ function simulate(seed, opts) {
     maxLoad = Math.max(maxLoad, game.weight() / game.carryLimit());
     const wl = FE.Stability.worldLevel(game);
     const rec = byWL[wl] || (byWL[wl] = { n: 0, s: [0, 0, 0], chaosAt: null });
-    if (measure.on && measure.cls) ((measure.clear[measure.cls] || (measure.clear[measure.cls] = {}))[wl] || (measure.clear[measure.cls][wl] = [])).push(FE.Gear.clearLevel(p));
     if (opts.cond === 'heavy' && p.equip.body) p.equip.body.dur = p.equip.body.max;
     // 裝備的狀態永遠合法：耐久在 1～上限之間、穿的位置對、重量算得出來
     for (const g of FE.Gear.equipped(p)) if (!(g.dur >= 1 && g.dur <= g.max)) fail(`模擬 seed${seed} 第${i}步 ${FE.Gear.name(g)} 耐久 ${g.dur}/${g.max}`);
@@ -851,7 +828,6 @@ function simulate(seed, opts) {
   }
   const steps = i;
   measure.on = false;
-  measure.cls = null;
   measure.cond = null;
   verifyReach = verify0;
   const syncCalls = soldierCalls.n; // 存檔讀回來的遊戲還會再玩幾步，先記下這個遊戲的士兵回合數
@@ -894,7 +870,8 @@ function simulate(seed, opts) {
     hp: `${game.player.maxHp}（Lv${game.level}）`,
     attr: FE.ATTRS.map((a) => `${a.name}${game.player.attr[a.key]}`).join(' '),
     skills: Object.keys(FE.SKILLS).map((k) => `${FE.SKILLS[k].name}${game.player.skills[k].lv}`).join(' '),
-    char: `${FE.PLAYER_RACES[game.player.race].name}（體型 ${game.player.size}）Lv${game.level}`,
+    char: `${FE.PLAYER_RACES[game.player.race].name}（體型 ${game.player.size}）Lv${game.level} 經驗值 ${game.exp}`,
+    skillExp: Object.keys(FE.SKILLS).filter((k) => game.player.skills[k].lv > 0 || game.player.skills[k].n > 0).map((k) => { const s = game.player.skills[k]; let t = s.n; for (let l = 0; l < s.lv; l++) t += FE.Char.skillNeed(l); return `${FE.SKILLS[k].name}${Math.round(t)}`; }).join(' '),
     weapon: `${game.player.equip.main ? FE.Gear.name(game.player.equip.main) : '徒手'}（${game.attackText()}）${game.bagCount('arrow') ? `、箭矢 ${game.bagCount('arrow')}` : ''}`,
     armor: `${game.player.equip.body ? FE.Gear.name(game.player.equip.body) : '無'}／${game.player.equip.off ? FE.Gear.name(game.player.equip.off) : '無盾'}`,
     weight: `${game.weight()}/${game.carryLimit()}`,
@@ -3711,9 +3688,16 @@ UNITS.combat28 = () => { try { testCombat28(); } catch (e) { fail('戰鬥測試�
 
 // ---- 工作：子行程各跑一項，主行程把結果合起來 ----
 // ---- 等級 L 角色與競技場（第二十九版）----
-// 技能等級取多少算「合理」：機器人跑出來的結果（單人 1500 個動作約 Lv 5～7、四人等效約 Lv 8～15 時，武器技能與格鬥/射擊 約是角色等級的一半，
-// 閃避、穿甲、盾牌使用約三分之一）；之後可以依模擬結果再調
-const LV_SKILL = { main: 0.5, side: 0.3 };
+// 技能等級取多少算「合理」：看機器人實際打出來的比例（戰士、法師單人 1500 個動作與四人等效 8000 個動作，各 2 個種子）：
+// 主武器技能的經驗約是角色累計經驗值的 2.5 倍、格鬥（近戰）或射擊（遠程）約 3 倍、穿甲約 2.5 倍（有穿中甲或重甲才算）、
+// 閃避約 0.5 倍、盾牌使用約 0.6 倍（有拿盾牌才算）。等級 L 的角色就拿 `FE.levelExp(L)` 乘這些倍率，換成技能等級
+const SKILL_PER_EXP = { main: 2.5, fight: 3, armor: 2.5, dodge: 0.5, shield: 0.6 };
+// 累積這麼多技能經驗是幾級
+function skillLevelFor(exp) {
+  let lv = 0;
+  while (exp >= FE.Char.skillNeed(lv)) exp -= FE.Char.skillNeed(lv++);
+  return lv;
+}
 // 世界等級對應的裝備品質（機器人的武器靠買、打造、掉落，品質大約隨世界等級升到做工好～優秀）：1→普通、2～3→做工好、4～5→精良、6 以上→優秀
 const qualityForWL = (wl) => Math.min(3, Math.floor(wl / 2));
 // 建立「等級 L 角色」：開新世界時挑職業的機器人起始裝備與種族，屬性點照職業主屬性與體質輪流分配（L−1 點，同 botPoints），
@@ -3730,16 +3714,18 @@ function makeLevelChar(cls, level, wl, seed) {
   const q = qualityForWL(wl);
   for (const g of FE.Gear.equipped(p)) g.q = q;
   const c = FE.CLASSES[cls];
-  const main = Math.floor(level * LV_SKILL.main);
-  const side = Math.floor(level * LV_SKILL.side);
+  const E = FE.levelExp(level);
+  const lv = (k) => ({ lv: skillLevelFor(E * SKILL_PER_EXP[k]), n: 0 });
   const w = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
-  for (const k of Object.keys(FE.SKILLS)) p.skills[k] = { lv: side, n: 0 };
+  p.skills.dodge = lv('dodge');
+  if (p.equip.off && FE.GEAR[p.equip.off.type].cat === 'shield') p.skills.shield = lv('shield');
+  if (p.equip.body && (p.equip.body.type === 'medium' || p.equip.body.type === 'heavy')) p.skills.armor = lv('armor');
   if (w) {
-    p.skills[w.skill] = { lv: main, n: 0 };
-    if (w.ammo || w.thrown) p.skills.shoot = { lv: main, n: 0 };
-    else p.skills.fight = { lv: main, n: 0 };
+    p.skills[w.skill] = lv('main');
+    if (w.ammo) p.skills.shoot = lv('fight');
+    else p.skills.fight = lv('fight');
   }
-  if (c.spell) p.skills.staff = { lv: main, n: 0 };
+  if (c.spell) p.skills.staff = lv('main');
   return game;
 }
 // 競技場：把冒險者放在一塊整平的空地上（聚落的圈外），怪物也直接放上去對打；關掉創世、掉落、經驗值，免得量測途中角色變了
@@ -3769,7 +3755,7 @@ function arenaGame(cls, level, wl, seed) {
   game.defeat = (m) => { game.monsters = game.monsters.filter((o) => o !== m); if (game.battle.targetId === m.id) game.battle.targetId = null; };
   return game;
 }
-const ARENA_TYPES = ['TERRAIN', 'UNREACHABLE', 'VALUE', 'REFERENCE', 'CLIFF']; // 各種異常輪流，不含碎裂
+const ARENA_TYPES = process.env.FE_ARENA_TYPES ? process.env.FE_ARENA_TYPES.split(',') : ['TERRAIN', 'UNREACHABLE', 'VALUE', 'REFERENCE', 'CLIFF']; // 各種異常輪流，不含碎裂；FE_ARENA_TYPES 可以指定只量哪幾種（查哪一種異常拖慢下數用）
 const ARENA_SCOPE = { small: [2, 4], mid: [6, 10] };
 function arenaMonster(game, tier, wl, i, dx) {
   const p = game.player;
@@ -3786,6 +3772,8 @@ function arenaFight(game, tier, wl, i) {
   const m = arenaMonster(game, tier, wl, i, ranged ? 3 : 1);
   let n = 0;
   game.battle.cooldown = 0;
+  const maxHp = p.maxHp;
+  p.maxHp = 1e9; // 對打時冒險者不會倒下（倒下會被送回聚落，後面就打不下去了）
   for (; n < 200 && game.monsters.includes(m); n++) {
     p.hp = p.maxHp;
     for (const g of FE.Gear.equipped(p)) g.dur = g.max;
@@ -3797,6 +3785,9 @@ function arenaFight(game, tier, wl, i) {
       game.act(game.battle.cooldown === 0 && m.hp > 8 ? 'deep' : 'attack');
     }
   }
+  p.maxHp = maxHp;
+  p.hp = maxHp;
+  if (n >= 200) fail(`競技場 ${game.player.cls} 打不倒 ${m.name}（世界等級 ${wl}）：怪物 ${m.hp}/${m.maxHp}，相對位置 ${m.x - p.x},${m.y - p.y}，${game.log.slice(0, 2).map((l) => l.text).join('｜')}`);
   game.monsters = [];
   return n;
 }
@@ -3807,6 +3798,8 @@ function arenaTaken(game, tier, wl, N, i0) {
   const skills = JSON.stringify(p.skills);
   let dmg = 0;
   let hit = 0;
+  const maxHp = p.maxHp;
+  p.maxHp = 1e9;
   for (let i = 0; i < N; i++) {
     p.hp = p.maxHp;
     p.block = null;
@@ -3817,6 +3810,8 @@ function arenaTaken(game, tier, wl, N, i0) {
     if (i % 25 === 24) p.skills = JSON.parse(skills);
   }
   p.skills = JSON.parse(skills);
+  p.maxHp = maxHp;
+  p.hp = maxHp;
   game.monsters = [];
   return { n: N, dmg, hit };
 }
@@ -4375,7 +4370,11 @@ function testGrowth29() {
     ok(g.level === 10 && g.exp === FE.levelExp(10) && p.points === 0 && Object.values(p.attr).reduce((s, v) => s + v, 0) === start + 9, `10 級角色：屬性總和 ${Object.values(p.attr).reduce((s, v) => s + v, 0)}（應該 ${start + 9}）`);
     ok(p.attr.str === 18 && p.maxHp === Ch.maxHp(p, 10) && p.hp === p.maxHp, `主屬性力量加到 18：${p.attr.str}，生命 ${p.hp}/${p.maxHp}`);
     ok(p.equip.main.q === qualityForWL(4) && p.equip.body.q === 2 && p.equip.off.q === 2 && qualityForWL(1) === 0 && qualityForWL(6) === 3, `世界等級 4 的裝備品質 ${p.equip.main.q}`);
-    ok(p.skills.sword.lv === 5 && p.skills.fight.lv === 5 && p.skills.dodge.lv === 3, `技能：劍術 ${p.skills.sword.lv}、格鬥 ${p.skills.fight.lv}、閃避 ${p.skills.dodge.lv}`);
+    // 10 級累計經驗 6,400：劍術 ×2.5＝16,000 → 13 級、格鬥 ×3＝19,200 → 15 級、穿甲（中甲）13 級、閃避 ×0.5＝3,200 → 4 級、盾牌使用 ×0.6＝3,840 → 5 級
+    ok(p.skills.sword.lv === 13 && p.skills.fight.lv === 15 && p.skills.armor.lv === 13 && p.skills.dodge.lv === 4 && p.skills.shield.lv === 5 && p.skills.bow.lv === 0, `技能：劍術 ${p.skills.sword.lv}、格鬥 ${p.skills.fight.lv}、穿甲 ${p.skills.armor.lv}、閃避 ${p.skills.dodge.lv}、盾牌使用 ${p.skills.shield.lv}`);
+    ok(skillLevelFor(0) === 0 && skillLevelFor(499) === 0 && skillLevelFor(500) === 1 && skillLevelFor(1100) === 2 && skillLevelFor(18000) === 15, '經驗換技能等級');
+    const gr = makeLevelChar('ranger', 5, 1, 9123).player;
+    ok(gr.skills.bow.lv === skillLevelFor(650 * 2.5) && gr.skills.shoot.lv === skillLevelFor(650 * 3) && gr.skills.fight.lv === 0 && gr.skills.armor.lv === 0 && gr.skills.shield.lv === 0, `遊俠 5 級：弓術 ${gr.skills.bow.lv}、射擊 ${gr.skills.shoot.lv}，輕甲不練穿甲、沒拿盾牌`);
     const g1 = makeLevelChar('mage', 1, 1, 9121);
     ok(g1.level === 1 && g1.player.points === 0 && g1.player.skills.staff.lv === 0 && g1.player.equip.main.q === 0, '1 級角色就是剛開局的樣子');
     // 競技場：打一場一定打得完
@@ -4421,7 +4420,7 @@ function collectState() {
   return {
     problems, pcount: problems.count || 0,
     stats, geo, reachCheck, bufferViolations, cutOff, stuckFixes, dlgStats, combat,
-    measure: { kills: measure.kills, clear: measure.clear, taken: measure.taken, armorCmp: measure.armorCmp },
+    measure: { armorCmp: measure.armorCmp },
     checks: { dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks },
     botDrops,
     sims: simResults, arena: arenaData,
@@ -4445,9 +4444,6 @@ function mergeState(part) {
   mergeDeep(reachCheck, part.reachCheck);
   mergeDeep(dlgStats, part.dlgStats);
   mergeDeep(combat, part.combat);
-  mergeDeep(measure.kills, part.measure.kills);
-  mergeDeep(measure.clear, part.measure.clear);
-  mergeDeep(measure.taken, part.measure.taken);
   mergeDeep(measure.armorCmp, part.measure.armorCmp);
   bufferViolations += part.bufferViolations;
   stuckFixes += part.stuckFixes;
@@ -4569,7 +4565,7 @@ console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${b
   const levels = QUICK ? [1, 15] : ARENA_LEVELS;
   const wls = QUICK ? [1, 4, 7] : [1, 2, 3, 4, 5, 6, 7];
   const trialsText = QUICK ? 10 : 40;
-  console.log(`競技場量測（每格 ${trialsText} 場對打；怪物血量的世界等級加成 ${C.WL_BONUS.HP}／級；技能等級：主技能與格鬥或射擊約為角色等級的 ${LV_SKILL.main}、其餘 ${LV_SKILL.side}；裝備品質隨世界等級）：打倒小怪物／中型怪物平均幾下`);
+  console.log(`競技場量測（每格 ${trialsText} 場對打；怪物血量的世界等級加成 ${C.WL_BONUS.HP}／級；技能經驗照機器人實測的比例（主武器 ×${SKILL_PER_EXP.main}、格鬥或射擊 ×${SKILL_PER_EXP.fight}、穿甲 ×${SKILL_PER_EXP.armor}、閃避 ×${SKILL_PER_EXP.dodge}、盾牌使用 ×${SKILL_PER_EXP.shield} 角色累計經驗值）；裝備品質隨世界等級）：打倒小怪物／中型怪物平均幾下`);
   for (const cls of BOT_CLASSES) {
     const a = arenaData[cls];
     if (!a) continue;

@@ -307,8 +307,8 @@
   }
   if (resume) launch();
   else {
-    FE.UI.startMenu((cls, picks) => {
-      game.start({ cls, picks });
+    FE.UI.startMenu((cls, picks, body) => {
+      game.start({ cls, picks, body });
       if (saved && saved.stale) game.say('遊戲版本更新，舊存檔、歷史紀錄與錯誤報告已清除，從新世界開始。', 'sys');
       launch();
     });

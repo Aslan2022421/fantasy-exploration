@@ -4,8 +4,8 @@
   const C = FE.CONFIG;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
-  // 升到第 level 級要的累計經驗值
-  FE.levelExp = (level) => (level <= 1 ? 0 : (level - 1) * C.LEVEL_FIRST + (C.LEVEL_STEP * (level - 2) * (level - 1)) / 2);
+  // 升到第 level 級要的累計經驗值（第二十九版：《D&D》第五版經驗表 ÷10，最高 LEVEL_MAX 級；超過最高級的等級要的經驗值同最高級）
+  FE.levelExp = (level) => C.LEVEL_EXP[Math.max(1, Math.min(level, C.LEVEL_MAX))];
 
   class Game {
     constructor(seed) {
@@ -40,18 +40,20 @@
       this.reports = FE.store.load('fe.reports', []);
     }
 
-    // 開新世界。opts.cls 是職業（warrior、ranger、mage、priest），opts.picks 是自己挑的起始裝備（選項 id 的清單，見 FE.CLASSES）；
-    // 沒給就用戰士和預設的挑法（測試用，遊戲裡一定由選職業的視窗給）
+    // 開新世界。opts.cls 是職業（warrior、ranger、mage、priest），opts.picks 是自己挑的起始裝備（選項 id 的清單，見 FE.CLASSES），
+    // opts.body 是種族與體型（{ race, bonus 人類自己加的兩點, height, build }，見 FE.Char.bodyOf）；
+    // 沒給就用戰士、預設的挑法和普通體型的人類（測試用，遊戲裡一定由建角的視窗給）
     start(opts) {
       opts = opts || {};
       const clsKey = opts.cls || 'warrior';
-      const picks = opts.picks || FE.Char.defaultPicks(clsKey);
+      const b = FE.Char.bodyOf(opts.body);
+      const picks = opts.picks || FE.Char.defaultPicks(clsKey, FE.bodySize(b.race, b.height, b.build));
       if (!FE.Char.validPicks(clsKey, picks)) throw new Error('起始裝備的挑法不對');
       this.say('創世神正在創世。你是冒險者：走遍世界、打倒怪物、完成任務，世界會跟著長下去。', 'sys');
       this.createChunk(true);
       const s = this.world.spawn;
       // 職業、六項屬性、起始裝備（裝備欄：主手、副手（盾牌或空著）、身上（防具））、生命都在 FE.Char.create 裡配好
-      this.player = FE.Char.create(this, clsKey, picks, FE.store.load('fe.name', '冒險者'));
+      this.player = FE.Char.create(this, clsKey, picks, FE.store.load('fe.name', '冒險者'), b);
       this.player.x = s.x;
       this.player.y = s.y;
       this.lastSafe = { x: s.x, y: s.y };
@@ -226,9 +228,13 @@
     // 不限格數，同一種東西疊放（藥草、礦石、送貨的物品）。送貨的物品是 id 'goods'，名字照委託，記著是誰託的（giverId），不跟採來的東西疊在一起。
     // 裝備（含礦鎬、鐮刀）每件單獨一格、不疊放：{ id: 'gear', n: 1, gear }，穿上的裝備不在背包裡，在 player.equip
 
-    // 箭矢分品質，同品質的疊在一起（key 是品質 q）；送貨的物品照託付的人分開（key 是 giverId）
+    // 箭矢、弩矢分品質，同品質的疊在一起（key 是品質 q）；送貨的物品照託付的人分開（key 是 giverId）
+    isAmmo(id) {
+      return !!(FE.BAG_ITEMS[id] && FE.BAG_ITEMS[id].bundle);
+    }
+
     bagEntry(id, key) {
-      return this.player.bag.find((e) => e.id === id && (id === 'goods' ? e.giverId === key : id === 'arrow' && key !== undefined ? e.q === key : true)) || null;
+      return this.player.bag.find((e) => e.id === id && (id === 'goods' ? e.giverId === key : this.isAmmo(id) && key !== undefined ? e.q === key : true)) || null;
     }
 
     // 有幾份；箭矢是各品質加起來的支數
@@ -237,29 +243,30 @@
     }
 
     bagAdd(id, n, extra) {
-      const e = this.bagEntry(id, id === 'goods' ? extra && extra.giverId : id === 'arrow' ? (extra && extra.q) || 0 : undefined);
+      const e = this.bagEntry(id, id === 'goods' ? extra && extra.giverId : this.isAmmo(id) ? (extra && extra.q) || 0 : undefined);
       if (e) e.n += n;
       else {
-        const name = id === 'arrow' ? FE.Gear.name({ type: 'arrow', q: (extra && extra.q) || 0 }) : FE.BAG_ITEMS[id] ? FE.BAG_ITEMS[id].name : id;
-        this.player.bag.push(Object.assign({ id, name, n }, id === 'arrow' ? { q: 0 } : {}, extra || {}));
+        const name = this.isAmmo(id) ? FE.Gear.name({ type: id, q: (extra && extra.q) || 0 }) : FE.BAG_ITEMS[id] ? FE.BAG_ITEMS[id].name : id;
+        this.player.bag.push(Object.assign({ id, name, n }, this.isAmmo(id) ? { q: 0 } : {}, extra || {}));
       }
     }
 
-    // 一件裝備放進背包；箭矢（買來的、掉的）是一捆，疊進同品質的箭矢裡
+    // 一件裝備放進背包；箭矢、弩矢（買來的、掉的）是一捆，疊進同品質的裡面
     bagAddGear(g) {
       const d = FE.Gear.def(g);
       if (d.cat === 'ammo') {
-        this.bagAdd('arrow', d.bundle, { q: g.q || 0 });
+        this.bagAdd(g.type, d.bundle, { q: g.q || 0 });
         return;
       }
       this.player.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
     }
 
-    // 射一支箭：先用品質最高的，回傳那支箭的品質；沒有箭回傳 null
-    takeArrow() {
-      const e = this.player.bag.filter((x) => x.id === 'arrow' && x.n > 0).sort((a, b) => b.q - a.q)[0];
+    // 射一支箭（或弩矢）：先用品質最高的，回傳那一支的品質；沒有回傳 null。type 是 'arrow' 或 'bolt'
+    takeArrow(type) {
+      const id = type || 'arrow';
+      const e = this.player.bag.filter((x) => x.id === id && x.n > 0).sort((a, b) => b.q - a.q)[0];
       if (!e) return null;
-      this.bagTake('arrow', 1, e.q);
+      this.bagTake(id, 1, e.q);
       return e.q;
     }
 
@@ -300,9 +307,14 @@
       return FE.Gear.loadTier(this.player);
     }
 
-    // 負重上限＝職業基礎＋力量修正值
+    // 能背的重量（磅）＝力量值×15
     carryLimit() {
       return FE.Char.carryLimit(this.player);
+    }
+
+    // 推拖上限（磅）＝力量值×30
+    pushLimit() {
+      return FE.Char.pushLimit(this.player);
     }
 
     // 魅力修正值（價錢、金幣獎勵用）
@@ -340,7 +352,9 @@
         if (e.id === 'gear') {
           const g = e.gear;
           const tool = FE.Gear.def(g).cat === 'tool';
-          return { id: 'gear', name: FE.Gear.name(g), n: 1, gear: g, use: !tool, info: `${FE.Gear.statText(g)}、${FE.Gear.durText(g)}` };
+          // 武器標出你拿起來是單手、雙手還是拿不動（看體型）
+          const grip = FE.Gear.def(g).cat === 'weapon' ? `${FE.Gear.gripText(this.player, g)}、` : '';
+          return { id: 'gear', name: FE.Gear.name(g), n: 1, gear: g, use: !tool, grip: grip.replace('、', ''), info: `${grip}${FE.Gear.statText(g)}、${FE.Gear.durText(g)}` };
         }
         return {
           id: e.id,
@@ -348,7 +362,7 @@
           name: e.id === 'goods' ? `${e.name}（要送去的東西）` : e.name,
           n: e.n,
           use: !!(FE.BAG_ITEMS[e.id] && FE.BAG_ITEMS[e.id].use),
-          info: e.id === 'arrow' ? '拿著弓箭按 F 射擊，一次用一支' : '',
+          info: e.id === 'arrow' ? '拿著弓箭按 F 射擊，一次用一支' : e.id === 'bolt' ? '拿著輕弩按 F 射擊，一次用一支' : '',
         };
       });
     }
@@ -370,8 +384,8 @@
     }
 
     // 穿上或拿起背包裡的一件裝備：武器放主手、盾牌放副手、防具穿在身上，換下的放回背包，算一個動作。
-    // 雙手武器（長槍、弓箭）佔兩手：拿起來時副手的東西放回背包，拿著時副手拿不了東西
-    // 雙持：副手暫時可以拿弓箭以外的任何武器（之後再定哪些只能單手、哪些要雙手），副手放了武器就不能拿盾牌，
+    // 體型不夠拿的武器拿不起來（出訊息，不算動作）；只能雙手拿的武器（弓箭、輕弩，或體型不夠單手）佔兩手：拿起來時副手的東西放回背包，拿著時副手拿不了東西。
+    // 雙持：副手只能放自己體型能單手拿的武器，副手放了武器就不能拿盾牌，
     // 反之亦然（副手只有一格，放進去就把原本的換下來）
     equipItem(entry, toOff) {
       const p = this.player;
@@ -381,11 +395,19 @@
         this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
         return;
       }
-      const slot = d.cat === 'weapon' ? (toOff && FE.Gear.offOk(d) ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
-      if (slot === 'off' && p.equip.main && FE.Gear.def(p.equip.main).twoHand) {
+      const grip = d.cat === 'weapon' ? FE.Char.grip(p, g) : 'one';
+      if (grip === 'none') {
+        this.say(`${FE.Gear.name(g)}太大太沉了，以你的體型拿不起來。`, 'sys');
+        return;
+      }
+      const slot = d.cat === 'weapon' ? (toOff && FE.Gear.offOk(p, g) ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
+      if (slot === 'off' && p.equip.main && FE.Gear.twoHanded(p, p.equip.main)) {
         const mn = FE.Gear.def(p.equip.main).name;
         this.say(`${mn}要用兩隻手拿，先換下${mn}才拿得了${d.cat === 'shield' ? '盾牌' : '副手的武器'}。`, 'sys');
         return;
+      }
+      if (toOff && d.cat === 'weapon' && slot === 'main') {
+        this.say(`${FE.Gear.name(g)}不能放在副手（以你的體型單手拿不動），改拿在主手。`, 'sys');
       }
       this.beginAction();
       const old = p.equip[slot];
@@ -393,7 +415,7 @@
       p.equip[slot] = g;
       if (old) this.bagAddGear(old);
       let extra = '';
-      if (slot === 'main' && d.twoHand && p.equip.off) {
+      if (slot === 'main' && grip === 'two' && p.equip.off) {
         this.bagAddGear(p.equip.off);
         extra = `${FE.Gear.name(p.equip.off)}放回背包。`;
         p.equip.off = null;
@@ -500,7 +522,7 @@
       if (n <= 0) return;
       this.exp += n;
       const p = this.player;
-      while (p && this.exp >= FE.levelExp(this.level + 1)) {
+      while (p && this.level < C.LEVEL_MAX && this.exp >= FE.levelExp(this.level + 1)) {
         this.level++;
         p.points += C.LEVEL_POINTS; // 每升一級 1 點屬性，畫面會跳出加點視窗（視窗開著不能做別的事）
         const gain = this.recalc();
@@ -641,9 +663,9 @@
         return;
       }
       if (!this.world.passable(nx, ny)) return;
-      // 超重太多（超過上限＋2）：不能移動，要先丟掉東西
+      // 超過推拖上限（力量值×30 磅）：不能移動，要先丟掉東西
       if (this.loadTier() >= 2) {
-        this.say(`你背得太重了（${this.weight()} / ${this.carryLimit()}），邁不開腳步。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
+        this.say(`你背得太重了（${this.weight()} 磅，推拖上限 ${this.pushLimit()} 磅），邁不開腳步。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
         return;
       }
       this.beginAction();
@@ -678,11 +700,14 @@
         if (FE.Checker.checkChest(chest)) this.say('寶箱被怪物的力量封住了，打不開。', 'sys');
         else this.openChest(chest);
       }
+      // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻；被扭曲過的地面一步 30 刻（取較大的）
+      const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.moveTicks(p);
       if (this.isHardGround(nx, ny)) {
-        this.say(`這裡的地面被異常扭曲過，很難走，這一步花了 ${C.TICKS_HARD} 刻。`, 'sys');
-        this.endTurn(true, C.TICKS_HARD);
+        const t = Math.max(C.TICKS_HARD, base);
+        this.say(`這裡的地面被異常扭曲過，很難走，這一步花了 ${t} 刻。`, 'sys');
+        this.endTurn(true, t);
       } else {
-        this.endTurn();
+        this.endTurn(true, base);
       }
     }
 
@@ -692,15 +717,14 @@
     endTurn(moved, ticks) {
       const p = this.player;
       const chaos = FE.Stability.state(this) === 2 ? C.CHAOS_TIME : 1;
-      // 身上防具和超重讓每個動作多花幾刻（見 gear.js 的 extraTicks）
+      // 身上防具讓每個動作多花幾刻（見 gear.js 的 extraTicks）；超重只讓走路變慢（見 move）
       const t = ((ticks || C.TICKS_MOVE) + FE.Gear.extraTicks(p)) * chaos;
       this.turn++;
       this.ticks = (this.ticks || 0) + t;
       FE.Combat.regenBlock(this, p);
       this.addRepair(C.VIRTUAL_REPAIR);
       // 冒險者脫離戰鬥（被射過的怪物離冒險者超過視野，撤退、倒下醒來都算）：自動撿回射向牠的箭的一半
-      for (const m of this.monsters) if (m.arrows && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) > C.SIGHT) this.recoverArrows(m);
-      FE.Char.armorAct(this); // 穿中甲或重甲做滿 10 個動作，穿甲行動算用一次
+      for (const m of this.monsters) if ((m.arrows || m.bolts) && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) > C.SIGHT) this.recoverArrows(m);
       if (moved !== false) {
         p.steps++;
         this.earn(C.COMPUTE_PER_MOVE);
@@ -772,6 +796,13 @@
       // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手已經觸發，副手那一下擲出 6～10 只算命中
       // 主手那一下把目標推開（長槍的推擊）或打倒了，副手就不出手：副手只打得到還貼在旁邊的目標
       if (dual && !this.fell && this.monsters.includes(m) && FE.AI.touching(this, m, p)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, off: true, noForced: first.forced, holy });
+      // 順劈（巨斧的精通）：主手命中後，可以順手打目標旁邊（八方向）、也在你的觸及範圍內（貼著你）的另一隻怪物（挑血量最少的），這一下不加屬性修正值；一個動作最多一次，不再磨損、練技能
+      if (first.hit && !this.fell && main && FE.Char.mastery(p, main) === 'cleave' && !(extra && extra.reach)) {
+        const other = this.monsters
+          .filter((o) => o !== m && Math.max(Math.abs(o.x - m.x), Math.abs(o.y - m.y)) === 1 && FE.AI.touching(this, o, p))
+          .sort((a, b) => a.hp - b.hp || a.id - b.id)[0];
+        if (other) FE.Combat.resolveAttack(this, p, other, 'attack', { weapon: main, cleave: true, noWear: true, noTrain: true, noForced: true });
+      }
       this.endTurn(false, ticks);
     }
 
@@ -805,13 +836,13 @@
         return null;
       };
       if (d && d.ammo) {
-        if (!this.bagCount('arrow')) return no('沒有箭矢了（鐵匠、武器匠有賣）。');
+        if (!this.bagCount(d.ammo)) return no(`沒有${FE.GEAR[d.ammo].name}了（鐵匠、武器匠有賣）。`);
         return { mode: 'shoot', weapon: w, range: FE.Char.range(p, d.range) };
       }
       if (d && d.thrown) return { mode: 'throw', weapon: w, range: FE.Char.range(p, d.thrown) };
       if (d && w.type === 'staff' && FE.Char.cls(p).spell) return { mode: 'spell', weapon: w, range: FE.Char.range(p, C.SPELL_RANGE) };
       if (d && w.type === 'staff') return no('法杖在你手上只能近戰（只有法師施得出法術）。');
-      return no(w ? `${FE.Gear.name(w)}不能遠程攻擊。拿弓箭可以射擊，短刀、短矛可以擲出去。` : '手上沒有武器，不能遠程攻擊。');
+      return no(w ? `${FE.Gear.name(w)}不能遠程攻擊。拿弓箭、輕弩可以射擊，短刀、短矛可以擲出去。` : '手上沒有武器，不能遠程攻擊。');
     }
 
     // 射程內、看得到的怪物，近的在前
@@ -885,10 +916,11 @@
       const ticks = FE.Char.attackTicks(p, w);
       let holy = !!FE.Char.cls(p).holy;
       if (r.mode === 'shoot') {
-        // 先記在怪物身上：牠倒下或冒險者脫離戰鬥時撿回一半（見 recoverArrows）
-        const q = this.takeArrow();
-        m.arrows = m.arrows || {};
-        m.arrows[q] = (m.arrows[q] || 0) + 1;
+        // 先記在怪物身上：牠倒下或冒險者脫離戰鬥時撿回一半（見 recoverArrows）；箭矢記在 m.arrows，弩矢記在 m.bolts
+        const q = this.takeArrow(FE.Gear.def(w).ammo);
+        const field = FE.Gear.def(w).ammo === 'bolt' ? 'bolts' : 'arrows';
+        m[field] = m[field] || {};
+        m[field][q] = (m[field][q] || 0) + 1;
         FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'shoot', weapon: w, range: r.range, ammoQ: q, holy });
       } else if (r.mode === 'throw') {
         const at = { x: m.x, y: m.y };
@@ -919,20 +951,22 @@
 
     // 射向這隻怪物的箭撿回一半（捨去，照射出去的品質放回背包）：牠倒下、或冒險者脫離戰鬥時
     recoverArrows(m) {
-      const spent = m.arrows;
-      m.arrows = null;
-      if (!spent) return;
-      const total = Object.values(spent).reduce((s, n) => s + n, 0);
-      let back = Math.floor(total * C.ARROW_BACK);
-      if (back <= 0) return;
-      const n0 = back;
-      // 品質高的先撿回
-      for (const q of Object.keys(spent).map(Number).sort((a, b) => b - a)) {
-        const k = Math.min(back, spent[q]);
-        if (k > 0) this.bagAdd('arrow', k, { q });
-        back -= k;
+      for (const [field, id] of [['arrows', 'arrow'], ['bolts', 'bolt']]) {
+        const spent = m[field];
+        m[field] = null;
+        if (!spent) continue;
+        const total = Object.values(spent).reduce((s, n) => s + n, 0);
+        let back = Math.floor(total * C.ARROW_BACK);
+        if (back <= 0) continue;
+        const n0 = back;
+        // 品質高的先撿回
+        for (const q of Object.keys(spent).map(Number).sort((a, b) => b - a)) {
+          const k = Math.min(back, spent[q]);
+          if (k > 0) this.bagAdd(id, k, { q });
+          back -= k;
+        }
+        this.say(`你撿回了 ${n0} 支${FE.GEAR[id].name}（射出 ${total} 支）。`, 'sys');
       }
-      this.say(`你撿回了 ${n0} 支箭矢（射出 ${total} 支）。`, 'sys');
     }
 
     // 走到有東西的那一格（擲出去的武器）就撿回來：主手空著就拿在主手，不然放進背包（不算動作）
@@ -944,7 +978,7 @@
       for (const it of here) {
         if (!p.equip.main && FE.Gear.def(it.gear).cat === 'weapon') {
           p.equip.main = it.gear;
-          if (FE.Gear.def(it.gear).twoHand && p.equip.off) {
+          if (FE.Gear.twoHanded(p, it.gear) && p.equip.off) {
             this.bagAddGear(p.equip.off);
             p.equip.off = null;
             p.block = null;
@@ -1208,6 +1242,7 @@
       const parts = page.split(':');
       if (parts.length >= 3) return `buy:${parts[1]}`;
       if (parts[0] === 'buy' && parts.length === 2) return Object.keys(S.buy).length === 1 ? 'main' : 'buy';
+      if (parts[0] === 'craft' && parts.length === 2) return Object.keys(FE.Gear.craftCats(S)).length === 1 ? 'main' : 'craft';
       return 'main';
     }
 
@@ -1311,8 +1346,15 @@
         return [list.length ? `${how}${have}` : '沒有要修的東西。', opts];
       }
 
-      if (page === 'craft') {
-        const opts = S.craft.map((type) => {
+      if (page === 'craft' || page.startsWith('craft:')) {
+        // 打造的東西也分類（跟「買」同一套分類，一層最多 8 項）；只有一類時直接列
+        const cats = FE.Gear.craftCats(S);
+        const keys = Object.keys(cats);
+        const cat = page === 'craft' ? (keys.length === 1 ? keys[0] : null) : page.split(':')[1];
+        if (!cat || !cats[cat]) {
+          return [`要打造哪一類？${have}`, keys.map((c) => ({ id: `craftCat:${c}`, label: FE.Gear.CAT_NAMES[c] })).concat([back])];
+        }
+        const opts = cats[cat].map((type) => {
           const qt = FE.Gear.craftQuote(type, v, cha);
           const lackOre = qt.ore - this.bagCount('ore');
           const lackGold = qt.fee - p.gold;
@@ -1355,7 +1397,8 @@
         return { close: true };
       }
       if (o.id === 'back') {
-        this.talkPage = this.parentPage(S, this.talkPage === 'buy' && Object.keys(S.buy).length === 1 ? 'buy:' + Object.keys(S.buy)[0] : this.talkPage);
+        const cats = Object.keys(FE.Gear.craftCats(S));
+        this.talkPage = this.parentPage(S, this.talkPage === 'buy' && Object.keys(S.buy).length === 1 ? 'buy:' + Object.keys(S.buy)[0] : this.talkPage === 'craft' && cats.length === 1 ? 'craft:' + cats[0] : this.talkPage);
         return stay;
       }
       if (o.disabled) {
@@ -1368,6 +1411,10 @@
       }
       if (o.id.startsWith('cat:')) {
         this.talkPage = 'buy:' + o.id.slice(4);
+        return stay;
+      }
+      if (o.id.startsWith('craftCat:')) {
+        this.talkPage = 'craft:' + o.id.slice(9);
         return stay;
       }
       if (o.id.startsWith('qual:')) {
@@ -1562,7 +1609,7 @@
     defeat(m, by) {
       this.monsters = this.monsters.filter((o) => o !== m);
       if (this.battle.targetId === m.id) this.battle.targetId = null;
-      if (m.arrows) this.recoverArrows(m); // 射向牠的箭撿回一半
+      if (m.arrows || m.bolts) this.recoverArrows(m); // 射向牠的箭、弩矢撿回一半
       if (by) {
         const fix = FE.repairBug(this, m, { noExp: true });
         FE.Stability.stat(this).soldierKills++;

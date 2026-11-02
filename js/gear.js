@@ -122,30 +122,35 @@
     };
   }
 
-  // ---- 重量與負重 ----
+  // ---- 重量與負重（第二十九版，單位磅）----
   function itemWeight(e) {
     if (e.id === 'gear') return def(e.gear).weight;
     const b = FE.BAG_ITEMS[e.id];
-    // 箭矢的重量是一捆（20 支）算的
-    return b && b.bundle ? (b.weight * e.n) / b.bundle : (b ? b.weight : 1) * e.n;
+    // 箭矢、弩矢的重量是一捆（20 支）算的
+    return b && b.bundle ? (b.weight * e.n) / b.bundle : (b ? b.weight : 5) * e.n;
   }
+  // 身上穿著的防具照穿甲技能打折（Dwarf Fortress 的表），其他照原重量
   function weightOf(p) {
-    return round2(equipped(p).reduce((s, g) => s + def(g).weight, 0) + p.bag.reduce((s, e) => s + itemWeight(e), 0));
+    const worn = equipped(p).reduce((s, g) => s + def(g).weight * (g === p.equip.body ? FE.Char.armorWeightMul(p) : 1), 0);
+    return round2(worn + p.bag.reduce((s, e) => s + itemWeight(e), 0));
   }
-  // 0 沒超重；1 超過上限 OVER_NEAR 以內（每個動作多 2 刻、出手 -1）；2 再超過（不能移動、不能撤退、出手 -2）
+  // 0 沒超重（範圍內沒有任何減值）；1 超過能背（力量值×15 磅）：移動一步 60 刻；2 超過推拖上限（力量值×30 磅）：不能移動（還能丟東西）
   function loadTier(p) {
-    const over = weightOf(p) - FE.Char.carryLimit(p);
-    return over <= 0 ? 0 : over <= C.OVER_NEAR ? 1 : 2;
+    const w = weightOf(p);
+    return w <= FE.Char.carryLimit(p) ? 0 : w <= FE.Char.pushLimit(p) ? 1 : 2;
   }
-  // 每個動作多花的刻：身上防具的 ticks（穿甲行動 5 級起少 1 刻、10 級起再少 1 刻，最少 0），加上超重
+  // 每個動作多花的刻：身上防具的 ticks（穿甲 5 級起少 1 刻、10 級起再少 1 刻，最少 0）；超重不在這裡算，走路才變慢（見 game.js 的 move）
   function extraTicks(p) {
-    const body = p.equip.body ? FE.Char.armorTicks(p, def(p.equip.body).ticks || 0) : 0;
-    return body + (loadTier(p) >= 1 ? C.OVER_TICKS : 0);
+    return p.equip.body ? FE.Char.armorTicks(p, def(p.equip.body).ticks || 0) : 0;
   }
-  // 近戰出手擲 d20 的角色加減：武器的命中加值，加敏捷修正值（靈巧取力量與敏捷較高者）與武器技能（每 5 級 +1），扣掉超重的減值
+  // 近戰出手擲 d20 的角色加減：武器的命中加值，加敏捷修正值（靈巧取力量與敏捷較高者）與武器技能（每 5 級 +1）、格鬥（每 10 級 +1）
   function hitMod(p, w) {
     return FE.Char.profile(p, wOf(p, w), 'melee').hit;
   }
+  // 這把武器冒險者怎麼拿：單手、雙手、拿不動（背包顯示用）
+  const gripText = (p, g) => FE.Char.GRIP_NAMES[FE.Char.grip(p, g)];
+  // 雙手拿的（體型不夠單手，或弓、輕弩）：拿著時副手不能放東西
+  const twoHanded = (p, g) => !!g && FE.Char.grip(p, g) === 'two';
 
   // ---- 磨損 ----
   // 每次磨損的機率＝1÷品質價值倍率；耐久到 0 就消失；剩兩成時訊息提醒一次。回傳 true 表示壞掉了
@@ -181,7 +186,7 @@
       if (d.versatile) tags.push(`可雙手（副手空著 ${dieText([d.die[0], d.versatile])}）`);
       for (const k of ['heavy', 'light', 'finesse', 'reach', 'twoHand']) if (d[k]) tags.push(FE.WEAPON_TAGS[k]);
       if (d.thrown) tags.push(`投擲 ${d.thrown[0]}／${d.thrown[1]} 格`);
-      if (d.ammo) tags.push(`彈藥（射程 ${d.range[0]}／${d.range[1]} 格）`);
+      if (d.ammo) tags.push(`彈藥（${G[d.ammo].name}，射程 ${d.range[0]}／${d.range[1]} 格）`);
       if (d.loading) tags.push(FE.WEAPON_TAGS.loading);
       return `${dieText(d.die)} ${FE.DMG_TYPES[d.type]}${tags.length ? '、' + tags.join('、') : ''}、精通${FE.MASTERIES[d.mastery].name}${q.hit ? `、命中 +${q.hit}` : ''}、${w}`;
     }
@@ -195,23 +200,37 @@
   }
 
   // ---- 商店 ----
-  // 鐵匠（村莊）什麼都賣、什麼都修（修到完整）、什麼都能打造（弓箭、法杖、箭矢、衣袍不能打造）；城鎮分成武器匠（武器、箭矢、礦鎬、鐮刀）和盔甲匠（防具與盾牌）。
-  // buy：賣的東西，分類顯示；quals：賣哪幾種品質（工具固定普通）；repair：修哪幾類（GEAR 的 cat）；craft：能打造的；sell：收哪幾類
+  // 鐵匠（村莊）什麼都賣、什麼都修（修到完整）、能打造長劍、長槍、短矛、短刀、短劍、戰斧、硬頭錘、戰錘和防具（弓、輕弩、鞭子、法杖、箭矢、弩矢、衣袍不能打造）；
+  // 城鎮分成武器匠（武器、箭矢、弩矢、礦鎬、鐮刀，多賣巨斧、巨劍、鞭子、輕弩）和盔甲匠（防具與盾牌）。
+  // buy：賣的東西，分類顯示（一層最多列 8 項，所以武器分成四類）；quals：賣哪幾種品質（工具固定普通）；repair：修哪幾類（GEAR 的 cat）；craft：能打造的；sell：收哪幾類
   const SHOPS = {
     blacksmith: {
       title: '鐵匠',
-      buy: { weapon: ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow'], armor: ['heavy', 'medium', 'light', 'robe', 'shield'], tool: ['pick', 'sickle'] },
+      buy: {
+        blade: ['sword', 'shortsword', 'dagger'],
+        axe: ['waraxe', 'club', 'warhammer'],
+        pole: ['spear', 'shortspear', 'staff'],
+        ranged: ['bow', 'arrow'],
+        armor: ['heavy', 'medium', 'light', 'robe', 'shield'],
+        tool: ['pick', 'sickle'],
+      },
       quals: [0],
       repair: ['weapon', 'armor', 'shield', 'tool'],
-      craft: ['sword', 'spear', 'shortspear', 'dagger', 'heavy', 'medium', 'light', 'shield'],
+      craft: ['sword', 'spear', 'shortspear', 'dagger', 'shortsword', 'waraxe', 'club', 'warhammer', 'heavy', 'medium', 'light', 'shield'],
       sell: ['weapon', 'armor', 'shield'],
     },
     weaponsmith: {
       title: '武器匠',
-      buy: { weapon: ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow'], tool: ['pick', 'sickle'] },
+      buy: {
+        blade: ['sword', 'shortsword', 'greatsword', 'dagger'],
+        axe: ['waraxe', 'greataxe', 'club', 'warhammer'],
+        pole: ['spear', 'shortspear', 'staff', 'whip'],
+        ranged: ['bow', 'crossbow', 'arrow', 'bolt'],
+        tool: ['pick', 'sickle'],
+      },
       quals: [0, 1],
       repair: ['weapon', 'tool'],
-      craft: ['sword', 'spear', 'shortspear', 'dagger'],
+      craft: ['sword', 'spear', 'shortspear', 'dagger', 'shortsword', 'waraxe', 'club', 'warhammer', 'greataxe', 'greatsword'],
       sell: ['weapon'],
     },
     armorer: {
@@ -223,7 +242,16 @@
       sell: ['armor', 'shield'],
     },
   };
-  const CAT_NAMES = { weapon: '武器與箭矢', armor: '防具與盾牌', tool: '工具' };
+  const CAT_NAMES = { blade: '劍與刀', axe: '斧與錘', pole: '長柄與法杖', ranged: '弓弩與彈藥', armor: '防具與盾牌', tool: '工具' };
+  // 打造的東西也分類顯示（跟「買」同一套分類）：回傳 { 分類: [種類] }，沒有東西的分類不列
+  function craftCats(S) {
+    const out = {};
+    for (const type of S.craft) {
+      const cat = Object.keys(S.buy).find((c) => S.buy[c].includes(type));
+      (out[cat] = out[cat] || []).push(type);
+    }
+    return out;
+  }
   // 工匠是哪一種店：村莊的 smith 是鐵匠，城鎮的 smith 是武器匠，armorer 是盔甲匠；不是工匠回傳 null
   function shopOf(npc, v) {
     if (!npc) return null;
@@ -232,13 +260,13 @@
     return null;
   }
   const isShopkeeper = (n) => !!n && (n.role === 'smith' || n.role === 'armorer');
-  // 能不能放副手（雙持）：暫時弓箭以外的武器都可以，之後再一把一把定哪些只能單手、哪些要雙手
-  const offOk = (d) => !!d && d.cat === 'weapon' && !d.ammo;
+  // 能不能放副手（雙持）：武器、不是弓和弩，而且冒險者的體型能單手拿（第二十九版）
+  const offOk = (p, g) => !!g && def(g).cat === 'weapon' && !def(g).ammo && FE.Char.grip(p, g) === 'one';
 
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
     equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense,
-    itemWeight, weightOf, loadTier, extraTicks, hitMod, wear, repaired, durText, statText,
-    SHOPS, CAT_NAMES, shopOf, isShopkeeper, offOk,
+    itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText,
+    SHOPS, CAT_NAMES, craftCats, shopOf, isShopkeeper, offOk,
   };
 })();

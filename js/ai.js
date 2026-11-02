@@ -207,6 +207,12 @@
         if (game.fell) return; // 冒險者倒下了，已經回到醒來的地方
         continue;
       }
+      // 緩速（鞭子、輕弩的精通）：下一次移動多花 10 刻，怪物 10 刻動一次，所以這一回合牠要移動的話就停在原地（攻擊不受影響）
+      const soldierNear = game.soldiers.length > 0 && game.soldiers.some((s) => touching(game, m, s));
+      if (m.slowed > 0 && !soldierNear) {
+        m.slowed--;
+        continue;
+      }
       // 纏上：冒險者設定的目標（撞上去設的）跟著冒險者走，保持貼著（路徑被擋就照追擊的走法盡量貼近），
       // 一直打到牠倒下、冒險者撤退成功或倒下才放開。冒險者在聚落裡時牠進不去，照平常行動，出來後再纏上。
       // 貼上之後的下一回合才攻擊（移動或攻擊擇一）

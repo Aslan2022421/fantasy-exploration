@@ -117,6 +117,7 @@
   //   range：遠程的 [正常射程, 最遠射程]、ammoQ：射出去的箭的品質（穿甲看它）
   //   holy：這一下命中時多 1d8 神聖傷害（牧師，每個動作只有第一下命中的那一次）
   //   noWear／noTrain：範圍魔攻的第二隻以後不再磨損法杖、不再練技能（一個動作只算一次）
+  //   cleave：順劈（巨斧）的第二隻：不加屬性修正值，也不再磨損、練技能
   // opts.noCounter：這一下不觸發反擊（反擊本身、趁機攻擊）；opts.counter／opts.opportunity 只影響訊息與統計。
   // 傷害、倒下（怪物走 game.defeat、冒險者走 game.die、士兵走 game.soldierDown）都在這裡處理；回傳這一下的結果。
   function resolveAttack(game, A, D, kind, opts) {
@@ -132,7 +133,7 @@
     const ranged = mode === 'shoot' || mode === 'throw' || mode === 'spell';
     // 冒險者這一下用的武器（反擊用主手）與算法；先記下，免得這一下把武器磨壞了找不到
     const wpn = aP ? (opts.counter ? A.equip.main : opts.weapon !== undefined ? opts.weapon : A.equip.main) : null;
-    const prof = aP ? FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, !!opts.off) : null;
+    const prof = aP ? FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
     if (prof && opts.ammoQ !== undefined) prof.pierce = FE.QUALITIES[opts.ammoQ].pierce; // 射出去的箭：穿甲看箭矢的品質
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值
@@ -167,14 +168,24 @@
     let absorbed = 0;
     let reduced = 0;
     let holy = 0;
+    let conCut = 0;
+    let grazed = false;
     const deep = kind === 'deep' ? 2 : 1; // 重擊：傷害骰擲兩次
-    // 冒險者挨打時，扣身上防具的減傷（照攻擊方的傷害種類），扣完至少吃 1 點
+    // 冒險者挨打時，扣身上防具的減傷（照攻擊方的傷害種類），扣完至少吃 1 點；
+    // 物理傷害（不是魔法、神聖）在防具減完之後再減體質修正值÷2（捨去），一樣至少吃 1 點（第二十九版）
     const armor = () => {
       if (dP && dmg > 1) {
         const cut = reduction(game, D, dmgType, prof ? prof.pierce : 0);
         if (cut > 0) {
           reduced = Math.min(cut, dmg - 1);
           dmg -= reduced;
+        }
+      }
+      if (dP && dmg > 1 && dmgType !== 'magic' && dmgType !== 'holy') {
+        const c = FE.Char.conCut(D);
+        if (c > 0) {
+          conCut = Math.min(c, dmg - 1);
+          dmg -= conCut;
         }
       }
     };
@@ -216,6 +227,10 @@
         holy = Math.max(1, FE.rollDice(r, C.HOLY_DIE, 1) - reduction(game, D, 'holy', 0));
         dmg += holy;
       }
+    } else if (aP && !opts.counter && prof.mastery === 'graze' && !prof.off && prof.attr > 0) {
+      // 擦掠（巨劍）：沒命中時照樣造成等於屬性修正值的傷害（修正值是正數才有；副手那一下、順劈的第二隻沒有）
+      dmg = prof.attr;
+      grazed = true;
     }
 
     // 磨損：冒險者出手一次磨這一下用的武器一次（盾擊磨盾牌），格擋成功一次磨盾牌一次，挨打時防具減傷有作用一次磨身上防具一次
@@ -225,9 +240,11 @@
     if (dP && absorbed > 0 && FE.Gear.shieldOf(D)) FE.Gear.wear(game, FE.Gear.shieldOf(D));
     if (dP && reduced > 0 && D.equip.body) FE.Gear.wear(game, D.equip.body);
     // 技能用了就成長：武器出手一次（打中沒打中都算；遠程另外算射擊）、閃開一次、格擋成功一次各練一次；反擊、盾擊、徒手不練
-    if (aP && !opts.counter && !opts.noTrain) for (const s of prof.skills) FE.Char.useSkill(game, s);
-    if (dP && dodged) FE.Char.useSkill(game, 'dodge');
-    if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield');
+    // 第二十九版：出手命中 10 點經驗、沒命中 5 點；閃開一次、格擋成功一次、穿著防具被打中而且防具擋下了傷害各 10 點（再乘智力的倍率）
+    if (aP && !opts.counter && !opts.noTrain) for (const s of prof.skills) FE.Char.useSkill(game, s, hitKey ? C.SKILL_EXP_HIT : C.SKILL_EXP_MISS);
+    if (dP && dodged) FE.Char.useSkill(game, 'dodge', C.SKILL_EXP_DODGE);
+    if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield', C.SKILL_EXP_BLOCK);
+    if (dP && reduced > 0) FE.Char.useSkill(game, 'armor', C.SKILL_EXP_ARMOR);
 
     // 傷害與倒下：倒下的處理（經驗值、修好地形、醒來）等這一下的訊息寫完才做，訊息才會先寫打了多少、再寫倒下
     let killed = false;
@@ -271,6 +288,10 @@
       } else if (mastery === 'push' && !D.boss) {
         const n = push(game, A, D, C.PUSH_DIST);
         if (n > 0) effects.push(`牠被推開了 ${n} 格`);
+      } else if (mastery === 'slow' && dmg > 0) {
+        // 緩速：命中且造成傷害後，目標下一次移動多花 10 刻（怪物 10 刻動一次，所以牠下一次移動晚一回合，見 ai.js）
+        D.slowed = C.SLOW_TURNS;
+        effects.push('牠的腳步慢了下來');
       }
     }
 
@@ -293,7 +314,7 @@
         : opts.opportunity
           ? `${aName}趁你轉身出手`
           : aP
-            ? heads[mode] || (kind === 'deep' ? `你對${dName}使出重擊` : opts.off ? `你用副手攻擊${dName}` : `你攻擊${dName}`)
+            ? heads[mode] || (kind === 'deep' ? `你對${dName}使出重擊` : opts.cleave ? `你順勢劈向${dName}` : opts.off ? `你用副手攻擊${dName}` : `你攻擊${dName}`)
             : `${aName}攻擊${dName}`;
       // 擲出 6～10 的「對方必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中
       // 反擊與趁機攻擊本身不能再被反擊，也只寫「命中」；遠程打不貼著的目標也不會被反擊
@@ -302,9 +323,9 @@
       const tag = `（${advTxt}擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''}：${rollName}）`;
       let text;
       if (opts.cling) {
-        text = `${aName}緊緊纏著你，趁你${opts.clingWord || '移開'}出手，${dodged ? '被你閃開了' : `造成 ${dmg} 點傷害${reduced > 0 ? `（護甲擋下 ${reduced} 點）` : ''}`}。`;
+        text = `${aName}緊緊纏著你，趁你${opts.clingWord || '移開'}出手，${dodged ? '被你閃開了' : `造成 ${dmg} 點傷害${reduced > 0 ? `（護甲擋下 ${reduced} 點）` : ''}${conCut > 0 ? `（你硬挺過去，又少受 ${conCut} 點）` : ''}`}。`;
       } else if (roll.key === 'miss') {
-        text = `${head}${tag}，沒有打中。`;
+        text = grazed ? `${head}${tag}，沒有打中，但擦傷了${pD}，造成 ${dmg} 點傷害。` : `${head}${tag}，沒有打中。`;
       } else {
         const parts = [];
         if (roll.key === 'fumble') parts.push('失手了');
@@ -317,6 +338,7 @@
         if (resisted) tail += '（有抗性，傷害減半）';
         if (absorbed > 0 && dmg > 0) tail += `（${pD}格擋，擋下 ${absorbed} 點）`;
         if (reduced > 0) tail += `（護甲擋下 ${reduced} 點）`;
+        if (conCut > 0) tail += `（你硬挺過去，又少受 ${conCut} 點）`;
         text = `${head}${tag}，${parts.concat(tail, effects).join('，')}。`;
       }
       game.say(text, dmg > 0 ? (aP ? 'good' : dP ? 'bad' : 'sys') : 'sys');
@@ -331,7 +353,7 @@
     const forced = countered && aP && roll.key === 'hard' && !opts.noForced;
     if (FE.Combat.hook) {
       FE.Combat.hook({
-        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, resisted, reduced, dmg, holy,
+        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, resisted, reduced, conCut, grazed, dmg, holy,
         dmgType, mastery: mastery && hitKey && alive ? mastery : null, effects, weapon: wpn, off: !!opts.off,
         counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D,
       });

@@ -111,6 +111,11 @@
     // 可雙手：副手空著時改用比較大的傷害骰（投擲、射擊不算）
     const sides = mode === 'melee' && d.versatile && !p.equip.off && !off ? d.versatile : d.die[1];
     out.die = [d.die[0], sides];
+    // 副手拿非輕型武器（暫時開放的情況）：那一下有劣勢、傷害骰降成 1d4；短刀這類輕型武器不受影響
+    if (off && !d.light) {
+      out.die = C.OFF_CLUMSY_DIE.slice();
+      out.offClumsy = true;
+    }
     out.attr = dmgAttr;
     // 遠程：武器技能只加傷害，命中看射擊；近戰：武器技能加命中與傷害
     out.hit = q.hit + hitAttr + (ranged ? shootHit(p) : skillHit(p, w)) - load;

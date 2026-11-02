@@ -146,6 +146,7 @@
     if (aP && D.vexed) adv.push('侵擾');
     if (A.sapped && !opts.cling) dis.push('削弱');
     if (prof && prof.heavy && !opts.counter) dis.push('重型');
+    if (prof && prof.offClumsy) dis.push('副手不順手');
     if (aP && ranged && opts.range && dist(A, D) > opts.range[0]) dis.push('超出正常射程');
     if (aP && ranged && game.adjacentMonsters().length) dis.push('貼著怪物');
     const advState = adv.length && dis.length ? 0 : adv.length ? 1 : dis.length ? -1 : 0;

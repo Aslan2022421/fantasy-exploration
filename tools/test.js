@@ -3120,6 +3120,10 @@ function testCombat28() {
     g.bagAddGear(ss);
     g.equipItem(p.bag.find((e) => e.gear === ss), true);
     ok(p.equip.off === ss, '短矛選「放副手」該拿在副手');
+    // 副手拿非輕型武器：那一下有劣勢、傷害骰 1d4；短刀（輕型）照常
+    const offP = Ch.profile(p, ss, 'melee', true);
+    const dagP = Ch.profile(p, G.make('dagger', 0, 24), 'melee', true);
+    ok(offP.offClumsy && offP.die.join() === '1,4' && !dagP.offClumsy && dagP.die.join() === '1,4', '副手非輕型武器：劣勢＋1d4；短刀不受影響');
     const bw = G.make('bow', 0, 23);
     g.bagAddGear(bw);
     g.equipItem(p.bag.find((e) => e.gear === bw), true);

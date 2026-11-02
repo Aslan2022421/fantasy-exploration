@@ -1,4 +1,4 @@
-// 裝備與物品（第二十五版）：裝備物件 { id, type, q, dur, max }（type 見 config.js 的 FE.GEAR，q 是 FE.QUALITIES 的索引）、
+// 裝備與物品（第二十五版；第二十八版加上武器的傷害骰與特質、箭矢）：裝備物件 { id, type, q, dur, max }（type 見 config.js 的 FE.GEAR，q 是 FE.QUALITIES 的索引）、
 // 名字與品質符號、價錢（原價含品質，販售價再乘聚落經濟）、重量與負重、磨損、隨機品質與掉落、商店的貨色。
 // 冒險者穿的裝備放在 player.equip（main 主手、off 副手、body 身上），沒穿的放在背包裡（id 'gear' 的項目，每件單獨一格、不疊放）。
 // 遊戲內的文字一律只寫世界裡看得到的現象。
@@ -71,7 +71,7 @@
     return hi;
   }
 
-  // 掉落的裝備種類：長劍、長槍、短刀、五種防具（重甲、中甲、輕甲、一般衣袍、魔法衣袍）、盾牌
+  // 掉落的裝備種類：長劍、長槍、短矛、短刀、弓箭、法杖、箭矢（一捆）、五種防具（重甲、中甲、輕甲、一般衣袍、魔法衣袍）、盾牌
   const DROP_TYPES = Object.keys(G).filter((k) => G[k].drop);
   function randomDrop(game, lo, hi) {
     const type = DROP_TYPES[Math.floor(game.rng() * DROP_TYPES.length)];
@@ -80,7 +80,21 @@
 
   // ---- 冒險者的裝備數字 ----
   const equipped = (p) => [p.equip.main, p.equip.off, p.equip.body].filter(Boolean);
-  const atkOf = (p) => (p.equip.main ? def(p.equip.main).atk : C.BARE_ATK);
+  // 掉落、寶箱的訊息用：箭矢是「一捆箭矢」，其他是「一件 X」
+  const lootName = (g) => (def(g).cat === 'ammo' ? `一捆 ${def(g).bundle} 支的${name(g)}` : `一件${name(g)}`);
+  // 武器的傷害寫法：「1d8」
+  const dieText = (die) => `${die[0]}d${die[1]}`;
+  // 主手武器現在的傷害（狀態列、角色畫面用）：骰子＋加值與傷害種類，例如「1d10+3 揮砍」；徒手「1+3 鈍擊」；弓箭寫射擊的傷害
+  function dmgText(p) {
+    const w = p.equip.main;
+    const sign = (n) => (n ? (n > 0 ? '+' : '') + n : '');
+    if (w && def(w).ammo) {
+      const r = FE.Char.profile(p, w, 'shoot');
+      return `${dieText(r.die)}${sign(r.dmg)} ${FE.DMG_TYPES[r.type]}（射擊）`;
+    }
+    const pr = FE.Char.profile(p, w, 'melee');
+    return `${pr.die ? dieText(pr.die) : C.BARE_DMG}${sign(pr.dmg)} ${FE.DMG_TYPES[pr.type]}`;
+  }
   // w 是哪一把武器（沒給就是主手；雙持時副手的短刀要傳進來）
   const wOf = (p, w) => (w === undefined ? p.equip.main : w);
   const hitBonus = (p, w) => (wOf(p, w) ? qual(wOf(p, w)).hit : 0);
@@ -112,7 +126,8 @@
   function itemWeight(e) {
     if (e.id === 'gear') return def(e.gear).weight;
     const b = FE.BAG_ITEMS[e.id];
-    return (b ? b.weight : 1) * e.n;
+    // 箭矢的重量是一捆（20 支）算的
+    return b && b.bundle ? (b.weight * e.n) / b.bundle : (b ? b.weight : 1) * e.n;
   }
   function weightOf(p) {
     return round2(equipped(p).reduce((s, g) => s + def(g).weight, 0) + p.bag.reduce((s, e) => s + itemWeight(e), 0));
@@ -127,9 +142,9 @@
     const body = p.equip.body ? FE.Char.armorTicks(p, def(p.equip.body).ticks || 0) : 0;
     return body + (loadTier(p) >= 1 ? C.OVER_TICKS : 0);
   }
-  // 出手擲 d20 的角色加減：主手武器的命中加值，加敏捷修正值與武器技能（每 5 級 +1），扣掉超重的減值
+  // 近戰出手擲 d20 的角色加減：武器的命中加值，加敏捷修正值（靈巧取力量與敏捷較高者）與武器技能（每 5 級 +1），扣掉超重的減值
   function hitMod(p, w) {
-    return hitBonus(p, w) + FE.Char.attrMod(p, 'dex') + FE.Char.skillHit(p, w) - loadTier(p);
+    return FE.Char.profile(p, wOf(p, w), 'melee').hit;
   }
 
   // ---- 磨損 ----
@@ -161,7 +176,16 @@
     const d = def(g);
     const q = qual(g);
     const w = `重 ${d.weight}`;
-    if (d.cat === 'weapon') return `攻擊力 ${d.atk}${q.hit ? `、命中 +${q.hit}` : ''}、${w}${d.finesse ? '、靈巧（傷害吃力量或敏捷較高的，再減半）' : ''}`;
+    if (d.cat === 'weapon') {
+      const tags = [];
+      if (d.versatile) tags.push(`可雙手（副手空著 ${dieText([d.die[0], d.versatile])}）`);
+      for (const k of ['heavy', 'light', 'finesse', 'reach', 'twoHand']) if (d[k]) tags.push(FE.WEAPON_TAGS[k]);
+      if (d.thrown) tags.push(`投擲 ${d.thrown[0]}／${d.thrown[1]} 格`);
+      if (d.ammo) tags.push(`彈藥（射程 ${d.range[0]}／${d.range[1]} 格）`);
+      if (d.loading) tags.push(FE.WEAPON_TAGS.loading);
+      return `${dieText(d.die)} ${FE.DMG_TYPES[d.type]}${tags.length ? '、' + tags.join('、') : ''}、精通${FE.MASTERIES[d.mastery].name}${q.hit ? `、命中 +${q.hit}` : ''}、${w}`;
+    }
+    if (d.cat === 'ammo') return `一捆 ${d.bundle} 支${q.pierce ? `、穿甲 ${Math.round(q.pierce * 100)}%` : ''}、重 ${d.weight}`;
     if (d.cat === 'armor') {
       const ex = (d.ticks ? `、每個動作多 ${d.ticks} 刻` : '') + (d.dodge ? `、閃避 ${Math.round(d.dodge * 100)}%` : '');
       return `物理減傷 ${Math.round(d.phys * q.armor)}、魔法減傷 ${Math.round(d.magic * q.armor)}、${w}${ex}`;
@@ -171,23 +195,23 @@
   }
 
   // ---- 商店 ----
-  // 鐵匠（村莊）什麼都賣、什麼都修（修到完整）、什麼都能打造；城鎮分成武器匠（武器、礦鎬、鐮刀）和盔甲匠（防具與盾牌）。
+  // 鐵匠（村莊）什麼都賣、什麼都修（修到完整）、什麼都能打造（弓箭、法杖、箭矢、衣袍不能打造）；城鎮分成武器匠（武器、箭矢、礦鎬、鐮刀）和盔甲匠（防具與盾牌）。
   // buy：賣的東西，分類顯示；quals：賣哪幾種品質（工具固定普通）；repair：修哪幾類（GEAR 的 cat）；craft：能打造的；sell：收哪幾類
   const SHOPS = {
     blacksmith: {
       title: '鐵匠',
-      buy: { weapon: ['sword', 'spear', 'dagger'], armor: ['heavy', 'medium', 'light', 'robe', 'shield'], tool: ['pick', 'sickle'] },
+      buy: { weapon: ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow'], armor: ['heavy', 'medium', 'light', 'robe', 'shield'], tool: ['pick', 'sickle'] },
       quals: [0],
       repair: ['weapon', 'armor', 'shield', 'tool'],
-      craft: ['sword', 'spear', 'dagger', 'heavy', 'medium', 'light', 'shield'],
+      craft: ['sword', 'spear', 'shortspear', 'dagger', 'heavy', 'medium', 'light', 'shield'],
       sell: ['weapon', 'armor', 'shield'],
     },
     weaponsmith: {
       title: '武器匠',
-      buy: { weapon: ['sword', 'spear', 'dagger'], tool: ['pick', 'sickle'] },
+      buy: { weapon: ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow'], tool: ['pick', 'sickle'] },
       quals: [0, 1],
       repair: ['weapon', 'tool'],
-      craft: ['sword', 'spear', 'dagger'],
+      craft: ['sword', 'spear', 'shortspear', 'dagger'],
       sell: ['weapon'],
     },
     armorer: {
@@ -199,7 +223,7 @@
       sell: ['armor', 'shield'],
     },
   };
-  const CAT_NAMES = { weapon: '武器', armor: '防具與盾牌', tool: '工具' };
+  const CAT_NAMES = { weapon: '武器與箭矢', armor: '防具與盾牌', tool: '工具' };
   // 工匠是哪一種店：村莊的 smith 是鐵匠，城鎮的 smith 是武器匠，armorer 是盔甲匠；不是工匠回傳 null
   function shopOf(npc, v) {
     if (!npc) return null;
@@ -208,11 +232,13 @@
     return null;
   }
   const isShopkeeper = (n) => !!n && (n.role === 'smith' || n.role === 'armorer');
+  // 能不能放副手（雙持）：暫時弓箭以外的武器都可以，之後再一把一把定哪些只能單手、哪些要雙手
+  const offOk = (d) => !!d && d.cat === 'weapon' && !d.ammo;
 
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
-    equipped, atkOf, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense,
+    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, wear, repaired, durText, statText,
-    SHOPS, CAT_NAMES, shopOf, isShopkeeper,
+    SHOPS, CAT_NAMES, shopOf, isShopkeeper, offOk,
   };
 })();

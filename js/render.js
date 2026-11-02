@@ -17,7 +17,7 @@
   const PAL_NAMES = [
     't-plain', 't-grass', 't-forest', 't-snow', 't-sand', 't-mount', 't-water', 't-rock', 't-stonewall', 't-woodwall', 't-house', 't-road', 't-market', 't-temple', 't-door', 't-bed', 't-furniture', 't-ruin', 't-relic',
     'void', 'hp', 'hp-mid', 'hp-low', 'bug', 'good', 'bad', 'world',
-    'map-node-ore', 'map-node-herb', 'map-chest', 'map-npc', 'map-smith', 'map-armorer', 'map-soldier', 'map-player-fg', 'map-player-bg',
+    'map-node-ore', 'map-node-herb', 'map-chest', 'map-item', 'map-ol-aim', 'map-aim-area', 'map-npc', 'map-smith', 'map-armorer', 'map-soldier', 'map-player-fg', 'map-player-bg',
     'map-mon-fg', 'map-mon-bg', 'map-mid-fg', 'map-mid-bg', 'map-boss-bg', 'map-glitch-fg', 'map-glitch-bg', 'map-ol-target', 'map-ol-hunt', 'map-ol-chase',
     'map-h0', 'map-h1', 'map-h2', 'map-h3', 'map-h4', 'map-village', 'map-town', 'map-indoor', 'map-road', 'map-quest', 'map-recipient',
     'm-plain', 'm-grassland', 'm-shrubland', 'm-forest', 'm-taiga', 'm-tundra', 'm-glacier', 'm-jungle', 'm-savanna', 'm-desert', 'm-marsh', 'm-swamp', 'm-mountain', 'm-lake', 'm-rock',
@@ -101,6 +101,8 @@
     const npcs = new Map(W.npcs.map((n) => [key(n.x, n.y), n]));
     const soldiers = new Map(game.soldiers.map((s) => [key(s.x, s.y), s]));
     const chests = new Map(W.chests.map((c) => [key(c.x, c.y), c]));
+    // 地上的東西（擲出去的武器）
+    const items = new Set(W.items.map((it) => key(it.x, it.y)));
     // 採集點：採完還沒長回來的不畫（那一格就是普通地面）
     const nodes = new Map(W.nodes.filter((n) => !(n.regrowAt > (game.ticks || 0))).map((n) => [key(n.x, n.y), n]));
     const monsters = new Map(game.monsters.map((m) => [key(m.x, m.y), m]));
@@ -116,6 +118,13 @@
       }
     }
     const target = game.targetMonster();
+    // 瞄準中的怪物（白框之外另一種顏色），範圍魔攻會波及的格子塗上底色
+    const aimed = game.aimTarget();
+    const area = new Set();
+    if (aimed && game.aim.mode === 'spell') {
+      const rad = FE.Char.attrMod(p, 'int') >= C.SPELL_BIG_INT ? C.SPELL_RADIUS[1] : C.SPELL_RADIUS[0];
+      for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) area.add(key(aimed.x + dx, aimed.y + dy));
+    }
     // 清除委託指定的小怪物（合體後就標合體怪物）
     const hunted = new Set();
     const hc = p.carrying && p.carrying.kind === 'hunt' ? p.carrying.monsterIds : [];
@@ -169,6 +178,13 @@
           fg = P['map-node-' + nd.kind];
           bold = true;
         }
+        if (items.has(k)) {
+          glyph = ')';
+          fg = P['map-item'];
+          bold = true;
+          alpha = 1;
+        }
+        if (area.has(k)) bg = P['map-aim-area'];
         if (chests.has(k)) {
           glyph = '$';
           fg = P['map-chest'];
@@ -214,7 +230,7 @@
           else if (m.tier === 'mid') { fg = P['map-mid-fg']; bg = P['map-mid-bg']; }
           else { fg = P['map-mon-fg']; bg = P['map-mon-bg']; }
           // 外框：目前的目標（白）＞清除委託指定（紫）＞正在追你（黃）
-          outline = m === target ? P['map-ol-target'] : hunted.has(m) ? P['map-ol-hunt'] : m.chase > 0 ? P['map-ol-chase'] : null;
+          outline = m === aimed ? P['map-ol-aim'] : m === target ? P['map-ol-target'] : hunted.has(m) ? P['map-ol-hunt'] : m.chase > 0 ? P['map-ol-chase'] : null;
           hpPct = Math.round((m.hp / m.maxHp) * 100);
         }
         if (p.x === x && p.y === y) {
@@ -351,7 +367,7 @@
     $('stWorld').innerHTML = `世界 <b class="ws-${lvl}">${FE.Stability.names[lvl]}</b>`;
     $('stGold').textContent = `金幣 ${p.gold}`;
     const d = FE.Gear.playerDefense(p);
-    $('stAtk').textContent = `攻擊力 ${game.playerAtk()}`;
+    $('stAtk').textContent = `傷害 ${game.attackText()}`;
     $('stPhys').textContent = `物理減傷 ${FE.Gear.physReduce(p)}`;
     $('stMagic').textContent = `魔法減傷 ${FE.Gear.magicReduce(p)}`;
     $('stDodge').textContent = `閃避 ${Math.round(d.dodge * 100)}%`;
@@ -373,26 +389,59 @@
 
   // ---- 下方：狀態效果、目標、地點資訊、快捷列 ----
 
-  // 狀態效果：這一版還沒有狀態，一律顯示「無」
+  // 怪物身上的狀態（倒地、削弱、侵擾），目標那一行與狀態效果用
+  const monStates = (m) => [m.prone ? '倒地（下一回合不能動，打牠有優勢）' : '', m.sapped ? '削弱（下一次出手有劣勢）' : '', m.vexed ? '侵擾（你下一次打牠有優勢）' : ''].filter(Boolean);
+
+  // 狀態效果：冒險者這邊的狀態（侵擾：你下一次打哪隻怪物有優勢）；沒有就寫「無」
   function drawEffects() {
-    $('fxText').textContent = '無';
+    const vex = game.monsters.filter((m) => m.vexed && Math.abs(m.x - game.player.x) + Math.abs(m.y - game.player.y) <= C.SIGHT * 3);
+    $('fxText').textContent = vex.length ? vex.map((m) => `侵擾：下一次打${m.name}有優勢`).join('　') : '無';
   }
 
-  // 目標那一行：目前的目標（名字、血條、生命，後面是體型、異常、抗性）；沒有就寫「無」
+  // 底部顯示的目標：瞄準中的、貼著的目前目標、長槍打得到的、還纏著你的那隻
+  function focusMonster() {
+    return game.aimTarget() || game.targetMonster() || game.reachTarget() || game.monsters.find((m) => m.id === game.battle.targetId) || null;
+  }
+
+  // 目標那一行：目前的目標（名字、血條、生命，後面是狀態、體型、異常、抗性）；瞄準中多寫距離與按鍵；沒有就寫「無」
   function drawTarget() {
-    const m = game.targetMonster();
+    const p = game.player;
+    const m = focusMonster();
     if (m) {
       const T = FE.BUG_TYPES[m.type];
-      $('tgtText').innerHTML = `<span class="tname">${esc(m.name)}</span><span class="t-hp"><span class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></span>生命 ${m.hp} / ${m.maxHp}</span><span class="dim t-extra">體型 ${FE.sizeName(m)}　異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</span>`;
+      const st = monStates(m);
+      let aim = '';
+      if (game.aim && m === game.aimTarget()) {
+        const r = game.rangedMode(true);
+        const d = Math.abs(m.x - p.x) + Math.abs(m.y - p.y);
+        const far = r && d > r.range[0];
+        aim = `<span class="aim">瞄準（${game.aim.i + 1}/${game.aim.ids.length}）距離 ${d} 格${far ? '，超出正常射程（劣勢）' : ''}${game.adjacentMonsters().length ? '，貼著怪物（劣勢）' : ''}：Tab 換目標，F 或 Enter 出手，Esc 取消</span>`;
+      }
+      $('tgtText').innerHTML = `<span class="tname">${esc(m.name)}</span><span class="t-hp"><span class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></span>生命 ${m.hp} / ${m.maxHp}</span>${aim}${st.length ? `<span class="t-state">${esc(st.join('、'))}</span>` : ''}<span class="dim t-extra">體型 ${FE.sizeName(m)}　異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, FE.Gear.clearLevel(p)))}</span>`;
     } else $('tgtText').textContent = '無';
     $('tgtText').className = m ? 'tgt' : '';
-    // 快捷列：攻擊 <1>、重擊 <2>（冷卻中顯示剩幾回合、變暗）、撤退 <3>；旁邊沒有怪物時都變暗
+    // 快捷列：攻擊 <1>、重擊 <2>（冷卻中顯示剩幾回合、變暗）、撤退 <3>、射擊／施法 <F>、治療 <4>（牧師）、盾擊 <5>（戰士）
+    const adj = game.targetMonster();
+    const cls = FE.Char.cls(p);
     const cd = game.battle.cooldown;
-    const qs = document.querySelectorAll('#quick .qs');
-    qs.forEach((b) => {
-      b.disabled = !m || (b.dataset.act === 'deep' && cd > 0);
+    const hcd = game.battle.healCd || 0;
+    const ranged = game.rangedMode(true);
+    const can = {
+      attack: !!adj || !!game.reachTarget(),
+      deep: !!adj && cd <= 0,
+      flee: !!adj,
+      fire: !!ranged,
+      heal: hcd <= 0 && p.hp < p.maxHp,
+      bash: !!adj && !!FE.Gear.shieldOf(p),
+    };
+    document.querySelectorAll('#quick .qs').forEach((b) => {
+      b.disabled = !can[b.dataset.act];
     });
-    document.querySelector('#quick [data-act="deep"] .qcd').textContent = m && cd > 0 ? `冷卻 ${cd}` : '';
+    document.querySelector('#quick [data-act="heal"]').classList.toggle('hidden', !cls.heal);
+    document.querySelector('#quick [data-act="bash"]').classList.toggle('hidden', !cls.bash);
+    document.querySelector('#quick [data-act="fire"] .qn').textContent = ranged && ranged.mode === 'spell' ? '施法' : ranged && ranged.mode === 'throw' ? '投擲' : '射擊';
+    document.querySelector('#quick [data-act="deep"] .qcd').textContent = adj && cd > 0 ? `冷卻 ${cd}` : '';
+    document.querySelector('#quick [data-act="heal"] .qcd').textContent = hcd > 0 ? `冷卻 ${hcd}` : '';
   }
 
   // 地點資訊（左下）：所在的聚落，或環境的簡短資訊
@@ -415,7 +464,7 @@
     el.innerHTML = `
       <div class="t-head"><b style="color:var(--accent)">${esc(b.name)}</b><span class="dim">高度 ${c.h}</span></div>
       <p>${b.hit ? `在這裡出手 ${b.hit > 0 ? '+' : ''}${b.hit}` : '在這裡出手沒有加減'}${lm ? `，${esc(lm.name)}` : ''}</p>
-      ${game.targetMonster() ? '' : '<p class="t-extra dim">旁邊沒有怪物。撞上怪物只會把牠設成目標，按 1 攻擊、2 重擊。</p>'}`;
+      ${game.targetMonster() ? '' : '<p class="t-extra dim">旁邊沒有怪物。撞上怪物只會把牠設成目標，按 1 攻擊、2 重擊；拿弓箭、短刀、短矛（法師拿法杖）按 F 遠程出手。</p>'}`;
   }
 
   function drawQuest() {
@@ -545,13 +594,13 @@
       }</p>
       <ul class="equipped">${slot('主手', p.equip.main)}${slot('副手', p.equip.off)}${slot('身上', p.equip.body)}</ul>
       <p><button data-dropmode class="${drop ? 'on' : ''}">${drop ? '現在是「丟掉」：選到的整疊直接消失（按 X 切回）' : '切到「丟掉」（X）'}</button>
-      <button data-offmode class="${ui.bagOff ? 'on' : ''}">${ui.bagOff ? '現在短刀放副手（雙持，按 V 切回）' : '短刀改放副手（V）'}</button></p>
-      <p class="dim">雙持：副手也拿短刀時，按 1 攻擊會主手、副手各出手一次，兩下的擲骰各 -2；重擊只用主手。副手拿了短刀就不能拿盾牌。</p>`;
+      <button data-offmode class="${ui.bagOff ? 'on' : ''}">${ui.bagOff ? '現在武器放副手（雙持，按 V 切回）' : '武器改放副手（V）'}</button></p>
+      <p class="dim">雙持：副手只能拿輕型武器（短刀）。按 1 攻擊會主手、副手各出手一次，副手那一下不加屬性修正值；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了短刀就不能拿盾牌；長槍、弓箭要用兩手。</p>`;
     $('backpack').innerHTML = list.length
       ? list
           .map((e, i) => {
             const can = drop ? e.id !== 'goods' : e.use;
-            const act = drop ? '丟掉' : e.id === 'gear' ? (ui.bagOff && e.gear && FE.Gear.def(e.gear).finesse ? '拿在副手' : '穿上或拿起') : '使用';
+            const act = drop ? '丟掉' : e.id === 'gear' ? (ui.bagOff && e.gear && FE.Gear.offOk(FE.Gear.def(e.gear)) ? '拿在副手' : '穿上或拿起') : '使用';
             const note = e.id === 'gear' && !e.use && !drop ? '放在背包裡，撞上礦脈或藥草就會用' : can ? act : '';
             return `<li><button data-use="${i}" ${can ? '' : 'disabled'}><kbd>${i + 1}</kbd>${esc(e.name)}${e.n > 1 ? ` ×${e.n}` : ''}${
               e.info ? ` <span class="dim">（${esc(e.info)}）</span>` : ''
@@ -559,6 +608,13 @@
           })
           .join('')
       : '<li class="dim">背包是空的。</li>';
+  }
+
+  // 角色視窗用：主手武器的精通（用得上的才寫）
+  function masteryLine() {
+    const p = game.player;
+    const m = p.equip.main ? FE.Char.mastery(p, p.equip.main) : null;
+    return m ? `　精通${FE.MASTERIES[m].name}（${FE.MASTERIES[m].desc}）` : '';
   }
 
   // 角色視窗（C）：職業與等級、生命與負重上限、六項屬性與修正值、各技能的等級與到下一級的進度、目前的加成
@@ -574,7 +630,11 @@
       return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td></tr>`;
     }).join('');
     const effect = (id, lv) => {
-      if (FE.SKILLS[id].weapon) return `出手 +${Math.floor(lv / C.SKILL_HIT_EVERY)}、傷害 +${Math.floor(lv / C.SKILL_DMG_EVERY)}`;
+      const mas = FE.GEAR[id] && FE.GEAR[id].mastery;
+      const unlock = mas && !c.mastery ? (lv >= FE.MASTERY_SKILL ? `；精通${FE.MASTERIES[mas].name}` : `；${FE.MASTERY_SKILL} 級學會精通${FE.MASTERIES[mas].name}`) : '';
+      if (id === 'bow') return `射擊的傷害 +${Math.floor(lv / C.SKILL_DMG_EVERY)}${unlock}`;
+      if (id === 'shoot') return `射擊、投擲的命中 +${Math.floor(lv / C.SKILL_HIT_EVERY)}`;
+      if (FE.SKILLS[id].weapon) return `近戰命中 +${Math.floor(lv / C.SKILL_HIT_EVERY)}、傷害 +${Math.floor(lv / C.SKILL_DMG_EVERY)}${id !== 'staff' && FE.GEAR[id].thrown ? '（投擲只加傷害）' : ''}${unlock}`;
       if (id === 'dodge') return `閃避機率 +${lv}%`;
       if (id === 'shield') return `格擋機率 +${lv * 2}%`;
       return lv >= 20 ? '中甲、重甲都不多花刻，重甲不再扣閃避' : lv >= 10 ? '中甲、重甲都不多花刻' : lv >= 5 ? '中甲不多花刻，重甲少 1 刻' : '中甲多 1 刻、重甲多 2 刻';
@@ -595,7 +655,7 @@
       <h3>技能（用了就成長，0～${C.SKILL_MAX} 級）</h3>
       <table class="stats"><tr><th>技能</th><th>等級</th><th>到下一級</th><th>目前的效果</th></tr>${skillRows}</table>
       <h3>目前的數字</h3>
-      <p>近戰傷害加值 ${sign(Ch.dmgBonus(p))}　出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　閃避 ${Math.round(d.dodge * 100)}%${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}</p>`;
+      <p>主手傷害 ${esc(game.attackText())}　近戰出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　暴擊 ${Ch.critMin(p, p.equip.main)}～20　攻擊一次 ${Ch.attackTicks(p, p.equip.main)} 刻${masteryLine()}　閃避 ${Math.round(d.dodge * 100)}%${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}</p>`;
   }
 
   // ---- 模態視窗：開新世界選職業與起始裝備、升級加點。開著的時候不能做別的事 ----

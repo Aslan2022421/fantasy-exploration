@@ -190,6 +190,12 @@
     for (const m of game.monsters.slice()) {
       if (!game.monsters.includes(m)) continue; // 被反擊打倒了
       FE.Combat.regenBlock(game, m);
+      // 倒地（失衡）：這一回合不能動，爬起來就過了
+      if (m.prone) {
+        m.prone = false;
+        if (dist(m, p) <= C.SIGHT) game.say(`${m.name}從地上爬了起來。`, 'sys');
+        continue;
+      }
       if (!safe && touching(game, m, p)) {
         // 追人的怪物纏上之後一直記得冒險者；不追人、只徘徊的怪物也照樣攻擊
         if (m.small) {
@@ -443,5 +449,5 @@
     }
   }
 
-  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching };
+  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free };
 })();

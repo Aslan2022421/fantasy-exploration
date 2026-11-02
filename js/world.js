@@ -16,6 +16,7 @@
       this.villages = [];
       this.landmarks = [];      // 聚落附近的獨特地貌
       this.nodes = [];          // 採集點（礦脈、藥草）：{ id, kind, x, y, regrowAt }，採完到 regrowAt 刻才長回來
+      this.items = [];          // 地上的東西（第二十八版：擲出去的武器）：{ x, y, gear }，冒險者走過去就撿回來
       this.nextId = 1;
       this.spawn = null;
       this.dormant = new Set(); // 創世時放不下怪物的地形錯位
@@ -122,6 +123,11 @@
     npcById(id) {
       return this.npcs.find((n) => n.id === id) || null;
     }
+    // 這一格地上的東西（擲出去的武器）
+    itemsAt(x, y) {
+      return this.items.filter((it) => it.x === x && it.y === y);
+    }
+
     chestAt(x, y) {
       return this.chests.find((c) => c.x === x && c.y === y) || null;
     }

@@ -1,4 +1,5 @@
-// 角色（第二十六版）：職業、六項屬性與修正值、生命與負重上限、升級加點、技能用了就成長、起始裝備。
+// 角色（第二十六版）：職業、六項屬性與修正值、生命與負重上限、升級加點、技能用了就成長、起始裝備；
+// 第二十八版加上出手的算法（profile：傷害骰、屬性、技能、重型、暴擊門檻、精通）、射程與攻擊速度。
 // 冒險者的資料放在 player：cls 職業、attr 六項屬性（str、dex、con、int、wis、cha）、skills 各技能 { lv 等級, n 這一級已經用了幾次 }、
 // points 還沒分配的屬性點、armorActs 穿中甲或重甲累積的動作數。遊戲內的文字一律只寫世界裡看得到的現象。
 (function () {
@@ -24,13 +25,13 @@
   const skillNeed = (lv) => C.SKILL_USE[0] + C.SKILL_USE[1] * lv;
   const freshSkills = () => Object.fromEntries(Object.keys(FE.SKILLS).map((k) => [k, { lv: 0, n: 0 }]));
 
-  // 主手武器對應的技能（長劍、長槍、短刀、法杖）；空手、弓箭沒有
+  // 武器對應的技能（長劍、長槍、短矛、短刀、弓箭、法杖）；空手沒有
   // w 是哪一把武器（沒給就是主手；副手的短刀要傳進來）
   function weaponSkill(p, w) {
     const g = w === undefined ? p.equip.main : w;
     return g && FE.SKILLS[g.type] && FE.SKILLS[g.type].weapon ? g.type : null;
   }
-  // 近戰武器技能：命中每 5 級 +1（出手 d20）、傷害每 3 級 +1
+  // 武器技能：命中每 5 級 +1（出手 d20）、傷害每 3 級 +1（遠程只加傷害，命中看射擊，見 profile）
   function skillHit(p, w) {
     const s = weaponSkill(p, w);
     return s ? Math.floor(skillLv(p, s) / C.SKILL_HIT_EVERY) : 0;
@@ -39,13 +40,97 @@
     const s = weaponSkill(p, w);
     return s ? Math.floor(skillLv(p, s) / C.SKILL_DMG_EVERY) : 0;
   }
-  // 靈巧武器（短刀）：傷害吃力量與敏捷修正值裡較高的那個，算完再 ÷2 無條件進位（見 combat.js 的 baseDamage）
+  const shootHit = (p) => Math.floor(skillLv(p, 'shoot') / C.SKILL_HIT_EVERY);
+  // 靈巧武器（短刀）：命中與傷害都取力量與敏捷修正值裡較高的那個
   const isFinesse = (w) => !!w && !!FE.GEAR[w.type].finesse;
-  // 冒險者一般攻擊、重擊的傷害加值：力量修正值（可為負；靈巧武器取力量與敏捷較高者）加武器技能
+  // 近戰一般攻擊、重擊的傷害加值（主手）：力量修正值（可為負；靈巧武器取力量與敏捷較高者）加武器技能
   function dmgBonus(p, w) {
     const g = w === undefined ? p.equip.main : w;
     const str = attrMod(p, 'str');
     return (isFinesse(g) ? Math.max(str, attrMod(p, 'dex')) : str) + skillDmg(p, g);
+  }
+
+  // ---- 精通與出手 ----
+  // 這把武器的精通冒險者用不用得上：戰士、遊俠一開始就會；法師、牧師要那把武器的技能 5 級。回傳精通的 key 或 null
+  function mastery(p, w) {
+    const d = w && FE.GEAR[w.type];
+    if (!d || !d.mastery) return null;
+    return cls(p).mastery || skillLv(p, w.type) >= FE.MASTERY_SKILL ? d.mastery : null;
+  }
+  // 擲出幾點以上算暴擊：平常 20；感知修正值 +2 以上 19；短刀再擴大 1
+  function critMin(p, w) {
+    return 20 - (attrMod(p, 'wis') >= C.CRIT_WIS ? 1 : 0) - (w && w.type === 'dagger' ? 1 : 0);
+  }
+  // 射程：武器的正常射程與最遠射程都加感知修正值，最少 1 格。base 是 [正常, 最遠]
+  function range(p, base) {
+    const w = attrMod(p, 'wis');
+    return [Math.max(1, base[0] + w), Math.max(1, base[1] + w)];
+  }
+
+  // 冒險者這一下怎麼算：mode 是 melee（近戰，含觸及）、shoot（弓箭射擊）、throw（投擲）、spell（法師拿法杖的範圍魔攻）、bash（戰士盾擊）；
+  // w 是用的武器（null 是徒手），off 是雙持時副手那一下。回傳：
+  //   die 傷害骰（徒手是 null，固定 BARE_DMG）、type 傷害種類、hit 出手 d20 的角色加減（品質＋屬性＋技能－超重；不含地形、高處）、
+  //   dmg 傷害加值（屬性＋技能）、attr 這一下用的屬性修正值（失衡的機率用）、heavy 重型武器的劣勢、crit 暴擊門檻、
+  //   mastery 用得上的精通、skills 這一下練哪些技能、clear 清除等級（抗性）、pierce 穿甲比例
+  function profile(p, w, mode, off) {
+    const d = w ? FE.GEAR[w.type] : null;
+    const q = w ? FE.QUALITIES[w.q || 0] : FE.QUALITIES[0];
+    const str = attrMod(p, 'str');
+    const dex = attrMod(p, 'dex');
+    const load = FE.Gear.loadTier(p);
+    const out = { die: null, type: 'blunt', hit: 0, dmg: 0, attr: 0, heavy: false, crit: critMin(p, w), mastery: null, skills: [], clear: q.clear, pierce: q.pierce };
+    if (mode === 'bash') {
+      // 盾擊：1d4 鈍擊＋力量修正值；沒有精通、不算技能，命中只加敏捷（盾牌沒有命中加值）
+      Object.assign(out, { die: C.BASH_DIE, type: 'blunt', hit: dex - load, dmg: str, attr: str, crit: critMin(p, null), clear: 0, pierce: 0 });
+      return out;
+    }
+    if (!d) {
+      // 徒手：固定 1 點鈍擊＋力量修正值
+      Object.assign(out, { hit: dex - load, dmg: str, attr: str, clear: 0, pierce: 0 });
+      return out;
+    }
+    if (mode === 'melee' && d.ammo) {
+      // 拿弓近戰打人：當臨時武器，1d4 鈍擊＋力量修正值；沒有精通、不算技能，命中只加敏捷
+      Object.assign(out, { die: C.BOW_MELEE_DIE, type: 'blunt', hit: dex - load, dmg: str, attr: str, crit: critMin(p, null), clear: 0, pierce: 0 });
+      return out;
+    }
+    out.type = d.type;
+    out.mastery = mastery(p, w);
+    if (mode === 'spell') {
+      // 法師的範圍魔攻：1d6 魔法＋智力修正值，命中加智力修正值（取代敏捷），算法杖技能
+      const int = attrMod(p, 'int');
+      Object.assign(out, { die: C.SPELL_DIE, type: 'magic', hit: q.hit + int + skillHit(p, w) - load, dmg: int + skillDmg(p, w), attr: int, skills: ['staff'] });
+      return out;
+    }
+    const ranged = mode === 'shoot' || mode === 'throw';
+    // 用哪一項屬性：靈巧取力量與敏捷較高者；射擊用敏捷；近戰與投擲的傷害用力量，命中照舊用敏捷
+    const hitAttr = d.finesse ? Math.max(str, dex) : dex;
+    const dmgAttr = d.finesse ? Math.max(str, dex) : mode === 'shoot' ? dex : str;
+    // 副手那一下不加屬性修正值，修正值是負數時照扣
+    const dmgMod = off ? Math.min(0, dmgAttr) : dmgAttr;
+    // 可雙手：副手空著時改用比較大的傷害骰（投擲、射擊不算）
+    const sides = mode === 'melee' && d.versatile && !p.equip.off && !off ? d.versatile : d.die[1];
+    out.die = [d.die[0], sides];
+    // 副手拿非輕型武器（暫時開放的情況）：那一下有劣勢、傷害骰降成 1d4；短刀這類輕型武器不受影響
+    if (off && !d.light) {
+      out.die = C.OFF_CLUMSY_DIE.slice();
+      out.offClumsy = true;
+    }
+    out.attr = dmgAttr;
+    // 遠程：武器技能只加傷害，命中看射擊；近戰：武器技能加命中與傷害
+    out.hit = q.hit + hitAttr + (ranged ? shootHit(p) : skillHit(p, w)) - load;
+    out.dmg = dmgMod + skillDmg(p, w);
+    out.skills = ranged ? [w.type, 'shoot'] : [w.type];
+    // 重型：近戰力量、遠程敏捷不到 13 出手有劣勢
+    out.heavy = !!d.heavy && (ranged ? p.attr.dex : p.attr.str) < C.HEAVY_MIN;
+    return out;
+  }
+
+  // 攻擊動作花幾刻：輕型 8、一般 10、重型 12，減敏捷修正值，最少 6（防具與超重另外疊加，見 game.js 的 endTurn）
+  function attackTicks(p, w) {
+    const d = w ? FE.GEAR[w.type] : null;
+    const base = d && d.heavy ? C.ATTACK_TICKS.heavy : d && d.light ? C.ATTACK_TICKS.light : C.ATTACK_TICKS.normal;
+    return Math.max(C.ATTACK_TICKS_MIN, base - attrMod(p, 'dex'));
   }
 
   // 用了一次：這一級的次數滿了就升級，訊息寫出來。20 級就不再累積
@@ -95,7 +180,8 @@
   // 預設的挑法：每組從前面挑
   const defaultPicks = (clsKey) => FE.CLASSES[clsKey].groups.flatMap((g) => g.of.slice(0, g.pick));
 
-  // 建立冒險者（還沒放上地圖）：職業、起始屬性、生命、固定的與自己挑的裝備
+  // 建立冒險者（還沒放上地圖）：職業、起始屬性、生命、固定的與自己挑的裝備。
+  // 雙手武器（長槍、弓箭）跟盾牌一起挑的時候，盾牌放進背包
   function create(game, clsKey, picks, name) {
     const c = FE.CLASSES[clsKey];
     if (!validPicks(clsKey, picks)) throw new Error('起始裝備的挑法不對');
@@ -122,6 +208,7 @@
       if (o.gear) {
         const cat = FE.GEAR[o.gear].cat;
         p.equip[cat === 'weapon' ? 'main' : cat === 'shield' ? 'off' : 'body'] = FE.Gear.make(o.gear, 0, game.nextGearId++);
+        if (o.arrows) p.bag.push({ id: 'arrow', name: FE.Gear.name({ type: 'arrow', q: 0 }), n: o.arrows, q: 0 });
       } else if (o.herb) {
         const e = p.bag.find((x) => x.id === 'herb');
         if (e) e.n += o.herb;
@@ -130,13 +217,18 @@
         p.gold += o.gold;
       }
     }
+    if (p.equip.main && FE.GEAR[p.equip.main.type].twoHand && p.equip.off) {
+      p.bag.push({ id: 'gear', name: FE.Gear.name(p.equip.off), n: 1, gear: p.equip.off });
+      p.equip.off = null;
+    }
     p.maxHp = p.hp = maxHp(p, 1);
     return p;
   }
 
   FE.Char = {
     mod, attrMod, cls, maxHp, carryLimit,
-    skillLv, skillNeed, freshSkills, weaponSkill, skillHit, skillDmg, isFinesse, dmgBonus, useSkill, armorAct, armorTicks, armorDodgeFree,
+    skillLv, skillNeed, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, isFinesse, dmgBonus, useSkill, armorAct, armorTicks, armorDodgeFree,
+    mastery, critMin, range, profile, attackTicks,
     validPicks, defaultPicks, create,
   };
 })();

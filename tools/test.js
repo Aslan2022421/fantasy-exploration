@@ -377,11 +377,11 @@ for (let seed = 1; seed <= GEN_SEEDS; seed++) {
 }
 
 // ---- 機器人模擬 ----
-// 裝備的好壞（機器人用）：武器看攻擊力再看品質，防具看物理減傷再看魔法減傷與品質，盾牌看品質
+// 裝備的好壞（機器人用）：武器看傷害骰的平均再看品質，防具看物理減傷再看魔法減傷與品質，盾牌看品質
 const slotOf = (g) => ({ weapon: 'main', shield: 'off', armor: 'body' })[FE.GEAR[g.type].cat] || null;
 function gearScore(g) {
   const d = FE.GEAR[g.type];
-  if (d.cat === 'weapon') return d.atk * 10 + g.q;
+  if (d.cat === 'weapon') return (d.die[0] * (d.die[1] + 1)) / 2 * 10 + g.q;
   if (d.cat === 'armor') return d.phys * 10 + d.magic + g.q * 0.1;
   return 10 + g.q;
 }
@@ -390,12 +390,14 @@ function gearScore(g) {
 function botGear(game) {
   const p = game.player;
   const noArmor = !!game.botNoArmor;
+  // 第二十八版：機器人只換同一種武器（品質比較好的），不換掉職業的武器（遊俠的弓箭、法師的法杖）
+  const better = (g, s) => !p.equip[s] || (s === 'main' ? g.type === p.equip.main.type && g.q > p.equip.main.q : gearScore(g) > gearScore(p.equip[s]));
   const junk = () => p.bag.findIndex((e) => {
     if (e.id !== 'gear') return false;
     const s = slotOf(e.gear);
     if (!s) return false;
     if (noArmor && s !== 'main') return true;
-    return !!p.equip[s] && gearScore(e.gear) <= gearScore(p.equip[s]);
+    return !!p.equip[s] && !better(e.gear, s);
   });
   while (game.loadTier() >= 2) {
     let i = junk();
@@ -414,7 +416,10 @@ function botGear(game) {
     if (e.id !== 'gear') return false;
     const s = slotOf(e.gear);
     if (!s || (noArmor && s !== 'main')) return false;
-    return !p.equip[s] || gearScore(e.gear) > gearScore(p.equip[s]);
+    // 拿著雙手武器時不拿盾牌（拿不了）
+    if (s === 'off' && p.equip.main && FE.GEAR[p.equip.main.type].twoHand) return false;
+    // 主手空著（壞掉了）：撿起背包裡的任何武器
+    return better(e.gear, s);
   });
   if (i >= 0) {
     game.useItem(i);
@@ -423,10 +428,10 @@ function botGear(game) {
   return false;
 }
 
-// 機器人開新世界時挑的起始裝備（選項 id）：戰士長劍、盾牌、2 份藥草；遊俠長槍；法師法杖、2 份藥草；牧師中甲、長劍、2 份藥草
+// 機器人開新世界時挑的起始裝備（選項 id）：戰士長劍、盾牌、2 份藥草；遊俠弓箭（附 20 支箭）；法師法杖、2 份藥草；牧師中甲、長劍、2 份藥草
 const BOT_PICKS = {
   warrior: ['sword', 'shield', 'herb'],
-  ranger: ['spear'],
+  ranger: ['bow'],
   mage: ['staff', 'herb'],
   priest: ['medium', 'sword', 'herb'],
 };
@@ -454,18 +459,29 @@ function botStep(game, rng, goal, lazy) {
   if (game.loadTier() >= 2 || !adj.length) {
     if (botGear(game)) return;
   }
+  const cls = FE.Char.cls(p);
+  // 牧師：生命一半以下、治療沒在冷卻就治療自己（按 4）
+  if (!lazy && cls.heal && p.hp < p.maxHp * 0.5 && !(game.battle.healCd > 0)) return game.act('heal');
   // 血量低又有藥草就先吃（戰鬥中也能吃）
   if (p.hp < p.maxHp * (adj.length ? 0.3 : 0.4) && game.bagCount('herb')) return game.eatHerb();
-  if (adj.length) {
-    if (p.hp < p.maxHp * 0.25) return game.act('flee');
-    if (!lazy) {
-      // 撞上怪物只設目標、不出手；先把目前的目標撞一下設好，再按 1／2 出手
-      const m = game.targetMonster();
-      if (m) game.move(m.x - p.x, m.y - p.y);
-      return game.act(game.battle.cooldown === 0 && m && m.hp > game.playerAtk() + 3 ? 'deep' : 'attack');
-    }
-  }
+  if (adj.length && p.hp < p.maxHp * 0.25) return game.act('flee');
   let tgt = lazy ? null : goal.get();
+  // 遠程（遊俠的弓箭、法師拿法杖的範圍魔攻）：貼著怪物就射貼著的（有劣勢）；不然要找的怪物在正常射程內、看得到就射，不然走近
+  const rm = !lazy && !game.world.inVillage(p.x, p.y) ? game.rangedMode(true) : null;
+  if (rm && rm.mode !== 'throw') {
+    const list = game.shootTargets(rm.range);
+    const near = list.filter((m) => Math.abs(m.x - p.x) + Math.abs(m.y - p.y) <= rm.range[0]);
+    const t = adj.length ? game.targetMonster() : near.find((m) => tgt && m.x === tgt.x && m.y === tgt.y) || near.find((m) => m.chase > 0 || m.id === game.battle.targetId);
+    if (t && game.fireAt(t)) return;
+  }
+  if (adj.length && !lazy) {
+    // 撞上怪物只設目標、不出手；先把目前的目標撞一下設好，再按 1／2 出手
+    const m = game.targetMonster();
+    if (m) game.move(m.x - p.x, m.y - p.y);
+    // 戰士拿盾牌：偶爾盾擊（按 5）
+    if (cls.bash && FE.Gear.shieldOf(p) && rng() < 0.25) return game.act('bash');
+    return game.act(game.battle.cooldown === 0 && m && m.hp > 8 ? 'deep' : 'attack');
+  }
   if (!adj.length && p.hp < p.maxHp * 0.4) {
     // 血量低：在聚落裡休息一次就回滿；不在聚落裡就先走回最近的聚落（對照組只在原地休息）
     if (lazy) { if (rng() < 0.8) return game.rest(); }
@@ -537,6 +553,7 @@ function botShop(game, npc) {
   const v = game.world.villageById(npc.villageId);
   const S = FE.Gear.SHOPS[FE.Gear.shopOf(npc, v)];
   const noArmor = !!game.botNoArmor;
+  const twoH = !!p.equip.main && !!FE.GEAR[p.equip.main.type].twoHand; // 拿雙手武器（弓箭、長槍）的不買盾牌
   const do_ = (id, stat) => { const ok = shopDo(game, npc, id); if (ok && stat) dlgStats[stat]++; return ok; };
   const price = (type, q) => FE.Gear.shopPrice(type, q, v, game.chaMod());
   const rank = (s) => (p.equip[s] ? gearScore(p.equip[s]) : 0);
@@ -549,9 +566,9 @@ function botShop(game, npc) {
     for (const type of ['heavy', 'medium', 'light']) {
       if (craftable(type) && gearScore({ type, q: 0 }) > rank('body')) { do_('craftItem:' + type, 'craft'); break; }
     }
-    if (!p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && craftable('shield')) do_('craftItem:shield', 'craft');
+    if (!twoH && !p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && craftable('shield')) do_('craftItem:shield', 'craft');
   }
-  if (p.equip.main && p.equip.main.q === 0 && craftable('sword') && game.bagCount('ore') >= 6) do_('craftItem:sword', 'craft');
+  if (p.equip.main && p.equip.main.q === 0 && craftable(p.equip.main.type) && game.bagCount('ore') >= 6) do_('craftItem:' + p.equip.main.type, 'craft');
   if (game.bagCount('ore') && do_('sellOre', 'sellOre')) { /* 礦石全賣 */ }
   // 修：磨損到四成以下的先修（都一次修到完整）
   for (let round = 0; round < 4; round++) {
@@ -560,9 +577,16 @@ function botShop(game, npc) {
   }
   // 買：工具、盾牌、防具（比現有的好的才買，先挑好品質）、換更好品質的武器
   for (const tool of ['pick', 'sickle']) if (!game.toolOf(tool) && price(tool, 0) <= p.gold && fits(tool)) do_(`buyItem:${tool}:0`, 'buy');
+  // 拿弓箭的：箭矢不到 40 支就買（先挑好品質），最多買 3 捆
+  if (p.equip.main && FE.GEAR[p.equip.main.type].ammo && S.buy.weapon) {
+    for (let k = 0; k < 3 && game.bagCount('arrow') < 40; k++) {
+      const q = S.quals.slice().reverse().find((qq) => price('arrow', qq) <= p.gold);
+      if (q === undefined || !do_(`buyItem:arrow:${q}`, 'buy')) break;
+    }
+  }
   const qs = S.quals.slice().reverse();
   if (!noArmor) {
-    if (!p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && S.buy.armor && fits('shield')) {
+    if (!twoH && !p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && S.buy.armor && fits('shield')) {
       const q = qs.find((qq) => price('shield', qq) <= p.gold);
       if (q !== undefined) do_(`buyItem:shield:${q}`, 'buy');
     }
@@ -679,7 +703,8 @@ function simulate(seed, opts) {
         const herb = !ore && game.toolOf('sickle') && game.bagCount('herb') < 3 ? near('herb', 16) : null;
         // 去工匠那裡：裝備磨損到四成以下、有礦石可賣、缺工具、缺防具或盾牌而且錢夠
         const worn = FE.Gear.equipped(p).some((g) => g.dur < g.max * 0.4);
-        const needShop = worn || game.bagCount('ore') >= 3 || (p.gold >= 20 && (!game.toolOf('pick') || !game.toolOf('sickle'))) || (!game.botNoArmor && p.gold >= 25 && (!p.equip.body || !p.equip.off));
+        const bowLow = p.equip.main && FE.GEAR[p.equip.main.type].ammo && game.bagCount('arrow') < 10 && p.gold >= 5;
+        const needShop = worn || bowLow || game.bagCount('ore') >= 3 || (p.gold >= 20 && (!game.toolOf('pick') || !game.toolOf('sickle'))) || (!game.botNoArmor && p.gold >= 25 && (!p.equip.body || (!p.equip.off && !(p.equip.main && FE.GEAR[p.equip.main.type].twoHand))));
         const shopkeeper = needShop && game.turn - (game.botShopAt === undefined ? -1e9 : game.botShopAt) > 120 ? w.npcs.filter((n) => FE.Gear.isShopkeeper(n) && dist(n) < 200).sort((a, b) => dist(a) - dist(b))[0] : null;
         if (c && c.kind !== 'hunt' && w.npcById(c.targetId)) target = { kind: 'npc', id: c.targetId };
         else if (shopkeeper && rng() < 0.7) target = { kind: 'npc', id: shopkeeper.id };
@@ -834,7 +859,7 @@ function simulate(seed, opts) {
     hp: `${game.player.maxHp}（Lv${game.level}）`,
     attr: FE.ATTRS.map((a) => `${a.name}${game.player.attr[a.key]}`).join(' '),
     skills: Object.keys(FE.SKILLS).map((k) => `${FE.SKILLS[k].name}${game.player.skills[k].lv}`).join(' '),
-    weapon: `${game.player.equip.main ? FE.Gear.name(game.player.equip.main) : '徒手'}（攻擊力 ${game.playerAtk()}）`,
+    weapon: `${game.player.equip.main ? FE.Gear.name(game.player.equip.main) : '徒手'}（${game.attackText()}）${game.bagCount('arrow') ? `、箭矢 ${game.bagCount('arrow')}` : ''}`,
     armor: `${game.player.equip.body ? FE.Gear.name(game.player.equip.body) : '無'}／${game.player.equip.off ? FE.Gear.name(game.player.equip.off) : '無盾'}`,
     weight: `${game.weight()}/${game.carryLimit()}`,
     bag: game.bagList().map((e) => `${e.name}${e.n > 1 ? '×' + e.n : ''}`).join(' '),
@@ -916,7 +941,7 @@ function testDialogs() {
   pick(smith, 'buy');
   ok(g.talkPage === 'buy' && ids(smith) === 'cat:weapon/cat:armor/cat:tool/back', `買的分類是 ${ids(smith)}`);
   pick(smith, 'cat:weapon');
-  ok(ids(smith) === 'buyItem:sword:0/buyItem:spear:0/buyItem:dagger:0/back', `武器的選項是 ${ids(smith)}`);
+  ok(ids(smith) === 'buyItem:sword:0/buyItem:spear:0/buyItem:shortspear:0/buyItem:dagger:0/buyItem:bow:0/buyItem:staff:0/buyItem:arrow:0/back', `武器的選項是 ${ids(smith)}`);
   const price = FE.Gear.shopPrice('sword', 0, sv);
   g.player.gold = price - 7;
   const o = g.talkOptions(smith).options[opt(smith, 'buyItem:sword:0')];
@@ -1399,9 +1424,16 @@ function testGear() {
     ok(G.shopPrice('pick', 0, poorMarket) === 20 && G.shopPrice('sickle', 0, plain) === 20, '礦鎬、鐮刀該固定 20 金幣');
     // 資料：武器、防具、盾牌、重量、價錢
     const W = FE.GEAR;
-    ok(W.sword.atk === 4 && W.sword.weight === 2 && W.sword.price === 30 && W.spear.atk === 4 && W.spear.weight === 1 && W.spear.price === 25 && W.dagger.atk === 3 && W.dagger.weight === 1 && W.dagger.price === 15, '長劍、長槍、短刀的數字不對');
-    ok(W.bow.atk === 3 && W.staff.atk === 3 && W.bow.price === 30 && W.staff.price === 30 && W.bow.sold === false && W.staff.sold === false && W.bow.drop === false && W.staff.drop === false, '弓箭、法杖只建資料，不賣不掉');
-    ok(FE.BAG_ITEMS.arrow.bundle === 20 && FE.BAG_ITEMS.arrow.weight === 1, '箭矢資料不對');
+    // 第二十八版：武器的傷害骰、傷害種類、特質、精通、重量、價錢
+    const wd = (t) => [W[t].die.join('d'), W[t].type, W[t].mastery, W[t].weight, W[t].price].join('/');
+    ok(wd('sword') === '1d8/slash/sap/2/30' && W.sword.versatile === 10 && !W.sword.twoHand, `長劍 ${wd('sword')}`);
+    ok(wd('spear') === '1d10/pierce/push/3/25' && W.spear.heavy && W.spear.reach && !W.spear.twoHand && !W.spear.versatile, `長槍 ${wd('spear')}（雙手限制暫時拿掉）`);
+    ok(wd('shortspear') === '1d6/pierce/sap/1/20' && W.shortspear.versatile === 8 && W.shortspear.thrown.join() === '4,12' && W.shortspear.ore === 3 && W.shortspear.dur === 200 && W.shortspear.sold && W.shortspear.drop, `短矛 ${wd('shortspear')}`);
+    ok(wd('dagger') === '1d4/pierce/nick/1/15' && W.dagger.finesse && W.dagger.light && W.dagger.thrown.join() === '4,12', `短刀 ${wd('dagger')}`);
+    ok(wd('bow') === '1d6/pierce/vex/1/30' && W.bow.ammo && W.bow.range.join() === '5,20' && W.bow.twoHand && W.bow.sold && W.bow.drop && !W.bow.ore, `弓箭 ${wd('bow')}`);
+    ok(wd('staff') === '1d6/blunt/topple/1/30' && W.staff.versatile === 8 && W.staff.sold && W.staff.drop && !W.staff.ore, `法杖 ${wd('staff')}`);
+    ok(Object.values(W).every((d) => d.cat !== 'weapon' || !d.loading), '裝填只建標籤，現有武器都沒有');
+    ok(FE.BAG_ITEMS.arrow.bundle === 20 && FE.BAG_ITEMS.arrow.weight === 1 && W.arrow.cat === 'ammo' && W.arrow.price === 5 && W.arrow.bundle === 20 && W.arrow.sold && W.arrow.drop, '箭矢資料不對');
     ok(W.heavy.phys === 3 && W.heavy.magic === 1 && W.heavy.ticks === 2 && W.heavy.dodge === -0.05 && W.heavy.weight === 4 && W.heavy.price === 60, '重甲的數字');
     ok(W.medium.phys === 2 && W.medium.magic === 2 && W.medium.ticks === 1 && W.medium.weight === 3 && W.medium.price === 40, '中甲的數字');
     ok(W.light.phys === 1 && W.light.magic === 1 && !W.light.ticks && W.light.weight === 1 && W.light.price === 20, '輕甲的數字');
@@ -1412,7 +1444,7 @@ function testGear() {
     // 起始：普通長劍、沒有防具、沒有副手
     const g2 = newGame(12);
     const q = g2.player;
-    ok(q.equip.main && q.equip.main.type === 'sword' && q.equip.main.q === 0 && !q.equip.off && !q.equip.body && g2.playerAtk() === 4 && G.name(q.equip.main) === '長劍', '起始裝備不是普通長劍');
+    ok(q.equip.main && q.equip.main.type === 'sword' && q.equip.main.q === 0 && !q.equip.off && !q.equip.body && g2.attackText() === '1d10 揮砍' && G.name(q.equip.main) === '長劍', `起始裝備不是普通長劍（${g2.attackText()}）`);
     ok(G.playerDefense(q).block === 0 && G.playerDefense(q).blockMax === 0 && near(G.playerDefense(q).dodge, 0.1), '沒拿盾牌時格擋機率該是 0');
     ok(G.name(G.make('sword', 1, 1)) === '-做工好-長劍' && G.name(G.make('heavy', 5, 1)) === '☼傑作☼重甲' && G.name(G.make('light', 3, 1)) === '*優秀*輕甲' && G.name(G.make('medium', 4, 1)) === '≡卓越≡中甲' && G.name(G.make('shield', 2, 1)) === '+精良+盾牌', '裝備名字的品質符號');
     // 盾牌與重甲的其他數字
@@ -1519,7 +1551,7 @@ function testGear() {
     sw.dur = 1;
     const log0 = g.log.length;
     G.wear(g, sw);
-    ok(p.equip.main === null && g.playerAtk() === C.BARE_ATK && g.log[0].text.includes('壞掉'), '穿著的劍耐久到 0 沒有消失');
+    ok(p.equip.main === null && g.attackText() === `${C.BARE_DMG} 鈍擊` && g.log[0].text.includes('壞掉'), '穿著的劍耐久到 0 沒有消失');
     const sh = G.make('shield', 0, g.nextGearId++);
     g.bagAddGear(sh);
     sh.dur = 1;
@@ -1610,10 +1642,11 @@ function testGear() {
     const sW = dump(wsmith);
     const sA = dump(armorer);
     const has = (list, t, q) => list.includes(`buyItem:${t}:${q}`);
-    ok(['sword', 'spear', 'dagger', 'heavy', 'medium', 'light', 'robe', 'shield', 'pick', 'sickle'].every((t) => has(sSmith, t, 0)) && sSmith.length === 10, `鐵匠賣的東西 ${sSmith}`);
-    ok(['sword', 'spear', 'dagger'].every((t) => has(sW, t, 0) && has(sW, t, 1)) && has(sW, 'pick', 0) && has(sW, 'sickle', 0) && sW.length === 8, `武器匠賣的東西 ${sW}`);
+    const WEAPONS = ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow'];
+    ok(WEAPONS.concat(['heavy', 'medium', 'light', 'robe', 'shield', 'pick', 'sickle']).every((t) => has(sSmith, t, 0)) && sSmith.length === 14, `鐵匠賣的東西 ${sSmith}`);
+    ok(WEAPONS.every((t) => has(sW, t, 0) && has(sW, t, 1)) && has(sW, 'pick', 0) && has(sW, 'sickle', 0) && sW.length === 16, `武器匠賣的東西 ${sW}`);
     ok(['heavy', 'medium', 'light', 'robe', 'shield'].every((t) => has(sA, t, 0) && has(sA, t, 1)) && sA.length === 10, `盔甲匠賣的東西 ${sA}`);
-    ok(![...sSmith, ...sW, ...sA].some((id) => /:(bow|staff|mrobe):/.test(id)), '商店不該賣弓箭、法杖、魔法衣袍');
+    ok(![...sSmith, ...sW, ...sA].some((id) => /:(mrobe):/.test(id)), '商店不該賣魔法衣袍');
     ok(![...sSmith, ...sW, ...sA].some((id) => /:[3-6]$/.test(id) || /:[2]$/.test(id)), '商店只賣普通與做工好');
     // 買：價錢＝原價×品質×經濟，扣金幣、東西進背包、不花動作
     p.bag = [];
@@ -1699,8 +1732,8 @@ function testGear() {
 
     // 打造：村莊鐵匠什麼都能打（衣袍除外），城鎮武器匠只打武器、盔甲匠只打防具與盾牌
     const craftIds = (n) => optIds(n, 'craft').filter((i) => i.startsWith('craftItem:')).map((i) => i.slice(10)).join(',');
-    ok(craftIds(smith) === 'sword,spear,dagger,heavy,medium,light,shield' && craftIds(wsmith) === 'sword,spear,dagger' && craftIds(armorer) === 'heavy,medium,light,shield', `可打造 ${craftIds(smith)}／${craftIds(wsmith)}／${craftIds(armorer)}`);
-    const need = { sword: 3, spear: 3, dagger: 3, heavy: 5, medium: 4, light: 2, shield: 2 };
+    ok(craftIds(smith) === 'sword,spear,shortspear,dagger,heavy,medium,light,shield' && craftIds(wsmith) === 'sword,spear,shortspear,dagger' && craftIds(armorer) === 'heavy,medium,light,shield', `可打造 ${craftIds(smith)}／${craftIds(wsmith)}／${craftIds(armorer)}`);
+    const need = { sword: 3, spear: 3, shortspear: 3, dagger: 3, heavy: 5, medium: 4, light: 2, shield: 2 };
     for (const [t, n] of Object.entries(need)) {
       const cq = G.craftQuote(t, vil);
       ok(cq.ore === n && cq.fee === Math.round(FE.GEAR[t].price * 0.5 * econ(vil)), `${t} 打造要 ${cq.ore} 顆礦石＋${cq.fee}（應該 ${n} 顆＋${Math.round(FE.GEAR[t].price * 0.5 * econ(vil))}）`);
@@ -1838,18 +1871,18 @@ function testGear() {
     const g = newGame(18);
     const p = g.player;
     const sword0 = p.equip.main;
-    const spear = G.make('spear', 2, g.nextGearId++);
+    const spear = G.make('shortspear', 2, g.nextGearId++);
     g.bagAddGear(spear);
     const t0 = g.turn, steps0 = p.steps;
     g.useItem(p.bag.findIndex((e) => e.gear === spear));
-    ok(p.equip.main === spear && p.bag.some((e) => e.gear === sword0) && !p.bag.some((e) => e.gear === spear) && g.turn === t0 + 1 && p.steps === steps0, '拿起長槍：主手該換成長槍、長劍放回背包、算一個動作、不算步數');
-    ok(g.playerAtk() === 4 && g.log.some((l) => l.text.includes('拿起了+精良+長槍')), `拿起長槍後攻擊力 ${g.playerAtk()}`);
+    ok(p.equip.main === spear && p.bag.some((e) => e.gear === sword0) && !p.bag.some((e) => e.gear === spear) && g.turn === t0 + 1 && p.steps === steps0, '拿起短矛：主手該換成短矛、長劍放回背包、算一個動作、不算步數');
+    ok(g.attackText() === '1d8 穿刺' && g.log.some((l) => l.text.includes('拿起了+精良+短矛')), `拿起短矛後（副手空著，可雙手）傷害 ${g.attackText()}`);
     const sh = G.make('shield', 0, g.nextGearId++);
     const arm = G.make('medium', 4, g.nextGearId++);
     g.bagAddGear(sh); g.bagAddGear(arm);
     g.useItem(p.bag.findIndex((e) => e.gear === sh));
     g.useItem(p.bag.findIndex((e) => e.gear === arm));
-    ok(p.equip.off === sh && p.equip.body === arm, '盾牌該穿在副手、防具穿在身上');
+    ok(p.equip.off === sh && p.equip.body === arm && g.attackText() === '1d6 穿刺', `盾牌該穿在副手、防具穿在身上；副手拿了盾牌就不能用可雙手的大骰子（${g.attackText()}）`);
     ok(near(G.playerDefense(p).block, 0.25) && G.playerDefense(p).blockMax === 4, `拿盾牌後格擋 ${G.playerDefense(p).block}／${G.playerDefense(p).blockMax}`);
     // 換下的放回背包
     const sh2 = G.make('shield', 3, g.nextGearId++);
@@ -1861,6 +1894,13 @@ function testGear() {
     g.bagAddGear(bow);
     g.useItem(p.bag.findIndex((e) => e.gear === bow));
     ok(p.equip.main === bow && p.equip.off === null && p.bag.some((e) => e.gear === sh2), '拿弓箭時副手的盾牌該放回背包');
+    // 長槍的雙手限制暫時拿掉：拿著長槍可以配盾
+    const sp2 = G.make('spear', 0, g.nextGearId++);
+    g.bagAddGear(sp2);
+    g.useItem(p.bag.findIndex((e) => e.gear === sp2));
+    g.useItem(p.bag.findIndex((e) => e.gear === sh2));
+    ok(p.equip.main === sp2 && p.equip.off === sh2, `拿著長槍可以配盾（暫時）：${g.log[0].text}`);
+    g.useItem(p.bag.findIndex((e) => e.gear === bow));
     const turn1 = g.turn;
     g.useItem(p.bag.findIndex((e) => e.gear === sh2));
     ok(p.equip.off === null && g.turn === turn1, '拿著弓箭不該能拿盾牌');
@@ -1892,7 +1932,8 @@ function testGear() {
     const g = newGame(19);
     const p = g.player;
     const mid = () => { const m = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 6 }, 1, 1); return m; };
-    const bagGear = () => p.bag.filter((e) => e.id === 'gear').map((e) => e.gear);
+    // 箭矢掉一捆，疊進背包的箭矢裡（當成 { type: 'arrow', q } 算）
+    const bagGear = () => p.bag.filter((e) => e.id === 'gear' || e.id === 'arrow').map((e) => (e.id === 'arrow' ? { type: 'arrow', q: e.q, n: e.n } : e.gear));
     // 創世時的中型怪物（small=false）與合體怪物（small=false、有 members）都會掉；事件生的 small、小怪物不掉
     const runs = 10000;
     let got = 0;
@@ -1906,7 +1947,13 @@ function testGear() {
     }
     ok(Math.abs(got / runs - 0.1) < 0.02, `中型怪物掉裝備的比例 ${(got / runs).toFixed(3)}（應該約 0.1）`);
     ok(Object.keys(hist).every((q) => q >= 1 && q <= 3) && hist[1] > hist[2] && hist[2] > hist[3], `中型怪物掉的品質 ${JSON.stringify(hist)}（應該做工好～優秀，越高越少）`);
-    ok([...types].every((t) => FE.GEAR[t].drop) && !types.has('bow') && !types.has('staff') && !types.has('pick') && ['sword', 'spear', 'dagger', 'heavy', 'medium', 'light', 'robe', 'mrobe', 'shield'].every((t) => types.has(t)), `掉落的種類 ${[...types]}`);
+    ok([...types].every((t) => FE.GEAR[t].drop) && !types.has('pick') && ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow', 'heavy', 'medium', 'light', 'robe', 'mrobe', 'shield'].every((t) => types.has(t)), `掉落的種類 ${[...types]}`);
+    // 箭矢掉一捆 20 支
+    {
+      let arrows = null;
+      for (let i = 0; i < 4000 && !arrows; i++) { p.bag = []; g.dropGear(mid()); arrows = p.bag.find((e) => e.id === 'arrow'); }
+      ok(arrows && arrows.n === 20 && arrows.q >= 1 && arrows.q <= 3 && g.log.some((l) => l.text.includes('一捆 20 支的')), `掉落的箭矢該是一捆 20 支：${JSON.stringify(arrows)}`);
+    }
     const small = mid(); small.small = true;
     const tiny = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
     let extra = 0;
@@ -2183,7 +2230,7 @@ function testCharacter() {
   }
 
   // 3. 起始裝備：固定的一定有，自己挑的每一種挑法都對；品質都是普通
-  const wantCombos = { warrior: 6, ranger: 2, mage: 4, priest: 8 };
+  const wantCombos = { warrior: 9, ranger: 4, mage: 4, priest: 8 };
   for (const [cls, c] of Object.entries(FE.CLASSES)) {
     const all = product(c.groups.map((gr) => combos(gr.of, gr.pick)));
     ok(all.length === wantCombos[cls], `${cls} 的起始裝備挑法有 ${all.length} 種（應該 ${wantCombos[cls]}）`);
@@ -2199,25 +2246,28 @@ function testCharacter() {
       const shields = gears.filter((t) => FE.GEAR[t].cat === 'shield');
       ok(weapons.length === 1 && p.equip.main && p.equip.main.type === weapons[0] && p.equip.main.q === 0 && p.equip.main.dur === p.equip.main.max, `${cls} ${flat} 主手該是 ${weapons}`);
       ok((armors.length ? p.equip.body && p.equip.body.type === armors[0] && p.equip.body.q === 0 : !p.equip.body), `${cls} ${flat} 身上該是 ${armors}`);
-      ok((shields.length ? p.equip.off && p.equip.off.type === 'shield' && p.equip.off.q === 0 : !p.equip.off), `${cls} ${flat} 副手該是 ${shields}`);
-      ok(g.bagCount('herb') === (ids.includes('herb') ? 2 : 0) && p.gold === (ids.includes('gold') ? 20 : 0) && p.bag.every((e) => e.id === 'herb'), `${cls} ${flat} 的藥草 ${g.bagCount('herb')}、金幣 ${p.gold}`);
-      ok(!['bow'].includes(p.equip.main.type), `${cls} 不該拿到弓箭`);
+      // 雙手武器（長槍）跟盾牌一起挑：盾牌放進背包
+      const two = FE.GEAR[weapons[0]].twoHand;
+      ok((shields.length ? (two ? !p.equip.off && p.bag.some((e) => e.gear && e.gear.type === 'shield') : p.equip.off && p.equip.off.type === 'shield' && p.equip.off.q === 0) : !p.equip.off), `${cls} ${flat} 副手該是 ${two ? '空著（盾牌在背包）' : shields}`);
+      ok(g.bagCount('herb') === (ids.includes('herb') ? 2 : 0) && p.gold === (ids.includes('gold') ? 20 : 0) && p.bag.every((e) => e.id === 'herb' || (e.id === 'arrow' && weapons[0] === 'bow') || (e.gear && e.gear.type === 'shield' && two)), `${cls} ${flat} 的藥草 ${g.bagCount('herb')}、金幣 ${p.gold}、背包 ${p.bag.map((e) => e.name)}`);
+      ok(g.bagCount('arrow') === (weapons[0] === 'bow' ? 20 : 0), `${cls} ${flat} 的箭矢 ${g.bagCount('arrow')}（弓箭附一捆 20 支）`);
     }
   }
   // 固定給的裝備
   ok(mk(23, 'warrior').player.equip.body.type === 'medium' && mk(23, 'ranger').player.equip.body.type === 'light' && mk(23, 'mage').player.equip.body.type === 'robe' && mk(23, 'priest', ['shield', 'sword', 'gold']).player.equip.body === null, '固定給的防具不對（戰士中甲、遊俠輕甲、法師一般衣袍、牧師沒有固定的）');
-  ok(mk(23, 'ranger').player.equip.main.type === 'dagger' && mk(23, 'ranger', ['spear']).player.equip.main.type === 'spear', '遊俠只能挑短刀或長槍');
-  ok(mk(23, 'mage', ['staff', 'gold']).player.equip.main.type === 'staff' && mk(23, 'mage', ['staff', 'gold']).playerAtk() === 3, '法師拿法杖攻擊力 3');
+  ok(mk(23, 'ranger').player.equip.main.type === 'bow' && ['bow', 'dagger', 'shortspear', 'spear'].every((t) => mk(23, 'ranger', [t]).player.equip.main.type === t) && !Ch.validPicks('ranger', ['sword']), '遊俠的武器四選一：弓箭、短刀、短矛、長槍');
+  ok(['sword', 'spear', 'shortspear'].every((t) => Ch.validPicks('warrior', [t, 'herb', 'gold'])), '戰士原本的長槍選項，長槍、短矛都能選');
+  ok(mk(23, 'mage', ['staff', 'gold']).player.equip.main.type === 'staff' && mk(23, 'mage', ['staff', 'gold']).attackText() === '1d8-1 鈍擊', `法師拿法杖（副手空著 1d8，力量 -1）：${mk(23, 'mage', ['staff', 'gold']).attackText()}`);
   // 不合法的挑法：挑多、挑少、挑到別組的、重複、不是清單
   ok(!Ch.validPicks('warrior', ['sword', 'spear', 'shield', 'herb']) && !Ch.validPicks('warrior', ['sword', 'shield']) && !Ch.validPicks('warrior', ['sword', 'shield', 'herb', 'gold']) &&
-    !Ch.validPicks('warrior', ['sword', 'herb', 'herb']) && !Ch.validPicks('warrior', ['dagger', 'herb', 'gold']) && !Ch.validPicks('ranger', ['bow']) && !Ch.validPicks('mage', ['staff']) &&
+    !Ch.validPicks('warrior', ['sword', 'herb', 'herb']) && !Ch.validPicks('warrior', ['dagger', 'herb', 'gold']) && !Ch.validPicks('ranger', ['bow', 'dagger']) && !Ch.validPicks('mage', ['staff']) &&
     !Ch.validPicks('priest', ['medium', 'shield', 'sword', 'gold']) && !Ch.validPicks('warrior', 'sword') && !Ch.validPicks('none', []), '不合法的挑法該被擋下');
   let threw = false;
   try { new FE.Game(1).start({ cls: 'warrior', picks: ['sword', 'spear'] }); } catch (e) { threw = true; }
   ok(threw, '不合法的挑法該讓開新世界失敗（不生出世界）');
-  // 每個選項 id 都對得到資料；法杖開放給起始裝備，商店與寶箱、怪物照舊不賣不掉法杖與弓箭
+  // 每個選項 id 都對得到資料；第二十八版起法杖、弓箭、箭矢、短矛商店有賣、寶箱與怪物會掉；弓箭、法杖、箭矢不能打造
   ok(Object.values(FE.CLASSES).every((c) => c.fixed.concat(...c.groups.map((gr) => gr.of)).every((id) => FE.START_OPTS[id])) && Object.values(FE.START_OPTS).every((o) => !o.gear || FE.GEAR[o.gear]), '起始裝備的選項資料對不上');
-  ok(FE.Gear.DROP_TYPES.every((t) => t !== 'staff' && t !== 'bow') && Object.values(G.SHOPS).every((s) => Object.values(s.buy).every((l) => !l.includes('staff') && !l.includes('bow')) && !s.craft.includes('staff')), '商店、打造、掉落不該有法杖與弓箭');
+  ok(['staff', 'bow', 'arrow', 'shortspear'].every((t) => FE.Gear.DROP_TYPES.includes(t) && G.SHOPS.blacksmith.buy.weapon.includes(t) && G.SHOPS.weaponsmith.buy.weapon.includes(t)) && Object.values(G.SHOPS).every((s) => !s.craft.includes('staff') && !s.craft.includes('bow') && !s.craft.includes('arrow')), '法杖、弓箭、箭矢、短矛該賣該掉；弓箭、法杖、箭矢不能打造');
 
   // 4. 生命公式與升級：每升一級加「職業基礎÷2＋體質修正值」，每次照公式重算，體質加點時前面的等級一起補上
   for (const [cls, w] of Object.entries(want)) {
@@ -2271,7 +2321,7 @@ function testCharacter() {
     ok(g.spendPoint('str') && p.attr.str === 18 && p.points === 2, '力量 17 該加得到 18');
     ok(!g.spendPoint('str') && p.attr.str === 18 && p.points === 2, '力量 18 不該再加，點數也不該被吃掉');
     ok(!g.spendPoint('luck') && p.points === 2, '不存在的屬性不該能加');
-    ok(g.spendPoint('int') && p.attr.int === 10 && p.points === 1, '智力、感知這一版沒效果，但要能加點');
+    ok(g.spendPoint('int') && p.attr.int === 10 && p.points === 1, '智力要能加點');
     ok(g.spendPoint('wis') && p.attr.wis === 13 && p.points === 0, '感知要能加點');
     // 六項都到上限，沒地方加的點數不留
     for (const k of keys) p.attr[k] = 18;
@@ -2292,56 +2342,59 @@ function testCharacter() {
     // 舊版本的存檔讀不了
     FE.store.save('fe.save', { version: C.SAVE_VERSION - 1, data: {} });
     const old = FE.Save.load();
-    ok(C.SAVE_VERSION === 15 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
+    ok(C.SAVE_VERSION === 16 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
   }
 
-  // 6. 力量：近戰傷害加修正值（可為負，最少 1）；戰士拿盾牌格擋值加修正值，其他職業只照盾牌與品質
+  // 6. 力量：近戰傷害加修正值（可為負，最少 1）；長劍 1d8（副手空著 1d10）；短刀靈巧取力量與敏捷較高者，不再減半；重擊傷害骰擲兩次
   {
     const g = mk(30, 'warrior', ['sword', 'herb', 'gold']);
     const p = g.player;
     const m = arena(g, 'CLIFF');
     m.type = 'RUNTIME'; // 碎裂：沒有閃避、格擋、抗性
-    const range = (n) => {
+    const range = (n, kind) => {
       const seen = [];
       FE.Combat.hook = (e) => { if (e.by === 'player' && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted && !e.counter) seen.push(e.dmg); };
-      p.equip.main.dur = p.equip.main.max = 1e9;
+      if (p.equip.main) p.equip.main.dur = p.equip.main.max = 1e9;
       // 每一下都把技能歸零，免得量到一半技能升級、傷害跟著變
-      for (let i = 0; i < n; i++) { p.hp = p.maxHp = 1e9; p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true }); }
+      for (let i = 0; i < n; i++) { p.hp = p.maxHp = 1e9; p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, kind || 'attack', { noCounter: true }); }
       FE.Combat.hook = hook0;
       return [Math.min(...seen), Math.max(...seen)];
     };
     ok(Ch.dmgBonus(p) === 3, `戰士力量 16 的傷害加值 ${Ch.dmgBonus(p)}`);
-    let r = range(500);
-    ok(r[0] === 7 && r[1] === 10, `力量 16（+3）拿長劍一般攻擊的傷害該是 7～10，量到 ${r}`);
+    let r = range(800);
+    ok(r[0] === 4 && r[1] === 13, `力量 16（+3）拿長劍、副手空著（1d10）的傷害該是 4～13，量到 ${r}`);
+    p.equip.off = G.make('shield', 0, g.nextGearId++);
+    r = range(800);
+    ok(r[0] === 4 && r[1] === 11, `副手拿盾牌時長劍是 1d8：4～11，量到 ${r}`);
+    p.equip.off = null;
     p.attr.str = 8;
-    r = range(500);
-    ok(r[0] === 3 && r[1] === 6, `力量 8（-1）拿長劍一般攻擊的傷害該是 3～6，量到 ${r}`);
+    r = range(800);
+    ok(r[0] === 1 && r[1] === 9, `力量 8（-1）拿長劍 1d10-1 該是 1～9（最少 1），量到 ${r}`);
     p.equip.main = G.make('dagger', 0, g.nextGearId++);
-    p.attr.str = 1; // 修正值 -5，但短刀取力量與敏捷較高者（敏捷 13 是 +1）：(3＋0～3＋1)÷2 進位 ＝ 2～4
+    p.attr.str = 1; // 修正值 -5，但短刀取力量與敏捷較高者（敏捷 13 是 +1）：1d4＋1 ＝ 2～5
     r = range(500);
-    ok(r[0] === 2 && r[1] === 4, `力量 1、敏捷 13 拿短刀該是 2～4（靈巧取較高者再 ÷2 進位），量到 ${r}`);
+    ok(r[0] === 2 && r[1] === 5, `力量 1、敏捷 13 拿短刀該是 2～5（靈巧取較高者，不再減半），量到 ${r}`);
     p.attr.str = 16;
-    p.attr.dex = 13; // 力量 +3 較高：(3＋0～3＋3)÷2 進位 ＝ 3～5
+    p.attr.dex = 13; // 力量 +3 較高：4～7
     r = range(500);
-    ok(r[0] === 3 && r[1] === 5, `力量 16 拿短刀該是 3～5，量到 ${r}`);
-    p.attr.str = 8;
-    p.attr.dex = 18; // 敏捷 +4 較高：(3＋0～3＋4)÷2 進位 ＝ 4～5
-    r = range(500);
-    ok(r[0] === 4 && r[1] === 5, `敏捷 18 拿短刀該是 4～5，量到 ${r}`);
+    ok(r[0] === 4 && r[1] === 7, `力量 16 拿短刀該是 4～7，量到 ${r}`);
     p.attr.str = 1;
     p.attr.dex = 1; // 兩個都 -5：最少 1
-    r = range(500);
+    r = range(300);
     ok(r[0] === 1 && r[1] === 1, `力量、敏捷都 1 拿短刀傷害該是最少 1，量到 ${r}`);
     p.attr.dex = 13;
     p.attr.str = 12;
-    // 重擊也加
-    const seen = [];
+    // 重擊：傷害骰擲兩次加總，再加一次修正值。長劍副手空著 2d10＋1 ＝ 3～21
     p.equip.main = G.make('sword', 0, g.nextGearId++);
-    p.equip.main.dur = p.equip.main.max = 1e9;
-    FE.Combat.hook = (e) => { if (e.by === 'player' && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted && !e.counter) seen.push(e.dmg); };
-    for (let i = 0; i < 500; i++) { p.hp = p.maxHp = 1e9; p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, 'deep', { noCounter: true }); }
-    FE.Combat.hook = hook0;
-    ok(Math.min(...seen) === 4 * 2 + 1 + 1 && Math.max(...seen) === 4 * 2 + 5 + 1, `力量 12（+1）重擊該是 10～14，量到 ${Math.min(...seen)}～${Math.max(...seen)}`);
+    r = range(3000, 'deep');
+    ok(r[0] === 3 && r[1] === 21, `力量 12（+1）長劍重擊該是 2d10+1 ＝ 3～21，量到 ${r}`);
+    // 徒手：固定 1＋力量修正值，最少 1
+    p.equip.main = null;
+    p.attr.str = 16;
+    r = range(200);
+    ok(r[0] === 4 && r[1] === 4, `徒手力量 16 該是 1＋3 ＝ 4，量到 ${r}`);
+    p.attr.str = 12;
+    p.equip.main = G.make('sword', 0, g.nextGearId++);
     // 反擊固定 1 點，不加力量
     p.attr.str = 18;
     const cs = [];
@@ -2349,16 +2402,16 @@ function testCharacter() {
     for (let i = 0; i < 100; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, counter: true });
     FE.Combat.hook = hook0;
     ok(cs.length > 0 && cs.every((d) => d === C.COUNTER_DAMAGE), '反擊該固定 1 點，不加力量');
-    // 法師拿法杖：近戰單體物攻，跟其他武器一樣算傷害（力量 8 → -1）
+    // 法師拿法杖近戰：1d6 鈍擊（副手空著 1d8）加力量（力量 8 → -1）
     const gm = mk(31, 'mage', ['staff', 'gold']);
     const pm = gm.player;
     const mm = arena(gm, 'RUNTIME');
     const sm = [];
     FE.Combat.hook = (e) => { if (e.by === 'player' && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted && !e.counter) sm.push(e.dmg); };
     pm.equip.main.dur = pm.equip.main.max = 1e9;
-    for (let i = 0; i < 400; i++) { pm.hp = pm.maxHp = 1e9; pm.skills = Ch.freshSkills(); FE.Combat.resolveAttack(gm, pm, mm, 'attack', { noCounter: true }); }
+    for (let i = 0; i < 600; i++) { pm.hp = pm.maxHp = 1e9; pm.skills = Ch.freshSkills(); FE.Combat.resolveAttack(gm, pm, mm, 'attack', { noCounter: true }); }
     FE.Combat.hook = hook0;
-    ok(gm.playerAtk() === 3 && Math.min(...sm) === 2 && Math.max(...sm) === 5, `法師拿法杖該是 2～5（攻擊力 3＋0～3，力量 -1），量到 ${Math.min(...sm)}～${Math.max(...sm)}`);
+    ok(Math.min(...sm) === 1 && Math.max(...sm) === 7, `法師拿法杖近戰該是 1d8-1 ＝ 1～7，量到 ${Math.min(...sm)}～${Math.max(...sm)}`);
   }
   // 盾牌的格擋值：戰士加力量修正值，其他職業只照盾牌與品質
   {
@@ -2375,7 +2428,7 @@ function testCharacter() {
 
   // 7. 敏捷：出手 d20 加修正值（跟品質、地形、高處疊加）；閃避每點修正值 +2%（PLAYER_DODGE 10% 為基準，再加技能、扣防具，最低 0）
   {
-    const g = mk(33, 'ranger');
+    const g = mk(33, 'ranger', ['shortspear']);
     const p = g.player;
     const m = arena(g, 'RUNTIME');
     const tag = () => { const l = g.log.find((x) => /擲出/.test(x.text)); const r = /擲出 \d+([+-]\d+)?：/.exec(l.text); return r && r[1] ? Number(r[1]) : 0; };
@@ -2498,14 +2551,17 @@ function testCharacter() {
       g.choose(target, idx);
       ok(p.gold === 23, `魅力 +3 的送貨獎勵 20 金幣該變 23，量到 ${p.gold}`);
     }
-    // 智力、感知這一版沒有效果：加點不改任何數字
+    // 智力管法師的範圍魔攻（命中、傷害、範圍），感知管射程與暴擊；近戰的命中與傷害不受影響
     const g = mk(38, 'mage');
     const p = g.player;
     const snap = () => JSON.stringify([p.maxHp, g.carryLimit(), G.playerDefense(p), G.hitMod(p), Ch.dmgBonus(p), g.chaMod()]);
     const s0 = snap();
+    const sp0 = Ch.profile(p, p.equip.main, 'spell');
     p.attr.int = 18;
-    p.attr.wis = 18;
-    ok(snap() === s0, '智力、感知這一版不該有效果');
+    p.attr.wis = 14;
+    const sp1 = Ch.profile(p, p.equip.main, 'spell');
+    ok(snap() === s0, '智力、感知不該改近戰與防禦的數字');
+    ok(sp1.hit - sp0.hit === 1 && sp1.dmg - sp0.dmg === 1 && Ch.critMin(p, p.equip.main) === 19 && Ch.range(p, [5, 20]).join() === '7,22', `智力 18 的魔攻命中、傷害各 +1，感知 14 的暴擊 19、射程 +2：${sp1.hit - sp0.hit}、${sp1.dmg - sp0.dmg}、${Ch.critMin(p, p.equip.main)}、${Ch.range(p, [5, 20])}`);
   }
 
   // 10. 負重上限跟著力量重算
@@ -2536,7 +2592,7 @@ function testCharacter() {
     let t20 = 0;
     for (let l = 0; l < 20; l++) { if (l < 15) t15 += Ch.skillNeed(l); t20 += Ch.skillNeed(l); }
     ok(t15 === 675 && t20 === 1150, `到 15 級共 ${t15} 次（應該 675）、到 20 級共 ${t20} 次（應該 1150）`);
-    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,dagger,staff,dodge,armor,shield' && C.SKILL_MAX === 20, '技能名單不對');
+    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,shortspear,dagger,bow,staff,shoot,dodge,armor,shield' && C.SKILL_MAX === 20, '技能名單不對');
     const g = mk(40, 'warrior');
     const p = g.player;
     for (let i = 0; i < 9; i++) Ch.useSkill(g, 'sword');
@@ -2561,7 +2617,17 @@ function testCharacter() {
     q.equip.main = null;
     ok(Ch.skillHit(q) === 0 && Ch.dmgBonus(q) === Ch.attrMod(q, 'str') && Ch.weaponSkill(q) === null, '空手沒有武器技能');
     q.equip.main = G.make('bow', 0, 81);
-    ok(Ch.weaponSkill(q) === null, '弓箭這一版沒有技能');
+    ok(Ch.weaponSkill(q) === 'bow', '弓箭有自己的技能');
+    // 遠程：武器技能只加傷害，命中看射擊（每 5 級 +1）
+    q.skills.bow.lv = 9;
+    q.skills.shoot.lv = 10;
+    const sh = Ch.profile(q, q.equip.main, 'shoot');
+    ok(sh.dmg === Ch.attrMod(q, 'dex') + 3 && sh.hit === Ch.attrMod(q, 'dex') + 2 && sh.skills.join() === 'bow,shoot', `弓箭 9 級傷害 +3、射擊 10 級命中 +2：傷害 ${sh.dmg}、命中 ${sh.hit}`);
+    q.equip.main = G.make('dagger', 0, 83);
+    q.skills.dagger.lv = 6;
+    const th = Ch.profile(q, q.equip.main, 'throw');
+    const best = Math.max(Ch.attrMod(q, 'str'), Ch.attrMod(q, 'dex'));
+    ok(th.dmg === best + 2 && th.hit === best + 2 && th.skills.join() === 'dagger,shoot', `投擲短刀：傷害吃短刀技能（+2）、命中吃射擊（+2）：傷害 ${th.dmg}、命中 ${th.hit}`);
     q.equip.main = G.make('staff', 0, 82);
     ok(Ch.weaponSkill(q) === 'staff', '法杖有自己的技能');
     // 實際的傷害加成：長劍 6 級 → 傷害 +2、命中 +1
@@ -2574,7 +2640,7 @@ function testCharacter() {
     FE.Combat.hook = (e) => { if (e.by === 'player' && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted) seen.push(e.dmg); };
     for (let i = 0; i < 400; i++) { p2.hp = p2.maxHp = 1e9; p2.equip.main.dur = p2.equip.main.max = 1e9; p2.skills.sword = { lv: 6, n: 0 }; FE.Combat.resolveAttack(g2, p2, m, 'attack', { noCounter: true }); }
     FE.Combat.hook = hook0;
-    ok(Math.min(...seen) === 4 + 2 && Math.max(...seen) === 4 + 3 + 2, `長劍 6 級傷害該 +2：量到 ${Math.min(...seen)}～${Math.max(...seen)}`);
+    ok(Math.min(...seen) === 1 + 2 && Math.max(...seen) === 10 + 2, `長劍 6 級（副手空著 1d10）傷害該 +2：量到 ${Math.min(...seen)}～${Math.max(...seen)}`);
     p2.skills.sword = { lv: 6, n: 0 };
     ok(G.hitMod(p2) === 1 + 1, `長劍 6 級命中該 +1（再加敏捷 13 的 +1）：${G.hitMod(p2)}`);
   }
@@ -2594,10 +2660,17 @@ function testCharacter() {
     const sword = p.equip.main;
     p.equip.main = null;
     for (let i = 0; i < 10; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
+    // 拿著弓箭按 1 是徒手（不練技能）；射擊練弓箭與射擊各一次
     p.equip.main = G.make('bow', 0, g.nextGearId++);
     p.equip.main.dur = p.equip.main.max = 1e9;
+    for (let i = 0; i < 10; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, weapon: null });
+    ok(Object.keys(FE.SKILLS).every((k) => k === 'sword' || uses(p, k) === 0) && uses(p, 'sword') === 60, '徒手出手不該練任何技能');
     for (let i = 0; i < 10; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
-    ok(Object.keys(FE.SKILLS).every((k) => k === 'sword' || uses(p, k) === 0) && uses(p, 'sword') === 60, '空手、弓箭出手不該練任何技能');
+    ok(Object.keys(FE.SKILLS).every((k) => k === 'sword' || uses(p, k) === 0), '拿弓近戰打人不該練任何技能');
+    for (let i = 0; i < 7; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, mode: 'shoot', range: [5, 20] });
+    ok(uses(p, 'bow') === 7 && uses(p, 'shoot') === 7, `射擊 7 次：弓箭 ${uses(p, 'bow')}、射擊 ${uses(p, 'shoot')}`);
+    for (let i = 0; i < 5; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, mode: 'bash' });
+    ok(uses(p, 'shield') === 0 && uses(p, 'bow') === 7 && uses(p, 'sword') === 60, '盾擊不算技能');
     p.equip.main = sword;
     // 閃避：閃開一次算一次（含趁機、纏上的那一下）；盾牌使用：格擋成功一次算一次
     let dodged = 0;
@@ -2656,7 +2729,7 @@ function testCharacter() {
     p.equip.body = G.make('heavy', 0, 93);
     ok(near(G.playerDefense(p).dodge, 0.12 - 0.05) && (p.skills.armor.lv = 19, near(G.playerDefense(p).dodge, 0.12 - 0.05)) && (p.skills.armor.lv = 20, near(G.playerDefense(p).dodge, 0.12)), '重甲扣 5% 閃避，20 級起不扣');
   }
-  // 12. 短刀是靈巧武器（力量與敏捷取較高者、算完 ÷2 進位）；雙持：副手也能拿短刀，按 1 兩下各扣 2，重擊只用主手
+  // 12. 短刀是靈巧武器（力量與敏捷取較高者）；雙持：副手只能拿輕型武器，按 1 兩下各擲一次、不扣減值，副手不加正的修正值，重擊只用主手
   {
     const outside = (g) => {
       const w = g.world;
@@ -2679,16 +2752,17 @@ function testCharacter() {
     };
     const lines = (g, re) => g.log.filter((l) => re.test(l.text));
     const modOf = (l) => { const r = /擲出 \d+([+-]\d+)?：/.exec(l.text); return r && r[1] ? Number(r[1]) : 0; };
-    // 重擊：(攻擊力×2＋1～5＋較高修正值)÷2 進位。遊俠敏捷 16（+3）、力量 12（+1）：(6＋1～5＋3)÷2 ＝ 5～7
+    // 重擊：短刀傷害骰擲兩次＋較高修正值，不再減半。遊俠敏捷 16（+3）、力量 12（+1）：2d4＋3 ＝ 5～11
     {
       const { g, p, m } = setup();
       const seen = [];
       FE.Combat.hook = (e) => { if (e.by === 'player' && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted && !e.counter) seen.push(e.dmg); };
-      for (let i = 0; i < 400; i++) { p.hp = p.maxHp = 1e9; p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, 'deep', { noCounter: true }); }
+      for (let i = 0; i < 1500; i++) { p.hp = p.maxHp = 1e9; p.equip.main.dur = 1000; p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, 'deep', { noCounter: true }); }
       FE.Combat.hook = hook0;
-      ok(Math.min(...seen) === 5 && Math.max(...seen) === 7, `短刀重擊該是 5～7（照重擊公式算完 ÷2 進位），量到 ${Math.min(...seen)}～${Math.max(...seen)}`);
+      ok(Math.min(...seen) === 5 && Math.max(...seen) === 11, `短刀重擊該是 2d4+3 ＝ 5～11，量到 ${Math.min(...seen)}～${Math.max(...seen)}`);
     }
-    // 雙持的一般攻擊：兩下各擲一次、各扣 2，各算一次短刀技能、各磨損一次
+    // 雙持的一般攻擊：兩下各擲一次、不扣減值，各算一次短刀技能、各磨損一次；副手那一下不加正的屬性修正值（負的照扣）；
+    // 有迅切（遊俠一開始就會）不多花刻，沒有就多 5 刻
     {
       const { g, p, m } = setup();
       p.hp = p.maxHp = 1e9;
@@ -2699,20 +2773,48 @@ function testCharacter() {
       p.equip.off.dur = p.equip.off.max = 1000;
       const d0 = p.equip.main.dur;
       g.log.length = 0;
+      const t0 = g.ticks;
       g.strike('attack', m);
       const a = lines(g, /^你攻擊/);
       const b = lines(g, /^你用副手攻擊/);
       ok(a.length === 1 && b.length === 1, `雙持按 1 該主手、副手各出手一次：${a.length}、${b.length}`);
-      ok(a.length && b.length && modOf(a[0]) === base - 2 && modOf(b[0]) === base - 2, `雙持兩下的擲骰各扣 2：單手 ${base}、主手 ${a.length && modOf(a[0])}、副手 ${b.length && modOf(b[0])}`);
+      ok(a.length && b.length && modOf(a[0]) === base && modOf(b[0]) === base, `雙持兩下的擲骰不扣減值：單手 ${base}、主手 ${a.length && modOf(a[0])}、副手 ${b.length && modOf(b[0])}`);
       ok(uses(p, 'dagger') === u0 + 2, `兩把各算一次短刀技能：${uses(p, 'dagger') - u0}`);
       ok(p.equip.main.dur === d0 - 1 && p.equip.off.dur === 999, `兩把各磨損一次：主手 ${d0 - p.equip.main.dur}、副手 ${1000 - p.equip.off.dur}`);
-      // 重擊只用主手、不扣減值
+      ok(g.ticks - t0 === Math.max(C.ATTACK_TICKS_MIN, C.ATTACK_TICKS.light - Ch.attrMod(p, 'dex')), `有迅切的雙持不多花刻：${g.ticks - t0}`);
+      // 沒有迅切（當成法師、短刀技能 0 級）：多 5 刻
+      p.cls = 'mage';
+      p.skills.dagger = { lv: 0, n: 0 };
+      const t1 = g.ticks;
+      g.strike('attack', m);
+      ok(g.ticks - t1 === Math.max(C.ATTACK_TICKS_MIN, C.ATTACK_TICKS.light - Ch.attrMod(p, 'dex')) + C.DUAL_TICKS, `沒有迅切的雙持多 5 刻：${g.ticks - t1}`);
+      p.skills.dagger = { lv: 5, n: 0 };
+      const t2 = g.ticks;
+      g.strike('attack', m);
+      ok(g.ticks - t2 === Math.max(C.ATTACK_TICKS_MIN, C.ATTACK_TICKS.light - Ch.attrMod(p, 'dex')), `法師短刀 5 級學會迅切，不多花刻：${g.ticks - t2}`);
+      p.cls = 'ranger';
+      // 副手那一下的傷害：遊俠力量 12、敏捷 16，主手 1d4+3 ＝ 4～7，副手 1d4 ＝ 1～4；兩項都 6（-2）時副手 1d4-2 最少 1 ＝ 1～2
+      const dmgs = { main: [], off: [] };
+      FE.Combat.hook = (e) => { if (e.by === 'player' && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted && !e.counter) dmgs[e.off ? 'off' : 'main'].push(e.dmg); };
+      for (let i = 0; i < 400; i++) { p.hp = p.maxHp = 1e9; p.skills = Ch.freshSkills(); p.equip.main.dur = p.equip.off.dur = 1000; g.battle.targetId = m.id; g.strike('attack', m); }
+      const rng = (a) => [Math.min(...a), Math.max(...a)].join('～');
+      ok(rng(dmgs.main) === '4～7' && rng(dmgs.off) === '1～4', `雙持傷害：主手 ${rng(dmgs.main)}（應該 4～7）、副手 ${rng(dmgs.off)}（應該 1～4）`);
+      p.attr.str = 6;
+      p.attr.dex = 6;
+      dmgs.off = [];
+      for (let i = 0; i < 400; i++) { p.hp = p.maxHp = 1e9; p.skills = Ch.freshSkills(); p.equip.main.dur = p.equip.off.dur = 1000; g.strike('attack', m); }
+      FE.Combat.hook = hook0;
+      ok(rng(dmgs.off) === '1～2', `修正值 -2 時副手照扣：${rng(dmgs.off)}（應該 1～2）`);
+      p.attr.str = 12;
+      p.attr.dex = 16;
+      // 重擊只用主手
       g.log.length = 0;
       g.battle.cooldown = 0;
       const u1 = uses(p, 'dagger');
+      const od = p.equip.off.dur;
       g.strike('deep', m);
       const dl = lines(g, /^你對.*重擊/);
-      ok(dl.length === 1 && lines(g, /^你用副手/).length === 0 && modOf(dl[0]) === base && uses(p, 'dagger') === u1 + 1 && p.equip.off.dur === 999, `重擊只用主手、不扣雙持減值：${dl.length} 行、擲骰 ${dl.length && modOf(dl[0])}（單手 ${base}）`);
+      ok(dl.length === 1 && lines(g, /^你用副手/).length === 0 && modOf(dl[0]) === base && uses(p, 'dagger') === u1 + 1 && p.equip.off.dur === od, `重擊只用主手：${dl.length} 行、擲骰 ${dl.length && modOf(dl[0])}（單手 ${base}）`);
       // 副手也吃自己的命中加值（品質）
       p.equip.off = G.make('dagger', 3, g.nextGearId++);
       p.equip.off.dur = p.equip.off.max = 1000;
@@ -2797,11 +2899,11 @@ function testCharacter() {
       const sw2 = G.make('sword', 0, g.nextGearId++);
       g.bagAddGear(sw2);
       g.equipItem(p.bag.find((e) => e.gear === sw2), true);
-      ok(p.equip.main === sw2 && p.equip.off.type === 'shield', '長劍不能放副手，照舊放主手');
+      ok(p.equip.off === sw2 && p.bag.some((e) => e.gear && e.gear.type === 'shield'), '長劍也能放副手（暫時弓箭以外都可以），盾牌放回背包');
       p.equip.main = G.make('bow', 0, g.nextGearId++);
       const t0 = g.turn;
       g.equipItem(p.bag.find((e) => e.gear === dag), true);
-      ok(p.equip.off.type === 'shield' && g.turn === t0 && p.bag.some((e) => e.gear === dag), '拿著弓箭不能把短刀放副手');
+      ok(p.equip.off === sw2 && g.turn === t0 && p.bag.some((e) => e.gear === dag), '拿著弓箭不能把短刀放副手');
       // 拿弓箭時副手的短刀放回背包
       p.equip.main = p.equip.main.type === 'bow' ? G.make('sword', 0, g.nextGearId++) : p.equip.main;
       p.equip.off = G.make('dagger', 0, g.nextGearId++);
@@ -2872,6 +2974,576 @@ function testReach() {
 }
 try { testReach(); } catch (e) { fail('可達性測試拋出例外：' + e.stack); }
 
+// ---- 第二十八版：戰鬥（骰子、特質、優勢與劣勢、精通、暴擊、傷害種類、射程與視線、彈藥回收、投擲、神聖、治療、盾擊、速度、範圍魔攻、瞄準）：場景測試 ----
+let combatChecks = 0;
+function testCombat28() {
+  const ok = (cond, msg) => { combatChecks++; if (!cond) fail('戰鬥 ' + msg); };
+  const G = FE.Gear;
+  const Ch = FE.Char;
+  const hook0 = FE.Combat.hook;
+  const spread = (a) => (a.length ? `${Math.min(...a)}～${Math.max(...a)}` : '沒有');
+  const uses = (p, id) => { const s = p.skills[id]; let t = s.n; for (let l = 0; l < s.lv; l++) t += Ch.skillNeed(l); return t; };
+  // 一塊平地：離聚落夠遠，31×31 格都改成同高度的空地，冒險者站在中央
+  const arena = (seed, cls, picks) => {
+    const g = new FE.Game(seed);
+    g.start({ cls, picks });
+    g.checkCreate = () => {};
+    for (let i = 0; i < 3; i++) g.createChunk(false);
+    g.monsters = [];
+    g.soldiers = [];
+    const w = g.world;
+    const R = 15;
+    let c = null;
+    for (const ch of w.chunks) {
+      const x = ch.x0 + 32, y = ch.y0 + 32;
+      let clean = true;
+      for (let dy = -R - 2; dy <= R + 2 && clean; dy++) for (let dx = -R - 2; dx <= R + 2; dx++) if (w.inBuffer(x + dx, y + dy) || !w.inBounds(x + dx, y + dy)) { clean = false; break; }
+      if (clean) { c = { x, y }; break; }
+    }
+    if (!c) return null;
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) { w.setCell(c.x + dx, c.y + dy, '.', 'plain'); w.setHeight(c.x + dx, c.y + dy, 1); }
+    const inside = (o) => Math.abs(o.x - c.x) <= R && Math.abs(o.y - c.y) <= R;
+    w.nodes = w.nodes.filter((n) => !inside(n));
+    w.chests = w.chests.filter((n) => !inside(n));
+    w.landmarks = w.landmarks.filter((l) => !(l.x1 >= c.x - R && l.x0 <= c.x + R && l.y1 >= c.y - R && l.y0 <= c.y + R));
+    const p = g.player;
+    p.x = c.x;
+    p.y = c.y;
+    p.hp = p.maxHp = 1e6;
+    for (const it of FE.Gear.equipped(p)) it.dur = it.max = 1e6;
+    g.worldEvery = 1e9; // 世界不走（怪物不移動、不出手），要看怪物的回合就直接叫 FE.AI.worldTurn
+    return { g, p, c, w };
+  };
+  const mon = (g, x, y, type) => {
+    const m = FE.dressMonster(FE.makeMonster({ type: type || 'RUNTIME', x, y, cells: [[x, y]], scope: 2, data: {} }, g.nextMonsterId++, 1), g.world);
+    Object.assign(m, { x, y, home: { x, y }, maxHp: 1e9, hp: 1e9, atk: 1 });
+    g.monsters.push(m);
+    return m;
+  };
+  const events = (fn) => {
+    const ev = [];
+    FE.Combat.hook = (e) => ev.push(e);
+    try { fn(); } finally { FE.Combat.hook = hook0; }
+    return ev;
+  };
+  const clean = (e) => (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.blocked && !e.resisted && !e.counter;
+
+  // 1. 骰子與 d20：傷害骰的範圍；優勢取高、劣勢取低；暴擊門檻
+  {
+    const r = FE.makeRng(5);
+    const a = [], b = [];
+    for (let i = 0; i < 4000; i++) { a.push(FE.rollDice(r, [1, 8], 1)); b.push(FE.rollDice(r, [1, 10], 2)); }
+    ok(spread(a) === '1～8' && spread(b) === '2～20', `擲骰範圍 1d8 ${spread(a)}、2d10 ${spread(b)}`);
+    let hi = 0, lo = 0, bad = 0;
+    for (let i = 0; i < 3000; i++) {
+      const u = FE.rollD20(r, 0, 1), d = FE.rollD20(r, 0, -1), n = FE.rollD20(r, 0, 0);
+      if (u.dice.length !== 2 || u.n !== Math.max(...u.dice) || d.dice.length !== 2 || d.n !== Math.min(...d.dice) || n.dice.length !== 1) bad++;
+      hi += u.n; lo += d.n;
+    }
+    ok(bad === 0 && hi / 3000 > 13 && lo / 3000 < 8, `優勢取高、劣勢取低：平均 ${(hi / 3000).toFixed(1)}／${(lo / 3000).toFixed(1)}、不對 ${bad}`);
+    let c19 = 0, c19b = 0;
+    for (let i = 0; i < 4000; i++) { const x = FE.rollD20(r, 0, 0, 19); if (x.n === 19 && x.key === 'crit') c19++; const y = FE.rollD20(r, 0, 0); if (y.n === 19 && y.key === 'crit') c19b++; }
+    ok(c19 > 100 && c19b === 0, `暴擊門檻 19 時擲出 19 是暴擊（${c19}），平常不是（${c19b}）`);
+  }
+
+  // 2. 暴擊：擲出 20 暴擊，傷害骰擲兩次；感知 +2 起 19；短刀再擴大 1
+  {
+    const A = arena(281, 'warrior', ['sword', 'shield', 'herb']);
+    ok(!!A, '找不到空地');
+    if (!A) return;
+    const { g, p } = A;
+    p.attr.str = 10;
+    p.attr.wis = 12;
+    ok(Ch.critMin(p, p.equip.main) === 20, `感知 12 的暴擊門檻 ${Ch.critMin(p, p.equip.main)}`);
+    p.attr.wis = 14;
+    ok(Ch.critMin(p, p.equip.main) === 19 && Ch.critMin(p, G.make('dagger', 0, 1)) === 18, `感知 14：長劍 19、短刀 18（${Ch.critMin(p, p.equip.main)}／${Ch.critMin(p, G.make('dagger', 0, 1))}）`);
+    p.attr.wis = 12;
+    ok(Ch.critMin(p, G.make('dagger', 0, 1)) === 19, '短刀平常 19 就暴擊');
+    const m = mon(g, p.x + 1, p.y);
+    const ev = events(() => { for (let i = 0; i < 3000; i++) { p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true }); } });
+    const crits = ev.filter((e) => e.by === 'player' && e.crit && !e.blocked && !e.resisted);
+    ok(crits.length > 50 && crits.every((e) => e.n === 20) && Math.min(...crits.map((e) => e.dmg)) >= 2 && Math.max(...crits.map((e) => e.dmg)) <= 16 && Math.max(...crits.map((e) => e.dmg)) > 8, `長劍（拿盾牌 1d8）暴擊擲兩次：${spread(crits.map((e) => e.dmg))}，擲出 ${[...new Set(crits.map((e) => e.n))]}`);
+    ok(g.log.some((l) => l.text.includes('暴擊，傷害骰擲兩次')), '暴擊的訊息該寫傷害骰擲兩次');
+    // 怪物暴擊：攻擊力照舊，擲兩次加總
+    p.equip.off = null;
+    p.equip.body = null;
+    const mev = events(() => { for (let i = 0; i < 3000; i++) { p.hp = 1e6; m.atk = 3; FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true }); } });
+    const mc = mev.filter((e) => e.by === 'monster' && e.crit && !e.blocked && !e.reduced);
+    ok(mc.length > 30 && Math.max(...mc.map((e) => e.dmg)) <= 8 && Math.max(...mc.map((e) => e.dmg)) > 4, `怪物（攻擊力 3）暴擊擲兩次加總：${spread(mc.map((e) => e.dmg))}`);
+  }
+
+  // 3. 傷害種類：揮砍打中甲重甲多擋 1；穿刺照穿甲比例無視一部分（捨去）；鈍擊無視一半（進位）；魔法、神聖只看魔法減傷
+  {
+    const A = arena(282, 'warrior', ['sword', 'herb', 'gold']);
+    const { g, p } = A;
+    p.equip.body = G.make('heavy', 0, 1); // 物理 3、魔法 1
+    const R = (t, pc) => FE.Combat.reduction(g, p, t, pc);
+    ok(R(null) === 3 && R('slash') === 4 && R('pierce', 0) === 3 && R('pierce', 0.5) === 2 && R('pierce', 0.3) === 3 && R('blunt') === 1 && R('magic') === 1 && R('holy') === 1, `重甲：一般 ${R(null)}、揮砍 ${R('slash')}、穿刺 ${R('pierce', 0.5)}、鈍擊 ${R('blunt')}、魔法 ${R('magic')}`);
+    p.equip.body = G.make('light', 0, 2); // 物理 1
+    ok(R('slash') === 1 && R('blunt') === 0 && R('pierce', 0.5) === 1, `輕甲：揮砍不多擋 ${R('slash')}、鈍擊 ${R('blunt')}`);
+    p.equip.body = G.make('medium', 0, 3);
+    ok(R('slash') === 3, `中甲揮砍多擋 1：${R('slash')}`);
+    p.equip.body = G.make('mrobe', 0, 4);
+    ok(R('magic') === 3 && R('holy') === 3 && R(null) === 0, '魔法衣袍只擋魔法與神聖');
+    const m = mon(g, p.x + 1, p.y);
+    ok(FE.Combat.reduction(g, m, 'slash') === 0, '怪物目前沒有減傷');
+    // 武器的傷害種類寫進判定
+    const kinds = {};
+    for (const t of ['sword', 'spear', 'shortspear', 'dagger', 'staff']) {
+      p.equip.main = G.make(t, 0, 10);
+      p.equip.main.dur = 1e6;
+      const ev = events(() => FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true }));
+      kinds[t] = ev[0].dmgType;
+    }
+    ok(kinds.sword === 'slash' && kinds.spear === 'pierce' && kinds.shortspear === 'pierce' && kinds.dagger === 'pierce' && kinds.staff === 'blunt', `武器的傷害種類 ${JSON.stringify(kinds)}`);
+  }
+
+  // 4. 重型：長槍近戰力量不到 13 有劣勢；可雙手；輕型才能放副手
+  {
+    const A = arena(283, 'warrior', ['spear', 'herb', 'gold']);
+    const { g, p } = A;
+    const m = mon(g, p.x + 1, p.y);
+    const advs = (n) => events(() => { for (let i = 0; i < n; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true }); }).filter((e) => e.by === 'player').map((e) => e.adv);
+    p.attr.str = 12;
+    ok(advs(30).every((a) => a === -1) && Ch.profile(p, p.equip.main, 'melee').heavy, '力量 12 拿長槍該有劣勢');
+    p.attr.str = 13;
+    ok(advs(30).every((a) => a === 0), '力量 13 拿長槍沒有劣勢');
+    ok(g.log.some((l) => /劣勢：\d+、\d+，擲出/.test(l.text)), '劣勢的訊息該寫出兩顆骰子');
+    // 可雙手：短矛副手空著 1d8、拿盾牌 1d6；投擲一律 1d6
+    p.equip.main = G.make('shortspear', 0, 20);
+    ok(Ch.profile(p, p.equip.main, 'melee').die.join() === '1,8' && Ch.profile(p, p.equip.main, 'throw').die.join() === '1,6', '短矛：副手空著 1d8，投擲 1d6');
+    p.equip.off = G.make('shield', 0, 21);
+    ok(Ch.profile(p, p.equip.main, 'melee').die.join() === '1,6', '短矛：拿盾牌 1d6');
+    // 副手：暫時弓箭以外的武器都能放副手；弓箭選「放副手」照樣拿在主手
+    p.equip.off = null;
+    const ss = G.make('shortspear', 0, 22);
+    g.bagAddGear(ss);
+    g.equipItem(p.bag.find((e) => e.gear === ss), true);
+    ok(p.equip.off === ss, '短矛選「放副手」該拿在副手');
+    // 副手拿非輕型武器：那一下有劣勢、傷害骰 1d4；短刀（輕型）照常
+    const offP = Ch.profile(p, ss, 'melee', true);
+    const dagP = Ch.profile(p, G.make('dagger', 0, 24), 'melee', true);
+    ok(offP.offClumsy && offP.die.join() === '1,4' && !dagP.offClumsy && dagP.die.join() === '1,4', '副手非輕型武器：劣勢＋1d4；短刀不受影響');
+    const bw = G.make('bow', 0, 23);
+    g.bagAddGear(bw);
+    g.equipItem(p.bag.find((e) => e.gear === bw), true);
+    ok(p.equip.main === bw && !p.equip.off, '弓箭選「放副手」該拿在主手，副手的東西放回背包');
+  }
+
+  // 5. 觸及：長槍按 1 時旁邊沒有目標，打直線 2 格外、中間是空格的目標；中間有東西、斜的都打不到；不會被反擊
+  {
+    const A = arena(284, 'warrior', ['spear', 'herb', 'gold']);
+    const { g, p } = A;
+    const m = mon(g, p.x + 2, p.y);
+    m.type = 'TERRAIN'; // 反擊機率 10%，貼著才會反擊
+    // 推擊會把牠推開，每次出手前放回 2 格外
+    let ev = events(() => { for (let i = 0; i < 40; i++) { m.x = p.x + 2; m.y = p.y; g.battle.targetId = null; g.act('attack'); } });
+    const pe = ev.filter((e) => e.by === 'player');
+    ok(pe.length === 40 && pe.every((e) => e.d === m) && !pe.some((e) => e.countered) && !ev.some((e) => e.counter), `長槍打 2 格外：出手 ${pe.length} 次、被反擊 ${pe.filter((e) => e.countered).length} 次`);
+    const blocker = mon(g, p.x + 1, p.y + 1); // 斜前方：不在中間、也沒貼著冒險者，不擋
+    m.x = p.x + 2; m.y = p.y;
+    ev = events(() => { g.battle.targetId = null; g.act('attack'); });
+    ok(ev.some((e) => e.by === 'player' && e.d === m), '斜的怪物不擋觸及');
+    g.monsters = g.monsters.filter((o) => o !== blocker);
+    g.world.setCell(p.x + 1, p.y, '#', 'plain');
+    const t0 = g.turn;
+    ev = events(() => g.act('attack'));
+    ok(!ev.some((e) => e.by === 'player') && g.turn === t0, '中間是巨石就打不到');
+    g.world.setCell(p.x + 1, p.y, '.', 'plain');
+    m.x = p.x + 2; m.y = p.y + 1;
+    ev = events(() => g.act('attack'));
+    ok(!ev.some((e) => e.by === 'player'), '斜的不算直線');
+    // 劍沒有觸及
+    m.x = p.x + 2; m.y = p.y;
+    p.equip.main = G.make('sword', 0, 30);
+    ev = events(() => g.act('attack'));
+    ok(!ev.some((e) => e.by === 'player'), '長劍打不到 2 格外');
+    // 雙持：主手長槍把目標推開後，副手那一下不出手（副手只打貼著的目標）；打倒的訊息寫在攻擊訊息後面
+    p.equip.main = G.make('spear', 0, 31);
+    p.equip.off = G.make('shortspear', 0, 32);
+    p.equip.main.dur = p.equip.off.dur = 1e9;
+    p.hp = p.maxHp = 1e9;
+    // 事件裡的 a、d 是活的物件，位置要在出手當下記下來
+    let pushes = 0;
+    let offN = 0;
+    let far = 0;
+    const hk = FE.Combat.hook;
+    FE.Combat.hook = (e) => {
+      if (e.by !== 'player') return;
+      if (!e.off && (e.effects || []).some((t) => t.includes('推開'))) pushes++;
+      if (e.off) {
+        offN++;
+        if (Math.abs(e.a.x - e.d.x) + Math.abs(e.a.y - e.d.y) !== 1) far++;
+      }
+    };
+    for (let i = 0; i < 60; i++) { m.x = p.x + 1; m.y = p.y; m.hp = m.maxHp = 1e6; g.battle.targetId = null; g.act('attack'); }
+    FE.Combat.hook = hk;
+    const offEv = { length: offN };
+    ok(pushes > 0 && offEv.length > 0 && far === 0, `推開後副手不該出手（推開 ${pushes} 次、副手 ${offEv.length} 次、其中不貼著 ${far} 次）`);
+    p.equip.off = null;
+    m.x = p.x + 1; m.y = p.y; m.hp = 1;
+    g.battle.targetId = null;
+    g.act('attack');
+    const iHit = g.log.findIndex((l) => /^你攻擊/.test(l.text));
+    const iDown = g.log.findIndex((l) => l.text.includes('倒下了'));
+    ok(iHit >= 0 && iDown >= 0 && iDown < iHit, '打倒的訊息該寫在攻擊訊息後面（log 新的在前）');
+  }
+
+  // 6. 射程、視線、優勢與劣勢：遊俠感知 15（+2）弓箭 7／22 格；超出正常射程有劣勢、超出最遠打不到；中間有巨石、樹打不到；旁邊貼著怪物有劣勢
+  {
+    const A = arena(285, 'ranger', ['bow']);
+    const { g, p } = A;
+    const r = g.rangedMode(true);
+    ok(r && r.mode === 'shoot' && r.range.join() === '7,22', `遊俠弓箭的射程 ${r && r.range}`);
+    const near = mon(g, p.x + 6, p.y);
+    const far = mon(g, p.x + 9, p.y + 3);
+    // 侵擾會讓下一次有優勢，每次射之前清掉
+    const shot = (m) => { m.vexed = false; const ev = events(() => g.fireAt(m)); return ev.find((e) => e.by === 'player'); };
+    let e = shot(near);
+    ok(e && e.adv === 0 && e.mode === 'shoot', `正常射程內沒有優劣：${e && e.adv}`);
+    e = shot(far);
+    ok(e && e.adv === -1, `超出正常射程有劣勢：${e && e.adv}`);
+    // 最遠射程：手動算看看（空地只有 31×31，22 格外在空地外面，只檢查 canShoot 的距離判斷）
+    ok(FE.Combat.canShoot(g, p, { x: p.x + 15, y: p.y }, [7, 14]) === false && FE.Combat.canShoot(g, p, { x: p.x + 14, y: p.y }, [7, 14]) === true, '超出最遠射程打不到');
+    // 視線：巨石、樹、建築的牆都擋；水不擋
+    for (const [t, blocks] of [['#', true], ['♣', true], ['⌂', true], ['≈', false]]) {
+      g.world.setCell(p.x + 3, p.y, t, 'plain');
+      ok(FE.Combat.canShoot(g, p, near, r.range) === !blocks, `中間是「${t}」${blocks ? '該擋住' : '不該擋'}`);
+    }
+    g.world.setCell(p.x + 3, p.y, '.', 'plain');
+    // 中間隔著高出 2 階的山丘也打不到
+    g.world.setHeight(p.x + 3, p.y, 3);
+    ok(!FE.Combat.canShoot(g, p, near, r.range), '隔著山丘打不到');
+    g.world.setHeight(p.x + 3, p.y, 1);
+    // 旁邊貼著怪物：遠程有劣勢
+    const adj = mon(g, p.x, p.y + 1);
+    e = shot(near);
+    ok(e && e.adv === -1, `貼著怪物時射擊有劣勢：${e && e.adv}`);
+    g.monsters = g.monsters.filter((o) => o !== adj);
+    // 優勢與劣勢抵消：目標倒地（優勢）＋超出正常射程（劣勢）＝擲一次
+    far.prone = true;
+    e = shot(far);
+    ok(e && e.adv === 0 && e.dice.length === 1, '優勢與劣勢同時有該抵消，只擲一次');
+    far.prone = false;
+    // 村莊裡不能出手
+    const v = g.world.villages[0];
+    p.x = v.cx; p.y = v.cy;
+    const t0 = g.turn;
+    g.act('fire');
+    ok(!g.aim && g.turn === t0 && g.log[0].text.includes('不能動手'), '聚落裡按 F 該不能出手');
+  }
+
+  // 7. 彈藥：每射一次用掉 1 支；目標倒下或冒險者脫離戰鬥，撿回用掉的一半（捨去）；沒有箭不能射；一捆 20 支重 1
+  {
+    const A = arena(286, 'ranger', ['bow']);
+    const { g, p } = A;
+    ok(g.bagCount('arrow') === 20 && Math.abs(G.weightOf(p) - (1 + 1 + 1)) < 1e-9, `遊俠起始 20 支箭，重 1（負重 ${G.weightOf(p)}）`);
+    const m = mon(g, p.x + 4, p.y);
+    for (let i = 0; i < 5; i++) g.fireAt(m);
+    ok(g.bagCount('arrow') === 15 && m.arrows && Object.values(m.arrows).reduce((s, n) => s + n, 0) === 5, `射 5 箭剩 ${g.bagCount('arrow')}`);
+    m.hp = 1;
+    let guard = 0;
+    while (g.monsters.includes(m) && guard++ < 50) g.fireAt(m);
+    const shot = 5 + guard;
+    ok(!g.monsters.includes(m) && g.bagCount('arrow') === 20 - shot + Math.floor(shot / 2), `打倒時撿回一半：射了 ${shot} 支，剩 ${g.bagCount('arrow')}（應該 ${20 - shot + Math.floor(shot / 2)}）`);
+    // 脫離戰鬥：射了 3 支，冒險者走遠（離牠超過 8 格）就撿回 1 支
+    const m2 = mon(g, p.x + 4, p.y + 2);
+    const a0 = g.bagCount('arrow');
+    for (let i = 0; i < 3; i++) g.fireAt(m2);
+    p.x -= 10;
+    g.endTurn(false);
+    ok(g.bagCount('arrow') === a0 - 3 + 1 && !m2.arrows, `脫離戰鬥撿回一半：${g.bagCount('arrow')}（應該 ${a0 - 2}）`);
+    p.x += 10;
+    // 沒有箭
+    p.bag = p.bag.filter((e) => e.id !== 'arrow');
+    const t0 = g.turn;
+    ok(!g.fireAt(m2) && g.turn === t0 && g.log[0].text.includes('沒有箭矢'), '沒有箭不能射');
+    // 拿著弓箭按 1 是拿弓打人：1d4 鈍擊＋力量修正值
+    m2.x = p.x + 1; m2.y = p.y;
+    const ev = events(() => { for (let i = 0; i < 40; i++) g.act('attack'); });
+    const pe = ev.filter((e) => e.by === 'player' && clean(e));
+    const sm = Ch.attrMod(p, 'str');
+    ok(pe.length > 5 && pe.every((e) => e.dmg >= Math.max(1, 1 + sm) && e.dmg <= Math.max(1, 4 + sm) && e.dmgType === 'blunt'), `拿弓箭按 1 是 1d4 鈍擊＋力量：${spread(pe.map((e) => e.dmg))}`);
+    // 箭矢分品質：買來的一捆疊進同品質的；射擊先用品質高的
+    g.bagAddGear(G.make('arrow', 2, 99));
+    g.bagAdd('arrow', 3, { q: 0 });
+    ok(g.bagCount('arrow') === 23 && p.bag.filter((e) => e.id === 'arrow').length === 2 && g.takeArrow() === 2, '箭矢分品質疊放，先用品質高的');
+  }
+
+  // 8. 投擲：短刀、短矛擲出去，掉在目標那格（副手的短刀換到主手）；走過去撿回來；存檔讀得回來
+  {
+    const A = arena(287, 'ranger', ['dagger']);
+    const { g, p, w } = A;
+    const d1 = p.equip.main;
+    const d2 = G.make('dagger', 0, g.nextGearId++);
+    p.equip.off = d2;
+    const m = mon(g, p.x + 3, p.y);
+    const r = g.rangedMode(true);
+    ok(r.mode === 'throw' && r.range.join() === '6,14', `短刀投擲 4／12 格＋感知 2：${r.range}`);
+    const ev = events(() => g.fireAt(m));
+    const e = ev.find((x) => x.by === 'player');
+    ok(e && e.mode === 'throw' && p.equip.main === d2 && !p.equip.off && w.items.length === 1 && w.items[0].gear === d1 && w.items[0].x === m.x && w.items[0].y === m.y, '擲出的短刀該掉在目標那格，副手的短刀換到主手');
+    ok(uses(p, 'dagger') === 1 && uses(p, 'shoot') === 1, `投擲算短刀技能也算射擊：${uses(p, 'dagger')}、${uses(p, 'shoot')}`);
+    g.fireAt(m);
+    ok(!p.equip.main && w.items.length === 2 && g.rangedMode(true) === null, '兩把都擲出去，手上空了');
+    // 存檔讀回來，地上的東西還在
+    FE.Save.save(g);
+    const back = FE.Save.load();
+    ok(back && back.game && back.game.world.items.length === 2 && back.game.world.items[0].gear.type === 'dagger', '地上的東西存檔讀不回來');
+    // 走過去撿回來：主手空著就拿在主手，第二把放背包
+    g.monsters = [];
+    p.x = m.x - 1;
+    g.move(1, 0);
+    ok(p.x === m.x && w.items.length === 0 && p.equip.main && p.equip.main.type === 'dagger' && p.bag.filter((x) => x.gear && x.gear.type === 'dagger').length === 1, `走過去撿回來：主手 ${p.equip.main && p.equip.main.type}、背包 ${p.bag.map((x) => x.name)}`);
+    // 短矛也能擲；長劍不行
+    p.equip.main = G.make('shortspear', 0, g.nextGearId++);
+    ok(g.rangedMode(true).mode === 'throw' && g.rangedMode(true).range.join() === '6,14', '短矛能擲');
+    p.equip.main = G.make('sword', 0, g.nextGearId++);
+    ok(g.rangedMode(true) === null, '長劍不能遠程');
+    // 投擲的傷害用近戰的屬性（短刀靈巧取較高者）
+    ok(Ch.profile(p, G.make('shortspear', 0, 1), 'throw').dmg === Ch.attrMod(p, 'str') && Ch.profile(p, G.make('dagger', 0, 1), 'throw').dmg === Math.max(Ch.attrMod(p, 'str'), Ch.attrMod(p, 'dex')), '投擲的傷害用近戰的屬性');
+  }
+
+  // 9. 精通：削弱、侵擾、失衡、推擊；法師、牧師要那把武器的技能 5 級才會
+  {
+    const A = arena(288, 'warrior', ['sword', 'herb', 'gold']);
+    const { g, p } = A;
+    const m = mon(g, p.x + 1, p.y);
+    // 削弱：命中後目標下一次出手有劣勢（用掉就沒了）
+    let guard = 0;
+    while (!m.sapped && guard++ < 50) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
+    ok(m.sapped && g.log.some((l) => l.text.includes('削弱')), '長劍命中後該削弱目標');
+    let ev = events(() => FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true }));
+    ok(ev[0].adv === -1 && !m.sapped, `被削弱的怪物下一次出手有劣勢：${ev[0].adv}`);
+    ev = events(() => FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true }));
+    ok(ev[0].adv === 0, '削弱只管下一次');
+    // 推擊：長槍命中把目標直線推開 2 格；擋住就停；大型怪物推不動
+    p.equip.main = G.make('spear', 0, g.nextGearId++);
+    p.equip.main.dur = 1e6;
+    const push = () => { const x0 = m.x; m.x = p.x + 1; m.y = p.y; let n = 0; let e; do { e = events(() => FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true })).find((x) => x.by === 'player'); m.sapped = false; } while (!(e.key === 'crit' || e.key === 'hit' || e.key === 'hard') && n++ < 50); return m.x - (p.x + 1); };
+    ok(push() === 2, `長槍推擊推開 2 格：${m.x - p.x - 1}`);
+    g.world.setCell(p.x + 3, p.y, '#', 'plain');
+    ok(push() === 1, '推到巨石前面就停');
+    g.world.setCell(p.x + 3, p.y, '.', 'plain');
+    m.boss = true;
+    ok(push() === 0, '大型怪物推不動');
+    m.boss = false;
+    // 失衡：法杖（戰士一開始就會）命中後 30%＋力量修正值×5% 讓目標倒地；倒地的下一回合不能動，打牠有優勢
+    p.equip.main = G.make('staff', 0, g.nextGearId++);
+    p.equip.main.dur = 1e6;
+    m.x = p.x + 1; m.y = p.y;
+    let hits = 0, prone = 0;
+    for (let i = 0; i < 600; i++) {
+      m.prone = false;
+      const e = events(() => FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true })).find((x) => x.by === 'player');
+      m.sapped = false;
+      if (['crit', 'hit', 'hard'].includes(e.key)) { hits++; if (m.prone) prone++; }
+    }
+    const want = C.TOPPLE_BASE + Ch.attrMod(p, 'str') * C.TOPPLE_PER;
+    ok(Math.abs(prone / hits - want) < 0.07, `失衡的機率 ${(prone / hits).toFixed(2)}（應該約 ${want.toFixed(2)}）`);
+    m.prone = true;
+    ev = events(() => FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true }));
+    ok(ev.find((x) => x.by === 'player').adv === 1, '打倒地的目標有優勢');
+    m.prone = true;
+    const hp0 = p.hp;
+    g.battle.targetId = m.id;
+    ev = events(() => FE.AI.worldTurn(g));
+    ok(!ev.some((e) => e.by === 'monster') && !m.prone && p.hp === hp0, '倒地的怪物下一回合不能動');
+    ev = events(() => FE.AI.worldTurn(g));
+    ok(ev.some((e) => e.by === 'monster' && e.d === p), '爬起來之後照常攻擊');
+    // 法師、牧師要那把武器的技能 5 級；戰士、遊俠一開始就會
+    const mg = arena(289, 'mage', ['staff', 'gold']);
+    const pm = mg.p;
+    ok(Ch.mastery(pm, pm.equip.main) === null, '法師一開始不會法杖的精通');
+    pm.skills.staff.lv = 5;
+    ok(Ch.mastery(pm, pm.equip.main) === 'topple' && Ch.mastery(pm, G.make('sword', 0, 1)) === null, '法杖技能 5 級學會失衡，長劍還不會');
+    ok(Ch.mastery(arena(290, 'ranger', ['bow']).p, G.make('bow', 0, 1)) === 'vex', '遊俠一開始就會');
+    // 侵擾：射中且有傷害後，冒險者下一次打牠有優勢
+    const R = arena(291, 'ranger', ['bow']);
+    const mv = mon(R.g, R.p.x + 3, R.p.y);
+    guard = 0;
+    while (!mv.vexed && guard++ < 50) R.g.fireAt(mv);
+    ok(mv.vexed, '射中後該侵擾目標');
+    ev = events(() => R.g.fireAt(mv));
+    ok(ev.find((x) => x.by === 'player').adv === 1, '被侵擾的目標，下一次射牠有優勢');
+  }
+
+  // 10. 神聖（牧師）：每個動作第一下命中時多 1d8 神聖傷害；雙持只算第一下命中的；治療按 4
+  {
+    const A = arena(292, 'priest', ['medium', 'sword', 'herb']);
+    const { g, p } = A;
+    const m = mon(g, p.x + 1, p.y);
+    const ev = events(() => { for (let i = 0; i < 300; i++) { p.skills = Ch.freshSkills(); g.battle.targetId = m.id; g.act('attack'); } }).filter((e) => e.by === 'player');
+    const hit = ev.filter((e) => ['crit', 'hit', 'hard'].includes(e.key));
+    ok(hit.length > 100 && hit.every((e) => e.holy >= 1 && e.holy <= 8 && e.dmg > e.holy) && ev.filter((e) => !['crit', 'hit', 'hard'].includes(e.key)).every((e) => e.holy === 0), `牧師命中時多 1d8 神聖：${spread(hit.map((e) => e.holy))}`);
+    ok(g.log.some((l) => l.text.includes('是神聖之力')), '訊息該寫出神聖之力');
+    // 雙持：一個動作最多一次
+    p.equip.main = G.make('dagger', 0, g.nextGearId++);
+    p.equip.off = G.make('dagger', 0, g.nextGearId++);
+    p.equip.main.dur = p.equip.off.dur = 1e6;
+    let twice = 0, both = 0;
+    for (let i = 0; i < 300; i++) {
+      const e2 = events(() => { g.battle.targetId = m.id; g.act('attack'); }).filter((e) => e.by === 'player' && !e.counter);
+      if (e2.length === 2 && e2.every((e) => ['crit', 'hit', 'hard'].includes(e.key))) both++;
+      if (e2.filter((e) => e.holy > 0).length > 1) twice++;
+    }
+    ok(both > 30 && twice === 0, `雙持兩下都命中 ${both} 次，神聖只算一次（多算 ${twice} 次）`);
+    // 不是牧師沒有神聖
+    const W = arena(293, 'warrior', ['sword', 'herb', 'gold']);
+    const mw = mon(W.g, W.p.x + 1, W.p.y);
+    const we = events(() => { for (let i = 0; i < 50; i++) { W.g.battle.targetId = mw.id; W.g.act('attack'); } });
+    ok(we.every((e) => !e.holy), '戰士沒有神聖傷害');
+    // 治療：1d8＋魅力修正值（牧師魅力 16 是 +3），冷卻 3 回合，只治自己，算一個動作；滿血不用
+    g.monsters = [];
+    p.maxHp = 100;
+    const got = [];
+    for (let i = 0; i < 200; i++) {
+      p.hp = 50;
+      g.battle.healCd = 0;
+      const t0 = g.turn;
+      g.act('heal');
+      if (g.turn !== t0 + 1 || g.battle.healCd !== C.HEAL_COOLDOWN - 0) { fail('戰鬥 治療該算一個動作並開始冷卻'); break; }
+      got.push(p.hp - 50);
+    }
+    ok(spread(got) === '4～11', `治療回 1d8+3：${spread(got)}`);
+    p.hp = 50;
+    const t1 = g.turn;
+    g.act('heal');
+    ok(p.hp === 50 && g.turn === t1 && g.log[0].text.includes('冷卻') === false && /還要 \d 回合/.test(g.log[0].text), `冷卻中不能治療：${g.log[0].text}`);
+    g.beginAction(); g.beginAction(); g.beginAction();
+    ok(g.battle.healCd === 0, `做了 3 個動作冷卻歸 0：${g.battle.healCd}`);
+    p.hp = p.maxHp;
+    const t2 = g.turn;
+    g.act('heal');
+    ok(g.turn === t2, '滿血不用治療');
+    p.hp = 99;
+    g.act('heal');
+    ok(p.hp === 100, '治療不超過生命上限');
+    W.p.hp = 10;
+    const t3 = W.g.turn;
+    W.g.act('heal');
+    ok(W.p.hp === 10 && W.g.turn === t3, '只有牧師會治療');
+  }
+
+  // 11. 盾擊（戰士拿盾牌按 5）：1d4 鈍擊＋力量修正值，算一個動作；沒有精通、不算技能；沒盾牌、不是戰士不行
+  {
+    const A = arena(294, 'warrior', ['sword', 'shield', 'herb']);
+    const { g, p } = A;
+    const m = mon(g, p.x + 1, p.y);
+    const u0 = JSON.stringify(p.skills);
+    const ev = events(() => { for (let i = 0; i < 300; i++) { g.battle.targetId = m.id; g.act('bash'); m.sapped = false; } }).filter((e) => e.by === 'player');
+    const cl = ev.filter(clean);
+    ok(ev.length === 300 && ev.every((e) => e.mode === 'bash' && e.dmgType === 'blunt' && !e.mastery) && spread(cl.map((e) => e.dmg)) === `${1 + 3}～${4 + 3}`, `盾擊 1d4+3 鈍擊：${spread(cl.map((e) => e.dmg))}`);
+    ok(JSON.stringify(Object.fromEntries(Object.entries(p.skills).filter(([k]) => k !== 'dodge' && k !== 'shield' && k !== 'armor'))) === JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(u0)).filter(([k]) => k !== 'dodge' && k !== 'shield' && k !== 'armor'))), '盾擊不算技能');
+    ok(!m.sapped && g.log.some((l) => l.text.startsWith('你用盾牌撞向')), '盾擊沒有精通，訊息寫用盾牌撞');
+    p.equip.off = null;
+    const t0 = g.turn;
+    g.act('bash');
+    ok(g.turn === t0, '沒拿盾牌不能盾擊');
+    const P = arena(295, 'priest', ['shield', 'sword', 'gold']);
+    mon(P.g, P.p.x + 1, P.p.y);
+    const t1 = P.g.turn;
+    P.g.act('bash');
+    ok(P.g.turn === t1, '不是戰士不能盾擊');
+  }
+
+  // 12. 速度：攻擊動作輕型 8、一般 10、重型 12，減敏捷修正值，最少 6；防具多花的刻照舊疊加；移動 10 刻
+  {
+    const A = arena(296, 'warrior', ['sword', 'herb', 'gold']);
+    const { g, p } = A;
+    p.equip.body = null;
+    const m = mon(g, p.x + 1, p.y);
+    const dt = (fn) => { const t = g.ticks; fn(); return g.ticks - t; };
+    const hit = () => { g.battle.targetId = m.id; g.act('attack'); };
+    p.attr.dex = 13; // +1
+    const tw = {};
+    for (const t of ['dagger', 'sword', 'spear']) { p.equip.main = G.make(t, 0, g.nextGearId++); p.equip.main.dur = 1e6; tw[t] = dt(hit); }
+    ok(tw.dagger === 7 && tw.sword === 9 && tw.spear === 11, `敏捷 13 的攻擊刻：短刀 ${tw.dagger}、長劍 ${tw.sword}、長槍 ${tw.spear}`);
+    p.attr.dex = 18; // +4
+    p.equip.main = G.make('dagger', 0, g.nextGearId++);
+    ok(dt(hit) === 6, '最少 6 刻');
+    p.attr.dex = 6; // -2
+    p.equip.main = G.make('sword', 0, g.nextGearId++);
+    ok(dt(hit) === 12, '敏捷 -2 的長劍 12 刻');
+    p.equip.body = G.make('heavy', 0, g.nextGearId++);
+    ok(dt(hit) === 14, '重甲再多 2 刻');
+    p.equip.body = null;
+    g.monsters = [];
+    ok(dt(() => g.move(1, 0)) === 10, '移動還是 10 刻');
+  }
+
+  // 13. 法師的範圍魔攻：打目標與周圍 1 格（智力 +3 起 2 格）所有怪物，每隻各擲命中（加智力），1d6＋智力 魔法；法杖只磨一次、技能只練一次
+  {
+    const A = arena(297, 'mage', ['staff', 'gold']);
+    const { g, p } = A;
+    p.attr.int = 14; // +2
+    const c = mon(g, p.x + 5, p.y);
+    const diag = mon(g, p.x + 6, p.y + 1);
+    const two = mon(g, p.x + 7, p.y);
+    const w0 = p.equip.main.dur = p.equip.main.max = 1000;
+    let ev = events(() => g.fireAt(c)).filter((e) => e.by === 'player');
+    ok(ev.length === 2 && ev[0].d === c && ev[1].d === diag && ev.every((e) => e.mode === 'spell' && e.dmgType === 'magic'), `智力 +2 打周圍 1 格：打到 ${ev.length} 隻`);
+    ok(p.equip.main.dur >= w0 - 1 && uses(p, 'staff') === 1, `法杖只磨一次（${w0 - p.equip.main.dur}）、技能只練一次（${uses(p, 'staff')}）`);
+    p.attr.int = 16; // +3
+    ev = events(() => g.fireAt(c)).filter((e) => e.by === 'player');
+    ok(ev.length === 3, `智力 +3 起打周圍 2 格：打到 ${ev.length} 隻`);
+    p.attr.int = 14;
+    const dm = [];
+    let hitMods = new Set();
+    for (let i = 0; i < 300; i++) {
+      p.skills = Ch.freshSkills();
+      const e = events(() => g.fireAt(c)).filter((x) => x.by === 'player' && x.d === c);
+      for (const x of e) { if (clean(x)) dm.push(x.dmg); hitMods.add(x.mod); }
+    }
+    ok(spread(dm) === '3～8', `範圍魔攻 1d6+2：${spread(dm)}`);
+    ok([...hitMods].every((x) => x === Ch.profile(p, p.equip.main, 'spell').hit + FE.BIOMES.plain.hit), `命中加智力：${[...hitMods]}`);
+    // 別的職業拿法杖不能施法
+    const W = arena(298, 'priest', ['medium', 'staff', 'gold']);
+    ok(W.g.rangedMode(true) === null, '牧師拿法杖不能施法');
+  }
+
+  // 14. 瞄準：F 自動選最近、看得到的怪物（不算動作）；Tab 換目標；F／Enter 出手；Esc 取消
+  {
+    const A = arena(299, 'ranger', ['bow']);
+    const { g, p } = A;
+    const a = mon(g, p.x + 6, p.y);
+    const b = mon(g, p.x + 3, p.y + 1);
+    const hidden = mon(g, p.x - 4, p.y);
+    g.world.setCell(p.x - 2, p.y, '#', 'plain');
+    const t0 = g.turn;
+    g.act('fire');
+    ok(g.aim && g.aimTarget() === b && g.turn === t0 && g.aim.ids.length === 2 && !g.aim.ids.includes(hidden.id), `F 選最近的看得到的怪物：${g.aimTarget() && g.aimTarget().id}`);
+    g.aimNext();
+    ok(g.aimTarget() === a, 'Tab 換下一個');
+    g.aimNext();
+    ok(g.aimTarget() === b, 'Tab 繞回第一個');
+    g.aimCancel();
+    ok(!g.aim && g.turn === t0, 'Esc 取消，不算動作');
+    g.act('fire');
+    g.aimNext();
+    const n0 = g.bagCount('arrow');
+    const ev = events(() => g.aimFire());
+    ok(!g.aim && g.turn === t0 + 1 && g.bagCount('arrow') === n0 - 1 && ev.some((e) => e.by === 'player' && e.d === a) && g.battle.targetId === a.id, '出手打瞄準的那隻，算一個動作');
+    g.monsters = [hidden];
+    g.act('fire');
+    ok(!g.aim && g.log[0].text.includes('看不到怪物'), '射程內看不到怪物時不進瞄準');
+  }
+
+  // 15. 商店的箭矢：一捆 20 支、5 金幣（乘品質與經濟），買了疊進背包
+  {
+    const g = new FE.Game(300);
+    g.start({ cls: 'ranger', picks: ['bow'] });
+    const smith = g.world.npcs.find((n) => n.role === 'smith');
+    const v = g.world.villageById(smith.villageId);
+    const p = g.player;
+    p.gold = 100;
+    const pr = G.shopPrice('arrow', 0, v, g.chaMod());
+    ok(pr === Math.round(5 * FE.Steading.shopFactor(v) * G.buyFactor(g.chaMod())) && shopDo(g, smith, 'buyItem:arrow:0') && g.bagCount('arrow') === 40 && p.gold === 100 - pr, `買一捆箭：${pr} 金幣，箭 ${g.bagCount('arrow')}`);
+    ok(g.log.some((l) => l.text.includes('一捆 20 支的箭矢')), '買箭的訊息');
+  }
+}
+try { testCombat28(); } catch (e) { fail('戰鬥測試拋出例外：' + e.stack); }
+
 // ---- 報告 ----
 const avg = (a, f) => (a.length ? (a.reduce((s, x) => s + f(x), 0) / a.length).toFixed(2) : '-');
 const rate = (a, f) => `${a.filter(f).length}/${a.length}`;
@@ -2892,7 +3564,7 @@ if (!SIM4_ONLY) {
 for (const s of sim) console.log('單人模擬', JSON.stringify(s));
 if (lazySim) console.log('對照（只走路不打怪）', JSON.stringify(lazySim));
 for (const s of sim4) console.log('四人等效（世界每 4 個動作走 1 回合，每個動作的算力不乘 4）', JSON.stringify(s));
-console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${bagChecks} 項｜裝備與物品的場景檢查 ${gearChecks} 項｜角色（職業、屬性、生命與負重、加點、技能）的場景檢查 ${charChecks} 項｜可達性快取的場景檢查 ${reachChecks} 項`);
+console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${bagChecks} 項｜裝備與物品的場景檢查 ${gearChecks} 項｜角色（職業、屬性、生命與負重、加點、技能）的場景檢查 ${charChecks} 項｜可達性快取的場景檢查 ${reachChecks} 項｜戰鬥（第二十八版）的場景檢查 ${combatChecks} 項`);
 // 量測：各世界等級（怪物生成時的）機器人打倒小怪物、中型怪物平均用了幾下（冒險者自己出手的次數，不含反擊），
 // 以及機器人在那個世界等級時主手武器清除等級（品質）的中間值（單人與四人等效模擬合計，不含防具對照組）。目標：小怪物約 3 下、中型怪物約 6 下
 {

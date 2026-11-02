@@ -229,26 +229,27 @@
     if (dP && dodged) FE.Char.useSkill(game, 'dodge');
     if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield');
 
-    // 傷害與倒下
+    // 傷害與倒下：倒下的處理（經驗值、修好地形、醒來）等這一下的訊息寫完才做，訊息才會先寫打了多少、再寫倒下
     let killed = false;
+    let fall = null;
     if (dmg > 0) {
       if (dP) {
         D.hp -= dmg;
         if (D.hp <= 0) {
           killed = true;
-          game.die(A);
+          fall = () => game.die(A);
         }
       } else if (dS) {
         D.hp -= dmg;
         if (D.hp <= 0) {
           killed = true;
-          game.soldierDown(D, A);
+          fall = () => game.soldierDown(D, A);
         }
       } else {
         D.hp = Math.max(0, D.hp - dmg);
         if (D.hp <= 0 && game.monsters.includes(D)) {
           killed = true;
-          game.defeat(D, aS ? A : null); // 士兵打倒的怪物，冒險者不拿經驗值也不拿算力
+          fall = () => game.defeat(D, aS ? A : null); // 士兵打倒的怪物，冒險者不拿經驗值也不拿算力
         }
       }
     }
@@ -320,6 +321,7 @@
       }
       game.say(text, dmg > 0 ? (aP ? 'good' : dP ? 'bad' : 'sys') : 'sys');
     }
+    if (fall) fall();
 
     // 6. 反擊：防守方還活著、還貼著，冒險者出手擲出 6～10 時怪物必定反擊，不然擲反擊機率；反擊只能一次，反擊打出的那一下不能再被反擊。
     // 「必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中，對方照自己的反擊機率擲。士兵不反擊（反擊機率 0）

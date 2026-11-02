@@ -770,7 +770,8 @@
       const first = FE.Combat.resolveAttack(this, p, m, kind, { weapon: main, holy });
       if (first.hit) holy = false;
       // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手已經觸發，副手那一下擲出 6～10 只算命中
-      if (dual && !this.fell && this.monsters.includes(m)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, off: true, noForced: first.forced, holy });
+      // 主手那一下把目標推開（長槍的推擊）或打倒了，副手就不出手：副手只打得到還貼在旁邊的目標
+      if (dual && !this.fell && this.monsters.includes(m) && FE.AI.touching(this, m, p)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, off: true, noForced: first.forced, holy });
       this.endTurn(false, ticks);
     }
 

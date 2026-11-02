@@ -3158,6 +3158,35 @@ function testCombat28() {
     p.equip.main = G.make('sword', 0, 30);
     ev = events(() => g.act('attack'));
     ok(!ev.some((e) => e.by === 'player'), '長劍打不到 2 格外');
+    // 雙持：主手長槍把目標推開後，副手那一下不出手（副手只打貼著的目標）；打倒的訊息寫在攻擊訊息後面
+    p.equip.main = G.make('spear', 0, 31);
+    p.equip.off = G.make('shortspear', 0, 32);
+    p.equip.main.dur = p.equip.off.dur = 1e9;
+    p.hp = p.maxHp = 1e9;
+    // 事件裡的 a、d 是活的物件，位置要在出手當下記下來
+    let pushes = 0;
+    let offN = 0;
+    let far = 0;
+    const hk = FE.Combat.hook;
+    FE.Combat.hook = (e) => {
+      if (e.by !== 'player') return;
+      if (!e.off && (e.effects || []).some((t) => t.includes('推開'))) pushes++;
+      if (e.off) {
+        offN++;
+        if (Math.abs(e.a.x - e.d.x) + Math.abs(e.a.y - e.d.y) !== 1) far++;
+      }
+    };
+    for (let i = 0; i < 60; i++) { m.x = p.x + 1; m.y = p.y; m.hp = m.maxHp = 1e6; g.battle.targetId = null; g.act('attack'); }
+    FE.Combat.hook = hk;
+    const offEv = { length: offN };
+    ok(pushes > 0 && offEv.length > 0 && far === 0, `推開後副手不該出手（推開 ${pushes} 次、副手 ${offEv.length} 次、其中不貼著 ${far} 次）`);
+    p.equip.off = null;
+    m.x = p.x + 1; m.y = p.y; m.hp = 1;
+    g.battle.targetId = null;
+    g.act('attack');
+    const iHit = g.log.findIndex((l) => /^你攻擊/.test(l.text));
+    const iDown = g.log.findIndex((l) => l.text.includes('倒下了'));
+    ok(iHit >= 0 && iDown >= 0 && iDown < iHit, '打倒的訊息該寫在攻擊訊息後面（log 新的在前）');
   }
 
   // 6. 射程、視線、優勢與劣勢：遊俠感知 15（+2）弓箭 7／22 格；超出正常射程有劣勢、超出最遠打不到；中間有巨石、樹打不到；旁邊貼著怪物有劣勢

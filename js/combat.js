@@ -27,7 +27,7 @@
     if (d.blockMax > 0) o.block = Math.min(d.blockMax, currentBlock(o, d.blockMax) + d.blockMax * C.BLOCK_REGEN);
   }
 
-  // 傷害種類對防守方減傷的影響（只有冒險者有防具；怪物和士兵目前沒有減傷，到第二十九版才有）。
+  // 傷害種類對防守方減傷的影響（只有冒險者有防具；怪物和士兵目前沒有減傷，到第三十一版才有）。
   // type：slash 揮砍（打中甲、重甲時多擋 1 點）、pierce 穿刺（無視 pierce 比例的物理減傷，無條件捨去）、
   // blunt 鈍擊（無視一半物理減傷，無條件進位）、magic／holy 只看魔法減傷；沒給（怪物的攻擊）照一般物理減傷。回傳要扣幾點
   function reduction(game, D, type, pierce) {

@@ -28,7 +28,8 @@ FE.CONFIG = {
   // 生命上限＝(職業基礎＋體質)×HP_MULT 無條件捨去，再加 (等級－1)×(職業基礎÷2＋體質修正值)；負重上限＝力量值×15 磅（js/char.js）
   HP_MULT: 1.5,         // 起始生命上限＝(職業基礎＋體質)×這個數，無條件捨去
   ATTR_CAP: 18,         // 屬性加點的上限
-  LEVEL_POINTS: 1,      // 每升一級可以加幾點屬性
+  LEVEL_POINTS: 1,      // 升到加點的那幾級時可以加幾點屬性
+  LEVEL_POINT_AT: [4, 8, 12, 16, 19], // 只有升到這幾級才加 1 點屬性（《D&D》），其他等級升級只加生命
   DEX_DODGE: 0.02,      // 敏捷每點修正值，閃避機率 +2%
   MOVE_TICKS_MIN: 8,    // 敏捷讓移動變快，一步最少幾刻（第二十九版）
   CHA_PRICE: 0.05,      // 魅力每點修正值：向工匠買東西（含修復費、打造工錢）−5%，賣東西 +5%，委託與任務的金幣獎勵 +5%
@@ -506,22 +507,22 @@ FE.START_OPTS = {
 // holy 牧師每個動作第一下命中多 1d8 神聖傷害、heal 牧師治療（按 4）
 FE.CLASSES = {
   warrior: {
-    name: '戰士', base: 10, attr: { str: 16, dex: 13, con: 15, int: 9, wis: 12, cha: 8 },
+    name: '戰士', base: 10, attr: { str: 15, dex: 13, con: 14, int: 10, wis: 12, cha: 8 },
     desc: '生命最多、背得最多。一開始就會武器的精通。拿盾牌時格擋值再加力量修正值，還能按 5 用盾牌撞。',
     fixed: ['medium'], groups: [{ pick: 1, of: ['sword', 'spear', 'shortspear'] }, { pick: 2, of: ['shield', 'herb', 'gold'] }], primary: 'str', mastery: true, bash: true,
   },
   ranger: {
-    name: '遊俠', base: 8, attr: { str: 12, dex: 16, con: 13, int: 8, wis: 15, cha: 9 },
+    name: '遊俠', base: 8, attr: { str: 12, dex: 15, con: 13, int: 8, wis: 14, cha: 10 },
     desc: '腳步輕、閃得開，擅長弓箭。一開始就會武器的精通。',
     fixed: ['light'], groups: [{ pick: 1, of: ['bow', 'dagger', 'shortspear', 'spear'] }], primary: 'dex', mastery: true,
   },
   mage: {
-    name: '法師', base: 4, attr: { str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 9 },
+    name: '法師', base: 4, attr: { str: 8, dex: 13, con: 12, int: 15, wis: 14, cha: 10 },
     desc: '生命少、背不動多少東西。拿法杖按 F，魔力會炸開一片，打中目標和周圍的怪物。',
     fixed: ['robe'], groups: [{ pick: 1, of: ['staff', 'dagger'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'int', spell: true,
   },
   priest: {
-    name: '牧師', base: 8, attr: { str: 13, dex: 8, con: 15, int: 9, wis: 12, cha: 16 },
+    name: '牧師', base: 8, attr: { str: 13, dex: 8, con: 14, int: 10, wis: 12, cha: 15 },
     desc: '生命不少，談起價錢也比較吃香。每次出手第一下打中時，神聖之力多傷對方一些；按 4 治療自己。',
     fixed: [], groups: [{ pick: 1, of: ['medium', 'shield'] }, { pick: 1, of: ['staff', 'sword'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'wis', holy: true, heal: true,
   },

@@ -400,7 +400,10 @@
   // 狀態效果：冒險者這邊的狀態（侵擾：你下一次打哪隻怪物有優勢）；沒有就寫「無」
   function drawEffects() {
     const vex = game.monsters.filter((m) => m.vexed && Math.abs(m.x - game.player.x) + Math.abs(m.y - game.player.y) <= C.SIGHT * 3);
-    $('fxText').textContent = vex.length ? vex.map((m) => `侵擾：下一次打${m.name}有優勢`).join('　') : '無';
+    const fx = vex.map((m) => `侵擾：下一次打${m.name}有優勢`);
+    if (game.battle.disengage) fx.push('撤離：下一步走開不會被趁機攻擊');
+    if (game.battle.dodge) fx.push('閃避：打你的攻擊都有劣勢');
+    $('fxText').textContent = fx.length ? fx.join('　') : '無';
   }
 
   // 底部顯示的目標：瞄準中的、貼著的目前目標、長槍打得到的、還纏著你的那隻
@@ -438,6 +441,8 @@
       fire: !!ranged,
       heal: hcd <= 0 && p.hp < p.maxHp,
       bash: !!adj && !!FE.Gear.shieldOf(p),
+      disengage: true,
+      dodge: true,
     };
     document.querySelectorAll('#quick .qs').forEach((b) => {
       b.disabled = !can[b.dataset.act];

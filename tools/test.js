@@ -38,6 +38,18 @@ for (const f of ['config', 'rng', 'world', 'checker', 'bugs', 'steading', 'char'
   }
 }
 const C = FE.CONFIG;
+// 四職業的起始屬性：第二十九版追加改成《D&D》標準陣列 15、14、13、12、10、8；
+// 場景檢查裡大多數數字（傷害加值、格擋值、價錢、生命⋯⋯）是照舊的 16、15、13、12、9、8 排的，所以場景檢查預設用舊的，
+// 只有明確測起始屬性的地方才用 useAttrs('new') 換成新的。競技場與機器人模擬一律用新的
+const NEW_ATTRS = {};
+for (const k of Object.keys(FE.CLASSES)) NEW_ATTRS[k] = Object.assign({}, FE.CLASSES[k].attr);
+const OLD_ATTRS = {
+  warrior: { str: 16, dex: 13, con: 15, int: 9, wis: 12, cha: 8 },
+  ranger: { str: 12, dex: 16, con: 13, int: 8, wis: 15, cha: 9 },
+  mage: { str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 9 },
+  priest: { str: 13, dex: 8, con: 15, int: 9, wis: 12, cha: 16 },
+};
+const useAttrs = (which) => { for (const k of Object.keys(NEW_ATTRS)) FE.CLASSES[k].attr = Object.assign({}, (which === 'new' ? NEW_ATTRS : OLD_ATTRS)[k]); };
 // 第二十六版：沒指定職業的 game.start() 給中性角色（場景測試與對照組用）：六項屬性都是 10（修正值 0）、沒有技能、
 // 裝備照第二十五版（普通長劍、沒有防具與盾牌）、背包空的、沒有金幣，生命上限 30、能背 150 磅（力量 10）、普通體型的人類（70,000），
 // 這樣舊的場景檢查（傷害、閃避 10%、出手加減⋯⋯）數字不變。要測職業就明確傳 { cls, picks }
@@ -2277,21 +2289,35 @@ function testCharacter() {
 
   // 2. 四個職業的起始屬性、生命、負重
   const want = {
-    warrior: { attr: [16, 13, 15, 9, 12, 8], hp: 37, carry: 240, base: 10 },
-    ranger: { attr: [12, 16, 13, 8, 15, 9], hp: 31, carry: 180, base: 8 },
-    mage: { attr: [8, 13, 12, 16, 15, 9], hp: 24, carry: 120, base: 4 },
-    priest: { attr: [13, 8, 15, 9, 12, 16], hp: 34, carry: 195, base: 8 },
+    warrior: { attr: [15, 13, 14, 10, 12, 8], hp: 36, carry: 225, base: 10 },
+    ranger: { attr: [12, 15, 13, 8, 14, 10], hp: 31, carry: 180, base: 8 },
+    mage: { attr: [8, 13, 12, 15, 14, 10], hp: 24, carry: 120, base: 4 },
+    priest: { attr: [13, 8, 14, 10, 12, 15], hp: 33, carry: 195, base: 8 },
   };
   ok(Object.keys(FE.CLASSES).join() === 'warrior,ranger,mage,priest', '職業該是戰士、遊俠、法師、牧師');
+  useAttrs('new'); // 起始屬性是《D&D》標準陣列 15、14、13、12、10、8，照原本的高低順序排
   for (const [cls, w] of Object.entries(want)) {
     const g = mk(21, cls);
     const p = g.player;
     ok(keys.map((k) => p.attr[k]).join() === w.attr.join(), `${cls} 的起始屬性 ${keys.map((k) => p.attr[k])}`);
-    ok(p.attr.str + p.attr.dex + p.attr.con + p.attr.int + p.attr.wis + p.attr.cha === 73 && w.attr.slice().sort((a, b) => b - a).join() === '16,15,13,12,9,8', `${cls} 的屬性該是 16、15、13、12、9、8 排列`);
+    ok(p.attr.str + p.attr.dex + p.attr.con + p.attr.int + p.attr.wis + p.attr.cha === 72 && w.attr.slice().sort((a, b) => b - a).join() === '15,14,13,12,10,8', `${cls} 的屬性該是 15、14、13、12、10、8 排列`);
     ok(p.maxHp === w.hp && p.hp === w.hp && g.level === 1, `${cls} 的起始生命 ${p.maxHp}（應該 ${w.hp}）`);
     ok(g.carryLimit() === w.carry && g.pushLimit() === w.carry * 2 && FE.CLASSES[cls].base === w.base && FE.CLASSES[cls].carry === undefined, `${cls} 的負重上限 ${g.carryLimit()}（應該 力量值×15＝${w.carry}），推拖上限 ${g.pushLimit()}`);
     ok(Object.keys(FE.SKILLS).every((k) => p.skills[k].lv === 0 && p.skills[k].n === 0) && p.points === 0, `${cls} 的技能該全是 0 級`);
   }
+  // 種族加值疊在新的起始屬性上：矮人戰士體質 14+2、精靈遊俠敏捷 15+2、人類法師加 2 點到智力 15+2；生命、負重跟著算
+  {
+    const dw = new FE.Game(1);
+    dw.start({ cls: 'warrior', body: { race: 'dwarf', bonus: {}, height: 4, build: 4 } });
+    const el = new FE.Game(1);
+    el.start({ cls: 'ranger', body: { race: 'elf', bonus: {}, height: 4, build: 4 } });
+    const hu = new FE.Game(1);
+    hu.start({ cls: 'mage', body: { race: 'human', bonus: { int: 2 }, height: 4, build: 4 } });
+    ok(dw.player.attr.con === 16 && dw.player.maxHp === Math.floor((10 + 16) * 1.5) && dw.carryLimit() === 225, `矮人戰士體質 ${dw.player.attr.con}、生命 ${dw.player.maxHp}、能背 ${dw.carryLimit()}`);
+    ok(el.player.attr.dex === 17 && el.player.maxHp === 31 && el.carryLimit() === 180, `精靈遊俠敏捷 ${el.player.attr.dex}`);
+    ok(hu.player.attr.int === 17 && hu.player.maxHp === 24 && hu.carryLimit() === 120, `人類法師智力 ${hu.player.attr.int}`);
+  }
+  useAttrs('legacy');
 
   // 3. 起始裝備：固定的一定有，自己挑的每一種挑法都對；品質都是普通
   const wantCombos = { warrior: 9, ranger: 4, mage: 4, priest: 8 };
@@ -2344,15 +2370,18 @@ function testCharacter() {
     let con = p.attr.con;
     p.hp = 5;
     g.addExp(FE.levelExp(2));
-    ok(g.level === 2 && p.points === 1 && p.maxHp === hpAt(con, 2) && p.hp === 5 + per(con), `${cls} 升到 2 級：生命上限 ${p.maxHp}（應該 ${hpAt(con, 2)}）、目前 ${p.hp}、點數 ${p.points}`);
+    ok(g.level === 2 && p.points === 0 && p.maxHp === hpAt(con, 2) && p.hp === 5 + per(con), `${cls} 升到 2 級：生命上限 ${p.maxHp}（應該 ${hpAt(con, 2)}）、目前 ${p.hp}、點數 ${p.points}（2 級沒有點數）`);
+    g.addExp(FE.levelExp(4));
+    ok(g.level === 4 && p.points === 1 && p.maxHp === hpAt(con, 4), `${cls} 升到 4 級：點數 ${p.points}（4 級有 1 點）`);
     const hp0 = p.hp;
     const max0 = p.maxHp;
     ok(g.spendPoint('con') && p.attr.con === con + 1 && p.points === 0, `${cls} 體質加點失敗`);
     con++;
-    ok(p.maxHp === hpAt(con, 2) && p.hp === hp0 + (p.maxHp - max0), `${cls} 體質加到 ${con}：生命上限 ${p.maxHp}（應該 ${hpAt(con, 2)}）`);
-    // 一口氣升四級
+    ok(p.maxHp === hpAt(con, 4) && p.hp === hp0 + (p.maxHp - max0), `${cls} 體質加到 ${con}：生命上限 ${p.maxHp}（應該 ${hpAt(con, 4)}）`);
+    // 一口氣升兩級（5、6 級沒有點數）
     g.addExp(FE.levelExp(6));
-    ok(g.level === 6 && p.points === 4 && p.maxHp === hpAt(con, 6), `${cls} 升到 6 級：生命上限 ${p.maxHp}（應該 ${hpAt(con, 6)}），點數 ${p.points}`);
+    ok(g.level === 6 && p.points === 0 && p.maxHp === hpAt(con, 6), `${cls} 升到 6 級：生命上限 ${p.maxHp}（應該 ${hpAt(con, 6)}），點數 ${p.points}`);
+    p.points = 4;
     const m1 = p.maxHp;
     const h1 = p.hp;
     for (let i = 0; i < 4; i++) { if (p.attr.con < C.ATTR_CAP) { g.spendPoint('con'); con++; } }
@@ -2374,7 +2403,14 @@ function testCharacter() {
   {
     const g = mk(25, 'mage');
     g.addExp(FE.levelExp(2));
-    ok(g.log.some((l) => /升到 Lv2/.test(l.text) && /屬性/.test(l.text)), '升級的訊息沒提到可以加屬性');
+    ok(g.log.some((l) => /升到 Lv2/.test(l.text) && !/屬性/.test(l.text)), '2 級沒有點數，訊息不該提屬性');
+    g.addExp(FE.levelExp(4));
+    ok(g.log.some((l) => /升到 Lv4/.test(l.text) && /1 點屬性/.test(l.text)) && g.log.some((l) => /升到 Lv3/.test(l.text) && !/屬性/.test(l.text)), '4 級的訊息提到可以加屬性，3 級不提');
+    // 加點只在 4、8、12、16、19 級
+    const g8 = mk(25, 'mage');
+    const ptsAt = [];
+    for (let L = 2; L <= 20; L++) { const before = g8.player.points; g8.addExp(FE.levelExp(L) - g8.exp); ptsAt.push(g8.player.points - before); }
+    ok(C.LEVEL_POINT_AT.join() === '4,8,12,16,19' && ptsAt.map((n, i) => (n ? i + 2 : 0)).filter(Boolean).join() === '4,8,12,16,19' && g8.player.points === 5, `加點的等級：${ptsAt.map((n, i) => (n ? i + 2 : 0)).filter(Boolean)}`);
   }
 
   // 5. 加點：每升一級 1 點，只能加還沒到 18 的屬性
@@ -2399,8 +2435,8 @@ function testCharacter() {
     ok(p.points === 0 && g.level === 2, '六項都滿時升級不該留點數');
     // 沒存好的點數存檔後還在（讀檔後視窗會再跳出來）
     const g2 = mk(27, 'priest');
-    g2.addExp(FE.levelExp(3));
-    ok(g2.player.points === 2, '連升兩級該有 2 點');
+    g2.addExp(FE.levelExp(8));
+    ok(g2.player.points === 2, '一口氣升到 8 級該有 2 點（4、8 級）');
     FE.Save.save(g2);
     const back = FE.Save.load();
     ok(back && back.game && back.game.player.points === 2 && back.game.player.cls === 'priest' && back.game.player.maxHp === g2.player.maxHp &&
@@ -3708,7 +3744,7 @@ function makeLevelChar(cls, level, wl, seed) {
   game.level = level;
   game.exp = FE.levelExp(level);
   const p = game.player;
-  p.points = level - 1;
+  p.points = C.LEVEL_POINT_AT.filter((l) => l <= level).length * C.LEVEL_POINTS; // 升到 4、8、12、16、19 級才有點數
   botPoints(game);
   p.hp = p.maxHp;
   const q = qualityForWL(wl);
@@ -4067,11 +4103,11 @@ function testGrowth29() {
     g.addExp(29);
     ok(g.level === 1, '29 點還是 1 級');
     g.addExp(1);
-    ok(g.level === 2 && g.player.points === 1, '30 點升 2 級');
+    ok(g.level === 2 && g.player.points === 0, '30 點升 2 級（2 級沒有屬性點）');
     g.addExp(60);
     ok(g.level === 3 && g.exp === 90, '累計 90 點升 3 級');
     g.addExp(35500 - 90);
-    ok(g.level === 20 && g.player.points === 19, `累計 35,500 點升到 20 級：${g.level}、點數 ${g.player.points}`);
+    ok(g.level === 20 && g.player.points === 5, `累計 35,500 點升到 20 級：${g.level}、點數 ${g.player.points}（4、8、12、16、19 級各 1 點）`);
     g.addExp(100000);
     ok(g.level === 20 && g.exp === 135500, `20 級是上限，經驗值還是累積：${g.level}`);
     ok(g.player.maxHp === FE.Char.maxHp(g.player, 20), '20 級生命上限照公式');
@@ -4367,8 +4403,8 @@ function testGrowth29() {
     const p = g.player;
     const c = FE.CLASSES.warrior;
     const start = Object.values(c.attr).reduce((s, v) => s + v, 0) + 2; // 矮人體質 +2
-    ok(g.level === 10 && g.exp === FE.levelExp(10) && p.points === 0 && Object.values(p.attr).reduce((s, v) => s + v, 0) === start + 9, `10 級角色：屬性總和 ${Object.values(p.attr).reduce((s, v) => s + v, 0)}（應該 ${start + 9}）`);
-    ok(p.attr.str === 18 && p.maxHp === Ch.maxHp(p, 10) && p.hp === p.maxHp, `主屬性力量加到 18：${p.attr.str}，生命 ${p.hp}/${p.maxHp}`);
+    ok(g.level === 10 && g.exp === FE.levelExp(10) && p.points === 0 && Object.values(p.attr).reduce((s, v) => s + v, 0) === start + 2, `10 級角色：屬性總和 ${Object.values(p.attr).reduce((s, v) => s + v, 0)}（應該 ${start + 2}，4、8 級各 1 點）`);
+    ok(p.attr.str === 17 && p.attr.con === 18 && p.maxHp === Ch.maxHp(p, 10) && p.hp === p.maxHp, `主屬性力量加到 18：${p.attr.str}，生命 ${p.hp}/${p.maxHp}`);
     ok(p.equip.main.q === qualityForWL(4) && p.equip.body.q === 2 && p.equip.off.q === 2 && qualityForWL(1) === 0 && qualityForWL(6) === 3, `世界等級 4 的裝備品質 ${p.equip.main.q}`);
     // 10 級累計經驗 6,400：劍術 ×2.5＝16,000 → 13 級、格鬥 ×3＝19,200 → 15 級、穿甲（中甲）13 級、閃避 ×0.5＝3,200 → 4 級、盾牌使用 ×0.6＝3,840 → 5 級
     ok(p.skills.sword.lv === 13 && p.skills.fight.lv === 15 && p.skills.armor.lv === 13 && p.skills.dodge.lv === 4 && p.skills.shield.lv === 5 && p.skills.bow.lv === 0, `技能：劍術 ${p.skills.sword.lv}、格鬥 ${p.skills.fight.lv}、穿甲 ${p.skills.armor.lv}、閃避 ${p.skills.dodge.lv}、盾牌使用 ${p.skills.shield.lv}`);
@@ -4381,6 +4417,77 @@ function testGrowth29() {
     const A = arenaGame('warrior', 1, 1, 9122);
     const n = arenaFight(A, 'small', 1, 0);
     ok(n >= 1 && n < 60 && A.monsters.length === 0, `競技場打倒小怪物用 ${n} 下`);
+  }
+
+  // 16b. 撤離（按 6）與閃避（按 7）：各花一個動作；撤離管到下一個動作之前走開不被趁機攻擊、纏上的目標不趁隙出手；閃避管到下一個動作之前打你的攻擊都有劣勢
+  {
+    const g = arena('warrior', 9130);
+    const p = g.player;
+    p.equip.main = gear('sword');
+    const step = (disengage) => {
+      g.monsters = [];
+      p.x = g.world.spawn ? p.x : p.x;
+      const m = mon(g, p.x + 1, p.y);
+      const o = mon(g, p.x, p.y + 1); // 貼著、但不是目標的另一隻（趁機攻擊的對象）
+      m.atk = o.atk = 3;
+      g.battle.targetId = m.id;
+      if (disengage) g.disengage();
+      const t = g.turn;
+      const ev = events(() => { for (let i = 0; i < 1; i++) g.move(-1, 0); });
+      return { ev, m, o, turn: t };
+    };
+    const t0 = g.turn;
+    g.disengage();
+    ok(g.turn === t0 + 1 && g.battle.disengage === true && g.ticks > 0, '撤離花一個動作');
+    g.rest();
+    ok(!g.battle.disengage, '下一個動作之後撤離就結束了');
+    // 沒撤離：走開時纏上的目標一定趁隙出手（cling），另一隻貼著的有機率趁機攻擊
+    let cling = 0;
+    let opp = 0;
+    for (let i = 0; i < 60; i++) { p.x = p.x > 0 ? p.x : p.x; const r = step(false); cling += r.ev.filter((e) => e.cling).length; opp += r.ev.filter((e) => e.opportunity).length; g.player.hp = g.player.maxHp = 1e6; p.x += 1; }
+    ok(cling > 30 && opp > 5, `沒撤離：趁隙 ${cling} 次、趁機攻擊 ${opp} 次`);
+    // 撤離之後走開：兩種都沒有
+    let cling2 = 0;
+    let opp2 = 0;
+    let moved = 0;
+    for (let i = 0; i < 60; i++) { const x0 = p.x; const r = step(true); cling2 += r.ev.filter((e) => e.cling || e.opportunity).length; if (p.x === x0 - 1) moved++; p.x += 1; p.hp = p.maxHp = 1e6; }
+    ok(cling2 === 0 && moved === 60, `撤離之後走開：被攻擊 ${cling2} 次、走開 ${moved}/60`);
+    // 撤離只管到下一個動作之前：走一步之後再走開（又貼上另一隻）就沒保護了
+    g.monsters = [];
+    const m1 = mon(g, p.x + 1, p.y);
+    g.battle.targetId = m1.id;
+    g.disengage();
+    g.move(-1, 0);
+    ok(!g.battle.disengage && !g.prevStance.dod, '走開之後撤離就結束了');
+    // 撤離的纏上照舊：牠還是會跟上來
+    FE.AI.worldTurn(g);
+    ok(Math.abs(m1.x - p.x) + Math.abs(m1.y - p.y) === 1 || Math.abs(m1.x - p.x) + Math.abs(m1.y - p.y) === 2, '纏上的目標還是會跟上來');
+    // 閃避：所有打你的攻擊都有劣勢（擲兩次取低）
+    g.monsters = [];
+    const mm = mon(g, p.x + 1, p.y);
+    mm.atk = 2;
+    const adv = (n) => events(() => { for (let i = 0; i < n; i++) { p.hp = p.maxHp = 1e6; FE.Combat.resolveAttack(g, mm, p, 'attack', { noCounter: true }); } }).filter((e) => e.by === 'monster');
+    ok(adv(50).every((e) => e.adv === 0), '平常怪物出手沒有優劣勢');
+    const t1 = g.turn;
+    g.dodgeStance();
+    ok(g.turn === t1 + 1 && g.battle.dodge === true, '閃避花一個動作');
+    const e1 = adv(80);
+    ok(e1.every((e) => e.adv === -1 && e.dice.length === 2), '閃避：打你的攻擊都擲兩次取低（劣勢）');
+    // 你自己出手不受影響
+    const mine = events(() => { for (let i = 0; i < 20; i++) { mm.hp = 1e9; FE.Combat.resolveAttack(g, p, mm, 'attack', { noCounter: true }); } }).filter((e) => e.by === 'player');
+    ok(mine.every((e) => e.adv === 0), '閃避不影響你自己出手');
+    g.move(-1, 0);
+    mm.x = p.x + 1;
+    mm.y = p.y;
+    ok(!g.battle.dodge && adv(30).every((e) => e.adv === 0), '下一個動作之後閃避就結束了');
+    // 快捷鍵：act('disengage')／act('dodge')
+    const t2 = g.turn;
+    g.act('disengage');
+    g.act('dodge');
+    ok(g.turn === t2 + 2 && g.battle.dodge && !g.battle.disengage, '按 6、7 就是這兩個動作');
+    // 存檔不會把狀態弄壞
+    FE.Save.save(g);
+    ok(!!FE.Save.load().game, '有撤離、閃避狀態時存檔讀得回來');
   }
 
   // 17. 存檔：種族、身高、體格、體型與技能經驗（小數）都存得回來
@@ -4411,7 +4518,7 @@ function runJob(id) {
   else if (kind === 'sim4') {
     simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 2000 : 3000, untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
-  else if (kind === 'unit') UNITS[a]();
+  else if (kind === 'unit') { useAttrs('legacy'); UNITS[a](); }
   else if (kind === 'arena') runArena(a);
   else throw new Error('不認得的工作 ' + id);
 }

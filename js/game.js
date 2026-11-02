@@ -524,9 +524,11 @@
       const p = this.player;
       while (p && this.level < C.LEVEL_MAX && this.exp >= FE.levelExp(this.level + 1)) {
         this.level++;
-        p.points += C.LEVEL_POINTS; // 每升一級 1 點屬性，畫面會跳出加點視窗（視窗開著不能做別的事）
+        // 只有升到 4、8、12、16、19 級才有 1 點屬性（畫面會跳出加點視窗，視窗開著不能做別的事），其他等級升級只加生命
+        const point = C.LEVEL_POINT_AT.includes(this.level);
+        if (point) p.points += C.LEVEL_POINTS;
         const gain = this.recalc();
-        this.say(`升到 Lv${this.level}！生命上限 +${gain}（現在 ${p.maxHp}），可以加 ${C.LEVEL_POINTS} 點屬性。`, 'world');
+        this.say(`升到 Lv${this.level}！生命上限 +${gain}（現在 ${p.maxHp}）${point ? `，可以加 ${C.LEVEL_POINTS} 點屬性` : ''}。`, 'world');
       }
       this.dropLostPoints();
     }
@@ -606,6 +608,10 @@
     beginAction() {
       if (this.battle.cooldown > 0) this.battle.cooldown--;
       if (this.battle.healCd > 0) this.battle.healCd--;
+      // 撤離、閃避只管到下一個動作之前：下一個動作開始時記下上一個動作留下的狀態（這個動作本身要用），然後清掉
+      this.prevStance = { dis: !!this.battle.disengage, dod: !!this.battle.dodge };
+      this.battle.disengage = false;
+      this.battle.dodge = false;
       this.aim = null;
     }
 
@@ -677,6 +683,7 @@
       // 其他貼著的怪物各有機率白打一下（走判定流程，但這一下不觸發反擊）
       for (const o of leaving) {
         if (!this.monsters.includes(o) || FE.AI.touching(this, o, p)) continue;
+        if (this.prevStance && this.prevStance.dis) continue; // 撤離：走開不會被趁機攻擊，纏上的目標也不趁隙出手（牠還是會跟上來）
         if (o.id === this.battle.targetId) {
           FE.Combat.resolveAttack(this, o, p, 'attack', { noCounter: true, cling: true, clingWord: '後退' });
         } else {
@@ -1011,6 +1018,23 @@
       const got = Math.min(p.maxHp - p.hp, Math.max(1, FE.rollDice(this.rng, C.HEAL_DIE, 1) + FE.Char.attrMod(p, 'cha')));
       p.hp += got;
       this.say(`你低聲祈禱，傷口癒合了，生命回復 ${got}。`, 'good');
+      this.endTurn(false);
+    }
+
+    // 按 6 撤離（《D&D》2024 的 Disengage）：花一個動作；這個動作之後到你下一個動作之前，你移動離開怪物旁邊時不會被趁機攻擊，
+    // 纏上的目標也不會趁隙出手（纏上照舊，牠還是會跟上來）
+    disengage() {
+      this.beginAction();
+      this.battle.disengage = true;
+      this.say('你小心地拉開架式，準備脫身：下一步走開，貼著你的怪物不會趁機出手。', 'sys');
+      this.endTurn(false);
+    }
+
+    // 按 7 閃避（《D&D》2024 的 Dodge）：花一個動作；到你下一個動作之前，所有打你的攻擊都有劣勢
+    dodgeStance() {
+      this.beginAction();
+      this.battle.dodge = true;
+      this.say('你專心閃躲：下一個動作之前，打你的攻擊都會打得比較差。', 'sys');
       this.endTurn(false);
     }
 
@@ -1540,6 +1564,14 @@
       }
       if (kind === 'bash') {
         this.bash();
+        return;
+      }
+      if (kind === 'disengage') {
+        this.disengage();
+        return;
+      }
+      if (kind === 'dodge') {
+        this.dodgeStance();
         return;
       }
       if (kind === 'fire') {

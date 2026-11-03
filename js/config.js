@@ -523,7 +523,7 @@ FE.MASTERIES = {
 FE.MASTERY_SKILL = 5;
 // 採集點：都可以走過去；拿著對的工具撞上去就採，採完變回普通地面，REGROW_TICKS 刻後長回來
 FE.NODES = {
-  ore: { name: '礦脈', glyph: '◊', tool: 'pick', item: 'ore', verb: '挖' },
+  ore: { name: '礦脈', glyph: '☼', tool: 'pick', item: 'ore', verb: '挖' },
   herb: { name: '藥草', glyph: '♥', tool: 'sickle', item: 'herb', verb: '割' },
 };
 // 六項屬性（順序固定：力量、敏捷、體質、智力、感知、魅力）。修正值＝(屬性－10)÷2 無條件捨去（9 和 8 都算 -1）。

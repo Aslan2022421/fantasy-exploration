@@ -74,12 +74,23 @@
     w: ['■', '│', '─', '└', '│', '│', '┌', '├', '─', '┘', '─', '┴', '┐', '┤', '┬', '┼'],
   };
   function wallGlyph(W, x, y, t) {
-    const same = (dx, dy) => {
-      const c = W.cell(x + dx, y + dy);
-      return c && c.t === t;
-    };
+    // 建築的牆（第三十二版）：民房、神殿、市場與地貌的牆都照雙線接（門不算牆，牆在門口斷開，同 DF）
+    const join = JOIN_WALLS[t] ? (o) => !!o && !!JOIN_WALLS[o.t] : (o) => !!o && o.t === t;
+    const same = (dx, dy) => join(W.cell(x + dx, y + dy));
     const bits = (same(0, -1) ? 1 : 0) | (same(1, 0) ? 2 : 0) | (same(0, 1) ? 4 : 0) | (same(-1, 0) ? 8 : 0);
-    return WALL_GLYPHS[t][bits];
+    return WALL_GLYPHS[JOIN_WALLS[t] ? 'W' : t][bits];
+  }
+  // 第三十二版：建築與地貌的牆畫成依相鄰的牆自動接起來的雙線框（照 Dwarf Fortress 砌好的牆）；地圖資料裡的代碼不變
+  const JOIN_WALLS = { '⌂': 1, '∩': 1, '♦': 1, 'Θ': 1, '†': 1, 'Ω': 1 };
+  // 畫面上的字元照 Dwarf Fortress〈Tilesets〉的用法（第三十二版）：地圖資料裡的代碼不變，只換畫出來的字。
+  // 床 Θ、桌 ╤、櫃 π、鐵砧 σ（工坊的工作台）、祭壇 É、市場攤位 ■、巨石 ∞、立石 ■、墓碑換成石碑 ∩
+  const SHOW = { '≡': 'Θ', 'π': '╤', '▌': 'π', '╤': 'σ', '¤': 'É', '╥': '■', '#': '∞', 'Π': '■', '‡': '∩' };
+  // 一格畫成什麼字：牆照相鄰自動接；門照 DF 木門 ║（城鎮與神殿用石門 ┼）；室內地板照 DF 砌好的地板 +；其他照 SHOW
+  function showGlyph(W, x, y, c, vv, indoor) {
+    if (WALL_GLYPHS[c.t] || JOIN_WALLS[c.t]) return wallGlyph(W, x, y, c.t);
+    if (c.t === '+') return vv && vv.kind === 'town' ? '┼' : '║';
+    if (c.t === '.' && indoor) return '+';
+    return SHOW[c.t] || c.t;
   }
 
   // 地形字元要不要粗體（FE.TERRAIN 的 cls；顏色是同名的 CSS 變數）。底色越亮越高，聚落、室內、小路、有委託、收貨人各有底色，也都在 CSS 變數裡
@@ -152,13 +163,13 @@
         const pw = Math.round(ox + (gx + 1) * cell) - px0;
         const ph = Math.round(oy + (gy + 1) * cell) - py0;
 
-        let glyph = WALL_GLYPHS[c.t] ? wallGlyph(W, x, y, c.t) : c.t;
         const tcls = FE.TERRAIN[c.t].cls;
         let fg = P[tcls] || P['t-plain'];
         let bold = TERRAIN_BOLD.has(tcls);
         // 底色越亮越高；聚落、室內、路各有底色
         const vv = W.villageAt(x, y);
         const indoor = vv && FE.Steading.roomAt(vv, x, y) >= 0;
+        let glyph = showGlyph(W, x, y, c, vv, indoor);
         let bg = c.t === '·' ? P['map-road'] : indoor ? P['map-indoor'] : vv ? (vv.kind === 'town' ? P['map-town'] : P['map-village']) : P['map-h' + c.h] || P['map-h0'];
         const baseBg = bg;
         let alpha = 1;

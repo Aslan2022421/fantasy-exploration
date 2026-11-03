@@ -58,12 +58,13 @@ function botGear(game) {
 
 // 機器人開新世界時挑的起始裝備（選項 id）：戰士長劍、盾牌、2 份藥草；遊俠弓箭（附 20 支箭）；法師法杖、2 份藥草；牧師中甲、長劍、2 份藥草
 const BOT_PICKS = {
-  warrior: ['sword', 'shield', 'herb'],
-  ranger: ['dagger'],            // 弓箭與一捆箭是固定給的
-  mage: ['herb'],                // 法杖是固定給的
-  priest: ['shield', 'herb'],    // 鱗甲與硬頭錘是固定給的
-  paladin: ['sword', 'herb'],    // 鎖子甲與盾牌是固定給的
-  barbarian: ['greataxe', 'herb'], // 皮甲是固定給的；不能穿中甲、重甲
+  // 第三十一版：起始裝備從全部武器與防具挑（主手、身上、副手、補給各一組）
+  warrior: ['sword', 'medium', 'shield', 'herb'],
+  ranger: ['bow', 'light', 'nooff', 'herb'],
+  mage: ['staff', 'robe', 'nooff', 'herb'],
+  priest: ['club', 'medium', 'shield', 'herb'],
+  paladin: ['sword', 'heavy', 'shield', 'herb'],
+  barbarian: ['greataxe', 'light', 'nooff', 'herb'], // 不能穿中甲、重甲
 };
 const BOT_CLASSES = Object.keys(BOT_PICKS);
 // 機器人照職業挑種族（第二十九版）：戰士、牧師矮人（體質 +2），遊俠精靈（敏捷 +2），法師人類（兩點都加智力）；身高、體格都取普通（4、4）
@@ -308,7 +309,7 @@ function simulate(seed, opts) {
   if (opts.scale != null) C.PLAYER_COMPUTE_SCALE = opts.scale;
   const game = new FE.Game(seed);
   // opts.cls：指定職業的模擬，起始裝備照 BOT_PICKS 挑；沒指定就是中性角色（對照組、只走路不打怪的那組）
-  game.start(opts.cls ? { cls: opts.cls, picks: BOT_PICKS[opts.cls], body: BOT_BODY[opts.cls], skills: FE.Char.rollSkills(opts.cls, FE.Char.startMainSkill(opts.cls, BOT_PICKS[opts.cls]), FE.makeRng(seed + 77)) } : undefined);
+  game.start(opts.cls ? { cls: opts.cls, picks: BOT_PICKS[opts.cls], body: BOT_BODY[opts.cls], skills: FE.Char.rollSkills(opts.cls, FE.makeRng(seed + 77)) } : undefined);
   let overActs = 0; // 超過能背的重量（走一步 60 刻）的動作數
   let maxJobs = 0;  // 同時手上最多幾個委託（第三十版）
   let maxLoad = 0;

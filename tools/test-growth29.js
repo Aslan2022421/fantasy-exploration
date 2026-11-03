@@ -664,60 +664,73 @@ function testGrowth29() {
     const poolOf = (cls) => [...new Set(FE.CLASSES[cls].pool.flatMap((t) => (t === 'melee' ? FE.MELEE_SKILLS : [t])))].sort().join();
     for (const [cls, s] of Object.entries(pools)) ok(poolOf(cls) === s.split(',').sort().join(), `${cls} 的技能池 ${poolOf(cls)}`);
 
-    // 起始技能：精熟（5）的是起始主手武器那一項；專精＝熟練（4）×2＋稱職（3）×3、全面＝稱職×6；池子不夠有幾項給幾項
-    ok(FE.SKILL_PACKS.focus.name === '專精' && FE.SKILL_PACKS.focus.levels.join() === '4,4,3,3,3' && FE.SKILL_PACKS.broad.name === '全面' && FE.SKILL_PACKS.broad.levels.join() === '3,3,3,3,3,3' && FE.START_MAIN_LEVEL === 5, '起始技能組合的資料');
-    const mains = { warrior: ['sword', 'herb', 'gold'], ranger: ['dagger'], mage: ['herb'], priest: ['shield', 'herb'], paladin: ['warhammer', 'herb'], barbarian: ['greataxe', 'herb'] };
-    const wantMain = { warrior: 'sword', ranger: 'bow', mage: 'staff', priest: 'mace', paladin: 'mace', barbarian: 'axe' };
-    for (const cls of Object.keys(pools)) {
-      const main = Ch.startMainSkill(cls, mains[cls]);
-      ok(main === wantMain[cls], `${cls} 的起始主手武器技能 ${main}（應該 ${wantMain[cls]}）`);
-      const pool = poolOf(cls).split(',');
+    // 起始技能（第三十一版）：從全部技能擲 5 格、新手～精通（1～5 級），至少 1 項武器技能、1 項防具技能，不重複；
+    // 偏高、偏低兩組輪流；鎖定的格子重擲時不變；本職業的池子加權
+    {
+      const R = FE.SKILL_ROLL;
+      ok(R.slots === 5 && R.high.length === 5 && R.low.length === 5 && R.high.concat(R.low).every((r) => r.length === 5 && r.reduce((a, b) => a + b, 0) === 100), '起始技能機率表的資料（兩組各 5 行、每行 5 級合計 100%）');
+      const isW = (k) => FE.SKILLS[k].weapon && k !== 'misc';
+      const isA = (k) => !!FE.ARMOR_SKILL[k];
       let bad = 0;
       const seen = new Set();
-      for (let i = 0; i < 300; i++) {
-        for (const key of ['focus', 'broad', undefined]) {
-          const r = Ch.rollSkills(cls, main, rng, key);
-          const lv = r.levels;
-          const drawn = Object.keys(lv).filter((k) => k !== main);
-          const pack = FE.SKILL_PACKS[r.pack];
-          const want = pack.levels.slice(0, Math.min(pack.levels.length, pool.filter((k) => k !== main).length)).slice().sort().join();
-          if (lv[main] !== 5 || drawn.some((k) => !pool.includes(k)) || new Set(drawn).size !== drawn.length || drawn.map((k) => lv[k]).sort().join() !== want || (key && r.pack !== key) || r.name !== pack.name) bad++;
-          for (const k of drawn) seen.add(k);
+      for (const cls of Object.keys(pools)) {
+        let prev = null;
+        for (let i = 0; i < 300; i++) {
+          const r = Ch.rollSkills(cls, rng, prev);
+          const ids = r.slots.map((x) => x.id);
+          if (ids.length !== 5 || new Set(ids).size !== 5 || !ids.some(isW) || !ids.some(isA) || r.slots.some((x) => !(x.lv >= 1 && x.lv <= 5)) || (prev && r.high === prev.high)) bad++;
+          for (const k of ids) seen.add(k);
+          prev = r;
         }
       }
-      ok(bad === 0, `${cls} 起始技能不對 ${bad} 次`);
-      ok(pool.filter((k) => k !== main).every((k) => seen.has(k)), `${cls} 池裡每一項都有機會抽到`);
+      ok(bad === 0, `起始技能不對 ${bad} 次（5 格、不重複、保底武器與防具、1～5 級、偏高偏低輪流）`);
+      ok(Object.keys(FE.SKILLS).every((k) => seen.has(k)), '全部技能都有機會擲到（不分職業）');
+      // 鎖定：鎖住的格子重擲後不變，其他格子照樣保底
+      const r1 = Ch.rollSkills('mage', FE.makeRng(9));
+      r1.slots[0].locked = true;
+      r1.slots[2].locked = true;
+      let keepBad = 0;
+      let prev = r1;
+      for (let i = 0; i < 200; i++) {
+        const r = Ch.rollSkills('mage', rng, prev);
+        if (r.slots[0].id !== r1.slots[0].id || r.slots[0].lv !== r1.slots[0].lv || r.slots[2].id !== r1.slots[2].id || !r.slots.map((x) => x.id).some(isW) || !r.slots.map((x) => x.id).some(isA)) keepBad++;
+        prev = r;
+      }
+      ok(keepBad === 0, `鎖定的格子重擲後不變 ${keepBad}`);
+      // 偏高組平均比偏低組高；本職業的池子比較常擲到（戰士的斧術 vs 法師的斧術）
+      let hi = 0, hn = 0, lo = 0, ln = 0, wAxe = 0, mAxe = 0;
+      for (let i = 0; i < 2000; i++) {
+        const r = Ch.rollSkills('warrior', rng);
+        for (const x of r.slots) if (r.high) { hi += x.lv; hn++; } else { lo += x.lv; ln++; }
+        if (r.levels.axe) wAxe++;
+        if (Ch.rollSkills('mage', rng).levels.axe) mAxe++;
+      }
+      ok(hi / hn > lo / ln + 0.5, `偏高組平均 ${(hi / hn).toFixed(2)}、偏低組 ${(lo / ln).toFixed(2)}`);
+      ok(wAxe > mAxe * 1.15, `本職業池子加權：戰士擲到斧術 ${wAxe}、法師 ${mAxe}`);
     }
+    // 起始技能放進角色：技能等級照擲的結果，挑到的武器、防具、盾牌所屬技能 +1，其餘涉獵；存檔讀得回來
     {
-      // 池子夠大（遊俠 6、戰士不含主手 11）：專精抽 5 項、全面抽 6 項；池子小（法師 4、牧師 4）：有幾項給幾項
-      const lens = (cls, key) => Object.keys(Ch.rollSkills(cls, Ch.startMainSkill(cls, mains[cls]), rng, key).levels).length;
-      ok(lens('ranger', 'focus') === 1 + 5 && lens('ranger', 'broad') === 1 + 6 && lens('warrior', 'focus') === 1 + 5 && lens('warrior', 'broad') === 1 + 6, '池子夠大，專精 5 項、全面 6 項（外加精熟那項）');
-      ok(lens('mage', 'focus') === 1 + 4 && lens('mage', 'broad') === 1 + 4 && lens('priest', 'focus') === 1 + 4 && lens('priest', 'broad') === 1 + 4, '池子只有 4 項，就給 4 項');
-      // 專精：熟練給前兩項抽到的、稱職給後面的；法師池子 4 項時專精是熟練 2、稱職 2
-      const mr = Ch.rollSkills('mage', 'staff', rng, 'focus').levels;
-      ok(Object.values(mr).sort().join() === '3,3,4,4,5', `法師專精：${JSON.stringify(mr)}`);
-      // 兩種組合各約一半
-      let focus = 0;
-      for (let i = 0; i < 2000; i++) if (Ch.rollSkills('warrior', 'sword', rng).pack === 'focus') focus++;
-      ok(focus > 900 && focus < 1100, `專精／全面各約 50%：專精 ${focus} / 2000`);
-      // 戰士起始主手是長劍時，抽到的武器技能不會再出現劍術 5 級以外的值
-      const wr = Ch.rollSkills('warrior', 'sword', rng, 'broad').levels;
-      ok(wr.sword === 5, '精熟那項不被池子的抽樣蓋掉');
-    }
-    // 起始技能放進角色：技能等級照抽的結果、其餘涉獵（0 級）、記著組合名稱、存檔讀得回來
-    {
-      const sk = Ch.rollSkills('ranger', 'bow', FE.makeRng(77), 'focus');
+      useClasses('new');
+      const sk = Ch.rollSkills('ranger', FE.makeRng(77));
+      const picks = ['bow', 'light', 'nooff', 'herb'];
       const g = new FE.Game(451);
-      g.start({ cls: 'ranger', picks: ['dagger'], skills: sk });
+      g.start({ cls: 'ranger', picks, skills: sk });
       const p = g.player;
-      ok(Object.keys(FE.SKILLS).every((k) => p.skills[k].lv === (sk.levels[k] || 0) && p.skills[k].n === 0) && p.skillPack === '專精', `起始技能放進角色：${Object.keys(FE.SKILLS).map((k) => k + p.skills[k].lv)}`);
+      const plus = Ch.startPlusOne(picks);
+      ok(plus.join() === 'bow,light', `挑到的裝備所屬技能：${plus}`);
+      ok(Object.keys(FE.SKILLS).every((k) => p.skills[k].lv === (sk.levels[k] || 0) + (plus.includes(k) ? 1 : 0) && p.skills[k].n === 0), `起始技能放進角色：${Object.keys(FE.SKILLS).map((k) => k + p.skills[k].lv)}`);
+      ok(p.equip.main.type === 'bow' && p.equip.body.type === 'light' && !p.equip.off && g.bagCount('arrow') === 20, '遊俠挑弓、皮甲、副手空著，附 20 支箭');
       FE.Save.save(g);
       const back = FE.Save.load();
-      ok(back && back.game && back.game.player.skillPack === '專精' && back.game.player.skills.bow.lv === 5, '存檔讀回來，技能組合名稱還在');
+      ok(back && back.game && back.game.player.skills.bow.lv === p.skills.bow.lv, '存檔讀回來，技能等級還在');
+      const g3 = new FE.Game(453);
+      g3.start({ cls: 'warrior', picks: ['crossbow', 'plate', 'shield', 'gold'], skills: Ch.rollSkills('warrior', FE.makeRng(3)) });
+      ok(g3.bagCount('bolt') === 20 && g3.player.equip.body.type === 'plate' && !g3.player.equip.off, '挑輕弩附 20 支弩矢、全部防具都能挑、雙手武器時盾牌放背包');
+      ok(FE.Char.validPicks('mage', ['greatsword', 'heavy', 'nooff', 'herb']) && !FE.Char.validPicks('mage', ['staff', 'herb']), '每個職業都能挑全部武器與防具（主手、身上、副手、補給各一組）');
       const g2 = new FE.Game(452);
-      g2.start({ cls: 'warrior', picks: ['sword', 'herb', 'gold'] });
-      ok(!g2.player.skillPack && Object.keys(FE.SKILLS).every((k) => g2.player.skills[k].lv === 0), '沒給起始技能（測試用）都是 0 級');
-      ok(Ch.rollSkills('warrior', 'sword', FE.makeRng(5), 'focus').levels.bow === undefined, '池子外的技能抽不到');
+      g2.start({ cls: 'warrior', picks: ['sword', 'medium', 'shield', 'herb'] });
+      ok(Object.keys(FE.SKILLS).every((k) => g2.player.skills[k].lv === 0), '沒給起始技能（測試用）都是 0 級，也不加那 1 級');
+      useClasses('legacy');
     }
     useClasses('legacy');
   }

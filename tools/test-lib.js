@@ -62,9 +62,30 @@ FE.Game.prototype.advance = function (t, interrupt) {
   if (NO_TIRE && this.player) this.player.awakeAt = this.ticks;
   return advance0.call(this, t, interrupt);
 };
+// 第三十一版：起始裝備改成主手、身上、副手、補給各挑一樣。舊的場景檢查照第二十九版的挑法（固定給的加自己挑的）寫，
+// 這裡換成新的挑法：第一把武器放主手、多的武器放背包，第一件防具穿上（沒有就衣袍），有盾牌就拿，藥草與 20 銀照給
+const V29_FIXED = { warrior: ['medium'], ranger: ['light', 'bow'], mage: ['robe', 'staff'], priest: ['medium', 'club'], paladin: ['heavy', 'shield'], barbarian: ['light'] };
+function v29Picks(cls, picks) {
+  const all = (V29_FIXED[cls] || []).concat(picks);
+  const cat = (id) => (FE.START_OPTS[id] && FE.START_OPTS[id].gear ? FE.GEAR[FE.START_OPTS[id].gear].cat : id);
+  const weapons = all.filter((id) => cat(id) === 'weapon');
+  const armor = all.find((id) => cat(id) === 'armor') || 'robe';
+  const supply = all.includes('herb') ? 'herb' : 'gold';
+  return { picks: [weapons[0] || 'staff', armor, all.includes('shield') ? 'shield' : 'nooff', supply], extra: weapons.slice(1).concat(all.includes('herb') && all.includes('gold') ? ['gold'] : []) };
+}
 const start0 = FE.Game.prototype.start;
 FE.Game.prototype.start = function (opts) {
+  let extra = [];
+  if (opts && opts.cls && opts.picks && FE.CLASSES[opts.cls].allGear && !FE.Char.validPicks(opts.cls, opts.picks)) {
+    const v = v29Picks(opts.cls, opts.picks);
+    opts = Object.assign({}, opts, { picks: v.picks });
+    extra = v.extra;
+  }
   start0.call(this, opts);
+  for (const id of extra) {
+    if (id === 'gold') this.player.copper += 20 * C.SILVER;
+    else { const g = FE.Gear.make(id, 0, this.nextGearId++); this.player.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g }); }
+  }
   if (!(opts && opts.cls)) neutralChar(this);
 };
 // 調數字用：FE_CFG='{"CREATION_SHARE":0.4}' 暫時蓋掉設定，FE_SEEDS='777,20201' 只跑這些種子的四人等效模擬

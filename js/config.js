@@ -546,7 +546,7 @@ FE.SKILLS = {
 // 防具類別對應的穿甲技能（無甲＝衣袍沒有）
 FE.ARMOR_SKILL = { light: 'light', medium: 'medium', heavy: 'heavy' };
 // 技能等級的名稱（0～15；15 以上寫「傳奇 +N」）
-FE.SKILL_LEVELS = ['涉獵', '新手', '尚可', '稱職', '熟練', '精熟', '有天分', '老練', '專家', '職業級', '卓越', '傑出', '大師', '高階大師', '宗師', '傳奇'];
+FE.SKILL_LEVELS = ['涉獵', '新手', '尚可', '稱職', '熟練', '精通', '天才', '老練', '專家', '專精', '卓越', '傑出', '大師', '英雄', '宗師', '傳奇'];
 FE.skillLevelName = (lv) => (lv >= FE.CONFIG.SKILL_LEGEND ? (lv > FE.CONFIG.SKILL_LEGEND ? `傳奇 +${lv - FE.CONFIG.SKILL_LEGEND}` : '傳奇') : FE.SKILL_LEVELS[Math.max(0, lv)]);
 
 // 種族與體型（第二十九版）：建角順序是種族 → 人類自己加 2 點屬性 → 擲身高與體格 → 職業 → 起始裝備。
@@ -563,18 +563,18 @@ FE.bodySize = (race, height, build) => Math.round(FE.PLAYER_RACES[race].size * (
 // 開新世界時可挑的起始裝備與物品（id 跟 FE.GEAR 的種類同名；herb、gold 是藥草與金幣）。品質都是普通
 // desc 是建角畫面右欄顯示的說明（只是文字，不影響規則）
 FE.START_OPTS = {
-  sword: { label: '長劍', gear: 'sword', desc: '1d8 揮砍，副手空著時 1d10。精通削弱：打中後對方下一次出手有劣勢。' },
-  spear: { label: '長槍', gear: 'spear', desc: '1d10 穿刺，很重（力量不到 13 出手有劣勢），打得到直線 2 格外；體型夠大才能單手拿。精通推擊：打中後把對方推開 2 格。' },
-  shortspear: { label: '短矛', gear: 'shortspear', desc: '1d6 穿刺，副手空著時 1d8，可以擲出去（4／12 格）。精通削弱。' },
-  dagger: { label: '短刀', gear: 'dagger', desc: '1d4 穿刺，靈巧、輕巧、出手快、容易暴擊，可以擲出去；副手也拿短刀可以雙持。精通迅切。' },
-  bow: { label: '弓箭', gear: 'bow', arrows: 20, desc: '1d6 穿刺，按 F 射擊（5／20 格），要用兩手，附一捆 20 支箭。精通侵擾：射中後你下一次打牠有優勢。' },
-  staff: { label: '法杖', gear: 'staff', desc: '1d6 鈍擊，副手空著時 1d8。法師拿著按 F 施放範圍魔法。精通失衡。' },
+  sword: { label: '長劍', gear: 'sword', desc: '1d8 揮砍，副手空著時 1d10。精通時削弱：打中後對方下一次出手有劣勢。' },
+  spear: { label: '長槍', gear: 'spear', desc: '1d10 穿刺，很重（力量不到 13 出手有劣勢），打得到直線 2 格外；體型夠大才能單手拿。精通時推擊：打中後把對方推開 2 格。' },
+  shortspear: { label: '短矛', gear: 'shortspear', desc: '1d6 穿刺，副手空著時 1d8，可以擲出去（4／12 格）。精通時削弱。' },
+  dagger: { label: '短刀', gear: 'dagger', desc: '1d4 穿刺，靈巧、輕巧、出手快、容易暴擊，可以擲出去；副手也拿短刀可以雙持。精通時迅切。' },
+  bow: { label: '弓箭', gear: 'bow', arrows: 20, desc: '1d6 穿刺，按 F 射擊（5／20 格），要用兩手，附一捆 20 支箭。精通時侵擾：射中後你下一次打牠有優勢。' },
+  staff: { label: '法杖', gear: 'staff', desc: '1d6 鈍擊，副手空著時 1d8。法師拿著按 F 施放範圍魔法。精通時失衡。' },
   shield: { label: '盾牌', gear: 'shield', desc: '拿在副手，有機率擋下一部分傷害。' },
-  waraxe: { label: '戰斧', gear: 'waraxe', desc: '1d8 揮砍，副手空著時 1d10。精通失衡：打中後有機會讓對方倒地。' },
-  greataxe: { label: '巨斧', gear: 'greataxe', desc: '1d12 揮砍，很重（力量不到 13 出手有劣勢），體型夠大才拿得起來。精通順劈：打中後可以順手打旁邊另一隻。' },
-  warhammer: { label: '戰錘', gear: 'warhammer', desc: '1d8 鈍擊，副手空著時 1d10。精通推擊。' },
-  shortsword: { label: '短劍', gear: 'shortsword', desc: '1d6 穿刺，靈巧、輕巧，副手也拿輕武器可以雙持。精通侵擾。' },
-  club: { label: '硬頭錘', gear: 'club', desc: '1d6 鈍擊。精通削弱。' },
+  waraxe: { label: '戰斧', gear: 'waraxe', desc: '1d8 揮砍，副手空著時 1d10。精通時失衡：打中後有機會讓對方倒地。' },
+  greataxe: { label: '巨斧', gear: 'greataxe', desc: '1d12 揮砍，很重（力量不到 13 出手有劣勢），體型夠大才拿得起來。精通時順劈：打中後可以順手打旁邊另一隻。' },
+  warhammer: { label: '戰錘', gear: 'warhammer', desc: '1d8 鈍擊，副手空著時 1d10。精通時推擊。' },
+  shortsword: { label: '短劍', gear: 'shortsword', desc: '1d6 穿刺，靈巧、輕巧，副手也拿輕武器可以雙持。精通時侵擾。' },
+  club: { label: '硬頭錘', gear: 'club', desc: '1d6 鈍擊。精通時削弱。' },
   medium: { label: '鱗甲', gear: 'medium', desc: '一片片金屬鱗疊成的甲，擋得住不少物理傷害，每個動作多花 1 刻。' },
   light: { label: '皮甲', gear: 'light', desc: '鞣過的皮革，擋不了刀劍，但輕便、不拖慢動作。' },
   heavy: { label: '鎖子甲', gear: 'heavy', desc: '鎖環編成的長甲，擋砍很好，每個動作多花 2 刻，力量要 13 才穿得順。' },
@@ -582,6 +582,22 @@ FE.START_OPTS = {
   herb: { label: '2 份藥草', herb: 2, desc: '放進背包，每份吃下去回復生命上限的四分之一。' },
   gold: { label: '20 銀', silver: 20, desc: '到聚落向工匠買裝備或修理。' },
 };
+// 第三十一版：武器與防具一律從全部列出（沒寫說明的照裝備資料補上名字），副手挑盾牌或空著；輕弩附 20 支弩矢
+for (const k of Object.keys(FE.GEAR)) {
+  const d = FE.GEAR[k];
+  if (FE.START_OPTS[k] || !d.sold || (d.cat !== 'weapon' && d.cat !== 'armor')) continue;
+  FE.START_OPTS[k] = { label: d.name, gear: k, desc: d.desc || '' };
+}
+FE.START_OPTS.crossbow.bolts = 20;
+FE.START_OPTS.nooff = { label: '副手空著', desc: '副手不拿東西（雙手武器、可雙手的武器要副手空著）。' };
+// 起始裝備的三組（allGear 的職業才有，排在職業自己的 groups 前面）：主手武器、身上防具、副手
+FE.START_GEAR_GROUPS = [
+  { pick: 1, of: Object.keys(FE.START_OPTS).filter((k) => FE.START_OPTS[k].gear && FE.GEAR[FE.START_OPTS[k].gear].cat === 'weapon'), name: '主手武器' },
+  { pick: 1, of: Object.keys(FE.START_OPTS).filter((k) => FE.START_OPTS[k].gear && FE.GEAR[FE.START_OPTS[k].gear].cat === 'armor'), name: '身上防具' },
+  { pick: 1, of: ['shield', 'nooff'], name: '副手' },
+];
+// 職業 cls 建角要挑的各組
+FE.startGroups = (cls) => (FE.CLASSES[cls].allGear ? FE.START_GEAR_GROUPS.concat(FE.CLASSES[cls].groups) : FE.CLASSES[cls].groups);
 // 職業（第二十九版追加改成六個）：base 職業基礎（生命用；負重看力量，不看職業）、attr 起始屬性、fixed 固定給的裝備（武器放主手，多的武器放背包）、
 // groups 自己選的（每組從 of 裡挑 pick 樣）、primary 是測試機器人加點的主屬性（其次體質；不是玩家的限制）、
 // pool 起始技能池（'melee' 代表各近戰武器技能：劍術、槍術、刀術、杖術、斧術、錘術、鞭術）。職業不綁武器和防具，裝備欄沒有職業限制，只有野蠻人不能穿中甲、重甲。
@@ -591,48 +607,51 @@ FE.CLASSES = {
   warrior: {
     name: '戰士', base: 10, attr: { str: 15, dex: 13, con: 14, int: 10, wis: 12, cha: 8 },
     desc: '生命多、背得多，什麼近戰武器都上手。拿盾牌時格擋值再加力量修正值，還能按 5 用盾牌撞。',
-    fixed: ['medium'], groups: [{ pick: 1, of: ['sword', 'waraxe', 'shortspear', 'spear'] }, { pick: 2, of: ['shield', 'herb', 'gold'] }], primary: 'str', bash: true,
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold'] }], primary: 'str', bash: true,
     pool: ['fight', 'medium', 'heavy', 'shield', 'dodge', 'melee'],
   },
   ranger: {
     name: '遊俠', base: 8, attr: { str: 12, dex: 15, con: 13, int: 8, wis: 14, cha: 10 },
     desc: '腳步輕、閃得開，擅長弓箭。一開始就帶著弓和一捆箭。',
-    fixed: ['light', 'bow'], groups: [{ pick: 1, of: ['dagger', 'shortsword'] }], primary: 'dex',
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold'] }], primary: 'dex',
     pool: ['shoot', 'dodge', 'fight', 'knife', 'sword', 'light'],
   },
   mage: {
     name: '法師', base: 4, attr: { str: 8, dex: 13, con: 12, int: 15, wis: 14, cha: 10 },
     desc: '生命少、背不動多少東西。拿法杖按 F，魔力會炸開一片，打中目標和周圍的怪物。',
-    fixed: ['robe', 'staff'], groups: [{ pick: 1, of: ['dagger', 'herb'] }], primary: 'int', spell: true,
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold'] }], primary: 'int', spell: true,
     pool: ['dodge', 'shoot', 'knife', 'fight'],
   },
   priest: {
     name: '牧師', base: 8, attr: { str: 13, dex: 10, con: 14, int: 8, wis: 15, cha: 12 },
     desc: '靠感知吃飯。按 F 對一個目標放神聖之光（過渡的一招，施法系統還沒談），按 4 治療自己（加感知修正值）。',
-    fixed: ['medium', 'club'], groups: [{ pick: 1, of: ['shield', 'staff'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'wis', light: true, heal: true, healAttr: 'wis',
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold'] }], primary: 'wis', light: true, heal: true, healAttr: 'wis',
     pool: ['shield', 'medium', 'fight', 'dodge'],
   },
   paladin: {
     name: '聖騎士', base: 10, attr: { str: 14, dex: 10, con: 13, int: 8, wis: 12, cha: 15 },
     desc: '披甲持盾的戰鬥者。每個動作第一下打中時，神聖之力多傷對方一些；按 4 治療自己（加魅力修正值）。',
-    fixed: ['heavy', 'shield'], groups: [{ pick: 1, of: ['sword', 'warhammer', 'shortspear'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'cha', holy: true, heal: true, healAttr: 'cha',
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold'] }], primary: 'cha', holy: true, heal: true, healAttr: 'cha',
     pool: ['shield', 'medium', 'heavy', 'fight', 'melee'],
   },
   barbarian: {
     name: '野蠻人', base: 12, attr: { str: 14, dex: 13, con: 15, int: 8, wis: 12, cha: 10 },
     desc: '生命最多，揮著大斧硬衝。不能穿中甲、重甲（輕甲、衣袍、盾牌可以）。',
-    fixed: ['light'], groups: [{ pick: 1, of: ['greataxe', 'waraxe'] }, { pick: 1, of: ['shortspear', 'herb'] }], primary: 'str', noHeavyArmor: true,
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold'] }], primary: 'str', noHeavyArmor: true,
     pool: ['fight', 'dodge', 'light', 'shoot', 'melee'],
   },
 };
 // 各近戰武器技能（職業技能池的 'melee'）
 FE.MELEE_SKILLS = ['sword', 'spear', 'knife', 'staff', 'axe', 'mace', 'whip'];
-// 起始技能的組合（第二十九版追加）：精熟（5 級）一項固定是起始主手武器那一項，其餘從職業技能池隨機抽，抽不到的都是涉獵
-FE.SKILL_PACKS = {
-  focus: { name: '專精', levels: [4, 4, 3, 3, 3] },  // 熟練 2 項、稱職 3 項
-  broad: { name: '全面', levels: [3, 3, 3, 3, 3, 3] }, // 稱職 6 項
+// 起始技能（第三十一版）：從全部技能擲 5 項，每項新手～精通（1～5 級），可以鎖定喜歡的、重擲其他的；
+// 保底至少 1 項武器技能、1 項防具技能（輕甲、中甲、重甲）；本職業原本的技能池加權 classWeight 倍（倍率測試後再定）。
+// 等級照機率表：偏高、偏低兩組輪流（第一次隨機），每組 5 行（新手／尚可／稱職／熟練／精通的 %），每次重擲打亂發給沒鎖定的格子
+FE.SKILL_ROLL = {
+  slots: 5,
+  classWeight: 2,
+  high: [[0, 5, 20, 40, 35], [5, 10, 25, 35, 25], [5, 15, 30, 30, 20], [10, 20, 35, 25, 10], [15, 30, 30, 20, 5]],
+  low: [[5, 20, 35, 30, 10], [10, 25, 35, 25, 5], [20, 30, 30, 15, 5], [30, 35, 25, 10, 0], [40, 35, 20, 5, 0]],
 };
-FE.START_MAIN_LEVEL = 5;
 // 身高、體格（1～7）出現的機率（%，第二十九版追加；體型公式不變）
 FE.BODY_ODDS = {
   human: { height: [8, 13, 19, 22, 18, 12, 8], build: [9, 14, 20, 21, 17, 12, 7] },

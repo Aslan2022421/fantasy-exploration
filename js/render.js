@@ -648,7 +648,7 @@
   function masteryLine() {
     const p = game.player;
     const m = p.equip.main ? FE.Char.mastery(p, p.equip.main) : null;
-    return m ? `　精通${FE.MASTERIES[m].name}（${FE.MASTERIES[m].desc}）` : '';
+    return m ? `　精通時${FE.MASTERIES[m].name}（${FE.MASTERIES[m].desc}）` : '';
   }
 
   // 角色視窗（C）：職業與等級、生命與負重上限、六項屬性與修正值、各技能的等級與到下一級的進度、目前的加成
@@ -674,12 +674,12 @@
       if (id === 'bow' || id === 'crossbow') {
         const name = FE.GEAR[id === 'bow' ? 'bow' : 'crossbow'].name;
         const mas = FE.GEAR[id === 'bow' ? 'bow' : 'crossbow'].mastery;
-        const unlock = lv >= FE.MASTERY_SKILL ? `；精通${FE.MASTERIES[mas].name}` : `；${FE.MASTERY_SKILL} 級學會精通${FE.MASTERIES[mas].name}`;
+        const unlock = lv >= FE.MASTERY_SKILL ? `；精通時${FE.MASTERIES[mas].name}` : `；${FE.MASTERY_SKILL} 級（精通）學會${FE.MASTERIES[mas].name}`;
         return `${name}射擊的傷害 +${dmg}${unlock}`;
       }
       if (FE.SKILLS[id].weapon) {
         const ws = weaponsOf(id).filter((k) => FE.GEAR[k].skill === id);
-        const unlock = `；精通：` + ws.map((k) => `${FE.MASTERIES[FE.GEAR[k].mastery].name}${lv >= FE.MASTERY_SKILL ? '' : `（${FE.MASTERY_SKILL} 級）`}`).join('、');
+        const unlock = `；精通時：` + ws.map((k) => `${FE.MASTERIES[FE.GEAR[k].mastery].name}${lv >= FE.MASTERY_SKILL ? '' : `（${FE.MASTERY_SKILL} 級）`}`).join('、');
         return `${ws.map((k) => FE.GEAR[k].name).join('、')}：近戰命中 +${hit}、傷害 +${dmg}${FE.GEAR[ws[0]].thrown ? '（投擲只加傷害）' : ''}${id === 'staff' ? '；法師的範圍魔攻也算' : ''}${unlock}`;
       }
       if (id === 'dodge') return `閃避機率 +${lv}%`;
@@ -716,9 +716,9 @@
   // 選職業的畫面不需要遊戲（這時還沒有世界），選完才呼叫 onDone(職業, 挑的裝備)
   const classKeys = Object.keys(FE.CLASSES);
   const raceKeys = Object.keys(FE.PLAYER_RACES);
-  // 建角的順序（第二十九版）：種族 → 人類自己加 2 點屬性 → 擲身高與體格 → 職業 → 起始裝備
+  // 建角的順序（第三十一版）：種族 → 人類自己加 2 點屬性 → 擲身高與體格 → 職業 → 起始技能 → 起始裝備（主手、身上、副手、補給）
   function startGroups() {
-    return FE.CLASSES[ui.start.cls].groups;
+    return FE.startGroups(ui.start.cls);
   }
   const optLabel = (id) => FE.START_OPTS[id].label;
   const signed = (n) => (n > 0 ? '+' : '') + n;
@@ -731,7 +731,7 @@
     if (s.step === 'bonus') return FE.ATTRS.map((a) => a.key);
     if (s.step === 'body') return ['accept', 'reroll'];
     if (s.step === 'class') return classKeys;
-    if (s.step === 'skills') return ['accept', 'reroll'];
+    if (s.step === 'skills') return s.skills.slots.map((x, i) => 's' + i).concat(['reroll', 'accept']);
     return FE.Char.groupOptions(startGroups()[s.gi], startSize());
   };
   // 擲身高與體格（各 1～7）
@@ -741,11 +741,12 @@
     ui.start.height = b.height;
     ui.start.build = b.build;
   };
-  // 擲起始技能（精熟一項是起始主手武器那一項，其餘從職業技能池隨機抽，組合也隨機）
+  // 擲起始技能（5 格，鎖定的留著，其他重擲；偏高、偏低兩組機率表輪流）
   const rollSkills = () => {
     const s = ui.start;
-    s.skills = FE.Char.rollSkills(s.cls, FE.Char.startMainSkill(s.cls, s.picks), Math.random);
+    s.skills = FE.Char.rollSkills(s.cls, Math.random, s.skills);
   };
+  const slotOf = (id) => ui.start.skills.slots[Number(id.slice(1))];
 
   // 右欄：游標那一項的詳細內容。種族看體型與加成；體型看身高、體格與每把武器拿不拿得動；職業看屬性、生命、負重、說明；裝備看數值、重量、說明
   function startDetail(id) {
@@ -773,9 +774,8 @@
       return `<dl><dt>種族</dt><dd>${R.name}</dd><dt>身高</dt><dd>${FE.HEIGHTS[s.height - 1]}（${s.height} / 7）</dd><dt>體格</dt><dd>${FE.BUILDS[s.build - 1]}（${s.build} / 7）</dd><dt>體型</dt><dd>${size.toLocaleString('en-US')}</dd></dl><p class="dim">體型＝基本體型 ×（1＋0.05×（身高−4））×（1＋0.05×（體格−4））。不滿意可以重擲（R）。這個體型拿各種武器：</p><dl>${rows}</dl>`;
     }
     if (s.step === 'skills') {
-      const sk = s.skills;
-      const rows = Object.keys(sk.levels).sort((a, b) => sk.levels[b] - sk.levels[a]).map((k) => `<dt>${esc(FE.SKILLS[k].name)}</dt><dd>${sk.levels[k]} 級（${esc(FE.skillLevelName(sk.levels[k]))}）</dd>`).join('');
-      return `<dl><dt>組合</dt><dd>${esc(sk.name)}</dd>${rows}</dl><p class="dim">精熟（5 級）一項固定是起始主手武器的技能，其餘從${esc(FE.CLASSES[s.cls].name)}的技能池隨機抽；其他技能都是涉獵（0 級）。「專精」是熟練 2 項、稱職 3 項，「全面」是稱職 6 項。不滿意可以重擲（R）。</p>`;
+      const rows = s.skills.slots.map((x) => `<dt>${esc(FE.SKILLS[x.id].name)}</dt><dd>${x.lv} 級（${esc(FE.skillLevelName(x.lv))}）${x.locked ? '　鎖定' : ''}</dd>`).join('');
+      return `<dl>${rows}<dt>這次的手氣</dt><dd>${s.skills.high ? '偏高' : '偏低'}（下一次重擲${s.skills.high ? '偏低' : '偏高'}）</dd></dl><p class="dim">從全部技能擲 5 項，每項新手～精通（1～5 級），至少 1 項武器技能、1 項防具技能；${esc(FE.CLASSES[s.cls].name)}擅長的技能比較容易擲到。選一格可以鎖定或解鎖，重擲（R）只換沒鎖定的格子。沒擲到的技能都是涉獵（0 級），一樣用了就會練。下一步挑的武器、防具、盾牌，所屬的技能再 +1。</p>`;
     }
     if (s.step === 'class') {
       const c = FE.CLASSES[id];
@@ -811,13 +811,19 @@
       if (s.step === 'bonus') return `${FE.ATTRS.find((a) => a.key === id).name}　+${s.bonus[id] || 0}`;
       if (s.step === 'body') return id === 'accept' ? '接受這個體型' : '重擲身高與體格（R）';
       if (s.step === 'class') return FE.CLASSES[id].name;
-      if (s.step === 'skills') return id === 'accept' ? '接受這組起始技能' : '重擲起始技能（R）';
+      if (s.step === 'skills') {
+        if (id === 'accept') return '接受這組起始技能';
+        if (id === 'reroll') return '重擲沒鎖定的格子（R）';
+        const x = slotOf(id);
+        return `${FE.SKILLS[x.id].name}　${x.lv} 級（${FE.skillLevelName(x.lv)}）`;
+      }
       return optLabel(id);
     };
     const rows = list
       .map((id, i) => {
-        const got = gear && s.sel.includes(id);
-        return `<li data-pick="${id}" data-i="${i}" class="${i === s.cur ? 'cur' : ''} ${got ? 'got' : ''}"><span class="mk">${i === s.cur ? '&gt;' : ''}</span><span class="box">${gear ? (got ? '[■]' : '[ ]') : ''}</span>${esc(labelOf(id))}</li>`;
+        const slot = s.step === 'skills' && id[0] === 's' ? slotOf(id) : null;
+        const got = (gear && s.sel.includes(id)) || (slot && slot.locked);
+        return `<li data-pick="${id}" data-i="${i}" class="${i === s.cur ? 'cur' : ''} ${got ? 'got' : ''}"><span class="mk">${i === s.cur ? '&gt;' : ''}</span><span class="box">${gear || slot ? (got ? '[■]' : '[ ]') : ''}</span>${esc(labelOf(id))}</li>`;
       })
       .join('');
     const R = s.race ? FE.PLAYER_RACES[s.race] : null;
@@ -841,17 +847,17 @@
       sub = '選職業';
       path = `新世界 › ${R.name}（${FE.HEIGHTS[s.height - 1]}、${FE.BUILDS[s.build - 1]}）`;
     } else if (s.step === 'skills') {
-      title = `起始技能：${s.skills.name}`;
+      title = '起始技能';
       sub = '擲起始技能';
       path = `新世界 › ${R.name} › ${FE.CLASSES[s.cls].name} › 起始技能`;
-      note = `組合「${esc(s.skills.name)}」。`;
+      note = '[■] 是鎖定的格子，重擲時不換。';
     } else if (gear) {
       const c = FE.CLASSES[s.cls];
       const have = s.picks.map(optLabel);
-      title = `起始裝備　第 ${s.gi + 1} / ${startGroups().length} 組`;
+      title = `起始裝備　${g.name || '補給'}（第 ${s.gi + 1} / ${startGroups().length} 組）`;
       sub = '選起始裝備';
       path = `新世界 › ${R.name} › ${c.name} › 起始裝備`;
-      note = `${g.pick > 1 ? `這一組從 ${list.length} 樣裡挑 ${g.pick} 樣，挑到 ${g.pick} 樣就進下一組。` : `這一組 ${list.length} 樣挑 1 樣。`}${list.length < g.of.length ? '（你的體型拿不起來的武器沒有列出。）' : ''}${c.fixed.length ? `<br>固定給：${c.fixed.map(optLabel).map(esc).join('、')}` : ''}${have.length ? `<br>已挑：${have.map(esc).join('、')}` : ''}`;
+      note = `${g.pick > 1 ? `這一組從 ${list.length} 樣裡挑 ${g.pick} 樣，挑到 ${g.pick} 樣就進下一組。` : `這一組 ${list.length} 樣挑 1 樣。`}${list.length < g.of.length ? '（你的體型拿不起來的武器沒有列出。）' : ''}${c.fixed.length ? `<br>固定給：${c.fixed.map(optLabel).map(esc).join('、')}` : ''}${have.length ? `<br>已挑：${have.map(esc).join('、')}` : ''}<br>挑到的武器、防具、盾牌，所屬的技能 +1。`;
     }
     const cur = list[s.cur];
     $('modalBody').className = 'cc';
@@ -901,17 +907,19 @@
       }
     } else if (s.step === 'skills') {
       if (id === 'reroll') rollSkills();
-      else {
-        startFinish();
-        return;
-      }
+      else if (id === 'accept') {
+        s.step = 'gear';
+        s.gi = 0;
+        s.cur = 0;
+        s.picks = [];
+        s.sel = [];
+      } else if (slotOf(id)) slotOf(id).locked = !slotOf(id).locked;
     } else if (s.step === 'class') {
       s.cls = id;
-      s.step = 'gear';
-      s.gi = 0;
+      s.step = 'skills';
       s.cur = 0;
-      s.picks = [];
-      s.sel = [];
+      s.skills = null;
+      rollSkills();
     } else {
       const g = startGroups()[s.gi];
       if (!startList().includes(id)) return;
@@ -922,9 +930,8 @@
         s.gi++;
         s.cur = 0;
         if (s.gi >= startGroups().length) {
-          s.step = 'skills';
-          s.cur = 0;
-          rollSkills();
+          startFinish();
+          return;
         }
       }
     }
@@ -952,19 +959,16 @@
       s.step = 'body';
       s.cur = 0;
     } else if (s.step === 'skills') {
-      // 回到最後一組起始裝備，重挑那一組
-      s.step = 'gear';
-      s.gi = startGroups().length - 1;
-      s.picks = s.picks.filter((id) => !startGroups()[s.gi].of.includes(id));
-      s.sel = [];
-      s.cur = 0;
+      s.step = 'class';
+      s.cur = classKeys.indexOf(s.cls);
     } else if (s.sel.length) s.sel = [];
     else if (s.gi > 0) {
       s.gi--;
       s.picks = s.picks.filter((id) => !startGroups()[s.gi].of.includes(id));
     } else {
-      s.step = 'class';
-      s.cur = classKeys.indexOf(s.cls);
+      // 回到起始技能（擲好的那組留著）
+      s.step = 'skills';
+      s.cur = 0;
     }
     drawStart();
   }

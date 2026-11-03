@@ -588,26 +588,19 @@ function testCombat28() {
     useClasses('new');
     const combos = (arr, k) => (k === 0 ? [[]] : arr.flatMap((x, i) => combos(arr.slice(i + 1), k - 1).map((r) => [x].concat(r))));
     const product = (lists) => lists.reduce((acc, l) => acc.flatMap((a) => l.map((x) => a.concat(x))), [[]]);
-    const spec = {
-      warrior: { fixed: ['medium'], groups: [[1, 'sword,waraxe,shortspear,spear'], [2, 'shield,herb,gold']], n: 12, body: 'medium' },
-      ranger: { fixed: ['light', 'bow'], groups: [[1, 'dagger,shortsword']], n: 2, body: 'light' },
-      mage: { fixed: ['robe', 'staff'], groups: [[1, 'dagger,herb']], n: 2, body: 'robe' },
-      priest: { fixed: ['medium', 'club'], groups: [[1, 'shield,staff'], [1, 'herb,gold']], n: 4, body: 'medium' },
-      paladin: { fixed: ['heavy', 'shield'], groups: [[1, 'sword,warhammer,shortspear'], [1, 'herb,gold']], n: 6, body: 'heavy' },
-      barbarian: { fixed: ['light'], groups: [[1, 'greataxe,waraxe'], [1, 'shortspear,herb']], n: 4, body: 'light' },
-    };
-    for (const [cls, s] of Object.entries(spec)) {
-      const c = FE.CLASSES[cls];
-      ok(c.fixed.join() === s.fixed.join() && c.groups.map((gr) => `${gr.pick}:${gr.of}`).join('|') === s.groups.map(([n, of]) => `${n}:${of}`).join('|'), `${cls} 的固定裝備與可挑的 ${c.fixed}／${c.groups.map((gr) => gr.of)}`);
-      const all = product(c.groups.map((gr) => combos(gr.of, gr.pick)));
-      ok(all.length === s.n, `${cls} 的起始挑法 ${all.length} 種（應該 ${s.n}）`);
-      for (const picks of all) {
+    // 第三十一版：每個職業都從全部武器與防具挑（主手、身上、副手），補給挑藥草或 20 銀；不再有固定給的裝備
+    const weapons = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon');
+    const armors = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && FE.GEAR[k].sold);
+    for (const cls of Object.keys(FE.CLASSES)) {
+      const gs = FE.startGroups(cls);
+      ok(FE.CLASSES[cls].fixed.length === 0 && gs.length === 4 && gs[0].of.slice().sort().join() === weapons.slice().sort().join() && gs[1].of.slice().sort().join() === armors.slice().sort().join() && gs[2].of.join() === 'shield,nooff' && gs[3].of.join() === 'herb,gold', `${cls} 的起始挑法：${gs.map((g) => g.of.length)}`);
+      for (const picks of [['sword', 'medium', 'shield', 'herb'], ['dagger', 'robe', 'nooff', 'gold'], ['bow', 'light', 'nooff', 'herb']]) {
         const g = new FE.Game(430);
         g.start({ cls, picks });
         const p = g.player;
-        const have = [p.equip.main, p.equip.off, p.equip.body].concat(p.bag.map((e) => e.gear)).filter(Boolean).map((x) => x.type);
-        const want = c.fixed.concat(picks).map((id) => FE.START_OPTS[id].gear).filter(Boolean);
-        ok(p.equip.body && p.equip.body.type === s.body && want.every((t) => have.includes(t)) && have.length === want.length, `${cls} ${picks} 的起始裝備 ${have}（應該 ${want}）`);
+        const have = [p.equip.main, p.equip.off, p.equip.body].filter(Boolean).map((x) => x.type);
+        const want = picks.map((id) => FE.START_OPTS[id].gear).filter(Boolean);
+        ok(want.every((t) => have.includes(t)) && have.length === want.length, `${cls} ${picks} 的起始裝備 ${have}（應該 ${want}）`);
         ok(g.bagCount('herb') === (picks.includes('herb') ? 2 : 0) && p.copper === (picks.includes('gold') ? 200 : 0), `${cls} ${picks} 的藥草與 20 銀`);
       }
     }

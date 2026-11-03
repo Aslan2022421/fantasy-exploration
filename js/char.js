@@ -242,7 +242,7 @@
     if (!c || !Array.isArray(picks)) return false;
     if (size !== undefined && picks.some((id) => !startOk(id, size))) return false;
     const rest = picks.slice();
-    for (const g of c.groups) {
+    for (const g of FE.startGroups(clsKey)) {
       const mine = rest.filter((id) => g.of.includes(id));
       if (mine.length !== g.pick || new Set(mine).size !== mine.length) return false;
       for (const id of mine) rest.splice(rest.indexOf(id), 1);
@@ -257,7 +257,7 @@
   // 這一組實際列出來的選項（拿不起來的拿掉）
   const groupOptions = (g, size) => g.of.filter((id) => startOk(id, size));
   // 預設的挑法：每組從前面挑（拿得起的）
-  const defaultPicks = (clsKey, size) => FE.CLASSES[clsKey].groups.flatMap((g) => (size === undefined ? g.of : groupOptions(g, size)).slice(0, g.pick));
+  const defaultPicks = (clsKey, size) => FE.startGroups(clsKey).flatMap((g) => (size === undefined ? g.of : groupOptions(g, size)).slice(0, g.pick));
 
   // 身體的資料（建角的前半）：race 種族、bonus 人類自己加的屬性點 { 屬性: 點數 }（總共 2 點）、height／build 1～7。沒給就是普通體型的人類，兩點不加
   function bodyOf(body) {
@@ -277,22 +277,52 @@
     }
     return null;
   }
-  // 起始技能（第二十九版追加）：精熟（5 級）一項是起始主手武器那一項，其餘從職業技能池隨機抽（不跟精熟那項重複）；
-  // 組合隨機：50%「專精」熟練（4）2 項＋稱職（3）3 項，50%「全面」稱職 6 項；池子不夠抽有幾項給幾項，抽不到的都是涉獵。
-  // packKey 指定組合（'focus'、'broad'）；rng 是亂數。回傳 { pack, name, levels: { 技能: 等級 } }
-  function rollSkills(clsKey, mainSkill, rng, packKey) {
+  // 起始技能（第三十一版）：從全部技能擲 5 格，每格新手～精通（1～5 級），locked 的格子留著不動、其他的重擲。
+  // 保底：5 格裡至少 1 項武器技能、1 項防具技能（輕甲、中甲、重甲）；技能不重複，本職業原本的池子（'melee' 是各近戰武器技能）加權 classWeight 倍。
+  // 等級照 FE.SKILL_ROLL 的機率表：偏高、偏低兩組輪流（prev 沒有就隨機挑一組），那一組的 5 行打亂後發給重擲的格子。
+  // prev 是上一次的結果（{ slots, high }），slots 每格 { id, lv, locked }。回傳 { slots, high（這次用的是不是偏高組）, levels: { 技能: 等級 } }
+  function rollSkills(clsKey, rng, prev) {
+    const R = FE.SKILL_ROLL;
     const c = FE.CLASSES[clsKey];
-    const pool = [...new Set(c.pool.flatMap((t) => (t === 'melee' ? FE.MELEE_SKILLS : [t])))].filter((k) => k !== mainSkill);
-    for (let i = pool.length - 1; i > 0; i--) {
+    const mine = new Set((c.pool || []).flatMap((t) => (t === 'melee' ? FE.MELEE_SKILLS : [t])));
+    const keep = prev ? prev.slots.filter((x) => x.locked) : [];
+    const used = new Set(keep.map((x) => x.id));
+    const isArmor = (k) => !!FE.ARMOR_SKILL[k];
+    const pick = (ok) => {
+      const cand = Object.keys(FE.SKILLS).filter((k) => !used.has(k) && ok(k));
+      const w = cand.map((k) => (mine.has(k) ? R.classWeight : 1));
+      let r = rng() * w.reduce((a, b) => a + b, 0);
+      for (let i = 0; i < cand.length; i++) if ((r -= w[i]) < 0) { used.add(cand[i]); return cand[i]; }
+      used.add(cand[cand.length - 1]);
+      return cand[cand.length - 1];
+    };
+    const ids = [];
+    if (!keep.some((x) => FE.SKILLS[x.id].weapon && x.id !== 'misc')) ids.push(pick((k) => FE.SKILLS[k].weapon && k !== 'misc'));
+    if (!keep.some((x) => isArmor(x.id))) ids.push(pick(isArmor));
+    while (keep.length + ids.length < R.slots) ids.push(pick(() => true));
+    const high = prev ? !prev.high : rng() < 0.5;
+    const rows = (high ? R.high : R.low).slice();
+    for (let i = rows.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
+      [rows[i], rows[j]] = [rows[j], rows[i]];
     }
-    const key = packKey || (rng() < 0.5 ? 'focus' : 'broad');
-    const pack = FE.SKILL_PACKS[key];
+    const fresh = ids.map((id, i) => ({ id, lv: FE.rollOdds(rng, rows[i]), locked: false }));
+    // 鎖定的留在原本的位置，重擲的依序填進其他格子
+    const slots = prev ? prev.slots.map((x) => (x.locked ? x : fresh.shift())) : fresh;
     const levels = {};
-    if (mainSkill) levels[mainSkill] = FE.START_MAIN_LEVEL;
-    pool.slice(0, pack.levels.length).forEach((k, i) => { levels[k] = pack.levels[i]; });
-    return { pack: key, name: pack.name, levels };
+    for (const x of slots) levels[x.id] = x.lv;
+    return { slots, high, levels };
+  }
+  // 起始裝備挑到的武器、防具、盾牌所屬的技能（建角時各 +1）
+  function startPlusOne(picks) {
+    const out = [];
+    for (const id of picks) {
+      const o = FE.START_OPTS[id];
+      const d = o && o.gear && FE.GEAR[o.gear];
+      const k = !d ? null : d.cat === 'weapon' ? d.skill : d.cat === 'shield' ? 'shield' : FE.ARMOR_SKILL[d.cls] || null;
+      if (k && !out.includes(k)) out.push(k);
+    }
+    return out;
   }
   // 擲身高與體格（各 1～7，照種族的機率）
   const rollBody = (race, rng) => ({ height: FE.rollOdds(rng, FE.BODY_ODDS[race].height), build: FE.rollOdds(rng, FE.BODY_ODDS[race].build) });
@@ -347,6 +377,7 @@
         if (cat === 'weapon' && p.equip.main) p.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
         else p.equip[cat === 'weapon' ? 'main' : cat === 'shield' ? 'off' : 'body'] = g;
         if (o.arrows) p.bag.push({ id: 'arrow', name: FE.Gear.name({ type: 'arrow', q: 0 }), n: o.arrows, q: 0 });
+        if (o.bolts) p.bag.push({ id: 'bolt', name: FE.Gear.name({ type: 'bolt', q: 0 }), n: o.bolts, q: 0 });
       } else if (o.herb) {
         const e = p.bag.find((x) => x.id === 'herb');
         if (e) e.n += o.herb;
@@ -362,7 +393,8 @@
     p.maxHp = p.hp = maxHp(p, 1);
     if (skillRoll) {
       for (const k of Object.keys(skillRoll.levels)) p.skills[k] = { lv: skillRoll.levels[k], n: 0 };
-      p.skillPack = skillRoll.name;
+      // 挑到的武器、防具、盾牌，所屬的技能 +1（衣袍沒有技能）
+      for (const k of startPlusOne(picks)) p.skills[k].lv++;
     }
     return p;
   }
@@ -371,7 +403,7 @@
     mod, attrMod, cls, maxHp, carryLimit, pushLimit, moveTicks, exhaustMoveMul,
     sizeOf, grip, GRIP_NAMES, canWieldType,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,
-    armorSkillId, armorWeightMul, armorTicks, strShort, dexForDodge, canWear, startMainSkill, rollSkills, rollBody, conCut,
+    armorSkillId, armorWeightMul, armorTicks, strShort, dexForDodge, canWear, startMainSkill, rollSkills, startPlusOne, rollBody, conCut,
     mastery, critMin, range, profile, attackTicks,
     validPicks, startOk, groupOptions, defaultPicks, bodyOf, create,
   };

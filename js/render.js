@@ -751,9 +751,15 @@
     ui.start.height = b.height;
     ui.start.build = b.build;
   };
-  // 擲起始技能（5 格，鎖定的留著，其他重擲；偏高、偏低兩組機率表輪流）
+  // 擲起始技能（5 格，鎖定的留著，其他重擲；偏高、偏低兩組機率表輪流）。
+  // 第一次擲不算；之後的重擲一個新世界最多 FE.SKILL_ROLL.rerolls 次，按 Esc 返回也不補回來，只有開新世界才重算（第三十二版）
+  const rerollsLeft = () => FE.SKILL_ROLL.rerolls - (ui.start.rerolls || 0);
   const rollSkills = () => {
     const s = ui.start;
+    if (s.skills) {
+      if (rerollsLeft() <= 0 || s.skills.slots.every((x) => x.locked)) return; // 用完了，或全鎖了（重擲也不會換）
+      s.rerolls = (s.rerolls || 0) + 1;
+    }
     s.skills = FE.Char.rollSkills(s.cls, Math.random, s.skills);
   };
   const slotOf = (id) => ui.start.skills.slots[Number(id.slice(1))];
@@ -785,7 +791,7 @@
     }
     if (s.step === 'skills') {
       const rows = s.skills.slots.map((x) => `<dt>${esc(FE.SKILLS[x.id].name)}</dt><dd>${x.lv} 級（${esc(FE.skillLevelName(x.lv))}）${x.locked ? '　鎖定' : ''}</dd>`).join('');
-      return `<dl>${rows}<dt>這次的手氣</dt><dd>${s.skills.high ? '偏高' : '偏低'}（下一次重擲${s.skills.high ? '偏低' : '偏高'}）</dd></dl><p class="dim">從全部技能擲 5 項，每項新手～精通（1～5 級），至少 1 項武器技能、1 項防具技能；${esc(FE.CLASSES[s.cls].name)}擅長的技能比較容易擲到。選一格可以鎖定或解鎖，重擲（R）只換沒鎖定的格子。沒擲到的技能都是涉獵（0 級），一樣用了就會練。下一步挑的武器、防具、盾牌，所屬的技能再 +1。</p>`;
+      return `<dl>${rows}<dt>這次的手氣</dt><dd>${s.skills.high ? '偏高' : '偏低'}（下一次重擲${s.skills.high ? '偏低' : '偏高'}）</dd><dt>重擲</dt><dd>還剩 ${rerollsLeft()} / ${FE.SKILL_ROLL.rerolls} 次</dd></dl><p class="dim">從全部技能擲 5 項，每項新手～精通（1～5 級），至少 1 項武器技能、1 項防具技能；${esc(FE.CLASSES[s.cls].name)}擅長的技能比較容易擲到。選一格可以鎖定或解鎖，重擲（R）只換沒鎖定的格子；一個新世界最多重擲 ${FE.SKILL_ROLL.rerolls} 次，按 Esc 返回也不會補回來。沒擲到的技能都是涉獵（0 級），一樣用了就會練。下一步挑的武器、防具、盾牌，所屬的技能再 +1。</p>`;
     }
     if (s.step === 'class') {
       const c = FE.CLASSES[id];
@@ -823,7 +829,7 @@
       if (s.step === 'class') return FE.CLASSES[id].name;
       if (s.step === 'skills') {
         if (id === 'accept') return '接受這組起始技能';
-        if (id === 'reroll') return '重擲沒鎖定的格子（R）';
+        if (id === 'reroll') return rerollsLeft() > 0 ? `重擲沒鎖定的格子（R，還剩 ${rerollsLeft()} 次）` : '重擲次數用完了';
         const x = slotOf(id);
         return `${FE.SKILLS[x.id].name}　${x.lv} 級（${FE.skillLevelName(x.lv)}）`;
       }
@@ -928,8 +934,8 @@
       s.cls = id;
       s.step = 'skills';
       s.cur = 0;
-      s.skills = null;
-      rollSkills();
+      // 按 Esc 回來換職業時，擲過的起始技能照舊保留（不然回上一步再進來等於多擲一次）
+      if (!s.skills) rollSkills();
     } else {
       const g = startGroups()[s.gi];
       if (!startList().includes(id)) return;

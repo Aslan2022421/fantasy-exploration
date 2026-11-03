@@ -184,10 +184,13 @@ function testEconomy30() {
     for (const m of g.monsters) { m.prone = true; m.small = false; } // 怪物不動
     const nOld = g.monsters.length;
     g.worldEvery = 1e9; // 世界不走（怪物不移動），只看日子
+    const spawn0 = g.spawnMonster;
+    g.spawnMonster = () => null; // 跨過整點時侵蝕與事件可能生出新怪物，這裡只量日子，先關掉
     g.endTurn(false, 10, { exact: true });
     ok(FE.Steading.econ(v) === 50 - nOld * C.ECON_MONSTER, `跨過一天扣 ${50 - FE.Steading.econ(v)}（應該 ${nOld}）`);
     g.endTurn(false, 10, { exact: true });
     ok(FE.Steading.econ(v) === 50 - nOld * C.ECON_MONSTER, '同一天不該再扣');
+    g.spawnMonster = spawn0;
     g.worldEvery = 1;
     // 上下限 0～100
     v.econ = 1; FE.Steading.addEcon(v, -50); ok(v.econ === 0 && v.steading.prosperity === 0, `經濟值下限 ${v.econ}`);

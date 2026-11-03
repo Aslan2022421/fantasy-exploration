@@ -107,15 +107,20 @@
         return DIRS.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy));
       };
       const spawned = [];
-      for (const d of found) {
-        const m = this.spawnMonster(d, canReach);
-        if (!m) {
-          // 放不下的地形錯位記起來，之後檢查侵蝕時不把它當成新的
-          if (d.type === 'TERRAIN' || d.type === 'CLIFF') for (const [x, y] of d.cells) this.world.dormant.add(x + ',' + y);
+      // 沒生怪物的地形錯位與斷崖記起來（沉睡），之後檢查侵蝕時不把它當成新的
+      const sleep = (d) => { if (d.type === 'TERRAIN' || d.type === 'CLIFF') for (const [x, y] of d.cells) this.world.dormant.add(x + ',' + y); };
+      const { sites, rest } = this.pickSites(found, rect, first);
+      rest.forEach(sleep);
+      for (const site of sites) {
+        // 開局最多 24 隻：名額用完了，選到的地形錯位與斷崖也先沉睡（一定要生的那幾種至少生帶頭的 1 隻）
+        const room = first ? C.START_MONSTER_MAX - spawned.length : Infinity;
+        const group = room > 0 || site.must ? this.spawnGroup(site, canReach, first, Math.max(1, room)) : [];
+        if (!group.length) {
+          sleep(site.d);
           continue;
         }
-        spawned.push(m);
-        if (m.type === 'UNREACHABLE') for (const [x, y] of m.cells) pending.add(x + ',' + y);
+        spawned.push(...group);
+        if (group[0].type === 'UNREACHABLE') for (const [x, y] of group[0].cells) pending.add(x + ',' + y);
       }
       // 收貨人不存在、懸空指標又放不下的任務直接撤回，不然接了會永遠送不出去
       for (const n of this.world.npcs) {
@@ -544,6 +549,83 @@
         }
       }
       return null;
+    }
+
+    // 第三十二版（三之二）：一段裡挑幾處錯誤生怪物——開局 4 處（至少 1 處在興趣點），之後照面積 1～3 處。
+    // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），其餘從地形錯位與斷崖裡隨機挑，沒挑到的沉睡
+    // （不生怪物、不算進創世門檻）。回傳 { sites: [{ d, must, at }], rest }，at 是開局放到興趣點上的位置
+    pickSites(found, rect, first) {
+      const rng = this.rng;
+      const sites = found.filter((d) => d.type !== 'TERRAIN' && d.type !== 'CLIFF').map((d) => ({ d, must: true }));
+      const opt = found.filter((d) => d.type === 'TERRAIN' || d.type === 'CLIFF');
+      for (let i = opt.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [opt[i], opt[j]] = [opt[j], opt[i]];
+      }
+      let n = C.START_SITES;
+      if (!first) {
+        const area = (rect.x1 - rect.x0) * (rect.y1 - rect.y0);
+        n = Math.max(1, Math.min(C.SITE_MAX, Math.round(area / C.SITE_AREA + rng() - 0.5)));
+      }
+      if (first) {
+        // 至少 1 處在興趣點：興趣點（含外圍 3 格）裡有錯誤就挑它，沒有就挑一處錯誤，把那一群放到興趣點上
+        const lms = this.world.landmarks.filter((l) => FE.inRect(rect, l.x0, l.y0));
+        const near = (l, d) => d.x >= l.x0 - 3 && d.x <= l.x1 + 3 && d.y >= l.y0 - 3 && d.y <= l.y1 + 3;
+        if (lms.length && !sites.some((s) => lms.some((l) => near(l, s.d)))) {
+          const l = FE.pick(rng, lms);
+          const i = opt.findIndex((d) => near(l, d));
+          if (i >= 0) sites.push({ d: opt.splice(i, 1)[0] });
+          else if (opt.length) sites.push({ d: opt.shift(), at: { x: Math.floor((l.x0 + l.x1) / 2), y: Math.floor((l.y0 + l.y1) / 2) } });
+        }
+      }
+      while (sites.length < n && opt.length) sites.push({ d: opt.shift() });
+      return { sites, rest: opt };
+    }
+
+    // 一群幾隻：照種族（FE.GROUP_SIZE），15% 落單 1 隻、10% 大窩 ×1.5；開局每處最多 6 隻
+    groupSize(race, first) {
+      const rng = this.rng;
+      const [lo, hi] = FE.GROUP_SIZE[race] || [1, 3];
+      let n = FE.randInt(rng, lo, hi);
+      const r = rng();
+      if (r < C.GROUP_STRAGGLER) n = 1;
+      else if (r < C.GROUP_STRAGGLER + C.GROUP_NEST) n = Math.ceil(n * C.GROUP_NEST_MUL);
+      return first ? Math.min(n, C.START_SITE_MAX) : n;
+    }
+
+    // 在一處錯誤生一群：帶頭的那隻照原本的錯誤生（帶著錯誤），跟班同族、影響範圍減半（最多到小怪物）、
+    // 散在帶頭那隻周圍 2～5 格；整群守著原地或照常徘徊。room 是這一群最多幾隻
+    spawnGroup(site, canReach, first, room) {
+      const d = site.at ? Object.assign({}, site.d, site.at) : site.d;
+      const lead = this.spawnMonster(d, canReach);
+      if (!lead) return [];
+      const guard = this.rng() < C.GROUP_GUARD;
+      Object.assign(lead, { group: lead.id, guard });
+      const group = [lead];
+      const n = Math.min(room, this.groupSize(lead.race, first));
+      const w = this.world;
+      const scope = Math.max(1, Math.min(C.MID_SCOPE - 1, Math.floor(d.scope / 2)));
+      const [r0, r1] = C.GROUP_SPREAD;
+      for (let i = 1; i < n; i++) {
+        let at = null;
+        for (let t = 0; t < 30 && !at; t++) {
+          const x = lead.x + FE.randInt(this.rng, -r1, r1);
+          const y = lead.y + FE.randInt(this.rng, -r1, r1);
+          const r = Math.max(Math.abs(x - lead.x), Math.abs(y - lead.y));
+          if (r < r0 || !w.passable(x, y) || w.inBuffer(x, y) || this.monsterAt(x, y) || this.isPlayerAt(x, y) || w.npcAt(x, y) || w.chestAt(x, y) || this.soldierAt(x, y)) continue;
+          if (canReach && !canReach(x, y)) continue;
+          at = { x, y };
+        }
+        if (!at) at = this.findFreeNear(lead.x, lead.y, canReach);
+        if (!at) break;
+        const m = FE.makeMonster(Object.assign({}, d, { x: at.x, y: at.y, scope }), this.nextMonsterId++, FE.Stability.worldLevel(this));
+        m.race = lead.race;
+        m.name = FE.monsterName(m);
+        Object.assign(m, { group: lead.id, guard });
+        this.monsters.push(m);
+        group.push(m);
+      }
+      return group;
     }
 
     spawnMonster(d, canReach) {
@@ -2028,14 +2110,17 @@
       this.monsters = this.monsters.filter((o) => o !== m);
       if (this.battle.targetId === m.id) this.battle.targetId = null;
       if (m.arrows || m.bolts) this.recoverArrows(m); // 射向牠的箭、弩矢撿回一半
+      // 第三十二版：一群共用一處錯誤，全群倒下才修好
+      const left = m.group ? this.monsters.filter((o) => o.group === m.group).length : 0;
+      const repair = (opts) => (left ? `這一群還剩 ${left} 隻，全倒下才修得好。` : FE.repairBug(this, m, opts));
       if (by) {
-        const fix = FE.repairBug(this, m, { noExp: true });
+        const fix = repair({ noExp: true });
         FE.Stability.stat(this).soldierKills++;
         if (Math.abs(m.x - this.player.x) + Math.abs(m.y - this.player.y) <= C.SIGHT * 2) this.say(`士兵打倒了${m.name}。${fix}`, 'world');
         FE.Stability.update(this);
         return;
       }
-      const fix = FE.repairBug(this, m);
+      const fix = repair();
       // 經驗值與打倒怪物的算力，打倒後一次結算
       this.say(`${m.name}倒下了，經驗值 +${m.exp}。${fix}`, 'good');
       this.dropChest(m);

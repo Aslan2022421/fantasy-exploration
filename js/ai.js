@@ -101,7 +101,7 @@
   function wander(game, m) {
     if (game.rng() >= C.WANDER_CHANCE) return;
     const options = DIRS.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(
-      ([x, y]) => free(game, x, y) && game.world.heightOk(m.x, m.y, x, y) && dist({ x, y }, m.home) <= C.WANDER_LEASH
+      ([x, y]) => free(game, x, y) && game.world.heightOk(m.x, m.y, x, y) && dist({ x, y }, m.home) <= (m.guard ? 1 : C.WANDER_LEASH) // 守著原地的群只在 1 格內走動
     );
     if (!options.length) return;
     [m.x, m.y] = FE.pick(game.rng, options);

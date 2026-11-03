@@ -184,6 +184,35 @@ function testCreation() {
       ok(g.creation >= g.nextChunkAt - 1e-6, `seed${seed} 清光第 ${k + 1} 塊後創世力 ${g.creation.toFixed(1)} < 門檻 ${g.nextChunkAt.toFixed(1)}`);
     }
   }
+  // 成群的怪物（第三十二版）：開局最多 4 群（一定要生的錯誤多於 4 處時照實際）、每群最多 6 隻、總共最多 24 隻、
+  // 至少 1 群在興趣點附近；同一群同族；一群全倒下才修好那處錯誤
+  let repairSeen = false;
+  for (const seed of [5, 66, 777, 8888, 12345, 31337]) {
+    const g = new FE.Game(seed);
+    g.start();
+    g.checkCreate = () => {};
+    const groups = new Map();
+    for (const m of g.monsters) groups.set(m.group, (groups.get(m.group) || []).concat(m));
+    const list = [...groups.values()];
+    const must = list.filter((gr) => gr[0].type !== 'TERRAIN' && gr[0].type !== 'CLIFF').length;
+    ok(g.monsters.every((m) => m.group) && g.monsters.length <= Math.max(C.START_MONSTER_MAX, must), `seed${seed} 開局 ${g.monsters.length} 隻（最多 ${C.START_MONSTER_MAX}）`);
+    ok(list.length >= 1 && list.length <= Math.max(C.START_SITES, must), `seed${seed} 開局 ${list.length} 群`);
+    ok(list.every((gr) => gr.length <= C.START_SITE_MAX && gr.every((m) => m.race === gr[0].race && m.type === gr[0].type)), `seed${seed} 有一群超過 ${C.START_SITE_MAX} 隻或不同族：${list.map((gr) => gr.length).join(',')}`);
+    const lms = g.world.landmarks;
+    ok(!lms.length || list.some((gr) => lms.some((l) => gr[0].x >= l.x0 - 8 && gr[0].x <= l.x1 + 8 && gr[0].y >= l.y0 - 8 && gr[0].y <= l.y1 + 8)), `seed${seed} 開局沒有一群在興趣點`);
+    // 全群倒下才修：地形錯位的群，前面幾隻倒下時那幾格不動，最後一隻倒下才變成草原
+    const gr = list.find((x) => x.length >= 2 && x[0].type === 'TERRAIN' && x[0].cells.length && g.world.cell(...x[0].cells[0]).biome !== 'grassland');
+    if (gr) {
+      const [cx, cy] = gr[0].cells[0];
+      for (const m of gr.slice(0, -1)) g.defeat(m);
+      ok(g.world.cell(cx, cy).biome !== 'grassland', `seed${seed} 一群還沒全倒就修好了`);
+      g.defeat(gr[gr.length - 1]);
+      ok(g.world.cell(cx, cy).biome === 'grassland', `seed${seed} 一群全倒下了卻沒修好`);
+      repairSeen = true;
+    }
+  }
+  ok(repairSeen, '幾個種子都沒有 2 隻以上的地形錯位群，量不到「全群倒下才修」');
+
   // 每個動作的算力：移動、出手各 1，乘上 PLAYER_COMPUTE_SCALE，一半進創世力；修補力另外有虛擬算力
   const g = new FE.Game(99);
   g.start();

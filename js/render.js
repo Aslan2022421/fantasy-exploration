@@ -616,13 +616,14 @@
     const list = game.bagList();
     const drop = ui.bagDrop;
     const tier = game.loadTier();
-    const slot = (label, g) =>
-      `<li><span class="dim">${label}</span> ${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）</span>` : '<span class="dim">空著</span>'}</li>`;
+    // 裝備欄（第三十一版）：點一格就脫下放回背包（Shift＋1／2／3），算一個動作
+    const slot = (label, g, key, n) =>
+      `<li><button data-unequip="${key}" ${g ? '' : 'disabled'}><kbd>⇧${n}</kbd><span class="dim">${label}</span> ${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）【脫下】</span>` : '<span class="dim">空著</span>'}</button></li>`;
     $('bagInfo').innerHTML = `
       <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
         tier === 1 ? '　超過能背的重量：走一步要 60 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
       }</p>
-      <ul class="equipped">${slot('主手', p.equip.main)}${slot('副手', p.equip.off)}${slot('身上', p.equip.body)}</ul>
+      <ul class="equipped">${slot('主手', p.equip.main, 'main', 1)}${slot('副手', p.equip.off, 'off', 2)}${slot('身上', p.equip.body, 'body', 3)}</ul>
       <p><button data-dropmode class="${drop ? 'on' : ''}">${drop ? '現在是「丟掉」：選到的整疊直接消失（按 X 切回）' : '切到「丟掉」（X）'}</button>
       <button data-offmode class="${ui.bagOff ? 'on' : ''}">${ui.bagOff ? '現在武器放副手（雙持，按 V 切回）' : '武器改放副手（V）'}</button></p>
       <p class="dim">雙持：副手只能放以你的體型能單手拿的武器（每把武器標了單手、雙手或拿不動）。按 1 攻擊會主手、副手各出手一次，副手那一下不加屬性修正值；副手拿非輕型武器時那一下有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;

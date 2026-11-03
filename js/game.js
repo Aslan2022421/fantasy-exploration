@@ -1226,6 +1226,23 @@
       this.say(text || `${FE.SPELLS[w.id].name}的效果結束了。`, 'sys');
     }
 
+    // 脫下裝備（第三十一版）：主手、副手、身上的那一件放回背包，算一個動作（跟穿上一樣）
+    unequip(slot) {
+      const p = this.player;
+      const g = p.equip[slot];
+      if (!g) {
+        this.say('那裡沒有東西可以脫。', 'sys');
+        return false;
+      }
+      this.beginAction();
+      p.equip[slot] = null;
+      if (slot === 'off') p.block = null;
+      this.bagAddGear(g);
+      this.say(`你${slot === 'body' ? '脫下' : '放下'}了${FE.Gear.name(g)}，收進背包。`, 'sys');
+      this.endTurn(false);
+      return true;
+    }
+
     // 射向這隻怪物的箭撿回一半（捨去，照射出去的品質放回背包）：牠倒下、或冒險者脫離戰鬥時
     recoverArrows(m) {
       for (const [field, id] of [['arrows', 'arrow'], ['bolts', 'bolt']]) {

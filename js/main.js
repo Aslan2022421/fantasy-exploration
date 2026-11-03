@@ -278,6 +278,13 @@
       FE.UI.toggleBagOff();
       return;
     }
+    // 背包視窗：Shift＋1／2／3 脫下主手、副手、身上的裝備
+    if (FE.UI.win() === 'backpack' && e.shiftKey && /^Digit[123]$/.test(e.code)) {
+      e.preventDefault();
+      const slot = ['main', 'off', 'body'][Number(e.code.slice(5)) - 1];
+      dispatch('脫下裝備', () => game.unequip(slot));
+      return;
+    }
     if (FE.UI.win() === 'backpack' && /^[1-9]$/.test(k)) {
       e.preventDefault();
       useBag(Number(k) - 1);
@@ -416,6 +423,11 @@
   });
   document.getElementById('overlay').addEventListener('click', (e) => {
     const use = e.target.closest && e.target.closest('[data-use]');
+    const off = e.target.closest && e.target.closest('[data-unequip]');
+    if (off && !off.disabled) {
+      dispatch('脫下裝備', () => game.unequip(off.dataset.unequip));
+      return;
+    }
     if (e.target.closest && e.target.closest('[data-dropmode]')) FE.UI.toggleBagDrop();
     else if (e.target.closest && e.target.closest('[data-offmode]')) FE.UI.toggleBagOff();
     else if (use && !use.disabled) useBag(Number(use.dataset.use));

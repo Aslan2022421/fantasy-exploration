@@ -5273,7 +5273,7 @@ function testEconomy30() {
     ok(g.talkOptions(n0).role.endsWith(FE.PLAYER_RACES[n0.race].name), `對話視窗的身分 ${g.talkOptions(n0).role}`);
   }
 
-  // 11. 力竭：連續一整天沒有長休 +1 級；長休 −1 級；出手的 d20 −2×級數，走一步多 1 刻×級數；6 級倒下，醒來降到 5 級再照長休 −1
+  // 11. 力竭：連續一整天沒有長休 +1 級；長休 −1 級；出手的 d20 −2×級數，走路照《D&D》速度每級少 5 呎換算；6 級倒下，醒來降到 5 級再照長休 −1
   {
     const g = newGame(310);
     const p = g.player;
@@ -5285,8 +5285,14 @@ function testEconomy30() {
     // 走一步多花的刻
     const free = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy) && !g.isHardGround(p.x + dx, p.y + dy));
     const step = (lv) => { p.exhaust = lv; p.awakeAt = g.ticks; const t0 = g.ticks; g.move(free[0], free[1]); g.move(-free[0], -free[1]); return (g.ticks - t0) / 2; };
-    const s0 = step(0), s3 = step(3);
-    ok(s3 - s0 === 3, `力竭 3 走一步多 ${s3 - s0} 刻（應該 3）`);
+    const s0 = step(0), s1 = step(1), s3 = step(3);
+    ok(s1 === Math.round(s0 * 1.2) && s3 === s0 * 2, `力竭照速度換算：0 級 ${s0}、1 級 ${s1}（應該 ${Math.round(s0 * 1.2)}）、3 級 ${s3}（應該 ${s0 * 2}）刻`);
+    // 耐久：一半以下磨損（−1、名稱加 x），四分之一以下破損（−2、加 X）
+    const sw = FE.Gear.make('sword', 0, 900);
+    sw.dur = sw.max; const n0 = FE.Gear.name(sw), w0 = FE.Gear.wearPenalty(sw);
+    sw.dur = Math.floor(sw.max * 0.4); const n1 = FE.Gear.name(sw), w1 = FE.Gear.wearPenalty(sw);
+    sw.dur = Math.floor(sw.max * 0.2); const n2 = FE.Gear.name(sw), w2 = FE.Gear.wearPenalty(sw);
+    ok(w0 === 0 && w1 === 1 && w2 === 2 && n0 === '長劍' && n1 === 'x長劍x' && n2 === 'X長劍X', `耐久懲罰 ${w0}/${w1}/${w2}、名稱 ${n0}/${n1}/${n2}`);
     p.exhaust = 0;
     // 長休 −1
     g.wakeSpot();

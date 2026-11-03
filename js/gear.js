@@ -10,12 +10,23 @@
   const qual = (g) => Q[g.q || 0];
   const round2 = (n) => Math.round(n * 100) / 100;
 
-  // 名字：普通不加符號，其他把品質寫在兩邊，例如「-做工好-長劍」「☼傑作☼重甲」；傳說物用獨有的名字
+  // 磨損：耐久低於最大值的一半是「磨損」（武器傷害、防具減傷 −1），低於四分之一是「破損」（−2）；回傳 [懲罰, 符號]
+  function wearTier(g) {
+    if (!g || !g.max) return [0, ''];
+    let out = [0, ''];
+    for (const [ratio, pen, sym] of C.WEAR_TIERS) if (g.dur < g.max * ratio) out = [pen, sym];
+    return out;
+  }
+  const wearPenalty = (g) => wearTier(g)[0];
+
+  // 名字：普通不加符號，其他把品質寫在兩邊，例如「-做工好-長劍」「☼傑作☼重甲」；傳說物用獨有的名字。
+  // 磨損、破損的再在最外面加 x、X（參考 DF），例如「x-做工好-長劍x」
   function name(g) {
     const d = def(g);
     const q = qual(g);
-    if (g.q === 6) return `${g.title || '傳說物'}（${d.name}）`;
-    return q.sym ? `${q.sym}${q.name}${q.sym}${d.name}` : d.name;
+    const base = g.q === 6 ? `${g.title || '傳說物'}（${d.name}）` : q.sym ? `${q.sym}${q.name}${q.sym}${d.name}` : d.name;
+    const w = wearTier(g)[1];
+    return w ? `${w}${base}${w}` : base;
   }
 
   function make(type, q, id) {
@@ -102,8 +113,9 @@
   // 武器的清除等級（普通 0 ～ 傑作 5、傳說物 6），抗性門檻看它；空手是 0
   const clearLevel = (p, w) => (wOf(p, w) ? qual(wOf(p, w)).clear : 0);
   // 身上防具的物理減傷（乘品質倍率，四捨五入）
-  const physReduce = (p) => (p.equip.body ? Math.round(def(p.equip.body).phys * qual(p.equip.body).armor) : 0);
-  const magicReduce = (p) => (p.equip.body ? Math.round(def(p.equip.body).magic * qual(p.equip.body).armor) : 0);
+  // 磨損、破損的防具減傷 −1、−2，最少 0
+  const physReduce = (p) => (p.equip.body ? Math.max(0, Math.round(def(p.equip.body).phys * qual(p.equip.body).armor) - wearPenalty(p.equip.body)) : 0);
+  const magicReduce = (p) => (p.equip.body ? Math.max(0, Math.round(def(p.equip.body).magic * qual(p.equip.body).armor) - wearPenalty(p.equip.body)) : 0);
   // 盾牌在副手才擋得住：格擋機率與格擋值（值乘品質倍率，四捨五入）；沒拿盾牌是 0
   const shieldOf = (p) => (p.equip.off && def(p.equip.off).cat === 'shield' ? p.equip.off : null);
 
@@ -271,7 +283,7 @@
 
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
-    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense,
+    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense, wearTier, wearPenalty,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText,
     SHOPS, CAT_NAMES, craftCats, shopOf, isShopkeeper, offOk,
   };

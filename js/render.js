@@ -400,7 +400,7 @@
     if (game.battle.disengage) fx.push('撤離：下一步走開不會被趁機攻擊');
     if (game.battle.dodge) fx.push('閃避：打你的攻擊都有劣勢');
     const ex = game.player.exhaust || 0;
-    if (ex) fx.push(`力竭 ${ex}：出手 −${C.EXHAUST_D20 * ex}，走一步多 ${C.EXHAUST_MOVE * ex} 刻`);
+    if (ex) fx.push(`力竭 ${ex}：出手 −${C.EXHAUST_D20 * ex}，走路慢 ${Math.round((FE.Char.exhaustMoveMul(game.player) - 1) * 100)}%`);
     $('fxText').textContent = fx.length ? fx.join('　') : '無';
   }
 

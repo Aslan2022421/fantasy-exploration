@@ -751,15 +751,15 @@
         else this.openChest(chest);
       }
       // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻；被扭曲過的地面一步 30 刻（取較大的）
-      // 力量不到身上防具的需求：一步 15 刻（跟超重、被扭曲的地面取最大的）；力竭每級再多 1 刻（第三十版）
+      // 力量不到身上防具的需求：一步 15 刻（跟超重、被扭曲的地面取最大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
       const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
-      const tired = C.EXHAUST_MOVE * (p.exhaust || 0);
+      const tired = (t) => Math.round(t * FE.Char.exhaustMoveMul(p));
       if (this.isHardGround(nx, ny)) {
-        const t = Math.max(C.TICKS_HARD, base) + tired;
+        const t = tired(Math.max(C.TICKS_HARD, base));
         this.say(`這裡的地面被異常扭曲過，很難走，這一步花了 ${t} 刻。`, 'sys');
         this.endTurn(true, t);
       } else {
-        this.endTurn(true, base + tired);
+        this.endTurn(true, tired(base));
       }
     }
 

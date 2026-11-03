@@ -23,6 +23,11 @@
   const pushLimit = (p) => p.attr.str * C.PUSH_PER_STR;
   // 走一步花幾刻：基本 10 刻減敏捷修正值，最少 8 刻（超重、被扭曲的地面另外算，見 game.js 的 move）
   const moveTicks = (p) => Math.max(C.MOVE_TICKS_MIN, C.TICKS_MOVE - attrMod(p, 'dex'));
+  // 力竭讓走一步的刻放大幾倍：速度 30 呎每級少 5 呎，刻數照比例放大（1 級 ×1.2、2 級 ×1.5、3 級 ×2、4 級 ×3、5 級 ×6）
+  const exhaustMoveMul = (p) => {
+    const ft = C.BASE_SPEED_FT - C.EXHAUST_FT * Math.min(C.EXHAUST_MAX - 1, p.exhaust || 0);
+    return C.BASE_SPEED_FT / ft;
+  };
 
   // ---- 種族與體型 ----
   // 冒險者的體型（沒有的話當成人類的基本體型，舊的測試用角色）
@@ -174,7 +179,7 @@
     out.off = !!off; // 這一下不加屬性修正值（擦掠也因此擦不到傷）
     // 遠程：武器技能只加傷害，命中看射擊；近戰：武器技能加命中與傷害，再加格鬥的命中
     out.hit = q.hit + hitAttr + (ranged ? shootHit(p) : lvHit(p, d.skill) + fight);
-    out.dmg = dmgMod + lvDmg(p, d.skill);
+    out.dmg = dmgMod + lvDmg(p, d.skill) - FE.Gear.wearPenalty(w); // 磨損、破損的武器傷害 −1、−2
     out.skills = ranged ? [d.skill, 'shoot'] : [d.skill, 'fight'];
     // 重型：近戰力量、遠程敏捷不到 13 出手有劣勢
     out.heavy = !!d.heavy && (ranged ? p.attr.dex : p.attr.str) < C.HEAVY_MIN;
@@ -363,7 +368,7 @@
   }
 
   FE.Char = {
-    mod, attrMod, cls, maxHp, carryLimit, pushLimit, moveTicks,
+    mod, attrMod, cls, maxHp, carryLimit, pushLimit, moveTicks, exhaustMoveMul,
     sizeOf, grip, GRIP_NAMES, canWieldType,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,
     armorSkillId, armorWeightMul, armorTicks, strShort, dexForDodge, canWear, startMainSkill, rollSkills, rollBody, conCut,

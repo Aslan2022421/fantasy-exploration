@@ -56,8 +56,8 @@
     arrowup: [0, -1], arrowdown: [0, 1], arrowleft: [-1, 0], arrowright: [1, 0],
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
   };
-  // 1 攻擊、2 重擊、3 撤退、4 治療（牧師）、5 盾擊（戰士）、6 撤離、7 閃避、F 遠程（射擊、投擲、施法：先進入瞄準）
-  const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', 6: 'disengage', 7: 'dodge', f: 'fire' };
+  // 1 攻擊、2 重擊、3 撤退、4 治療（牧師、聖騎士）、5 盾擊（戰士）、6 撤離、7 閃避、F 遠程（射擊、投擲、施法、神聖之光：先進入瞄準）、T 投擲（任何武器）
+  const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', 6: 'disengage', 7: 'dodge', f: 'fire', t: 'throw' };
   // 按鍵視窗：同時只開一個
   const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', c: 'character', m: 'minimap', '`': 'reports' };
 
@@ -132,7 +132,7 @@
       if (k === 'tab') {
         game.aimNext();
         FE.UI.update();
-      } else if (k === 'f' || k === 'enter') {
+      } else if (k === 'f' || k === 't' || k === 'enter') {
         dispatch('戰鬥：遠程', () => game.aimFire());
       } else if (k === 'escape') {
         game.aimCancel();
@@ -178,8 +178,8 @@
     if (ACTS[k]) {
       e.preventDefault();
       // F 只是進入瞄準，不算動作、不存檔
-      if (ACTS[k] === 'fire') {
-        game.act('fire');
+      if (ACTS[k] === 'fire' || ACTS[k] === 'throw') {
+        game.act(ACTS[k]);
         FE.UI.update();
         return;
       }
@@ -216,10 +216,10 @@
     const b = e.target.closest && e.target.closest('[data-act]');
     const act = b && b.dataset.act;
     if (!act || b.disabled || !ready || game.talking != null || FE.UI.win()) return;
-    if (act === 'fire') {
+    if (act === 'fire' || act === 'throw') {
       if (game.aim) dispatch('戰鬥：遠程', () => game.aimFire());
       else {
-        game.act('fire');
+        game.act(act);
         FE.UI.update();
       }
       return;
@@ -307,8 +307,8 @@
   }
   if (resume) launch();
   else {
-    FE.UI.startMenu((cls, picks, body) => {
-      game.start({ cls, picks, body });
+    FE.UI.startMenu((cls, picks, body, skills) => {
+      game.start({ cls, picks, body, skills });
       if (saved && saved.stale) game.say('遊戲版本更新，舊存檔、歷史紀錄與錯誤報告已清除，從新世界開始。', 'sys');
       launch();
     });

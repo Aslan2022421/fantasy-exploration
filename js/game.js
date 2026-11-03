@@ -53,7 +53,7 @@
       this.createChunk(true);
       const s = this.world.spawn;
       // 職業、六項屬性、起始裝備（裝備欄：主手、副手（盾牌或空著）、身上（防具））、生命都在 FE.Char.create 裡配好
-      this.player = FE.Char.create(this, clsKey, picks, FE.store.load('fe.name', '冒險者'), b);
+      this.player = FE.Char.create(this, clsKey, picks, FE.store.load('fe.name', '冒險者'), b, opts.skills);
       this.player.x = s.x;
       this.player.y = s.y;
       this.lastSafe = { x: s.x, y: s.y };
@@ -395,6 +395,10 @@
         this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
         return;
       }
+      if (!FE.Char.canWear(p, g)) {
+        this.say(`${FE.Char.cls(p).name}不能穿${d.cls === 'heavy' ? '重甲' : '中甲'}（${FE.Gear.name(g)}）。`, 'sys');
+        return;
+      }
       const grip = d.cat === 'weapon' ? FE.Char.grip(p, g) : 'one';
       if (grip === 'none') {
         this.say(`${FE.Gear.name(g)}太大太沉了，以你的體型拿不起來。`, 'sys');
@@ -708,7 +712,8 @@
         else this.openChest(chest);
       }
       // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻；被扭曲過的地面一步 30 刻（取較大的）
-      const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.moveTicks(p);
+      // 力量不到身上防具的需求：一步 15 刻（跟超重、被扭曲的地面取最大的）
+      const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
       if (this.isHardGround(nx, ny)) {
         const t = Math.max(C.TICKS_HARD, base);
         this.say(`這裡的地面被異常扭曲過，很難走，這一步花了 ${t} 刻。`, 'sys');
@@ -834,22 +839,37 @@
 
     // ---- 遠程：按 F 瞄準，Tab 換目標，F 或 Enter 出手，Esc 取消 ----
     // 拿弓箭（要箭矢）是射擊，拿短刀、短矛是投擲，法師拿法杖是範圍魔攻。回傳 { mode, weapon, range } 或 null（順便寫出為什麼不行）
-    rangedMode(quiet) {
+    // 投擲（第二十九版追加，所有武器都能丟，按 T）：副手拿著武器先丟副手，否則丟主手；射程一律 4／12 格加感知修正值
+    throwMode(quiet) {
       const p = this.player;
+      const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
+      const w = off || p.equip.main;
+      if (!w) {
+        if (!quiet) this.say('手上沒有武器可以丟。', 'sys');
+        return null;
+      }
+      return { mode: 'throw', weapon: w, slot: off ? 'off' : 'main', range: FE.Char.range(p, C.THROW_RANGE) };
+    }
+
+    rangedMode(quiet, kind) {
+      const p = this.player;
+      if (kind === 'throw') return this.throwMode(quiet);
       const w = p.equip.main;
       const d = w ? FE.Gear.def(w) : null;
       const no = (text) => {
         if (!quiet) this.say(text, 'sys');
         return null;
       };
+      // 牧師按 F 放神聖之光（不用拿武器）
+      if (FE.Char.cls(p).light) return { mode: 'light', weapon: null, range: FE.Char.range(p, C.SPELL_RANGE) };
       if (d && d.ammo) {
         if (!this.bagCount(d.ammo)) return no(`沒有${FE.GEAR[d.ammo].name}了（鐵匠、武器匠有賣）。`);
         return { mode: 'shoot', weapon: w, range: FE.Char.range(p, d.range) };
       }
-      if (d && d.thrown) return { mode: 'throw', weapon: w, range: FE.Char.range(p, d.thrown) };
+      if (d && d.thrown) return this.throwMode(quiet);
       if (d && w.type === 'staff' && FE.Char.cls(p).spell) return { mode: 'spell', weapon: w, range: FE.Char.range(p, C.SPELL_RANGE) };
       if (d && w.type === 'staff') return no('法杖在你手上只能近戰（只有法師施得出法術）。');
-      return no(w ? `${FE.Gear.name(w)}不能遠程攻擊。拿弓箭、輕弩可以射擊，短刀、短矛可以擲出去。` : '手上沒有武器，不能遠程攻擊。');
+      return no(w ? `${FE.Gear.name(w)}不能按 F 遠程攻擊。拿弓箭、輕弩可以射擊；任何武器都可以按 T 丟出去。` : '手上沒有武器，不能遠程攻擊。');
     }
 
     // 射程內、看得到的怪物，近的在前
@@ -861,13 +881,13 @@
     }
 
     // 按 F：進入瞄準，自動選最近、看得到的怪物（不算動作）
-    aimStart() {
+    aimStart(kind) {
       const p = this.player;
       if (this.world.inVillage(p.x, p.y)) {
         this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
         return;
       }
-      const r = this.rangedMode();
+      const r = this.rangedMode(false, kind);
       if (!r) return;
       const list = this.shootTargets(r.range);
       if (!list.length) {
@@ -876,7 +896,7 @@
       }
       // 目前的目標在射程內就先選牠
       const i = Math.max(0, list.findIndex((m) => m.id === this.battle.targetId));
-      this.aim = { mode: r.mode, ids: list.map((m) => m.id), i };
+      this.aim = { mode: r.mode, kind, ids: list.map((m) => m.id), i };
     }
 
     // 瞄準中的怪物（不在了就是 null）
@@ -898,19 +918,20 @@
     // F 或 Enter：對瞄準的怪物出手
     aimFire() {
       const m = this.aimTarget();
+      const kind = this.aim && this.aim.kind;
       this.aim = null;
-      if (m) this.fireAt(m);
+      if (m) this.fireAt(m, kind);
     }
 
     // 遠程出手（一個動作）：射擊用掉 1 支箭；投擲的武器掉在目標那格；範圍魔攻打目標與周圍的怪物。
     // 出手的目標設成目前的目標（牠會纏上來）。測試的機器人直接叫這個
-    fireAt(m) {
+    fireAt(m, kind) {
       const p = this.player;
       if (this.world.inVillage(p.x, p.y)) {
         this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
         return false;
       }
-      const r = this.rangedMode();
+      const r = this.rangedMode(false, kind);
       if (!r) return false;
       if (!this.monsters.includes(m) || !FE.Combat.canShoot(this, p, m, r.range)) {
         this.say(`${m.name}不在射程內，或中間有東西擋著。`, 'sys');
@@ -932,8 +953,11 @@
       } else if (r.mode === 'throw') {
         const at = { x: m.x, y: m.y };
         FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'throw', weapon: w, range: r.range, holy });
-        // 擲出去的武器（沒在出手時磨壞的話）掉在目標那格，走過去就撿回來；副手拿著輕型武器時換到主手
-        if (p.equip.main === w) {
+        // 擲出去的武器（沒在出手時磨壞的話）掉在目標那格，走過去就撿回來；丟的是主手的，副手拿著武器就換到主手
+        if (p.equip.off === w) {
+          p.equip.off = null;
+          this.world.items.push({ x: at.x, y: at.y, gear: w });
+        } else if (p.equip.main === w) {
           p.equip.main = null;
           this.world.items.push({ x: at.x, y: at.y, gear: w });
           if (p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon') {
@@ -941,6 +965,9 @@
             p.equip.off = null;
           }
         }
+      } else if (r.mode === 'light') {
+        // 牧師的神聖之光：對一個目標，1d8＋感知修正值的神聖傷害，命中加感知修正值
+        FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'light', weapon: null, range: r.range });
       } else {
         // 範圍魔攻：目標與周圍 1 格（智力修正值 +3 起 2 格）的所有怪物，每隻各擲命中；法杖只磨一次、技能只練一次
         const rad = FE.Char.attrMod(p, 'int') >= C.SPELL_BIG_INT ? C.SPELL_RADIUS[1] : C.SPELL_RADIUS[0];
@@ -998,11 +1025,11 @@
       }
     }
 
-    // 牧師按 4：治療自己，回 1d8＋魅力修正值（最少 1），冷卻 3 回合，算一個動作
+    // 牧師、聖騎士按 4：治療自己，回 1d8＋修正值（牧師加感知、聖騎士加魅力，最少 1），冷卻 3 回合，算一個動作
     heal() {
       const p = this.player;
       if (!FE.Char.cls(p).heal) {
-        this.say('只有牧師會治療。', 'sys');
+        this.say('只有牧師和聖騎士會治療。', 'sys');
         return;
       }
       if (this.battle.healCd > 0) {
@@ -1015,7 +1042,8 @@
       }
       this.beginAction();
       this.battle.healCd = C.HEAL_COOLDOWN;
-      const got = Math.min(p.maxHp - p.hp, Math.max(1, FE.rollDice(this.rng, C.HEAL_DIE, 1) + FE.Char.attrMod(p, 'cha')));
+      // 治療加哪一項屬性的修正值看職業：牧師加感知，聖騎士加魅力
+      const got = Math.min(p.maxHp - p.hp, Math.max(1, FE.rollDice(this.rng, C.HEAL_DIE, 1) + FE.Char.attrMod(p, FE.Char.cls(p).healAttr || 'cha')));
       p.hp += got;
       this.say(`你低聲祈禱，傷口癒合了，生命回復 ${got}。`, 'good');
       this.endTurn(false);
@@ -1576,6 +1604,10 @@
       }
       if (kind === 'fire') {
         this.aimStart();
+        return;
+      }
+      if (kind === 'throw') {
+        this.aimStart('throw');
         return;
       }
       let m = this.targetMonster();

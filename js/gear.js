@@ -107,15 +107,13 @@
   const shieldOf = (p) => (p.equip.off && def(p.equip.off).cat === 'shield' ? p.equip.off : null);
 
   // 冒險者的防禦數字：
-  //   閃避＝PLAYER_DODGE＋敏捷修正值×2%＋閃避技能每級 1%＋防具的閃避加減（重甲 -5%，穿甲行動 20 級起不再扣），最低 0
+  //   閃避＝PLAYER_DODGE＋敏捷修正值×2%（輕甲與無甲照加、中甲最多 +2 點修正值、重甲不加不扣，見 Char.dexForDodge）＋閃避技能每級 1%，最低 0
   //   格擋機率＝盾牌的機率＋盾牌使用每級 2%；格擋值＝盾牌與品質的格擋值，戰士再加力量修正值（其他職業只照盾牌）；沒拿盾牌都是 0
   function playerDefense(p) {
-    const body = p.equip.body ? def(p.equip.body) : null;
     const sh = shieldOf(p);
-    const armorDodge = body && body.dodge ? (FE.Char.armorDodgeFree(p) && body.dodge < 0 ? 0 : body.dodge) : 0;
     const blockMax = sh ? Math.max(0, Math.round(def(sh).value * qual(sh).armor) + (p.cls === 'warrior' ? FE.Char.attrMod(p, 'str') : 0)) : 0;
     return {
-      dodge: Math.max(0, C.PLAYER_DODGE + C.DEX_DODGE * FE.Char.attrMod(p, 'dex') + C.SKILL_DODGE * FE.Char.skillLv(p, 'dodge') + armorDodge),
+      dodge: Math.max(0, C.PLAYER_DODGE + C.DEX_DODGE * FE.Char.dexForDodge(p) + C.SKILL_DODGE * FE.Char.skillLv(p, 'dodge')),
       counter: C.PLAYER_COUNTER,
       block: sh ? def(sh).block + C.SKILL_BLOCK * FE.Char.skillLv(p, 'shield') : 0,
       blockMax,
@@ -192,8 +190,10 @@
     }
     if (d.cat === 'ammo') return `一捆 ${d.bundle} 支${q.pierce ? `、穿甲 ${Math.round(q.pierce * 100)}%` : ''}、重 ${d.weight}`;
     if (d.cat === 'armor') {
-      const ex = (d.ticks ? `、每個動作多 ${d.ticks} 刻` : '') + (d.dodge ? `、閃避 ${Math.round(d.dodge * 100)}%` : '');
-      return `物理減傷 ${Math.round(d.phys * q.armor)}、魔法減傷 ${Math.round(d.magic * q.armor)}、${w}${ex}`;
+      const kind = { light: '輕甲', medium: '中甲', heavy: '重甲', none: '無甲' }[d.cls] || '';
+      const dodge = { light: '敏捷照加閃避', medium: '敏捷最多加 +2 點修正值的閃避', heavy: '敏捷不加不扣閃避', none: '敏捷照加閃避' }[d.cls] || '';
+      const ex = (d.ticks ? `、每個動作多 ${d.ticks} 刻` : '') + (d.str ? `、力量要 ${d.str}` : '') + (d.stealth ? '、不利隱匿' : '');
+      return `${kind}、物理減傷 ${Math.round(d.phys * q.armor)}、魔法減傷 ${Math.round(d.magic * q.armor)}、${dodge}、${w}${ex}${d.desc ? '。' + d.desc : ''}`;
     }
     if (d.cat === 'shield') return `格擋 ${Math.round(d.block * 100)}%、格擋值 ${Math.round(d.value * q.armor)}、${w}`;
     return w;
@@ -211,12 +211,12 @@
         axe: ['waraxe', 'club', 'warhammer'],
         pole: ['spear', 'shortspear', 'staff'],
         ranged: ['bow', 'arrow'],
-        armor: ['heavy', 'medium', 'light', 'robe', 'shield'],
+        armor: ['padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield'],
         tool: ['pick', 'sickle'],
       },
       quals: [0],
       repair: ['weapon', 'armor', 'shield', 'tool'],
-      craft: ['sword', 'spear', 'shortspear', 'dagger', 'shortsword', 'waraxe', 'club', 'warhammer', 'heavy', 'medium', 'light', 'shield'],
+      craft: ['sword', 'spear', 'shortspear', 'dagger', 'shortsword', 'waraxe', 'club', 'warhammer', 'padded', 'light', 'hide', 'chainshirt', 'ringmail', 'shield'],
       sell: ['weapon', 'armor', 'shield'],
     },
     weaponsmith: {
@@ -235,14 +235,19 @@
     },
     armorer: {
       title: '盔甲匠',
-      buy: { armor: ['heavy', 'medium', 'light', 'robe', 'shield'] },
+      buy: {
+        armorL: ['padded', 'light', 'studded', 'robe'],
+        armorM: ['hide', 'chainshirt', 'medium', 'breastplate', 'halfplate'],
+        armorH: ['ringmail', 'heavy', 'splint', 'plate'],
+        shieldC: ['shield'],
+      },
       quals: [0, 1],
       repair: ['armor', 'shield'],
-      craft: ['heavy', 'medium', 'light', 'shield'],
+      craft: ['padded', 'light', 'studded', 'hide', 'chainshirt', 'medium', 'breastplate', 'halfplate', 'ringmail', 'heavy', 'splint', 'plate', 'shield'],
       sell: ['armor', 'shield'],
     },
   };
-  const CAT_NAMES = { blade: '劍與刀', axe: '斧與錘', pole: '長柄與法杖', ranged: '弓弩與彈藥', armor: '防具與盾牌', tool: '工具' };
+  const CAT_NAMES = { blade: '劍與刀', axe: '斧與錘', pole: '長柄與法杖', ranged: '弓弩與彈藥', armor: '防具與盾牌', armorL: '輕甲與衣袍', armorM: '中甲', armorH: '重甲', shieldC: '盾牌', tool: '工具' };
   // 打造的東西也分類顯示（跟「買」同一套分類）：回傳 { 分類: [種類] }，沒有東西的分類不列
   function craftCats(S) {
     const out = {};

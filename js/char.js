@@ -82,7 +82,8 @@
   function mastery(p, w) {
     const d = w && FE.GEAR[w.type];
     if (!d || !d.mastery) return null;
-    return cls(p).mastery || skillLv(p, d.skill) >= FE.MASTERY_SKILL ? d.mastery : null;
+    // 第二十九版追加：精通一律要該武器的技能練到 5 級（精熟），不分職業
+    return skillLv(p, d.skill) >= FE.MASTERY_SKILL ? d.mastery : null;
   }
   // 擲出幾點以上算暴擊：平常 20；感知修正值 +2 以上 19；短刀再擴大 1
   function critMin(p, w) {
@@ -106,6 +107,30 @@
     const dex = attrMod(p, 'dex');
     const fight = fightHit(p);
     const out = { die: null, type: 'blunt', hit: 0, dmg: 0, attr: 0, heavy: false, crit: critMin(p, w), mastery: null, skills: [], clear: q.clear, pierce: q.pierce };
+    if (mode === 'light') {
+      // 牧師的神聖之光（過渡的一招，施法系統還沒談）：1d8 神聖傷害加感知修正值，命中也加感知修正值；沒有神聖傷害附加（那是聖騎士的）
+      const wis = attrMod(p, 'wis');
+      Object.assign(out, { die: C.LIGHT_DIE, type: 'holy', hit: wis, dmg: wis, attr: wis, crit: critMin(p, null), skills: [], clear: 0, pierce: 0 });
+      return out;
+    }
+    if (mode === 'throw' && d) {
+      // 投擲（第二十九版追加，所有武器都能丟）：有投擲特質的照武器骰、算那把武器的技能；其他武器是臨時武器 1d4 鈍擊；弓、輕弩只有 1 點。都練射擊
+      const real = !!d.thrown;
+      const fin = real && d.finesse;
+      Object.assign(out, {
+        die: real ? d.die.slice() : d.ammo ? null : C.THROW_JUNK_DIE.slice(),
+        type: real ? d.type : 'blunt',
+        hit: (real ? q.hit : 0) + (fin ? Math.max(str, dex) : dex) + shootHit(p),
+        dmg: (fin ? Math.max(str, dex) : str) + (real ? lvDmg(p, d.skill) : 0),
+        attr: fin ? Math.max(str, dex) : str,
+        crit: critMin(p, real ? w : null),
+        mastery: real ? mastery(p, w) : null,
+        skills: real ? [d.skill, 'shoot'] : ['shoot'],
+        clear: real ? q.clear : 0,
+        pierce: real ? q.pierce : 0,
+      });
+      return out;
+    }
     if (mode === 'bash') {
       // 盾擊：1d4 鈍擊＋力量修正值；沒有精通，練雜物使用與格鬥，命中只加敏捷（盾牌沒有命中加值）
       Object.assign(out, { die: C.BASH_DIE, type: 'blunt', hit: dex + lvHit(p, 'misc') + fight, dmg: str + lvDmg(p, 'misc'), attr: str, crit: critMin(p, null), skills: ['misc', 'fight'], clear: 0, pierce: 0 });
@@ -177,15 +202,31 @@
   }
 
   // 穿甲技能的效果：身上防具的重量打折（照 Dwarf Fortress 的表）；5 級起中甲不多花刻、重甲少 1 刻；10 級起重甲不多花刻；15 級起重甲不再扣閃避
+  // 穿甲拆成輕甲、中甲、重甲三項（第二十九版追加）：身上穿哪一類，就看那一項技能；衣袍（無甲）沒有
+  const armorSkillId = (p) => (p.equip && p.equip.body ? FE.ARMOR_SKILL[FE.GEAR[p.equip.body.type].cls] || null : null);
   function armorWeightMul(p) {
+    const id = armorSkillId(p);
     const t = C.ARMOR_WEIGHT_MUL;
-    return t[Math.min(skillLv(p, 'armor'), t.length - 1)];
+    return id ? t[Math.min(skillLv(p, id), t.length - 1)] : 1;
   }
   function armorTicks(p, base) {
-    const lv = skillLv(p, 'armor');
+    const id = armorSkillId(p);
+    const lv = id ? skillLv(p, id) : 0;
     return Math.max(0, base - (lv >= 5 ? 1 : 0) - (lv >= 10 ? 1 : 0));
   }
-  const armorDodgeFree = (p) => skillLv(p, 'armor') >= C.ARMOR_FREE_DODGE;
+  // 力量不到身上防具的需求：走一步花 STR_REQ_TICKS 刻
+  const strShort = (p) => !!(p.equip && p.equip.body && FE.GEAR[p.equip.body.type].str && p.attr.str < FE.GEAR[p.equip.body.type].str);
+  // 閃避的敏捷加成（修正值，換成機率前）：輕甲與無甲照加、負的照扣；中甲最多 +2（負的照扣）；重甲不加也不扣
+  function dexForDodge(p) {
+    const m = attrMod(p, 'dex');
+    const k = p.equip && p.equip.body ? FE.GEAR[p.equip.body.type].cls : 'none';
+    return k === 'heavy' ? 0 : k === 'medium' ? Math.min(m, C.MEDIUM_DEX_CAP) : m;
+  }
+  // 野蠻人不能穿中甲、重甲
+  const canWear = (p, g) => {
+    const d = FE.GEAR[g.type];
+    return !(d.cat === 'armor' && cls(p).noHeavyArmor && (d.cls === 'medium' || d.cls === 'heavy'));
+  };
   // 體質：挨到的物理傷害，防具減完之後再減（體質修正值÷2，捨去；負的不加傷害）
   const conCut = (p) => Math.max(0, Math.floor(attrMod(p, 'con') / 2));
 
@@ -223,9 +264,37 @@
     return Object.assign({ bonus: {} }, b);
   }
 
-  // 建立冒險者（還沒放上地圖）：種族與體型、職業、起始屬性（職業的，加種族加成）、生命、固定的與自己挑的裝備。
+  // 起始主手武器是哪一項技能：固定的與自己挑的裝備裡第一把武器
+  function startMainSkill(clsKey, picks) {
+    for (const id of FE.CLASSES[clsKey].fixed.concat(picks)) {
+      const o = FE.START_OPTS[id];
+      if (o && o.gear && FE.GEAR[o.gear].cat === 'weapon') return FE.GEAR[o.gear].skill;
+    }
+    return null;
+  }
+  // 起始技能（第二十九版追加）：精熟（5 級）一項是起始主手武器那一項，其餘從職業技能池隨機抽（不跟精熟那項重複）；
+  // 組合隨機：50%「專精」熟練（4）2 項＋稱職（3）3 項，50%「全面」稱職 6 項；池子不夠抽有幾項給幾項，抽不到的都是涉獵。
+  // packKey 指定組合（'focus'、'broad'）；rng 是亂數。回傳 { pack, name, levels: { 技能: 等級 } }
+  function rollSkills(clsKey, mainSkill, rng, packKey) {
+    const c = FE.CLASSES[clsKey];
+    const pool = [...new Set(c.pool.flatMap((t) => (t === 'melee' ? FE.MELEE_SKILLS : [t])))].filter((k) => k !== mainSkill);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const key = packKey || (rng() < 0.5 ? 'focus' : 'broad');
+    const pack = FE.SKILL_PACKS[key];
+    const levels = {};
+    if (mainSkill) levels[mainSkill] = FE.START_MAIN_LEVEL;
+    pool.slice(0, pack.levels.length).forEach((k, i) => { levels[k] = pack.levels[i]; });
+    return { pack: key, name: pack.name, levels };
+  }
+  // 擲身高與體格（各 1～7，照種族的機率）
+  const rollBody = (race, rng) => ({ height: FE.rollOdds(rng, FE.BODY_ODDS[race].height), build: FE.rollOdds(rng, FE.BODY_ODDS[race].build) });
+
+  // 建立冒險者（還沒放上地圖）：種族與體型、職業、起始屬性（職業的，加種族加成）、生命、固定的與自己挑的裝備、起始技能（skillRoll，可以沒有）。
   // 雙手拿的武器（弓箭、體型不夠單手的）跟盾牌一起挑的時候，盾牌放進背包
-  function create(game, clsKey, picks, name, body) {
+  function create(game, clsKey, picks, name, body, skillRoll) {
     const c = FE.CLASSES[clsKey];
     const b = bodyOf(body);
     const R = FE.PLAYER_RACES[b.race];
@@ -265,7 +334,10 @@
       const o = FE.START_OPTS[id];
       if (o.gear) {
         const cat = FE.GEAR[o.gear].cat;
-        p.equip[cat === 'weapon' ? 'main' : cat === 'shield' ? 'off' : 'body'] = FE.Gear.make(o.gear, 0, game.nextGearId++);
+        const g = FE.Gear.make(o.gear, 0, game.nextGearId++);
+        // 武器：第一把拿在主手，多的放背包（例如法師的備用短刀）
+        if (cat === 'weapon' && p.equip.main) p.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
+        else p.equip[cat === 'weapon' ? 'main' : cat === 'shield' ? 'off' : 'body'] = g;
         if (o.arrows) p.bag.push({ id: 'arrow', name: FE.Gear.name({ type: 'arrow', q: 0 }), n: o.arrows, q: 0 });
       } else if (o.herb) {
         const e = p.bag.find((x) => x.id === 'herb');
@@ -280,6 +352,10 @@
       p.equip.off = null;
     }
     p.maxHp = p.hp = maxHp(p, 1);
+    if (skillRoll) {
+      for (const k of Object.keys(skillRoll.levels)) p.skills[k] = { lv: skillRoll.levels[k], n: 0 };
+      p.skillPack = skillRoll.name;
+    }
     return p;
   }
 
@@ -287,7 +363,7 @@
     mod, attrMod, cls, maxHp, carryLimit, pushLimit, moveTicks,
     sizeOf, grip, GRIP_NAMES, canWieldType,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,
-    armorWeightMul, armorTicks, armorDodgeFree, conCut,
+    armorSkillId, armorWeightMul, armorTicks, strShort, dexForDodge, canWear, startMainSkill, rollSkills, rollBody, conCut,
     mastery, critMin, range, profile, attackTicks,
     validPicks, startOk, groupOptions, defaultPicks, bodyOf, create,
   };

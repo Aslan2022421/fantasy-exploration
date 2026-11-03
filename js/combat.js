@@ -34,7 +34,7 @@
     if (!isPlayer(game, D)) return 0;
     if (type === 'magic' || type === 'holy') return FE.Gear.magicReduce(D);
     const phys = FE.Gear.physReduce(D);
-    if (type === 'slash') return phys + (D.equip.body && (D.equip.body.type === 'medium' || D.equip.body.type === 'heavy') ? 1 : 0);
+    if (type === 'slash') return phys + (D.equip.body && (FE.GEAR[D.equip.body.type].cls === 'medium' || FE.GEAR[D.equip.body.type].cls === 'heavy') ? 1 : 0);
     if (type === 'pierce') return phys - Math.floor(phys * (pierce || 0));
     if (type === 'blunt') return phys - Math.ceil(phys / 2);
     return phys;
@@ -130,7 +130,7 @@
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
     const mode = aP ? opts.mode || 'melee' : null;
-    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'spell';
+    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'spell' || mode === 'light';
     // 冒險者這一下用的武器（反擊用主手）與算法；先記下，免得這一下把武器磨壞了找不到
     const wpn = aP ? (opts.counter ? A.equip.main : opts.weapon !== undefined ? opts.weapon : A.equip.main) : null;
     const prof = aP ? FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
@@ -236,6 +236,7 @@
 
     // 磨損：冒險者出手一次磨這一下用的武器一次（盾擊磨盾牌），格擋成功一次磨盾牌一次，挨打時防具減傷有作用一次磨身上防具一次
     // （每次磨損的機率＝1÷品質價值倍率，見 gear.js 的 wear）
+    const armorId = dP ? FE.Char.armorSkillId(D) : null; // 防具磨壞前先記下穿的是哪一類
     const wornOut = aP && !opts.noWear ? (mode === 'bash' ? FE.Gear.shieldOf(A) : wpn) : null;
     if (wornOut) FE.Gear.wear(game, wornOut);
     if (dP && absorbed > 0 && FE.Gear.shieldOf(D)) FE.Gear.wear(game, FE.Gear.shieldOf(D));
@@ -245,7 +246,7 @@
     if (aP && !opts.counter && !opts.noTrain) for (const s of prof.skills) FE.Char.useSkill(game, s, hitKey ? C.SKILL_EXP_HIT : C.SKILL_EXP_MISS);
     if (dP && dodged) FE.Char.useSkill(game, 'dodge', C.SKILL_EXP_DODGE);
     if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield', C.SKILL_EXP_BLOCK);
-    if (dP && reduced > 0) FE.Char.useSkill(game, 'armor', C.SKILL_EXP_ARMOR);
+    if (dP && reduced > 0 && armorId) FE.Char.useSkill(game, armorId, C.SKILL_EXP_ARMOR); // 穿哪一類就練哪一項（輕甲、中甲、重甲）
 
     // 傷害與倒下：倒下的處理（經驗值、修好地形、醒來）等這一下的訊息寫完才做，訊息才會先寫打了多少、再寫倒下
     let killed = false;
@@ -308,6 +309,7 @@
         shoot: `你朝${dName}射了一箭`,
         throw: `你把${wName}擲向${dName}`,
         spell: `魔力炸開，波及${dName}`,
+        light: `你放出神聖之光，照向${dName}`,
         bash: `你用盾牌撞向${dName}`,
       };
       const head = opts.counter

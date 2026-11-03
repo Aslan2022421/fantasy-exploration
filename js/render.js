@@ -428,7 +428,7 @@
       $('tgtText').innerHTML = `<span class="tname">${esc(m.name)}</span><span class="t-hp"><span class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></span>生命 ${m.hp} / ${m.maxHp}</span>${aim}${st.length ? `<span class="t-state">${esc(st.join('、'))}</span>` : ''}<span class="dim t-extra">體型 ${FE.sizeName(m)}　異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, FE.Gear.clearLevel(p)))}</span>`;
     } else $('tgtText').textContent = '無';
     $('tgtText').className = m ? 'tgt' : '';
-    // 快捷列：攻擊 <1>、重擊 <2>（冷卻中顯示剩幾回合、變暗）、撤退 <3>、射擊／施法 <F>、治療 <4>（牧師）、盾擊 <5>（戰士）
+    // 快捷列：攻擊 <1>、重擊 <2>（冷卻中顯示剩幾回合、變暗）、撤退 <3>、射擊／施法 <F>、治療 <4>（牧師、聖騎士）、盾擊 <5>（戰士）
     const adj = game.targetMonster();
     const cls = FE.Char.cls(p);
     const cd = game.battle.cooldown;
@@ -443,13 +443,14 @@
       bash: !!adj && !!FE.Gear.shieldOf(p),
       disengage: true,
       dodge: true,
+      throw: !!game.throwMode(true),
     };
     document.querySelectorAll('#quick .qs').forEach((b) => {
       b.disabled = !can[b.dataset.act];
     });
     document.querySelector('#quick [data-act="heal"]').classList.toggle('hidden', !cls.heal);
     document.querySelector('#quick [data-act="bash"]').classList.toggle('hidden', !cls.bash);
-    document.querySelector('#quick [data-act="fire"] .qn').textContent = ranged && ranged.mode === 'spell' ? '施法' : ranged && ranged.mode === 'throw' ? '投擲' : '射擊';
+    document.querySelector('#quick [data-act="fire"] .qn').textContent = ranged && ranged.mode === 'spell' ? '施法' : ranged && ranged.mode === 'light' ? '神聖之光' : ranged && ranged.mode === 'throw' ? '投擲' : '射擊';
     document.querySelector('#quick [data-act="deep"] .qcd').textContent = adj && cd > 0 ? `冷卻 ${cd}` : '';
     document.querySelector('#quick [data-act="heal"] .qcd').textContent = hcd > 0 ? `冷卻 ${hcd}` : '';
   }
@@ -639,7 +640,7 @@
       const v = p.attr[a.key];
       return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td></tr>`;
     }).join('');
-    // 這項武器技能管哪些武器、學會哪些精通（法師、牧師要 5 級才會）
+    // 這項武器技能管哪些武器、學會哪些精通（一律要 5 級才會）
     const weaponsOf = (id) => Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon' && (FE.GEAR[k].skill === id || FE.GEAR[k].meleeSkill === id));
     const effect = (id, lv) => {
       const hit = Math.floor(lv / C.SKILL_HIT_EVERY);
@@ -650,18 +651,20 @@
       if (id === 'bow' || id === 'crossbow') {
         const name = FE.GEAR[id === 'bow' ? 'bow' : 'crossbow'].name;
         const mas = FE.GEAR[id === 'bow' ? 'bow' : 'crossbow'].mastery;
-        const unlock = !c.mastery ? (lv >= FE.MASTERY_SKILL ? `；精通${FE.MASTERIES[mas].name}` : `；${FE.MASTERY_SKILL} 級學會精通${FE.MASTERIES[mas].name}`) : '';
+        const unlock = lv >= FE.MASTERY_SKILL ? `；精通${FE.MASTERIES[mas].name}` : `；${FE.MASTERY_SKILL} 級學會精通${FE.MASTERIES[mas].name}`;
         return `${name}射擊的傷害 +${dmg}${unlock}`;
       }
       if (FE.SKILLS[id].weapon) {
         const ws = weaponsOf(id).filter((k) => FE.GEAR[k].skill === id);
-        const unlock = !c.mastery ? `；` + ws.map((k) => `${FE.MASTERIES[FE.GEAR[k].mastery].name}${lv >= FE.MASTERY_SKILL ? '' : `（${FE.MASTERY_SKILL} 級）`}`).join('、') : '';
+        const unlock = `；精通：` + ws.map((k) => `${FE.MASTERIES[FE.GEAR[k].mastery].name}${lv >= FE.MASTERY_SKILL ? '' : `（${FE.MASTERY_SKILL} 級）`}`).join('、');
         return `${ws.map((k) => FE.GEAR[k].name).join('、')}：近戰命中 +${hit}、傷害 +${dmg}${FE.GEAR[ws[0]].thrown ? '（投擲只加傷害）' : ''}${id === 'staff' ? '；法師的範圍魔攻也算' : ''}${unlock}`;
       }
       if (id === 'dodge') return `閃避機率 +${lv}%`;
       if (id === 'shield') return `格擋機率 +${lv * 2}%`;
-      const mul = Ch.armorWeightMul(p);
-      return `身上防具的重量 ×${mul}；${lv >= 10 ? '中甲、重甲都不多花刻' : lv >= 5 ? '中甲不多花刻，重甲少 1 刻' : '中甲多 1 刻、重甲多 2 刻'}${lv >= C.ARMOR_FREE_DODGE ? '；重甲不再扣閃避' : ''}`;
+      // 輕甲、中甲、重甲：穿這一類時身上防具的重量打折、多花的刻減少
+      const t = C.ARMOR_WEIGHT_MUL;
+      const ticks = id === 'light' ? '輕甲本來不多花刻' : id === 'medium' ? (lv >= 5 ? '中甲不多花刻' : '中甲多 1 刻（5 級起不多花）') : lv >= 10 ? '重甲不多花刻' : lv >= 5 ? '重甲少 1 刻（10 級起不多花）' : '重甲多 2 刻（5 級起少 1 刻）';
+      return `穿這一類時防具的重量 ×${t[Math.min(lv, t.length - 1)]}；${ticks}`;
     };
     const skillRows = Object.keys(FE.SKILLS).map((id) => {
       const s = p.skills[id];
@@ -673,7 +676,7 @@
     const body = `${R.name}　身高${FE.HEIGHTS[(p.height || 4) - 1]}、體格${FE.BUILDS[(p.build || 4) - 1]}　體型 ${Ch.sizeOf(p).toLocaleString('en-US')}`;
     $('charInfo').innerHTML = `
       <p><b>${esc(p.name)}</b>　${esc(c.name)}　Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}${p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加</b>` : ''}</p>
-      <p>${esc(body)}</p>
+      <p>${esc(body)}${p.skillPack ? `　起始技能組合：${esc(p.skillPack)}` : ''}</p>
       <p>主手 ${p.equip.main ? esc(FE.Gear.name(p.equip.main)) : '空著'}　副手 ${p.equip.off ? esc(FE.Gear.name(p.equip.off)) : '空著'}${p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''}　身上 ${p.equip.body ? esc(FE.Gear.name(p.equip.body)) : '空著'}</p>
       <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Ch.moveTicks(p)} 刻　休息一次回復 ${heal}</p>
       <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
@@ -703,12 +706,20 @@
     if (s.step === 'bonus') return FE.ATTRS.map((a) => a.key);
     if (s.step === 'body') return ['accept', 'reroll'];
     if (s.step === 'class') return classKeys;
+    if (s.step === 'skills') return ['accept', 'reroll'];
     return FE.Char.groupOptions(startGroups()[s.gi], startSize());
   };
   // 擲身高與體格（各 1～7）
   const rollBody = () => {
-    ui.start.height = 1 + Math.floor(Math.random() * 7);
-    ui.start.build = 1 + Math.floor(Math.random() * 7);
+    // 照種族的機率擲（第二十九版追加，FE.BODY_ODDS）
+    const b = FE.Char.rollBody(ui.start.race, Math.random);
+    ui.start.height = b.height;
+    ui.start.build = b.build;
+  };
+  // 擲起始技能（精熟一項是起始主手武器那一項，其餘從職業技能池隨機抽，組合也隨機）
+  const rollSkills = () => {
+    const s = ui.start;
+    s.skills = FE.Char.rollSkills(s.cls, FE.Char.startMainSkill(s.cls, s.picks), Math.random);
   };
 
   // 右欄：游標那一項的詳細內容。種族看體型與加成；體型看身高、體格與每把武器拿不拿得動；職業看屬性、生命、負重、說明；裝備看數值、重量、說明
@@ -736,9 +747,14 @@
         .join('');
       return `<dl><dt>種族</dt><dd>${R.name}</dd><dt>身高</dt><dd>${FE.HEIGHTS[s.height - 1]}（${s.height} / 7）</dd><dt>體格</dt><dd>${FE.BUILDS[s.build - 1]}（${s.build} / 7）</dd><dt>體型</dt><dd>${size.toLocaleString('en-US')}</dd></dl><p class="dim">體型＝基本體型 ×（1＋0.05×（身高−4））×（1＋0.05×（體格−4））。不滿意可以重擲（R）。這個體型拿各種武器：</p><dl>${rows}</dl>`;
     }
+    if (s.step === 'skills') {
+      const sk = s.skills;
+      const rows = Object.keys(sk.levels).sort((a, b) => sk.levels[b] - sk.levels[a]).map((k) => `<dt>${esc(FE.SKILLS[k].name)}</dt><dd>${sk.levels[k]} 級（${esc(FE.skillLevelName(sk.levels[k]))}）</dd>`).join('');
+      return `<dl><dt>組合</dt><dd>${esc(sk.name)}</dd>${rows}</dl><p class="dim">精熟（5 級）一項固定是起始主手武器的技能，其餘從${esc(FE.CLASSES[s.cls].name)}的技能池隨機抽；其他技能都是涉獵（0 級）。「專精」是熟練 2 項、稱職 3 項，「全面」是稱職 6 項。不滿意可以重擲（R）。</p>`;
+    }
     if (s.step === 'class') {
       const c = FE.CLASSES[id];
-      const tmp = { cls: id, attr: Object.assign({}, c.attr) };
+      const tmp ={ cls: id, attr: Object.assign({}, c.attr) };
       // 顯示加上種族加成後的屬性（人類自己加的兩點也算進去）
       const R = FE.PLAYER_RACES[s.race];
       const add = Object.assign({}, R.bonus || {});
@@ -770,6 +786,7 @@
       if (s.step === 'bonus') return `${FE.ATTRS.find((a) => a.key === id).name}　+${s.bonus[id] || 0}`;
       if (s.step === 'body') return id === 'accept' ? '接受這個體型' : '重擲身高與體格（R）';
       if (s.step === 'class') return FE.CLASSES[id].name;
+      if (s.step === 'skills') return id === 'accept' ? '接受這組起始技能' : '重擲起始技能（R）';
       return optLabel(id);
     };
     const rows = list
@@ -798,6 +815,11 @@
       title = '職業';
       sub = '選職業';
       path = `新世界 › ${R.name}（${FE.HEIGHTS[s.height - 1]}、${FE.BUILDS[s.build - 1]}）`;
+    } else if (s.step === 'skills') {
+      title = `起始技能：${s.skills.name}`;
+      sub = '擲起始技能';
+      path = `新世界 › ${R.name} › ${FE.CLASSES[s.cls].name} › 起始技能`;
+      note = `組合「${esc(s.skills.name)}」。`;
     } else if (gear) {
       const c = FE.CLASSES[s.cls];
       const have = s.picks.map(optLabel);
@@ -817,14 +839,14 @@
         <div class="frame"><span class="ft">${esc(title)}</span><div class="fb"><ul class="cc-list">${rows}</ul>${note ? `<p class="cc-note">${note}</p>` : ''}</div></div>
         <div class="frame"><span class="ft">${esc(labelOf(cur))}</span><div class="fb cc-detail">${startDetail(cur)}</div></div>
       </div>
-      <div class="cc-keys">[Esc] 返回　[Enter／Space] 選擇　[R] ${s.step === 'body' ? '重擲' : '隨機'}　方向鍵移動　數字鍵直接選</div>`;
+      <div class="cc-keys">[Esc] 返回　[Enter／Space] 選擇　[R] ${s.step === 'body' || s.step === 'skills' ? '重擲' : '隨機'}　方向鍵移動　數字鍵直接選</div>`;
   }
   function startFinish() {
     const done = ui.start.done;
-    const { cls, picks, race, bonus, height, build } = ui.start;
+    const { cls, picks, race, bonus, height, build, skills } = ui.start;
     ui.start = null;
     $('modal').classList.add('hidden');
-    done(cls, picks, { race, bonus, height, build });
+    done(cls, picks, { race, bonus, height, build }, skills);
   }
   // 選到某一項：種族（人類接著加兩點、其他種族直接擲體型）→ 加點 → 接受或重擲體型 → 職業 → 起始裝備
   function startChoose(id) {
@@ -852,6 +874,12 @@
         s.step = 'class';
         s.cur = 0;
       }
+    } else if (s.step === 'skills') {
+      if (id === 'reroll') rollSkills();
+      else {
+        startFinish();
+        return;
+      }
     } else if (s.step === 'class') {
       s.cls = id;
       s.step = 'gear';
@@ -869,8 +897,9 @@
         s.gi++;
         s.cur = 0;
         if (s.gi >= startGroups().length) {
-          startFinish();
-          return;
+          s.step = 'skills';
+          s.cur = 0;
+          rollSkills();
         }
       }
     }
@@ -896,6 +925,13 @@
       s.cur = 0;
     } else if (s.step === 'class') {
       s.step = 'body';
+      s.cur = 0;
+    } else if (s.step === 'skills') {
+      // 回到最後一組起始裝備，重挑那一組
+      s.step = 'gear';
+      s.gi = startGroups().length - 1;
+      s.picks = s.picks.filter((id) => !startGroups()[s.gi].of.includes(id));
+      s.sel = [];
       s.cur = 0;
     } else if (s.sel.length) s.sel = [];
     else if (s.gi > 0) {
@@ -1010,7 +1046,7 @@
       } else if (k === 'enter' || k === ' ') startChoose(list[s.cur]);
       else if (k === 'r') {
         // 擲體型那一步是重擲；其他步驟是隨機：從還沒選的裡面抽一樣，等於選下去
-        if (s.step === 'body') startChoose('reroll');
+        if (s.step === 'body' || s.step === 'skills') startChoose('reroll');
         else {
           const open = list.filter((id) => !s.sel.includes(id));
           startChoose(open[Math.floor(Math.random() * open.length)]);

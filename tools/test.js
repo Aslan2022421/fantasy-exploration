@@ -40,16 +40,20 @@ for (const f of ['config', 'rng', 'world', 'checker', 'bugs', 'steading', 'char'
 const C = FE.CONFIG;
 // 四職業的起始屬性：第二十九版追加改成《D&D》標準陣列 15、14、13、12、10、8；
 // 場景檢查裡大多數數字（傷害加值、格擋值、價錢、生命⋯⋯）是照舊的 16、15、13、12、9、8 排的，所以場景檢查預設用舊的，
-// 只有明確測起始屬性的地方才用 useAttrs('new') 換成新的。競技場與機器人模擬一律用新的
-const NEW_ATTRS = {};
-for (const k of Object.keys(FE.CLASSES)) NEW_ATTRS[k] = Object.assign({}, FE.CLASSES[k].attr);
-const OLD_ATTRS = {
-  warrior: { str: 16, dex: 13, con: 15, int: 9, wis: 12, cha: 8 },
-  ranger: { str: 12, dex: 16, con: 13, int: 8, wis: 15, cha: 9 },
-  mage: { str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 9 },
-  priest: { str: 13, dex: 8, con: 15, int: 9, wis: 12, cha: 16 },
+// 只有明確測起始屬性的地方才用 useClasses('new') 換成新的。競技場與機器人模擬一律用新的
+// 第二十九版再追加（六個職業、精通一律要技能 5 級）：場景檢查預設用「舊的四職業」（第二十九版追加前的定義，單位數字才對得上），
+// 並把精通門檻設成 0 級（舊測試裡戰士、遊俠一開始就會精通）；明確測新職業、新精通的地方用 useClasses('new') 換回真的。競技場與機器人模擬一律用新的
+const NEW_CLASSES = FE.CLASSES;
+const OLD_CLASSES = {
+  warrior: { name: '戰士', base: 10, attr: { str: 16, dex: 13, con: 15, int: 9, wis: 12, cha: 8 }, desc: '', fixed: ['medium'], groups: [{ pick: 1, of: ['sword', 'spear', 'shortspear'] }, { pick: 2, of: ['shield', 'herb', 'gold'] }], primary: 'str', bash: true, pool: ['fight', 'melee'] },
+  ranger: { name: '遊俠', base: 8, attr: { str: 12, dex: 16, con: 13, int: 8, wis: 15, cha: 9 }, desc: '', fixed: ['light'], groups: [{ pick: 1, of: ['bow', 'dagger', 'shortspear', 'spear'] }], primary: 'dex', pool: ['shoot', 'fight'] },
+  mage: { name: '法師', base: 4, attr: { str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 9 }, desc: '', fixed: ['robe'], groups: [{ pick: 1, of: ['staff', 'dagger'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'int', spell: true, pool: ['dodge'] },
+  priest: { name: '牧師', base: 8, attr: { str: 13, dex: 8, con: 15, int: 9, wis: 12, cha: 16 }, desc: '', fixed: [], groups: [{ pick: 1, of: ['medium', 'shield'] }, { pick: 1, of: ['staff', 'sword'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'wis', holy: true, heal: true, pool: ['shield'] },
 };
-const useAttrs = (which) => { for (const k of Object.keys(NEW_ATTRS)) FE.CLASSES[k].attr = Object.assign({}, (which === 'new' ? NEW_ATTRS : OLD_ATTRS)[k]); };
+const useClasses = (which) => {
+  FE.CLASSES = which === 'new' ? NEW_CLASSES : OLD_CLASSES;
+  FE.MASTERY_SKILL = which === 'new' ? 5 : 0;
+};
 // 第二十六版：沒指定職業的 game.start() 給中性角色（場景測試與對照組用）：六項屬性都是 10（修正值 0）、沒有技能、
 // 裝備照第二十五版（普通長劍、沒有防具與盾牌）、背包空的、沒有金幣，生命上限 30、能背 150 磅（力量 10）、普通體型的人類（70,000），
 // 這樣舊的場景檢查（傷害、閃避 10%、出手加減⋯⋯）數字不變。要測職業就明確傳 { cls, picks }
@@ -402,7 +406,8 @@ function botGear(game) {
   const p = game.player;
   const noArmor = !!game.botNoArmor;
   // 第二十八版：機器人只換同一種武器（品質比較好的），不換掉職業的武器（遊俠的弓箭、法師的法杖）
-  const better = (g, s) => !p.equip[s] || (s === 'main' ? g.type === p.equip.main.type && g.q > p.equip.main.q : gearScore(g) > gearScore(p.equip[s]));
+  const wearable = (g) => FE.Char.canWear(p, g) && !(FE.GEAR[g.type].str > p.attr.str); // 野蠻人不穿中甲重甲；力量不夠的防具走路會變慢，機器人不穿
+  const better = (g, s) => (s === 'body' && !wearable(g) ? false : !p.equip[s] || (s === 'main' ? g.type === p.equip.main.type && g.q > p.equip.main.q : gearScore(g) > gearScore(p.equip[s])));
   const junk = () => p.bag.findIndex((e) => {
     if (e.id !== 'gear') return false;
     const s = slotOf(e.gear);
@@ -445,9 +450,11 @@ function botGear(game) {
 // 機器人開新世界時挑的起始裝備（選項 id）：戰士長劍、盾牌、2 份藥草；遊俠弓箭（附 20 支箭）；法師法杖、2 份藥草；牧師中甲、長劍、2 份藥草
 const BOT_PICKS = {
   warrior: ['sword', 'shield', 'herb'],
-  ranger: ['bow'],
-  mage: ['staff', 'herb'],
-  priest: ['medium', 'sword', 'herb'],
+  ranger: ['dagger'],            // 弓箭與一捆箭是固定給的
+  mage: ['herb'],                // 法杖是固定給的
+  priest: ['shield', 'herb'],    // 鱗甲與硬頭錘是固定給的
+  paladin: ['sword', 'herb'],    // 鎖子甲與盾牌是固定給的
+  barbarian: ['greataxe', 'herb'], // 皮甲是固定給的；不能穿中甲、重甲
 };
 const BOT_CLASSES = Object.keys(BOT_PICKS);
 // 機器人照職業挑種族（第二十九版）：戰士、牧師矮人（體質 +2），遊俠精靈（敏捷 +2），法師人類（兩點都加智力）；身高、體格都取普通（4、4）
@@ -456,6 +463,8 @@ const BOT_BODY = {
   ranger: { race: 'elf', bonus: {}, height: 4, build: 4 },
   mage: { race: 'human', bonus: { int: 2 }, height: 4, build: 4 },
   priest: { race: 'dwarf', bonus: {}, height: 4, build: 4 },
+  paladin: { race: 'dwarf', bonus: {}, height: 4, build: 4 },
+  barbarian: { race: 'human', bonus: { str: 2 }, height: 4, build: 4 }, // 70,000 的人類拿得起巨斧（雙手）
 };
 
 // 機器人升級加點：照職業的主屬性（戰士力量、遊俠敏捷、法師智力、牧師感知）和體質輪流加，一個加到 18 就改加另一個，兩個都滿了加別的。
@@ -585,8 +594,12 @@ function botShop(game, npc) {
   // 背得動才買、才打造（法師背不了一整套）
   const fits = (type) => game.weight() + FE.GEAR[type].weight <= game.carryLimit();
   const craftable = (type) => fits(type) && S.craft.includes(type) && FE.Gear.craftQuote(type, v, cha).ore <= game.bagCount('ore') && FE.Gear.craftQuote(type, v, cha).fee <= p.gold;
+  // 穿得了的防具（野蠻人不穿中甲重甲、力量不夠需求的不穿），好的排前面
+  const armorTypes = Object.keys(FE.GEAR)
+    .filter((t) => FE.GEAR[t].cat === 'armor' && t !== 'mrobe' && t !== 'robe' && FE.Char.canWear(p, { type: t }) && !(FE.GEAR[t].str > p.attr.str))
+    .sort((a, b) => gearScore({ type: b, q: 0 }) - gearScore({ type: a, q: 0 }));
   if (!noArmor) {
-    for (const type of ['heavy', 'medium', 'light']) {
+    for (const type of armorTypes) {
       if (craftable(type) && gearScore({ type, q: 0 }) > rank('body')) { do_('craftItem:' + type, 'craft'); break; }
     }
     if (!twoH && !p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && craftable('shield')) do_('craftItem:shield', 'craft');
@@ -609,14 +622,14 @@ function botShop(game, npc) {
   }
   const qs = S.quals.slice().reverse();
   if (!noArmor) {
-    if (!twoH && !p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && S.buy.armor && fits('shield')) {
+    if (!twoH && !p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && sells('shield') && fits('shield')) {
       const q = qs.find((qq) => price('shield', qq) <= p.gold);
       if (q !== undefined) do_(`buyItem:shield:${q}`, 'buy');
     }
-    if (S.buy.armor) {
+    if (armorTypes.some(sells)) {
       let best = null;
-      for (const type of ['heavy', 'medium', 'light']) {
-        if (!fits(type)) continue;
+      for (const type of armorTypes) {
+        if (!sells(type) || !fits(type)) continue;
         const q = qs.find((qq) => price(type, qq) <= p.gold);
         if (q === undefined) continue;
         if (gearScore({ type, q }) > Math.max(rank('body'), ...p.bag.filter((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'armor').map((e) => gearScore(e.gear)))) { best = { type, q }; break; }
@@ -679,7 +692,7 @@ function simulate(seed, opts) {
   if (opts.scale != null) C.PLAYER_COMPUTE_SCALE = opts.scale;
   const game = new FE.Game(seed);
   // opts.cls：指定職業的模擬，起始裝備照 BOT_PICKS 挑；沒指定就是中性角色（對照組、只走路不打怪的那組）
-  game.start(opts.cls ? { cls: opts.cls, picks: BOT_PICKS[opts.cls], body: BOT_BODY[opts.cls] } : undefined);
+  game.start(opts.cls ? { cls: opts.cls, picks: BOT_PICKS[opts.cls], body: BOT_BODY[opts.cls], skills: FE.Char.rollSkills(opts.cls, FE.Char.startMainSkill(opts.cls, BOT_PICKS[opts.cls]), FE.makeRng(seed + 77)) } : undefined);
   let overActs = 0; // 超過能背的重量（走一步 60 刻）的動作數
   let maxLoad = 0;
   // 對照組（opts.cond）：不買也不穿防具與盾牌，只差身上有沒有一件重甲（重甲不會磨損，每個動作後補滿耐久）
@@ -1435,7 +1448,7 @@ function testGear() {
     const armorMult = [1, 1.2, 1.4, 1.6, 1.8, 2, 3];
     const hit = [0, 1, 2, 3, 4, 5, 8];
     const pierce = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.5];
-    const phys = { heavy: [3, 4, 4, 5, 5, 6, 9], medium: [2, 2, 3, 3, 4, 4, 6], light: [1, 1, 1, 2, 2, 2, 3], robe: [0, 0, 0, 0, 0, 0, 0] };
+    const phys = { heavy: [3, 4, 4, 5, 5, 6, 9], medium: [2, 2, 3, 3, 4, 4, 6], light: [0, 0, 0, 0, 0, 0, 0], robe: [0, 0, 0, 0, 0, 0, 0] };
     const shield = [4, 5, 6, 6, 7, 8, 12];
     ok(Q.length === 7 && Q.map((q) => q.name).join('') === '普通做工好精良優秀卓越傑作傳說物' && Q.map((q) => q.sym).join('|') === '|-|+|*|≡|☼|', `品質的名字或符號 ${Q.map((q) => q.sym + q.name)}`);
     for (let i = 0; i <= 6; i++) {
@@ -1451,7 +1464,7 @@ function testGear() {
       ok(G.hitBonus(p) === hit[i] && G.clearLevel(p) === i, `武器品質 ${i} 的命中加值或清除等級`);
     }
     // 價錢：原價×品質×經濟；荒蕪 1.6、有市場再一成；礦鎬鐮刀固定 20
-    ok(G.shopPrice('sword', 0, poorMarket) === Math.round(30 * 1.6 * 0.9) && G.shopPrice('heavy', 1, poorMarket) === Math.round(60 * 1.1 * 1.6 * 0.9), `荒蕪有市場的價錢 ${G.shopPrice('sword', 0, poorMarket)}`);
+    ok(G.shopPrice('sword', 0, poorMarket) === Math.round(30 * 1.6 * 0.9) && G.shopPrice('heavy', 1, poorMarket) === Math.round(87 * 1.1 * 1.6 * 0.9), `荒蕪有市場的價錢 ${G.shopPrice('sword', 0, poorMarket)}`);
     ok(G.shopPrice('pick', 0, poorMarket) === 20 && G.shopPrice('sickle', 0, plain) === 20, '礦鎬、鐮刀該固定 20 金幣');
     // 資料：武器、防具、盾牌、重量、價錢
     const W = FE.GEAR;
@@ -1459,7 +1472,7 @@ function testGear() {
     const wd = (t) => [W[t].die.join('d'), W[t].type, W[t].mastery, W[t].weight, W[t].price].join('/');
     // 第二十九版：重量改磅數；沒有近戰武器有「雙手」標籤（弓、輕弩射擊才一律雙手）
     ok(wd('sword') === '1d8/slash/sap/3/30' && W.sword.versatile === 10 && !W.sword.twoHand && W.sword.skill === 'sword' && W.sword.grip.join() === '52500,57500', `長劍 ${wd('sword')}`);
-    ok(wd('spear') === '1d10/pierce/push/18/25' && W.spear.heavy && W.spear.reach && !W.spear.twoHand && !W.spear.versatile && W.spear.skill === 'pike' && W.spear.grip.join() === '62500,77500', `長槍 ${wd('spear')}`);
+    ok(wd('spear') === '1d10/pierce/push/18/25' && W.spear.heavy && W.spear.reach && !W.spear.twoHand && !W.spear.versatile && W.spear.skill === 'spear' && W.spear.grip.join() === '62500,77500', `長槍 ${wd('spear')}`);
     ok(wd('shortspear') === '1d6/pierce/sap/3/20' && W.shortspear.versatile === 8 && W.shortspear.thrown.join() === '4,12' && W.shortspear.ore === 3 && W.shortspear.dur === 200 && W.shortspear.sold && W.shortspear.drop && W.shortspear.skill === 'spear' && W.shortspear.grip.join() === '5000,47500', `短矛 ${wd('shortspear')}`);
     ok(wd('dagger') === '1d4/pierce/nick/1/15' && W.dagger.finesse && W.dagger.light && W.dagger.thrown.join() === '4,12' && W.dagger.skill === 'knife' && W.dagger.grip.join() === '5000,27500', `短刀 ${wd('dagger')}`);
     ok(wd('bow') === '1d6/pierce/vex/2/30' && W.bow.ammo === 'arrow' && W.bow.range.join() === '5,20' && W.bow.twoHand && W.bow.sold && W.bow.drop && !W.bow.ore && W.bow.skill === 'bow' && W.bow.meleeSkill === 'sword' && W.bow.grip.join() === '15000,0', `弓箭 ${wd('bow')}`);
@@ -1471,17 +1484,24 @@ function testGear() {
     ok(nw('greataxe') === '1d12/slash/cleave/axe/7/45/5/62500-77500' && W.greataxe.heavy, `巨斧 ${nw('greataxe')}`);
     ok(nw('greatsword') === '2d6/slash/graze/sword/6/50/5/62500-77500' && W.greatsword.heavy, `巨劍 ${nw('greatsword')}`);
     ok(nw('club') === '1d6/blunt/sap/mace/4/15/3/32500-37500', `硬頭錘 ${nw('club')}`);
-    ok(nw('warhammer') === '1d8/blunt/push/hammer/5/30/3/32500-37500' && W.warhammer.versatile === 10, `戰錘 ${nw('warhammer')}`);
+    ok(nw('warhammer') === '1d8/blunt/push/mace/5/30/3/32500-37500' && W.warhammer.versatile === 10, `戰錘 ${nw('warhammer')}`);
     ok(nw('whip') === '1d4/slash/slow/whip/3/10/0/22500-27500' && W.whip.finesse && W.whip.reach && !W.whip.ore, `鞭子 ${nw('whip')}`);
-    ok(nw('crossbow') === '1d8/pierce/slow/crossbow/5/35/0/15000-0' && W.crossbow.ammo === 'bolt' && W.crossbow.range.join() === '5,20' && W.crossbow.loading && W.crossbow.twoHand && W.crossbow.meleeSkill === 'hammer' && !W.crossbow.ore, `輕弩 ${nw('crossbow')}`);
+    ok(nw('crossbow') === '1d8/pierce/slow/crossbow/5/35/0/15000-0' && W.crossbow.ammo === 'bolt' && W.crossbow.range.join() === '5,20' && W.crossbow.loading && W.crossbow.twoHand && W.crossbow.meleeSkill === 'mace' && !W.crossbow.ore, `輕弩 ${nw('crossbow')}`);
     ok(Object.values(W).filter((d) => d.cat === 'weapon' && d.twoHand).length === 2 && Object.values(W).every((d) => d.cat !== 'weapon' || (d.sold && d.drop)), '只有弓和輕弩有雙手標籤；所有武器都販售、都會掉落');
     ok(FE.BAG_ITEMS.arrow.bundle === 20 && FE.BAG_ITEMS.arrow.weight === 1 && W.arrow.cat === 'ammo' && W.arrow.price === 5 && W.arrow.bundle === 20 && W.arrow.sold && W.arrow.drop, '箭矢資料不對');
     ok(FE.BAG_ITEMS.bolt.bundle === 20 && FE.BAG_ITEMS.bolt.weight === 1.5 && W.bolt.cat === 'ammo' && W.bolt.price === 5 && W.bolt.bundle === 20 && W.bolt.sold && W.bolt.drop, '弩矢資料不對（一捆 20 支、1.5 磅、價格 5）');
-    ok(W.heavy.phys === 3 && W.heavy.magic === 1 && W.heavy.ticks === 2 && W.heavy.dodge === -0.05 && W.heavy.weight === 55 && W.heavy.price === 60, '重甲的數字');
-    ok(W.medium.phys === 2 && W.medium.magic === 2 && W.medium.ticks === 1 && W.medium.weight === 45 && W.medium.price === 40, '中甲的數字');
-    ok(W.light.phys === 1 && W.light.magic === 1 && !W.light.ticks && W.light.weight === 10 && W.light.price === 20, '輕甲的數字');
+    // 第二十九版追加：防具換成十二件（類別、物理／魔法減傷、力量需求、重量、價格、隱匿劣勢）
+    const arm = (t) => [W[t].cls, W[t].phys, W[t].magic, W[t].str || 0, W[t].weight, W[t].price, !!W[t].stealth, W[t].ticks].join('/');
+    const wantArm = {
+      padded: 'light/0/1/0/8/22/true/0', light: 'light/0/1/0/10/32/false/0', studded: 'light/1/1/0/13/67/false/0',
+      hide: 'medium/1/2/0/12/32/false/1', chainshirt: 'medium/1/2/0/20/71/false/1', medium: 'medium/2/2/0/45/71/true/1', breastplate: 'medium/2/2/0/20/200/false/1', halfplate: 'medium/2/2/0/40/274/true/1',
+      ringmail: 'heavy/2/1/0/40/55/true/2', heavy: 'heavy/3/1/13/50/87/true/2', splint: 'heavy/3/1/15/55/141/true/2', plate: 'heavy/4/1/15/60/387/true/2',
+    };
+    ok(Object.entries(wantArm).every(([t, s]) => arm(t) === s), `防具的數字：${Object.keys(wantArm).filter((t) => arm(t) !== wantArm[t]).map((t) => t + ' ' + arm(t))}`);
+    ok(W.heavy.name === '鎖子甲' && W.medium.name === '鱗甲' && W.light.name === '皮甲' && W.padded.name === '布甲' && W.studded.name === '鑲釘皮甲' && W.hide.name === '厚皮甲' && W.chainshirt.name === '鎖子襯衫' && W.breastplate.name === '胸甲' && W.halfplate.name === '半身板甲' && W.ringmail.name === '環甲' && W.splint.name === '條板甲' && W.plate.name === '全身板甲', '防具的名字（舊的輕甲→皮甲、中甲→鱗甲、重甲→鎖子甲）');
+    ok(Object.values(W).filter((d) => d.cat === 'armor' && d.desc).length === 12 && Object.values(W).every((d) => d.cat !== 'armor' || d.dodge === undefined), '十二件防具都有一句說明，舊的 dodge 欄拿掉了');
     ok(W.robe.phys === 0 && W.robe.magic === 1 && W.robe.weight === 4 && W.robe.price === 10 && W.mrobe.phys === 0 && W.mrobe.magic === 3 && W.mrobe.sold === false, '衣袍的數字');
-    ok(W.shield.block === 0.25 && W.shield.value === 4 && W.shield.weight === 6 && W.shield.price === 25, '盾牌的數字');
+    ok(W.shield.block === 0.25 && W.shield.value === 4 && W.shield.weight === 6 && W.shield.price === 32, '盾牌的數字');
     ok(W.sword.dur === 200 && W.shield.dur === 100 && W.heavy.dur === 150 && W.pick.dur === 50 && W.sickle.dur === 50 && W.pick.weight === 10 && W.sickle.weight === 2, '耐久或工具重量不對');
     ok(FE.BAG_ITEMS.ore.weight === 10 && FE.BAG_ITEMS.herb.weight === 0.5 && FE.BAG_ITEMS.goods.weight === 5 && g.carryLimit() === 150 && g.pushLimit() === 300 && C.ORE_PRICE === 5, '礦石、藥草、送貨物品的重量或中性角色的負重上限不對（力量 10：能背 150、推拖 300 磅）');
     ok(W.robe.weight === 4 && W.mrobe.weight === 4 && W.shield.weight === 6 && W.sword.weight === 3 && W.spear.weight === 18 && W.shortspear.weight === 3 && W.dagger.weight === 1 && W.bow.weight === 2 && W.staff.weight === 4 && W.arrow.weight === 1, '裝備的重量（磅）不對');
@@ -1490,10 +1510,10 @@ function testGear() {
     const q = g2.player;
     ok(q.equip.main && q.equip.main.type === 'sword' && q.equip.main.q === 0 && !q.equip.off && !q.equip.body && g2.attackText() === '1d10 揮砍' && G.name(q.equip.main) === '長劍', `起始裝備不是普通長劍（${g2.attackText()}）`);
     ok(G.playerDefense(q).block === 0 && G.playerDefense(q).blockMax === 0 && near(G.playerDefense(q).dodge, 0.1), '沒拿盾牌時格擋機率該是 0');
-    ok(G.name(G.make('sword', 1, 1)) === '-做工好-長劍' && G.name(G.make('heavy', 5, 1)) === '☼傑作☼重甲' && G.name(G.make('light', 3, 1)) === '*優秀*輕甲' && G.name(G.make('medium', 4, 1)) === '≡卓越≡中甲' && G.name(G.make('shield', 2, 1)) === '+精良+盾牌', '裝備名字的品質符號');
+    ok(G.name(G.make('sword', 1, 1)) === '-做工好-長劍' && G.name(G.make('heavy', 5, 1)) === '☼傑作☼鎖子甲' && G.name(G.make('light', 3, 1)) === '*優秀*皮甲' && G.name(G.make('medium', 4, 1)) === '≡卓越≡鱗甲' && G.name(G.make('shield', 2, 1)) === '+精良+盾牌', '裝備名字的品質符號');
     // 盾牌與重甲的其他數字
     q.equip.body = G.make('heavy', 0, 99);
-    ok(near(G.playerDefense(q).dodge, 0.05) && G.extraTicks(q) === 2, '重甲該讓閃避 -5%、每個動作多 2 刻');
+    ok(near(G.playerDefense(q).dodge, 0.1) && G.extraTicks(q) === 2, '重甲每個動作多 2 刻（閃避不再另外扣 5%）');
     q.equip.body = G.make('medium', 0, 99);
     ok(near(G.playerDefense(q).dodge, 0.1) && G.extraTicks(q) === 1, '中甲該多 1 刻、不扣閃避');
     q.equip.body = G.make('light', 0, 99);
@@ -1689,9 +1709,9 @@ function testGear() {
     // 第二十九版：村莊鐵匠加短劍、戰斧、硬頭錘、戰錘；城鎮武器匠再加巨斧、巨劍、鞭子、輕弩和弩矢
     const WEAPONS_V = ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow', 'shortsword', 'waraxe', 'club', 'warhammer'];
     const WEAPONS = WEAPONS_V.concat(['greataxe', 'greatsword', 'whip', 'crossbow', 'bolt']);
-    ok(WEAPONS_V.concat(['heavy', 'medium', 'light', 'robe', 'shield', 'pick', 'sickle']).every((t) => has(sSmith, t, 0)) && sSmith.length === 18 && !has(sSmith, 'greataxe', 0) && !has(sSmith, 'whip', 0) && !has(sSmith, 'crossbow', 0), `鐵匠賣的東西 ${sSmith}`);
+    ok(WEAPONS_V.concat(['padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield', 'pick', 'sickle']).every((t) => has(sSmith, t, 0)) && sSmith.length === 20 && !has(sSmith, 'heavy', 0) && !has(sSmith, 'medium', 0) && !has(sSmith, 'greataxe', 0) && !has(sSmith, 'whip', 0) && !has(sSmith, 'crossbow', 0), `鐵匠賣的東西 ${sSmith}`);
     ok(WEAPONS.every((t) => has(sW, t, 0) && has(sW, t, 1)) && has(sW, 'pick', 0) && has(sW, 'sickle', 0) && sW.length === 34, `武器匠賣的東西 ${sW}`);
-    ok(['heavy', 'medium', 'light', 'robe', 'shield'].every((t) => has(sA, t, 0) && has(sA, t, 1)) && sA.length === 10, `盔甲匠賣的東西 ${sA}`);
+    ok(['padded', 'light', 'studded', 'hide', 'chainshirt', 'medium', 'breastplate', 'halfplate', 'ringmail', 'heavy', 'splint', 'plate', 'robe', 'shield'].every((t) => has(sA, t, 0) && has(sA, t, 1)) && sA.length === 28, `盔甲匠賣的東西 ${sA}`);
     ok(![...sSmith, ...sW, ...sA].some((id) => /:(mrobe):/.test(id)), '商店不該賣魔法衣袍');
     ok(![...sSmith, ...sW, ...sA].some((id) => /:[3-6]$/.test(id) || /:[2]$/.test(id)), '商店只賣普通與做工好');
     // 買：價錢＝原價×品質×經濟，扣金幣、東西進背包、不花動作
@@ -1701,19 +1721,20 @@ function testGear() {
     let b = buy(wsmith, 'sword', 1);
     ok(b.r && b.spent === Math.round(30 * 1.1 * econ(town)) && b.turns === 0 && p.bag.some((e) => e.id === 'gear' && e.gear.type === 'sword' && e.gear.q === 1), `武器匠買做工好長劍 花了 ${b.spent}，應該 ${Math.round(30 * 1.1 * econ(town))}`);
     b = buy(armorer, 'shield', 1);
-    ok(b.r && b.spent === Math.round(25 * 1.1 * econ(town)), `盔甲匠買做工好盾牌 花了 ${b.spent}`);
-    b = buy(smith, 'heavy', 0);
-    ok(b.r && b.spent === Math.round(60 * econ(vil)), `鐵匠買重甲 花了 ${b.spent}，應該 ${Math.round(60 * econ(vil))}`);
+    ok(b.r && b.spent === Math.round(32 * 1.1 * econ(town)), `盔甲匠買做工好盾牌 花了 ${b.spent}`);
+    b = buy(smith, 'ringmail', 0);
+    ok(b.r && b.spent === Math.round(55 * econ(vil)), `鐵匠買環甲 花了 ${b.spent}，應該 ${Math.round(55 * econ(vil))}`);
+    ok(!buy(smith, 'heavy', 0).r && !buy(smith, 'plate', 0).r, '村莊鐵匠不賣鎖子甲、全身板甲');
     ok(!buy(smith, 'sword', 1).r && !buy(wsmith, 'heavy', 0).r && !buy(armorer, 'sword', 0).r && !buy(wsmith, 'shield', 0).r, '店裡不賣的東西買到了（鐵匠做工好、武器匠賣防具、盔甲匠賣武器）');
     b = buy(smith, 'pick', 0);
     ok(b.r && b.spent === 20 && buy(smith, 'pick', 0).r && p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').length === 2, `礦鎬 20 金幣、已有的還能再買（花了 ${b.spent}）`);
     // 錢不夠：選項寫還差多少
-    p.gold = Math.round(60 * econ(vil)) - 9;
+    p.gold = Math.round(55 * econ(vil)) - 9;
     open(smith);
     g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === 'buy'));
     g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === 'cat:armor'));
-    const heavyOpt = g.talkOptions(smith).options.find((o) => o.id === 'buyItem:heavy:0');
-    ok(heavyOpt.disabled && heavyOpt.note === '還差 9 金幣', `買重甲錢不夠的說明：${heavyOpt.note}`);
+    const heavyOpt = g.talkOptions(smith).options.find((o) => o.id === 'buyItem:ringmail:0');
+    ok(heavyOpt.disabled && heavyOpt.note === '還差 9 金幣', `買環甲錢不夠的說明：${heavyOpt.note}`);
 
     // 賣礦石：一顆 5 金幣
     p.bag = [];
@@ -1725,7 +1746,7 @@ function testGear() {
     const ga = G.make('medium', 3, g.nextGearId++); ga.dur = 75;
     const gh = G.make('shield', 0, g.nextGearId++);
     for (const x of [gs, ga, gh]) g.bagAddGear(x);
-    ok(G.sellPrice(gs) === Math.round(30 * 1.2 * 0.5 * (50 / 200)) && G.sellPrice(ga) === Math.round(40 * 1.333 * 0.5 * 0.5) && G.sellPrice(gh) === Math.round(25 * 0.5), `賣回價 ${G.sellPrice(gs)}／${G.sellPrice(ga)}／${G.sellPrice(gh)}`);
+    ok(G.sellPrice(gs) === Math.round(30 * 1.2 * 0.5 * (50 / 200)) && G.sellPrice(ga) === Math.round(71 * 1.333 * 0.5 * 0.5) && G.sellPrice(gh) === Math.round(32 * 0.5), `賣回價 ${G.sellPrice(gs)}／${G.sellPrice(ga)}／${G.sellPrice(gh)}`);
     ok(!shopDo(g, wsmith, `sellItem:${ga.id}`) && !shopDo(g, wsmith, `sellItem:${gh.id}`) && !shopDo(g, armorer, `sellItem:${gs.id}`), '武器匠收了防具、盔甲匠收了武器');
     p.gold = 0;
     ok(shopDo(g, wsmith, `sellItem:${gs.id}`) && p.gold === G.sellPrice(gs) && !p.bag.some((e) => e.gear === gs), '武器匠沒有收武器');
@@ -1785,10 +1806,10 @@ function testGear() {
       return cats.flatMap((c) => optIds(n, 'craft:' + c.slice(9)).filter((i) => i.startsWith('craftItem:')).map((i) => i.slice(10))).sort().join(',');
     };
     const sorted = (s) => s.split(',').sort().join(',');
-    ok(craftIds(smith) === sorted('sword,spear,shortspear,dagger,shortsword,waraxe,club,warhammer,heavy,medium,light,shield') && craftIds(wsmith) === sorted('sword,spear,shortspear,dagger,shortsword,waraxe,club,warhammer,greataxe,greatsword') && craftIds(armorer) === sorted('heavy,medium,light,shield'), `可打造 ${craftIds(smith)}／${craftIds(wsmith)}／${craftIds(armorer)}`);
-    ok(optIds(smith, 'craft').join() === 'craftCat:blade,craftCat:pole,craftCat:axe,craftCat:armor,back' && optIds(wsmith, 'craft').join() === 'craftCat:blade,craftCat:pole,craftCat:axe,back' && !optIds(armorer, 'craft').some((i) => i.startsWith('craftCat:')), `打造的分類 ${optIds(smith, 'craft')}／${optIds(wsmith, 'craft')}`);
+    ok(craftIds(smith) === sorted('sword,spear,shortspear,dagger,shortsword,waraxe,club,warhammer,padded,light,hide,chainshirt,ringmail,shield') && craftIds(wsmith) === sorted('sword,spear,shortspear,dagger,shortsword,waraxe,club,warhammer,greataxe,greatsword') && craftIds(armorer) === sorted('padded,light,studded,hide,chainshirt,medium,breastplate,halfplate,ringmail,heavy,splint,plate,shield'), `可打造 ${craftIds(smith)}／${craftIds(wsmith)}／${craftIds(armorer)}`);
+    ok(optIds(smith, 'craft').join() === 'craftCat:blade,craftCat:pole,craftCat:axe,craftCat:armor,back' && optIds(wsmith, 'craft').join() === 'craftCat:blade,craftCat:pole,craftCat:axe,back' && optIds(armorer, 'craft').join() === 'craftCat:armorL,craftCat:armorM,craftCat:armorH,craftCat:shieldC,back', `打造的分類 ${optIds(smith, 'craft')}／${optIds(wsmith, 'craft')}／${optIds(armorer, 'craft')}`);
     ok([smith, wsmith, armorer].every((n) => { const cats = optIds(n, 'craft').filter((i) => i.startsWith('craftCat:')); return optIds(n, 'craft').length <= 9 && cats.every((c) => optIds(n, 'craft:' + c.slice(9)).length <= 9); }), '打造每一層該最多 9 個選項（按得到）');
-    const need = { sword: 3, spear: 3, shortspear: 3, dagger: 3, heavy: 5, medium: 4, light: 2, shield: 2, shortsword: 3, waraxe: 3, club: 3, warhammer: 3, greataxe: 5, greatsword: 5 };
+    const need = { sword: 3, spear: 3, shortspear: 3, dagger: 3, heavy: 5, medium: 4, light: 2, shield: 2, shortsword: 3, waraxe: 3, club: 3, warhammer: 3, greataxe: 5, greatsword: 5, padded: 2, studded: 3, hide: 3, chainshirt: 4, breastplate: 5, halfplate: 5, ringmail: 5, splint: 6, plate: 7 };
     for (const [t, n] of Object.entries(need)) {
       const cq = G.craftQuote(t, vil);
       ok(cq.ore === n && cq.fee === Math.round(FE.GEAR[t].price * 0.5 * econ(vil)), `${t} 打造要 ${cq.ore} 顆礦石＋${cq.fee}（應該 ${n} 顆＋${Math.round(FE.GEAR[t].price * 0.5 * econ(vil))}）`);
@@ -1796,11 +1817,11 @@ function testGear() {
     // 礦石或金幣不夠：寫還差多少，不能打
     p.bag = [];
     g.bagAdd('ore', 4);
-    p.gold = G.craftQuote('heavy', vil).fee - 2;
-    open(smith); g.talkPage = 'craft:armor';
-    const co = g.talkOptions(smith).options.find((o) => o.id === 'craftItem:heavy');
-    ok(co.disabled && co.note === '還差 2 金幣、1 顆礦石', `打造重甲錢和礦石都不夠的說明：${co.note}`);
-    ok(!shopDo(g, smith, 'craftItem:heavy') && g.bagCount('ore') === 4, '不夠還是打造了');
+    p.gold = G.craftQuote('heavy', town).fee - 2;
+    open(armorer); g.talkPage = 'craft:armorH';
+    const co = g.talkOptions(armorer).options.find((o) => o.id === 'craftItem:heavy');
+    ok(co.disabled && co.note === '還差 2 金幣、1 顆礦石', `打造鎖子甲錢和礦石都不夠的說明：${co.note}`);
+    ok(!shopDo(g, armorer, 'craftItem:heavy') && g.bagCount('ore') === 4, '不夠還是打造了');
     // 打造的品質範圍：村莊普通～精良（每高一級機率減半），城鎮做工好～優秀
     const crafted = (n, v, type, runs) => {
       const hist = {};
@@ -2292,10 +2313,12 @@ function testCharacter() {
     warrior: { attr: [15, 13, 14, 10, 12, 8], hp: 36, carry: 225, base: 10 },
     ranger: { attr: [12, 15, 13, 8, 14, 10], hp: 31, carry: 180, base: 8 },
     mage: { attr: [8, 13, 12, 15, 14, 10], hp: 24, carry: 120, base: 4 },
-    priest: { attr: [13, 8, 14, 10, 12, 15], hp: 33, carry: 195, base: 8 },
+    priest: { attr: [13, 10, 14, 8, 15, 12], hp: 33, carry: 195, base: 8 },
+    paladin: { attr: [14, 10, 13, 8, 12, 15], hp: 34, carry: 210, base: 10 },
+    barbarian: { attr: [14, 13, 15, 8, 12, 10], hp: 40, carry: 210, base: 12 },
   };
-  ok(Object.keys(FE.CLASSES).join() === 'warrior,ranger,mage,priest', '職業該是戰士、遊俠、法師、牧師');
-  useAttrs('new'); // 起始屬性是《D&D》標準陣列 15、14、13、12、10、8，照原本的高低順序排
+  useClasses('new');
+  ok(Object.keys(FE.CLASSES).join() === 'warrior,ranger,mage,priest,paladin,barbarian', '職業該是戰士、遊俠、法師、牧師、聖騎士、野蠻人'); // 起始屬性是《D&D》標準陣列 15、14、13、12、10、8，照各職業的高低順序排
   for (const [cls, w] of Object.entries(want)) {
     const g = mk(21, cls);
     const p = g.player;
@@ -2317,7 +2340,7 @@ function testCharacter() {
     ok(el.player.attr.dex === 17 && el.player.maxHp === 31 && el.carryLimit() === 180, `精靈遊俠敏捷 ${el.player.attr.dex}`);
     ok(hu.player.attr.int === 17 && hu.player.maxHp === 24 && hu.carryLimit() === 120, `人類法師智力 ${hu.player.attr.int}`);
   }
-  useAttrs('legacy');
+  useClasses('legacy');
 
   // 3. 起始裝備：固定的一定有，自己挑的每一種挑法都對；品質都是普通
   const wantCombos = { warrior: 9, ranger: 4, mage: 4, priest: 8 };
@@ -2362,7 +2385,7 @@ function testCharacter() {
   ok(['staff', 'bow', 'arrow', 'shortspear'].every((t) => FE.Gear.DROP_TYPES.includes(t) && sellsAt(G.SHOPS.blacksmith, t) && sellsAt(G.SHOPS.weaponsmith, t)) && Object.values(G.SHOPS).every((s) => !s.craft.includes('staff') && !s.craft.includes('bow') && !s.craft.includes('arrow') && !s.craft.includes('whip') && !s.craft.includes('crossbow')), '法杖、弓箭、箭矢、短矛該賣該掉；弓箭、法杖、箭矢、鞭子、輕弩不能打造');
 
   // 4. 生命公式與升級：每升一級加「職業基礎÷2＋體質修正值」，每次照公式重算，體質加點時前面的等級一起補上
-  for (const [cls, w] of Object.entries(want)) {
+  for (const [cls, w] of Object.entries(want).filter(([c]) => FE.CLASSES[c])) {
     const g = mk(24, cls);
     const p = g.player;
     const per = (con) => Math.floor(w.base / 2) + Ch.mod(con);
@@ -2444,7 +2467,7 @@ function testCharacter() {
     // 舊版本的存檔讀不了
     FE.store.save('fe.save', { version: C.SAVE_VERSION - 1, data: {} });
     const old = FE.Save.load();
-    ok(C.SAVE_VERSION === 17 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
+    ok(C.SAVE_VERSION === 18 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
   }
 
   // 6. 力量：近戰傷害加修正值（可為負，最少 1）；長劍 1d8（副手空著 1d10）；短刀靈巧取力量與敏捷較高者，不再減半；重擊傷害骰擲兩次
@@ -2545,24 +2568,26 @@ function testCharacter() {
     // 跟品質、技能、超重疊加
     p.attr.dex = 16;
     p.equip.main = G.make('spear', 2, g.nextGearId++); // 精良 +2
-    p.skills.pike.lv = 10; // 長槍練的是長矛術，+2；格鬥 10 級再 +1
+    p.skills.spear.lv = 10; // 長槍練的是槍術，+2；格鬥 10 級再 +1
     p.skills.fight.lv = 10;
-    ok(G.hitMod(p) === 3 + 2 + 2 + 1 && roll() - base === 8, `敏捷 +3、精良 +2、長矛術 10 級 +2、格鬥 10 級 +1 該疊成 +8：${roll() - base}`);
+    ok(G.hitMod(p) === 3 + 2 + 2 + 1 && roll() - base === 8, `敏捷 +3、精良 +2、槍術 10 級 +2、格鬥 10 級 +1 該疊成 +8：${roll() - base}`);
     p.attr.dex = 10;
     p.equip.main = G.make('spear', 0, g.nextGearId++);
-    p.skills.pike.lv = 0;
+    p.skills.spear.lv = 0;
     p.skills.fight.lv = 0;
     g.bagAdd('ore', Math.ceil((g.carryLimit() + 1 - g.weight()) / 10)); // 超過能背（第二十九版：超重不再扣出手 d20）
     ok(g.loadTier() === 1 && G.hitMod(p) === 0, `超重不該再扣出手：${G.hitMod(p)}`);
     p.bag = [];
     // 閃避
     const d = (q) => G.playerDefense(q).dodge;
-    const mkp = (dex, body, armorLv, dodgeLv) => { const q = mk(34, 'ranger').player; q.attr.dex = dex; q.equip.body = body ? G.make(body, 0, 99) : null; q.skills.armor.lv = armorLv || 0; q.skills.dodge.lv = dodgeLv || 0; return q; };
+    const mkp = (dex, body, armorLv, dodgeLv) => { const q = mk(34, 'ranger').player; q.attr.dex = dex; q.equip.body = body ? G.make(body, 0, 99) : null; if (body) q.skills[FE.GEAR[body].cls].lv = armorLv || 0; q.skills.dodge.lv = dodgeLv || 0; return q; };
     ok(near(d(mkp(10)), 0.10) && near(d(mkp(16)), 0.16) && near(d(mkp(13)), 0.12) && near(d(mkp(8)), 0.08), `閃避隨敏捷：${d(mkp(10))}、${d(mkp(16))}、${d(mkp(13))}、${d(mkp(8))}`);
-    ok(near(d(mkp(16, 'heavy')), 0.11) && near(d(mkp(16, 'medium')), 0.16), '重甲該扣 5% 閃避');
+    ok(near(d(mkp(16, 'light')), 0.16) && near(d(mkp(16, 'studded')), 0.16) && near(d(mkp(8, 'light')), 0.08), '輕甲的敏捷加減全照算（包含負的）');
+    ok(near(d(mkp(16, 'medium')), 0.14) && near(d(mkp(14, 'hide')), 0.14) && near(d(mkp(13, 'medium')), 0.12) && near(d(mkp(8, 'medium')), 0.08), '中甲的敏捷加成最多 +2 點修正值，負的照扣');
+    ok(near(d(mkp(16, 'heavy')), 0.10) && near(d(mkp(8, 'heavy')), 0.10) && near(d(mkp(16, 'plate')), 0.10), '重甲敏捷不加也不扣');
     ok(near(d(mkp(16, null, 0, 5)), 0.21) && near(d(mkp(10, null, 0, 20)), 0.30), '閃避技能每級該加 1%');
-    ok(near(d(mkp(16, 'heavy', 14)), 0.11) && near(d(mkp(16, 'heavy', 15)), 0.16), '穿甲 15 級起重甲不再扣閃避');
-    ok(d(mkp(1, 'heavy')) === 0, `閃避最低 0：${d(mkp(1, 'heavy'))}`);
+    ok(near(d(mkp(16, 'heavy', 14)), 0.10) && near(d(mkp(16, 'heavy', 0, 5)), 0.15), '重甲穿多高的技能都不改敏捷的閃避');
+    ok(d(mkp(1)) === 0 && d(mkp(1, 'heavy')) === 0.10, `閃避最低 0：${d(mkp(1))}、重甲 ${d(mkp(1, 'heavy'))}`);
   }
 
   // 8. 體質：休息回復加修正值（最少 1），村莊住一晚回滿不變
@@ -2599,7 +2624,7 @@ function testCharacter() {
     const poor = { kind: 'village', steading: { prosperity: 0, tags: [] } }; // 荒蕪 ×1.6
     ok(G.shopPrice('sword', 0, plain, 0) === 30 && G.shopPrice('sword', 0, plain) === 30, '魅力 0 價錢不變');
     ok(G.shopPrice('sword', 0, plain, 3) === Math.round(30 * 0.85) && G.shopPrice('sword', 0, plain, -1) === Math.round(30 * 1.05) && G.shopPrice('sword', 0, plain, 2) === 27, `買價：魅力 +3 ${G.shopPrice('sword', 0, plain, 3)}、-1 ${G.shopPrice('sword', 0, plain, -1)}`);
-    ok(G.shopPrice('heavy', 1, poor, 3) === Math.round(60 * 1.1 * 1.6 * 0.85), '魅力疊在聚落經濟倍率上');
+    ok(G.shopPrice('heavy', 1, poor, 3) === Math.round(87 * 1.1 * 1.6 * 0.85), '魅力疊在聚落經濟倍率上');
     ok(G.shopPrice('pick', 0, plain, 3) === Math.round(20 * 0.85) && G.shopPrice('pick', 0, plain, 0) === 20, '礦鎬、鐮刀也看魅力，不看經濟');
     const sw = G.make('sword', 0, 1);
     ok(G.sellPrice(sw, 0) === 15 && G.sellPrice(sw, 3) === Math.round(15 * 1.15) && G.sellPrice(sw, -1) === Math.round(15 * 0.95), `賣價：${G.sellPrice(sw, 3)}`);
@@ -2692,8 +2717,8 @@ function testCharacter() {
   // 11. 技能（第二十九版，照 Dwarf Fortress）：升到第 N 級要 400＋100N 點經驗，等級沒有上限，15 級以上是傳奇
   {
     ok(Ch.skillNeed(0) === 500 && Ch.skillNeed(1) === 600 && Ch.skillNeed(14) === 1900 && Ch.skillNeed(19) === 2400, `升級門檻不對：${Ch.skillNeed(0)}、${Ch.skillNeed(1)}、${Ch.skillNeed(14)}`);
-    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,pike,knife,staff,axe,mace,hammer,whip,bow,crossbow,misc,fight,shoot,dodge,armor,shield' && C.SKILL_MAX === undefined, '技能名單不對（劍術、矛術、長矛術、刀術、杖術、斧術、錘術、重錘術、鞭術、弓術、弩術、雜物使用、格鬥、射擊、閃避、穿甲、盾牌使用）');
-    ok(FE.SKILLS.sword.name === '劍術' && FE.SKILLS.spear.name === '矛術' && FE.SKILLS.pike.name === '長矛術' && FE.SKILLS.knife.name === '刀術' && FE.SKILLS.staff.name === '杖術' && FE.SKILLS.axe.name === '斧術' && FE.SKILLS.mace.name === '錘術' && FE.SKILLS.hammer.name === '重錘術' && FE.SKILLS.whip.name === '鞭術' && FE.SKILLS.bow.name === '弓術' && FE.SKILLS.crossbow.name === '弩術' && FE.SKILLS.misc.name === '雜物使用' && FE.SKILLS.fight.name === '格鬥' && FE.SKILLS.shoot.name === '射擊' && FE.SKILLS.armor.name === '穿甲', '技能的名字不對');
+    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,misc,fight,shoot,dodge,light,medium,heavy,shield' && C.SKILL_MAX === undefined, '技能名單不對（劍術、槍術、刀術、杖術、斧術、錘術、鞭術、弓術、弩術、雜物使用、格鬥、射擊、閃避、輕甲、中甲、重甲、盾牌使用）');
+    ok(FE.SKILLS.sword.name === '劍術' && FE.SKILLS.spear.name === '槍術' && FE.SKILLS.knife.name === '刀術' && FE.SKILLS.staff.name === '杖術' && FE.SKILLS.axe.name === '斧術' && FE.SKILLS.mace.name === '錘術' &&FE.SKILLS.whip.name === '鞭術' && FE.SKILLS.bow.name === '弓術' && FE.SKILLS.crossbow.name === '弩術' && FE.SKILLS.misc.name === '雜物使用' && FE.SKILLS.fight.name === '格鬥' && FE.SKILLS.shoot.name === '射擊' && FE.SKILLS.light.name === '輕甲' && FE.SKILLS.medium.name === '中甲' && FE.SKILLS.heavy.name === '重甲', '技能的名字不對');
     ok(FE.SKILL_LEVELS.join() === '涉獵,新手,尚可,稱職,熟練,精熟,有天分,老練,專家,職業級,卓越,傑出,大師,高階大師,宗師,傳奇' && FE.skillLevelName(15) === '傳奇' && FE.skillLevelName(16) === '傳奇 +1' && FE.skillLevelName(30) === '傳奇 +15' && FE.skillLevelName(0) === '涉獵' && FE.skillLevelName(7) === '老練', '等級名稱不對');
     const g = mk(40, 'warrior');
     const p = g.player;
@@ -2801,7 +2826,7 @@ function testCharacter() {
     p.equip.main.dur = p.equip.main.max = 1e9;
     const h0 = gained();
     for (let i = 0; i < 10; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
-    ok(uses(p, 'hammer') === gained() - h0 && uses(p, 'crossbow') === 0, `拿弩近戰練重錘術：重錘術 ${uses(p, 'hammer')}（應該 ${gained() - h0}）、弩術 ${uses(p, 'crossbow')}`);
+    ok(uses(p, 'mace') === gained() - h0 && uses(p, 'crossbow') === 0, `拿弩近戰練錘術：錘術 ${uses(p, 'mace')}（應該 ${gained() - h0}）、弩術 ${uses(p, 'crossbow')}`);
     // 射擊：弓術（管傷害）＋射擊（管命中）；弩射擊練弩術＋射擊
     p.equip.main = G.make('bow', 0, g.nextGearId++);
     const s0 = gained();
@@ -2855,7 +2880,7 @@ function testCharacter() {
     ok(near(dSk.dodge - dBase.dodge, 0.07) && near(dSk.block - dBase.block, 0.10) && dSk.blockMax === dBase.blockMax, `閃避 7 級 +7%、盾牌使用 5 級 +10%：${dSk.dodge - dBase.dodge}、${dSk.block - dBase.block}`);
   }
   // 穿甲（第二十九版）：穿著防具被打中而且防具擋下傷害時 10 點經驗；身上防具的重量照 DF 表打折；
-  // 5 級起中甲不多花刻、重甲少 1 刻，10 級起重甲不多花刻，15 級起重甲不再扣閃避
+  // 5 級起中甲不多花刻、重甲少 1 刻，10 級起重甲不多花刻；輕甲、中甲、重甲各練各的（第二十九版追加）
   {
     const g = mk(45, 'warrior', ['sword', 'herb', 'gold']); // 固定中甲
     const p = g.player;
@@ -2866,33 +2891,51 @@ function testCharacter() {
     FE.Combat.hook = (e) => { if (e.d === p && e.by === 'monster' && e.reduced > 0) armorHits++; };
     const hitMe = (n) => { for (let i = 0; i < n; i++) { p.hp = p.maxHp = 1e9; p.equip.body.dur = p.equip.body.max = 1e9; FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true }); } };
     hitMe(300);
-    ok(armorHits > 50 && uses(p, 'armor') === armorHits * C.SKILL_EXP_ARMOR, `穿中甲被打中、防具擋下傷害 ${armorHits} 次，穿甲經驗 ${uses(p, 'armor')}（應該 ${armorHits * 10}）`);
-    const a1 = uses(p, 'armor');
+    ok(armorHits > 50 && uses(p, 'medium') === armorHits * C.SKILL_EXP_ARMOR && uses(p, 'light') === 0 && uses(p, 'heavy') === 0, `穿中甲被打中、防具擋下傷害 ${armorHits} 次，中甲經驗 ${uses(p, 'medium')}（應該 ${armorHits * 10}），輕甲 ${uses(p, 'light')}、重甲 ${uses(p, 'heavy')} 該是 0`);
+    const a1 = uses(p, 'medium');
     p.equip.body = G.make('robe', 0, 90); // 衣袍擋不住物理傷害（物理減傷 0），不算
     for (let i = 0; i < 200; i++) { p.hp = p.maxHp = 1e9; p.equip.body.dur = 1e9; FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true }); }
-    ok(uses(p, 'armor') === a1, '防具沒擋下傷害（衣袍物理減傷 0）不練穿甲');
+    ok(uses(p, 'medium') === a1 && uses(p, 'light') === 0, '防具沒擋下傷害（衣袍物理減傷 0）不練穿甲');
     p.equip.body = null;
     for (let i = 0; i < 100; i++) { p.hp = p.maxHp = 1e9; FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true }); }
-    ok(uses(p, 'armor') === a1, '沒穿防具不練穿甲');
+    ok(uses(p, 'medium') === a1 && uses(p, 'light') === 0 && uses(p, 'heavy') === 0, '沒穿防具不練穿甲');
     FE.Combat.hook = hook0;
     // 走路、休息不再練穿甲
     p.equip.body = G.make('heavy', 0, 91);
     for (let i = 0; i < 30; i++) g.endTurn(false);
-    ok(uses(p, 'armor') === a1, '穿甲不再靠做動作練');
-    // 重量：身上防具照穿甲技能打折（DF 表），背包裡的不打折
+    ok(uses(p, 'medium') === a1 && uses(p, 'heavy') === 0, '穿甲不再靠做動作練');
+    // 穿輕甲被打中練輕甲、穿重甲練重甲，各練各的
+    for (const [type, id] of [['light', 'light'], ['heavy', 'heavy'], ['studded', 'light'], ['ringmail', 'heavy'], ['hide', 'medium']]) {
+      p.equip.body = G.make(type, 0, 94);
+      const before = ['light', 'medium', 'heavy'].map((k) => uses(p, k));
+      let got = 0;
+      FE.Combat.hook = (e) => { if (e.d === p && e.by === 'monster' && e.reduced > 0) got++; };
+      hitMe(200);
+      FE.Combat.hook = hook0;
+      const after = ['light', 'medium', 'heavy'].map((k) => uses(p, k));
+      const idx = ['light', 'medium', 'heavy'].indexOf(id);
+      if (FE.GEAR[type].phys > 0) ok(got > 20 && after[idx] - before[idx] === got * C.SKILL_EXP_ARMOR && after.every((x, i) => i === idx || x === before[i]), `${FE.GEAR[type].name} 只練${FE.SKILLS[id].name}：+${after[idx] - before[idx]}（擋下 ${got} 次）`);
+      else ok(got === 0 && after.every((x, i) => x === before[i]), `${FE.GEAR[type].name} 物理減傷 0，擋不下傷害，不練穿甲`);
+    }
+    m.atk = 5;
+    // 重量：身上防具照那一類穿甲技能打折（DF 表），背包裡的不打折
     const mul = [1, 1, 0.8125, 0.75, 0.6875, 0.625, 0.5625, 0.5, 0.4375, 0.375, 0.3125, 0.25, 0.1875, 0.125, 0.0625, 0];
     p.bag = [];
     p.equip = { main: null, off: null, body: G.make('heavy', 0, 92) };
-    ok(mul.every((x, lv) => { p.skills.armor.lv = lv; return near(G.weightOf(p), 55 * x, 0.01) && near(Ch.armorWeightMul(p), x); }) && (p.skills.armor.lv = 40, near(G.weightOf(p), 0) && near(Ch.armorWeightMul(p), 0)), '穿甲的減重：0～1 級 ×1、2 級 ×0.8125⋯⋯14 級 ×0.0625、15 級以上 ×0');
-    p.skills.armor.lv = 10;
+    ok(mul.every((x, lv) => { p.skills.heavy.lv = lv; return near(G.weightOf(p), 50 * x, 0.01) && near(Ch.armorWeightMul(p), x); }) && (p.skills.heavy.lv = 40, near(G.weightOf(p), 0) && near(Ch.armorWeightMul(p), 0)), '重甲的減重：0～1 級 ×1、2 級 ×0.8125⋯⋯14 級 ×0.0625、15 級以上 ×0');
+    p.skills.heavy.lv = 0;
+    p.skills.medium.lv = 15;
+    ok(near(G.weightOf(p), 50), `中甲練到 15 級，身上穿的是重甲，重量不打折：${G.weightOf(p)}`);
+    p.skills.heavy.lv = 10;
     g.bagAddGear(G.make('medium', 0, 93));
-    ok(near(G.weightOf(p), 55 * 0.3125 + 45, 0.01), `背包裡的防具不打折：${G.weightOf(p)}`);
+    ok(near(G.weightOf(p), 50 * 0.3125 + 45, 0.01), `背包裡的防具不打折：${G.weightOf(p)}`);
     p.bag = [];
+    p.skills.medium.lv = 0;
     // 刻數：不看超重（負重夠）
     const ticksOf = (type, lv) => {
       p.equip.body = G.make(type, 0, 92);
-      p.skills.armor.lv = lv;
-      p.skills.armor.n = 0;
+      const id = FE.ARMOR_SKILL[FE.GEAR[type].cls];
+      for (const k of ['light', 'medium', 'heavy']) p.skills[k] = { lv: k === id ? lv : 0, n: 0 };
       const t0 = g.ticks || 0;
       g.endTurn(false);
       return g.ticks - t0;
@@ -2900,9 +2943,15 @@ function testCharacter() {
     ok(ticksOf('medium', 0) === 11 && ticksOf('medium', 4) === 11 && ticksOf('medium', 5) === 10 && ticksOf('medium', 20) === 10, '中甲：0～4 級多 1 刻，5 級起不多花');
     ok(ticksOf('heavy', 0) === 12 && ticksOf('heavy', 4) === 12 && ticksOf('heavy', 5) === 11 && ticksOf('heavy', 9) === 11 && ticksOf('heavy', 10) === 10 && ticksOf('heavy', 20) === 10, '重甲：0～4 級多 2 刻、5～9 級多 1 刻、10 級起不多花');
     ok(ticksOf('light', 0) === 10, '輕甲不多花刻');
-    p.skills.armor.lv = 0;
+    ok(ticksOf('hide', 0) === 11 && ticksOf('hide', 5) === 10 && ticksOf('ringmail', 0) === 12 && ticksOf('ringmail', 10) === 10, '厚皮甲照中甲、環甲照重甲算多花的刻');
+    // 一種穿甲技能的等級不影響另一種：中甲 20 級穿重甲照樣多 2 刻
     p.equip.body = G.make('heavy', 0, 93);
-    ok(near(G.playerDefense(p).dodge, 0.12 - 0.05) && (p.skills.armor.lv = 14, near(G.playerDefense(p).dodge, 0.12 - 0.05)) && (p.skills.armor.lv = 15, near(G.playerDefense(p).dodge, 0.12)), '重甲扣 5% 閃避，15 級起不扣');
+    p.skills.medium = { lv: 20, n: 0 };
+    p.skills.heavy = { lv: 0, n: 0 };
+    { const t0 = g.ticks || 0; g.endTurn(false); ok(g.ticks - t0 === 12, `中甲 20 級穿重甲該多 2 刻：${g.ticks - t0}`); }
+    p.skills.medium = { lv: 0, n: 0 };
+    p.skills.dodge = { lv: 0, n: 0 };
+    ok(near(G.playerDefense(p).dodge, C.PLAYER_DODGE) && (p.skills.heavy.lv = 15, near(G.playerDefense(p).dodge, C.PLAYER_DODGE)), '重甲不加也不扣敏捷的閃避（穿甲技能不影響）');
   }
   // 12. 短刀是靈巧武器（力量與敏捷取較高者）；雙持：副手只能拿輕型武器，按 1 兩下各擲一次、不扣減值，副手不加正的修正值，重擊只用主手
   {
@@ -2941,6 +2990,9 @@ function testCharacter() {
     {
       const { g, p, m } = setup();
       p.hp = p.maxHp = 1e9;
+      const ms0 = FE.MASTERY_SKILL;
+      FE.MASTERY_SKILL = 5; // 第二十九版追加：精通一律要技能 5 級
+      p.skills.knife = { lv: 5, n: 0 };
       g.strike('attack', m);
       const base = modOf(lines(g, /^你攻擊/)[0]);
       const u0 = uses(p, 'knife');
@@ -2967,6 +3019,7 @@ function testCharacter() {
       const t2 = g.ticks;
       g.strike('attack', m);
       ok(g.ticks - t2 === Math.max(C.ATTACK_TICKS_MIN, C.ATTACK_TICKS.light - Ch.attrMod(p, 'dex')), `法師短刀 5 級學會迅切，不多花刻：${g.ticks - t2}`);
+      FE.MASTERY_SKILL = ms0;
       p.cls = 'ranger';
       // 副手那一下的傷害：遊俠力量 12、敏捷 16，主手 1d4+3 ＝ 4～7，副手 1d4 ＝ 1～4；兩項都 6（-2）時副手 1d4-2 最少 1 ＝ 1～2
       const dmgs = { main: [], off: [] };
@@ -2989,7 +3042,7 @@ function testCharacter() {
       const od = p.equip.off.dur;
       g.strike('deep', m);
       const dl = lines(g, /^你對.*重擊/);
-      ok(dl.length === 1 && lines(g, /^你用副手/).length === 0 && modOf(dl[0]) === base && uses(p, 'knife') - u1 <= C.SKILL_EXP_HIT * Ch.expFactor(p) + 1e-6 && uses(p, 'knife') > u1 && p.equip.off.dur === od, `重擊只用主手：${dl.length} 行、擲骰 ${dl.length && modOf(dl[0])}（單手 ${base}）`);
+      ok(dl.length === 1 && lines(g, /^你用副手/).length === 0 && modOf(dl[0]) === base - 1 && uses(p, 'knife') - u1 <= C.SKILL_EXP_HIT * Ch.expFactor(p) + 1e-6 && uses(p, 'knife') > u1 && p.equip.off.dur === od, `重擊只用主手：${dl.length} 行、擲骰 ${dl.length && modOf(dl[0])}（單手 ${base}，技能重設後少刀術 5 級的 1）`);
       // 副手也吃自己的命中加值（品質）
       p.equip.off = G.make('dagger', 3, g.nextGearId++);
       p.equip.off.dur = p.equip.off.max = 1000;
@@ -3254,7 +3307,7 @@ function testCombat28() {
     p.equip.body = G.make('heavy', 0, 1); // 物理 3、魔法 1
     const R = (t, pc) => FE.Combat.reduction(g, p, t, pc);
     ok(R(null) === 3 && R('slash') === 4 && R('pierce', 0) === 3 && R('pierce', 0.5) === 2 && R('pierce', 0.3) === 3 && R('blunt') === 1 && R('magic') === 1 && R('holy') === 1, `重甲：一般 ${R(null)}、揮砍 ${R('slash')}、穿刺 ${R('pierce', 0.5)}、鈍擊 ${R('blunt')}、魔法 ${R('magic')}`);
-    p.equip.body = G.make('light', 0, 2); // 物理 1
+    p.equip.body = G.make('studded', 0, 2); // 鑲釘皮甲：物理 1
     ok(R('slash') === 1 && R('blunt') === 0 && R('pierce', 0.5) === 1, `輕甲：揮砍不多擋 ${R('slash')}、鈍擊 ${R('blunt')}`);
     p.equip.body = G.make('medium', 0, 3);
     ok(R('slash') === 3, `中甲揮砍多擋 1：${R('slash')}`);
@@ -3457,7 +3510,7 @@ function testCombat28() {
     ok(r.mode === 'throw' && r.range.join() === '6,14', `短刀投擲 4／12 格＋感知 2：${r.range}`);
     const ev = events(() => g.fireAt(m));
     const e = ev.find((x) => x.by === 'player');
-    ok(e && e.mode === 'throw' && p.equip.main === d2 && !p.equip.off && w.items.length === 1 && w.items[0].gear === d1 && w.items[0].x === m.x && w.items[0].y === m.y, '擲出的短刀該掉在目標那格，副手的短刀換到主手');
+    ok(e && e.mode === 'throw' && p.equip.main === d1 && !p.equip.off && w.items.length === 1 && w.items[0].gear === d2 && w.items[0].x === m.x && w.items[0].y === m.y, '擲出的短刀該掉在目標那格，先擲副手的，主手的留著');
     ok(uses(p, 'knife') > 0 && uses(p, 'knife') === uses(p, 'shoot') && uses(p, 'fight') === 0, `投擲算刀術也算射擊（不算格鬥）：${uses(p, 'knife')}、${uses(p, 'shoot')}`);
     g.fireAt(m);
     ok(!p.equip.main && w.items.length === 2 && g.rangedMode(true) === null, '兩把都擲出去，手上空了');
@@ -3529,10 +3582,23 @@ function testCombat28() {
     // 法師、牧師要那把武器的技能 5 級；戰士、遊俠一開始就會
     const mg = arena(289, 'mage', ['staff', 'gold']);
     const pm = mg.p;
+    // 第二十九版追加：精通一律要該武器的技能 5 級，不分職業（舊測試用的 MASTERY_SKILL = 0 在這裡換回 5）
+    const ms0 = FE.MASTERY_SKILL;
+    FE.MASTERY_SKILL = 5;
+    pm.skills.staff.lv = 0;
+    pm.skills.sword.lv = 0;
     ok(Ch.mastery(pm, pm.equip.main) === null, '法師一開始不會法杖的精通');
     pm.skills.staff.lv = 5;
     ok(Ch.mastery(pm, pm.equip.main) === 'topple' && Ch.mastery(pm, G.make('sword', 0, 1)) === null, '法杖技能 5 級學會失衡，長劍還不會');
-    ok(Ch.mastery(arena(290, 'ranger', ['bow']).p, G.make('bow', 0, 1)) === 'vex', '遊俠一開始就會');
+    const rg = arena(290, 'ranger', ['bow']).p;
+    rg.skills.bow.lv = 4;
+    ok(Ch.mastery(rg, G.make('bow', 0, 1)) === null, '遊俠弓術 4 級也還沒有精通');
+    rg.skills.bow.lv = 5;
+    ok(Ch.mastery(rg, G.make('bow', 0, 1)) === 'vex', '遊俠弓術 5 級才有侵擾');
+    const wr5 = arena(291, 'warrior', ['sword', 'herb', 'gold']).p;
+    wr5.skills.sword.lv = 0;
+    ok(Ch.mastery(wr5, G.make('sword', 0, 1)) === null, '戰士也要劍術 5 級才有削弱');
+    FE.MASTERY_SKILL = ms0;
     // 侵擾：射中且有傷害後，冒險者下一次打牠有優勢
     const R = arena(291, 'ranger', ['bow']);
     const mv = mon(R.g, R.p.x + 3, R.p.y);
@@ -3719,6 +3785,213 @@ function testCombat28() {
     ok(pr === Math.round(5 * FE.Steading.shopFactor(v) * G.buyFactor(g.chaMod())) && shopDo(g, smith, 'buyItem:arrow:0') && g.bagCount('arrow') === 40 && p.gold === 100 - pr, `買一捆箭：${pr} 金幣，箭 ${g.bagCount('arrow')}`);
     ok(g.log.some((l) => l.text.includes('一捆 20 支的箭矢')), '買箭的訊息');
   }
+
+  // 16. 第二十九版再追加：六個職業的起始裝備與能力、牧師的神聖之光、聖騎士的神聖與治療、野蠻人的穿著限制
+  {
+    useClasses('new');
+    const combos = (arr, k) => (k === 0 ? [[]] : arr.flatMap((x, i) => combos(arr.slice(i + 1), k - 1).map((r) => [x].concat(r))));
+    const product = (lists) => lists.reduce((acc, l) => acc.flatMap((a) => l.map((x) => a.concat(x))), [[]]);
+    const spec = {
+      warrior: { fixed: ['medium'], groups: [[1, 'sword,waraxe,shortspear,spear'], [2, 'shield,herb,gold']], n: 12, body: 'medium' },
+      ranger: { fixed: ['light', 'bow'], groups: [[1, 'dagger,shortsword']], n: 2, body: 'light' },
+      mage: { fixed: ['robe', 'staff'], groups: [[1, 'dagger,herb']], n: 2, body: 'robe' },
+      priest: { fixed: ['medium', 'club'], groups: [[1, 'shield,staff'], [1, 'herb,gold']], n: 4, body: 'medium' },
+      paladin: { fixed: ['heavy', 'shield'], groups: [[1, 'sword,warhammer,shortspear'], [1, 'herb,gold']], n: 6, body: 'heavy' },
+      barbarian: { fixed: ['light'], groups: [[1, 'greataxe,waraxe'], [1, 'shortspear,herb']], n: 4, body: 'light' },
+    };
+    for (const [cls, s] of Object.entries(spec)) {
+      const c = FE.CLASSES[cls];
+      ok(c.fixed.join() === s.fixed.join() && c.groups.map((gr) => `${gr.pick}:${gr.of}`).join('|') === s.groups.map(([n, of]) => `${n}:${of}`).join('|'), `${cls} 的固定裝備與可挑的 ${c.fixed}／${c.groups.map((gr) => gr.of)}`);
+      const all = product(c.groups.map((gr) => combos(gr.of, gr.pick)));
+      ok(all.length === s.n, `${cls} 的起始挑法 ${all.length} 種（應該 ${s.n}）`);
+      for (const picks of all) {
+        const g = new FE.Game(430);
+        g.start({ cls, picks });
+        const p = g.player;
+        const have = [p.equip.main, p.equip.off, p.equip.body].concat(p.bag.map((e) => e.gear)).filter(Boolean).map((x) => x.type);
+        const want = c.fixed.concat(picks).map((id) => FE.START_OPTS[id].gear).filter(Boolean);
+        ok(p.equip.body && p.equip.body.type === s.body && want.every((t) => have.includes(t)) && have.length === want.length, `${cls} ${picks} 的起始裝備 ${have}（應該 ${want}）`);
+        ok(g.bagCount('herb') === (picks.includes('herb') ? 2 : 0) && p.gold === (picks.includes('gold') ? 20 : 0), `${cls} ${picks} 的藥草與金幣`);
+      }
+    }
+
+    // 治療：牧師加感知修正值、聖騎士加魅力修正值，1d8，最少 1，冷卻 3 回合
+    const healSpread = (cls, picks, attr) => {
+      const { g, p } = arena(431, cls, picks);
+      Object.assign(p.attr, attr);
+      p.maxHp = 1000;
+      const got = [];
+      for (let i = 0; i < 300; i++) { p.hp = 500; g.battle.healCd = 0; g.act('heal'); got.push(p.hp - 500); }
+      return spread(got);
+    };
+    ok(healSpread('priest', ['shield', 'herb'], { wis: 16, cha: 8 }) === '4～11', `牧師治療 1d8＋感知修正值 +3：${healSpread('priest', ['shield', 'herb'], { wis: 16, cha: 8 })}`);
+    ok(healSpread('priest', ['shield', 'herb'], { wis: 10, cha: 18 }) === '1～8', '牧師治療不看魅力');
+    ok(healSpread('paladin', ['sword', 'herb'], { cha: 16, wis: 8 }) === '4～11', `聖騎士治療 1d8＋魅力修正值 +3：${healSpread('paladin', ['sword', 'herb'], { cha: 16, wis: 8 })}`);
+    ok(healSpread('paladin', ['sword', 'herb'], { cha: 10, wis: 18 }) === '1～8', '聖騎士治療不看感知');
+    {
+      const { g, p } = arena(432, 'warrior', ['sword', 'shield', 'herb']);
+      p.hp = 5;
+      const t0 = g.turn;
+      g.act('heal');
+      ok(p.hp === 5 && g.turn === t0 && g.log[0].text.includes('牧師和聖騎士'), '戰士不會治療');
+      ok(FE.CLASSES.mage.heal === undefined && FE.CLASSES.barbarian.heal === undefined && FE.CLASSES.ranger.heal === undefined, '只有牧師、聖騎士有治療');
+    }
+
+    // 聖騎士：每個動作第一下命中多 1d8 神聖傷害；牧師沒有
+    {
+      const { g, p } = arena(433, 'paladin', ['sword', 'herb']);
+      const m = mon(g, p.x + 1, p.y);
+      const ev = events(() => { for (let i = 0; i < 300; i++) { p.hp = p.maxHp = 1e6; p.equip.main.dur = p.equip.main.max = 1e6; g.battle.targetId = m.id; g.strike('attack', m); } }).filter((e) => e.by === 'player' && !e.counter);
+      const hits = ev.filter((e) => e.key === 'hit' || e.key === 'hard' || e.key === 'crit');
+      ok(hits.length > 100 && hits.every((e) => e.holy >= 1 && e.holy <= 8) && ev.filter((e) => !hits.includes(e)).every((e) => e.holy === 0), `聖騎士命中多 1d8 神聖傷害：${spread(hits.map((e) => e.holy))}`);
+      ok(g.rangedMode(true) === null, '聖騎士拿長劍按 F 不能遠程');
+      const pr = arena(434, 'priest', ['shield', 'herb']);
+      const m2 = mon(pr.g, pr.p.x + 1, pr.p.y);
+      const ev2 = events(() => { for (let i = 0; i < 200; i++) { pr.p.hp = pr.p.maxHp = 1e6; pr.p.equip.main.dur = pr.p.equip.main.max = 1e6; pr.g.battle.targetId = m2.id; pr.g.strike('attack', m2); } }).filter((e) => e.by === 'player' && !e.counter);
+      ok(ev2.length > 100 && ev2.every((e) => e.holy === 0), '牧師沒有命中的神聖附加傷害（那是聖騎士的）');
+    }
+
+    // 牧師的神聖之光（按 F）：1d8 神聖傷害加感知修正值，命中加感知修正值，射程 5／20 加感知修正值，不用武器、不練技能、不丟武器
+    {
+      const { g, p, w } = arena(435, 'priest', ['staff', 'gold']);
+      p.attr.wis = 14;
+      p.skills = Ch.freshSkills();
+      const club = p.equip.main;
+      const r = g.rangedMode(true);
+      ok(r && r.mode === 'light' && r.range.join() === '7,22', `神聖之光射程 5／20 加感知修正值 +2：${r && r.range}`);
+      const pf = Ch.profile(p, null, 'light');
+      ok(pf.type === 'holy' && pf.die.join() === '1,8' && pf.dmg === 2 && pf.hit === 2 && pf.mastery === null && pf.skills.length === 0, '神聖之光的算法：1d8 神聖、傷害與命中各加感知修正值');
+      const m = mon(g, p.x + 3, p.y);
+      const t0 = g.turn;
+      const ev = events(() => { for (let i = 0; i < 300; i++) { p.hp = p.maxHp = 1e6; g.fireAt(m); } }).filter((e) => e.by === 'player');
+      const cl = ev.filter((e) => (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.resisted);
+      ok(g.turn === t0 + 300 && ev.length === 300 && ev.every((e) => e.mode === 'light' && e.dmgType === 'holy' && e.holy === 0) && spread(cl.map((e) => e.dmg)) === '3～10', `神聖之光 1d8+2：${spread(cl.map((e) => e.dmg))}`);
+      ok(Object.keys(FE.SKILLS).every((k) => uses(p, k) === 0) && p.equip.main === club && w.items.length === 0, '神聖之光不練技能、不丟武器');
+      p.attr.wis = 8;
+      ok(g.rangedMode(true).range.join() === '4,19', '感知修正值 -1 射程縮 1');
+      p.equip.main = null;
+      ok(g.rangedMode(true).mode === 'light', '手上沒有武器也能放神聖之光');
+      const wr = arena(436, 'warrior', ['sword', 'shield', 'herb']);
+      ok(wr.g.rangedMode(true) === null && arena(437, 'mage', ['herb']).g.rangedMode(true).mode === 'spell', '戰士按 F 不能遠程、法師拿法杖是範圍魔攻');
+    }
+
+    // 野蠻人不能穿中甲、重甲（輕甲、衣袍、盾牌可以）
+    {
+      const { g, p } = arena(438, 'barbarian', ['greataxe', 'herb']);
+      const can = (t) => Ch.canWear(p, G.make(t, 0, 1));
+      ok(!can('medium') && !can('hide') && !can('breastplate') && !can('heavy') && !can('ringmail') && !can('plate') && can('light') && can('padded') && can('studded') && can('robe') && can('mrobe') && can('shield'), '野蠻人只穿得了輕甲、衣袍、盾牌');
+      g.bagAddGear(G.make('medium', 0, g.nextGearId++));
+      const body0 = p.equip.body;
+      const t0 = g.turn;
+      g.equipItem(p.bag.find((e) => e.gear && e.gear.type === 'medium'));
+      ok(p.equip.body === body0 && g.turn === t0 && g.log[0].text.includes('不能穿'), `野蠻人穿中甲被擋下：${g.log[0].text}`);
+      const pal = arena(439, 'paladin', ['sword', 'herb']);
+      ok(Ch.canWear(pal.p, G.make('plate', 0, 1)) && Ch.canWear(arena(440, 'warrior', ['sword', 'shield', 'herb']).p, G.make('heavy', 0, 1)), '其他職業穿什麼都行');
+    }
+
+    // 投擲（按 T）：所有武器都能丟，副手的武器先丟，射程一律 4／12 加感知修正值，掉在目標那格；有投擲特質的照武器骰並練那項技能，其他是 1d4 鈍擊，弓和輕弩 1 點；都練射擊
+    {
+      const { g, p, w } = arena(441, 'warrior', ['sword', 'shield', 'herb']);
+      p.attr.wis = 10;
+      p.attr.str = 10;
+      p.attr.dex = 10;
+      p.skills = Ch.freshSkills();
+      const target = () => { g.monsters = []; return mon(g, p.x + 3, p.y); };
+      const throwOnce = (weapon, off) => {
+        p.equip.main = weapon;
+        p.equip.off = off || null;
+        w.items.length = 0;
+        const m = target();
+        const ev = events(() => g.fireAt(m, 'throw')).filter((e) => e.by === 'player');
+        return { m, ev: ev[0] };
+      };
+      const sample = (type, n) => {
+        const dmgs = [];
+        for (let i = 0; i < n; i++) {
+          p.hp = p.maxHp = 1e6;
+          p.skills = Ch.freshSkills(); // 技能練起來會加傷害，每次都從 0 級開始
+          const r = throwOnce(G.make(type, 0, g.nextGearId++));
+          if (r.ev && (r.ev.key === 'hit' || r.ev.key === 'hard') && !r.ev.dodged && !r.ev.crit && !r.ev.resisted) dmgs.push(r.ev.dmg);
+        }
+        return spread(dmgs);
+      };
+      const rm = g.rangedMode(true, 'throw');
+      ok(rm.mode === 'throw' && rm.range.join() === '4,12', `投擲射程 4／12 加感知修正值 0：${rm.range}`);
+      p.attr.wis = 14;
+      ok(g.rangedMode(true, 'throw').range.join() === '6,14', '感知修正值 +2 射程 6／14');
+      p.attr.wis = 10;
+      ok(g.rangedMode(true) === null, '長劍按 F 不能遠程（要按 T 丟）');
+      // 傷害
+      ok(sample('sword', 300) === '1～4', `丟長劍是臨時武器 1d4：${sample('sword', 300)}`);
+      ok(sample('shortspear', 300) === '1～6', `丟短矛照自己的 1d6：${sample('shortspear', 300)}`);
+      ok(sample('dagger', 300) === '1～4', `丟短刀照自己的 1d4：${sample('dagger', 300)}`);
+      ok(sample('greataxe', 300) === '1～4', `丟巨斧也是臨時武器 1d4：${sample('greataxe', 300)}`);
+      ok(sample('bow', 200) === '1～1' && sample('crossbow', 200) === '1～1', '丟弓和輕弩只有 1 點');
+      // 擲出去的武器掉在目標那格；練的技能
+      p.skills = Ch.freshSkills();
+      let r = throwOnce(G.make('sword', 0, g.nextGearId++));
+      ok(w.items.length === 1 && w.items[0].x === r.m.x && w.items[0].y === r.m.y && w.items[0].gear.type === 'sword' && !p.equip.main, '丟出去的長劍掉在目標那格，手上空了');
+      ok(uses(p, 'sword') === 0 && uses(p, 'fight') === 0 && uses(p, 'shoot') > 0, `丟長劍只練射擊：劍術 ${uses(p, 'sword')}、射擊 ${uses(p, 'shoot')}`);
+      p.skills = Ch.freshSkills();
+      r = throwOnce(G.make('shortspear', 0, g.nextGearId++));
+      ok(uses(p, 'spear') === uses(p, 'shoot') && uses(p, 'spear') > 0 && uses(p, 'fight') === 0, `丟短矛練槍術和射擊：槍術 ${uses(p, 'spear')}、射擊 ${uses(p, 'shoot')}`);
+      p.skills = Ch.freshSkills();
+      r = throwOnce(G.make('club', 0, g.nextGearId++));
+      ok(uses(p, 'mace') === 0 && uses(p, 'shoot') > 0, '丟硬頭錘不練錘術');
+      // 副手拿武器先丟副手
+      const main = G.make('sword', 0, g.nextGearId++);
+      const off = G.make('dagger', 0, g.nextGearId++);
+      p.equip.main = main;
+      p.equip.off = off;
+      ok(g.rangedMode(true, 'throw').slot === 'off', '副手拿著武器，先丟副手的');
+      r = throwOnce(main, off);
+      ok(p.equip.main === main && !p.equip.off && w.items.length === 1 && w.items[0].gear === off, '丟出去的是副手的短刀，主手的長劍留著');
+      // 副手是盾牌就丟主手；兩手都空沒有東西可丟
+      p.equip.main = G.make('sword', 0, g.nextGearId++);
+      p.equip.off = G.make('shield', 0, g.nextGearId++);
+      ok(g.rangedMode(true, 'throw').slot === 'main', '副手是盾牌，丟主手的');
+      p.equip.main = null;
+      ok(g.rangedMode(true, 'throw') === null, '手上沒有武器沒東西可丟');
+      // 走過去撿回來
+      g.monsters = [];
+      p.equip.off = null;
+      const sword = G.make('sword', 0, g.nextGearId++);
+      r = throwOnce(sword);
+      p.x = r.m.x - 1;
+      g.monsters = [];
+      g.move(1, 0);
+      ok(w.items.length === 0 && (p.equip.main === sword || p.bag.some((e) => e.gear === sword)), '走過去把丟出去的武器撿回來');
+    }
+
+    // 護甲（第二十九版再追加）：力量不到需求走一步 15 刻、潛行劣勢只是標記、各店賣的防具
+    {
+      const { g, p } = arena(442, 'warrior', ['sword', 'shield', 'herb']);
+      p.skills = Ch.freshSkills();
+      p.attr.dex = 10;
+      const stepTicks = () => { const t0 = g.ticks; g.move(1, 0); return g.ticks - t0; };
+      const walk = (type, str) => { p.equip.body = G.make(type, 0, g.nextGearId++); p.attr.str = str; return stepTicks(); };
+      ok(walk('heavy', 12) === 15 + 2 && walk('heavy', 13) === 10 + 2, `鎖子甲要力量 13：不夠走一步 15 刻（加防具多花的 2 刻），夠了 10 刻：${walk('heavy', 12)}／${walk('heavy', 13)}`);
+      ok(walk('splint', 14) === 15 + 2 && walk('splint', 15) === 10 + 2 && walk('plate', 14) === 15 + 2 && walk('plate', 15) === 10 + 2, '條板甲、全身板甲要力量 15');
+      ok(walk('ringmail', 8) === 10 + 2 && walk('medium', 8) === 10 + 1 && walk('light', 8) === 10, '環甲、中甲、輕甲沒有力量需求');
+      p.attr.str = 12;
+      p.equip.body = G.make('heavy', 0, g.nextGearId++);
+      p.attr.dex = 18; // 敏捷高走路只要 6 刻，力量不夠還是 15 刻（取較大的）
+      ok(stepTicks() === 15 + 2, '力量不夠的 15 刻跟敏捷的步數取較大的');
+      const stealth = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && FE.GEAR[k].stealth).sort().join();
+      ok(stealth === 'halfplate,heavy,medium,padded,plate,ringmail,splint', `潛行劣勢的防具：${stealth}`);
+      // 描述：每件防具一句說明，戰鬥數字不受標記影響
+      ok(Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && k !== 'mrobe' && k !== 'robe').every((k) => FE.GEAR[k].desc && FE.GEAR[k].desc.length > 8 && !/D&D|龍與地下城/.test(FE.GEAR[k].desc)), '每件防具都有一句遊戲內的說明');
+      // 商店
+      const S = G.SHOPS;
+      const armorBuy = (s) => Object.values(S[s].buy).flat().filter((t) => FE.GEAR[t].cat === 'armor' && t !== 'robe' && t !== 'mrobe').sort().join();
+      ok(armorBuy('blacksmith') === 'chainshirt,hide,light,padded,ringmail', `村莊鐵匠賣的防具：${armorBuy('blacksmith')}`);
+      ok(Object.values(S.blacksmith.buy).flat().includes('shield') && S.blacksmith.craft.includes('shield'), '村莊鐵匠賣盾牌');
+      const allArmor = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && k !== 'robe' && k !== 'mrobe').sort().join();
+      ok(armorBuy('armorer') === allArmor && S.armorer.craft.slice().sort().join() === (allArmor + ',shield').split(',').sort().join(), `城鎮盔甲匠什麼防具都賣、都能打造：${armorBuy('armorer')}`);
+      ok(!Object.values(S.weaponsmith.buy).flat().some((t) => FE.GEAR[t].cat === 'armor'), '城鎮武器匠不賣防具');
+    }
+    useClasses('legacy');
+  }
 }
 UNITS.combat28 = () => { try { testCombat28(); } catch (e) { fail('戰鬥測試拋出例外：' + e.stack); } };
 
@@ -3740,7 +4013,8 @@ const qualityForWL = (wl) => Math.min(3, Math.floor(wl / 2));
 // 技能練到合理等級，裝備（武器、身上的防具、盾牌）照世界等級給對應品質。回傳新遊戲；level 1、wl 1 就是剛開局的角色
 function makeLevelChar(cls, level, wl, seed) {
   const game = new FE.Game(seed || 9001);
-  game.start({ cls, picks: BOT_PICKS[cls], body: BOT_BODY[cls] });
+  const picks = FE.Char.validPicks(cls, BOT_PICKS[cls]) ? BOT_PICKS[cls] : FE.Char.defaultPicks(cls); // 舊職業定義下（場景檢查）機器人的挑法不一定合法
+  game.start({ cls, picks, body: BOT_BODY[cls] });
   game.level = level;
   game.exp = FE.levelExp(level);
   const p = game.player;
@@ -3755,7 +4029,8 @@ function makeLevelChar(cls, level, wl, seed) {
   const w = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
   p.skills.dodge = lv('dodge');
   if (p.equip.off && FE.GEAR[p.equip.off.type].cat === 'shield') p.skills.shield = lv('shield');
-  if (p.equip.body && (p.equip.body.type === 'medium' || p.equip.body.type === 'heavy')) p.skills.armor = lv('armor');
+  const aid = FE.Char.armorSkillId(p);
+  if (aid && aid !== 'light') p.skills[aid] = lv('armor'); // 輕甲幾乎擋不下傷害（皮甲物理減傷 0），機器人也練不起來，不給
   if (w) {
     p.skills[w.skill] = lv('main');
     if (w.ammo) p.skills.shoot = lv('fight');
@@ -4129,7 +4404,7 @@ function testGrowth29() {
     ok(prof('shortsword').die.join() === '1,6' && prof('shortsword').type === 'pierce' && prof('greataxe').die.join() === '1,12' && prof('greatsword').die.join() === '2,6', '短劍 1d6 穿刺、巨斧 1d12、巨劍 2d6');
     ok(prof('whip').die.join() === '1,4' && prof('whip').type === 'slash', '鞭子 1d4 揮砍');
     ok(prof('crossbow', 'shoot').die.join() === '1,8' && prof('crossbow', 'shoot').type === 'pierce' && prof('crossbow', 'shoot').dmg === 2, '輕弩 1d8 穿刺，射擊加敏捷');
-    ok(prof('crossbow', 'melee').die.join() === '1,4' && prof('crossbow', 'melee').type === 'blunt' && prof('crossbow', 'melee').skills.join() === 'hammer,fight' && prof('bow', 'melee').skills.join() === 'sword,fight', '拿弩近戰 1d4 鈍擊算重錘術，拿弓近戰算劍術');
+    ok(prof('crossbow', 'melee').die.join() === '1,4' && prof('crossbow', 'melee').type === 'blunt' && prof('crossbow', 'melee').skills.join() === 'mace,fight' && prof('bow', 'melee').skills.join() === 'sword,fight', '拿弩近戰 1d4 鈍擊算錘術，拿弓近戰算劍術');
     // 靈巧：短劍、鞭子取力量與敏捷較高者；重型：巨斧、巨劍近戰力量不到 13 有劣勢
     p.attr.str = 8; p.attr.dex = 16;
     ok(prof('shortsword').dmg === 3 && prof('shortsword').hit === 3 && prof('whip').dmg === 3 && prof('waraxe').dmg === -1, '短劍、鞭子靈巧取較高的修正值');
@@ -4196,6 +4471,8 @@ function testGrowth29() {
     pm.size = 95000;
     pm.equip.main = gear('greataxe');
     pm.equip.main.dur = pm.equip.main.max = 1e9;
+    const ms0 = FE.MASTERY_SKILL;
+    FE.MASTERY_SKILL = 5; // 精通一律要技能 5 級（舊測試預設是 0）
     let cleaved = 0;
     for (let i = 0; i < 100; i++) {
       pm.hp = pm.maxHp = 1e6;
@@ -4216,6 +4493,7 @@ function testGrowth29() {
       if (events(() => gm.strike('attack', a)).filter((e) => e.by === 'player').length > 1) cleaved2++;
     }
     ok(cleaved2 > 20, `斧術 5 級起法師也會順劈（${cleaved2} 次）`);
+    FE.MASTERY_SKILL = ms0;
     // 長劍沒有順劈
     p.equip.main = gear('sword');
     p.equip.main.dur = 1e9;
@@ -4388,7 +4666,7 @@ function testGrowth29() {
     g.bagAddGear(gear('sickle'));
     g.bagAddGear(gear('heavy'));
     g.bagAddGear(gear('robe'));
-    ok(near(G.weightOf(p), 54 + 2 * 0.5 + 3 * 10 + 5 + 18 + 10 + 2 + 55 + 4), `藥草 0.5、礦石 10、送貨 5、長槍 18、礦鎬 10、鐮刀 2、重甲 55、衣袍 4：${G.weightOf(p)}`);
+    ok(near(G.weightOf(p), 54 + 2 * 0.5 + 3 * 10 + 5 + 18 + 10 + 2 + 50 + 4), `藥草 0.5、礦石 10、送貨 5、長槍 18、礦鎬 10、鐮刀 2、鎖子甲 50、衣袍 4：${G.weightOf(p)}`);
     p.attr.str = 16;
     ok(g.carryLimit() === 240 && g.pushLimit() === 480 && Ch.carryLimit({ attr: { str: 9 } }) === 135, '力量 16 能背 240、推拖 480；力量 9 能背 135（看力量值不看修正值）');
     // 超過推拖上限不能移動但能丟東西、能出手
@@ -4407,10 +4685,12 @@ function testGrowth29() {
     ok(p.attr.str === 17 && p.attr.con === 18 && p.maxHp === Ch.maxHp(p, 10) && p.hp === p.maxHp, `主屬性力量加到 18：${p.attr.str}，生命 ${p.hp}/${p.maxHp}`);
     ok(p.equip.main.q === qualityForWL(4) && p.equip.body.q === 2 && p.equip.off.q === 2 && qualityForWL(1) === 0 && qualityForWL(6) === 3, `世界等級 4 的裝備品質 ${p.equip.main.q}`);
     // 10 級累計經驗 6,400：劍術 ×2.5＝16,000 → 13 級、格鬥 ×3＝19,200 → 15 級、穿甲（中甲）13 級、閃避 ×0.5＝3,200 → 4 級、盾牌使用 ×0.6＝3,840 → 5 級
-    ok(p.skills.sword.lv === 13 && p.skills.fight.lv === 15 && p.skills.armor.lv === 13 && p.skills.dodge.lv === 4 && p.skills.shield.lv === 5 && p.skills.bow.lv === 0, `技能：劍術 ${p.skills.sword.lv}、格鬥 ${p.skills.fight.lv}、穿甲 ${p.skills.armor.lv}、閃避 ${p.skills.dodge.lv}、盾牌使用 ${p.skills.shield.lv}`);
+    ok(p.skills.sword.lv === 13 && p.skills.fight.lv === 15 && p.skills.medium.lv === 13 && p.skills.light.lv === 0 && p.skills.heavy.lv === 0 && p.skills.dodge.lv === 4 && p.skills.shield.lv === 5 && p.skills.bow.lv === 0, `技能：劍術 ${p.skills.sword.lv}、格鬥 ${p.skills.fight.lv}、中甲 ${p.skills.medium.lv}、閃避 ${p.skills.dodge.lv}、盾牌使用 ${p.skills.shield.lv}`);
     ok(skillLevelFor(0) === 0 && skillLevelFor(499) === 0 && skillLevelFor(500) === 1 && skillLevelFor(1100) === 2 && skillLevelFor(18000) === 15, '經驗換技能等級');
+    useClasses('new'); // 新遊俠的主手是弓；起始技能是隨機抽的，只看弓術、射擊（換算來的）與不在遊俠技能名單裡的項目
     const gr = makeLevelChar('ranger', 5, 1, 9123).player;
-    ok(gr.skills.bow.lv === skillLevelFor(650 * 2.5) && gr.skills.shoot.lv === skillLevelFor(650 * 3) && gr.skills.fight.lv === 0 && gr.skills.armor.lv === 0 && gr.skills.shield.lv === 0, `遊俠 5 級：弓術 ${gr.skills.bow.lv}、射擊 ${gr.skills.shoot.lv}，輕甲不練穿甲、沒拿盾牌`);
+    useClasses('legacy');
+    ok(gr.equip.main.type === 'bow' && gr.skills.bow.lv === skillLevelFor(650 * 2.5) && gr.skills.shoot.lv === skillLevelFor(650 * 3) && gr.skills.medium.lv === 0 && gr.skills.heavy.lv === 0 && gr.skills.shield.lv === 0, `遊俠 5 級（主手 ${gr.equip.main && gr.equip.main.type}）：弓術 ${gr.skills.bow.lv}、射擊 ${gr.skills.shoot.lv}，沒穿中重甲、沒拿盾牌`);
     const g1 = makeLevelChar('mage', 1, 1, 9121);
     ok(g1.level === 1 && g1.player.points === 0 && g1.player.skills.staff.lv === 0 && g1.player.equip.main.q === 0, '1 級角色就是剛開局的樣子');
     // 競技場：打一場一定打得完
@@ -4500,6 +4780,106 @@ function testGrowth29() {
     const q = back && back.game && back.game.player;
     ok(!!q && q.race === 'dwarf' && q.height === 6 && q.build === 2 && q.size === FE.bodySize('dwarf', 6, 2) && q.skills.sword.lv === 3 && q.skills.sword.n === 123.45 && q.attr.con === p.attr.con, '存檔讀回來，種族與體型、技能經驗都在');
   }
+
+  // 18. 第二十九版再追加：身高與體格的機率、起始技能（精熟＋專精／全面）、技能合併與穿甲拆分
+  {
+    useClasses('new');
+    // 身高、體格的機率：每項加起來 100；大量抽樣跟表差不到 1.5 個百分點；體型公式不變
+    const odds = FE.BODY_ODDS;
+    ok(Object.keys(odds).join() === 'human,dwarf,elf' && Object.values(odds).every((o) => o.height.length === 7 && o.build.length === 7 && o.height.reduce((s, x) => s + x, 0) === 100 && o.build.reduce((s, x) => s + x, 0) === 100), '三個種族的身高、體格機率各 7 項、加起來 100');
+    ok(odds.human.height.join() === '8,13,19,22,18,12,8' && odds.human.build.join() === '9,14,20,21,17,12,7' && odds.dwarf.height.join() === '24,27,20,13,9,5,2' && odds.dwarf.build.join() === '3,6,11,17,23,24,16' && odds.elf.height.join() === '2,6,12,18,25,22,15' && odds.elf.build.join() === '21,28,22,14,8,5,2', '各種族的機率表');
+    const rng = FE.makeRng(2026);
+    for (const race of Object.keys(odds)) {
+      const N = 40000;
+      const cnt = { height: Array(8).fill(0), build: Array(8).fill(0) };
+      for (let i = 0; i < N; i++) { const b = Ch.rollBody(race, rng); cnt.height[b.height]++; cnt.build[b.build]++; }
+      const dev = (k) => Math.max(...odds[race][k].map((pct, i) => Math.abs(cnt[k][i + 1] / N * 100 - pct)));
+      ok(dev('height') < 1.5 && dev('build') < 1.5 && cnt.height[0] === 0 && cnt.build[0] === 0, `${race} 身高偏差 ${dev('height').toFixed(2)}、體格偏差 ${dev('build').toFixed(2)}（百分點）`);
+    }
+    ok(FE.rollOdds(() => 0, [8, 13, 19]) === 1 && FE.rollOdds(() => 0.999999, [8, 13, 19]) === 3 && FE.rollOdds(() => 0.2, [8, 13, 19]) === 2, 'rollOdds 照機率切段');
+    ok(FE.bodySize('human', 4, 4) === 70000 && FE.bodySize('dwarf', 4, 4) === 60000 && near(FE.bodySize('human', 7, 1), 70000 * 1.15 * 0.85, 1e-6), '體型公式不變');
+
+    // 技能合併與拆分
+    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,misc,fight,shoot,dodge,light,medium,heavy,shield', '技能名單：槍術、錘術合併，穿甲拆成輕甲、中甲、重甲');
+    ok(FE.GEAR.spear.skill === 'spear' && FE.GEAR.shortspear.skill === 'spear' && FE.GEAR.club.skill === 'mace' && FE.GEAR.warhammer.skill === 'mace' && FE.GEAR.crossbow.meleeSkill === 'mace', '短矛、長槍都算槍術；硬頭錘、戰錘、拿弩近戰都算錘術');
+    ok(FE.ARMOR_SKILL.light === 'light' && FE.ARMOR_SKILL.medium === 'medium' && FE.ARMOR_SKILL.heavy === 'heavy', '防具類別對應輕甲、中甲、重甲');
+    // 傷害骰從武器來，技能只給加值
+    {
+      const p = mkg(450, 'warrior', ['sword', 'herb', 'gold']).player;
+      const d0 = Ch.profile(p, gear('sword'), 'melee').die.join();
+      p.skills.sword.lv = 15;
+      ok(Ch.profile(p, gear('sword'), 'melee').die.join() === d0 && d0 === '1,10', '劍術等級不改傷害骰（副手空著的長劍 1d10）');
+    }
+
+    // 職業的技能池
+    const pools = {
+      warrior: 'fight,medium,heavy,shield,dodge,sword,spear,knife,staff,axe,mace,whip',
+      ranger: 'shoot,dodge,fight,knife,sword,light',
+      mage: 'dodge,shoot,knife,fight',
+      priest: 'shield,medium,fight,dodge',
+      paladin: 'shield,medium,heavy,fight,sword,spear,knife,staff,axe,mace,whip',
+      barbarian: 'fight,dodge,light,shoot,sword,spear,knife,staff,axe,mace,whip',
+    };
+    const poolOf = (cls) => [...new Set(FE.CLASSES[cls].pool.flatMap((t) => (t === 'melee' ? FE.MELEE_SKILLS : [t])))].sort().join();
+    for (const [cls, s] of Object.entries(pools)) ok(poolOf(cls) === s.split(',').sort().join(), `${cls} 的技能池 ${poolOf(cls)}`);
+
+    // 起始技能：精熟（5）的是起始主手武器那一項；專精＝熟練（4）×2＋稱職（3）×3、全面＝稱職×6；池子不夠有幾項給幾項
+    ok(FE.SKILL_PACKS.focus.name === '專精' && FE.SKILL_PACKS.focus.levels.join() === '4,4,3,3,3' && FE.SKILL_PACKS.broad.name === '全面' && FE.SKILL_PACKS.broad.levels.join() === '3,3,3,3,3,3' && FE.START_MAIN_LEVEL === 5, '起始技能組合的資料');
+    const mains = { warrior: ['sword', 'herb', 'gold'], ranger: ['dagger'], mage: ['herb'], priest: ['shield', 'herb'], paladin: ['warhammer', 'herb'], barbarian: ['greataxe', 'herb'] };
+    const wantMain = { warrior: 'sword', ranger: 'bow', mage: 'staff', priest: 'mace', paladin: 'mace', barbarian: 'axe' };
+    for (const cls of Object.keys(pools)) {
+      const main = Ch.startMainSkill(cls, mains[cls]);
+      ok(main === wantMain[cls], `${cls} 的起始主手武器技能 ${main}（應該 ${wantMain[cls]}）`);
+      const pool = poolOf(cls).split(',');
+      let bad = 0;
+      const seen = new Set();
+      for (let i = 0; i < 300; i++) {
+        for (const key of ['focus', 'broad', undefined]) {
+          const r = Ch.rollSkills(cls, main, rng, key);
+          const lv = r.levels;
+          const drawn = Object.keys(lv).filter((k) => k !== main);
+          const pack = FE.SKILL_PACKS[r.pack];
+          const want = pack.levels.slice(0, Math.min(pack.levels.length, pool.filter((k) => k !== main).length)).slice().sort().join();
+          if (lv[main] !== 5 || drawn.some((k) => !pool.includes(k)) || new Set(drawn).size !== drawn.length || drawn.map((k) => lv[k]).sort().join() !== want || (key && r.pack !== key) || r.name !== pack.name) bad++;
+          for (const k of drawn) seen.add(k);
+        }
+      }
+      ok(bad === 0, `${cls} 起始技能不對 ${bad} 次`);
+      ok(pool.filter((k) => k !== main).every((k) => seen.has(k)), `${cls} 池裡每一項都有機會抽到`);
+    }
+    {
+      // 池子夠大（遊俠 6、戰士不含主手 11）：專精抽 5 項、全面抽 6 項；池子小（法師 4、牧師 4）：有幾項給幾項
+      const lens = (cls, key) => Object.keys(Ch.rollSkills(cls, Ch.startMainSkill(cls, mains[cls]), rng, key).levels).length;
+      ok(lens('ranger', 'focus') === 1 + 5 && lens('ranger', 'broad') === 1 + 6 && lens('warrior', 'focus') === 1 + 5 && lens('warrior', 'broad') === 1 + 6, '池子夠大，專精 5 項、全面 6 項（外加精熟那項）');
+      ok(lens('mage', 'focus') === 1 + 4 && lens('mage', 'broad') === 1 + 4 && lens('priest', 'focus') === 1 + 4 && lens('priest', 'broad') === 1 + 4, '池子只有 4 項，就給 4 項');
+      // 專精：熟練給前兩項抽到的、稱職給後面的；法師池子 4 項時專精是熟練 2、稱職 2
+      const mr = Ch.rollSkills('mage', 'staff', rng, 'focus').levels;
+      ok(Object.values(mr).sort().join() === '3,3,4,4,5', `法師專精：${JSON.stringify(mr)}`);
+      // 兩種組合各約一半
+      let focus = 0;
+      for (let i = 0; i < 2000; i++) if (Ch.rollSkills('warrior', 'sword', rng).pack === 'focus') focus++;
+      ok(focus > 900 && focus < 1100, `專精／全面各約 50%：專精 ${focus} / 2000`);
+      // 戰士起始主手是長劍時，抽到的武器技能不會再出現劍術 5 級以外的值
+      const wr = Ch.rollSkills('warrior', 'sword', rng, 'broad').levels;
+      ok(wr.sword === 5, '精熟那項不被池子的抽樣蓋掉');
+    }
+    // 起始技能放進角色：技能等級照抽的結果、其餘涉獵（0 級）、記著組合名稱、存檔讀得回來
+    {
+      const sk = Ch.rollSkills('ranger', 'bow', FE.makeRng(77), 'focus');
+      const g = new FE.Game(451);
+      g.start({ cls: 'ranger', picks: ['dagger'], skills: sk });
+      const p = g.player;
+      ok(Object.keys(FE.SKILLS).every((k) => p.skills[k].lv === (sk.levels[k] || 0) && p.skills[k].n === 0) && p.skillPack === '專精', `起始技能放進角色：${Object.keys(FE.SKILLS).map((k) => k + p.skills[k].lv)}`);
+      FE.Save.save(g);
+      const back = FE.Save.load();
+      ok(back && back.game && back.game.player.skillPack === '專精' && back.game.player.skills.bow.lv === 5, '存檔讀回來，技能組合名稱還在');
+      const g2 = new FE.Game(452);
+      g2.start({ cls: 'warrior', picks: ['sword', 'herb', 'gold'] });
+      ok(!g2.player.skillPack && Object.keys(FE.SKILLS).every((k) => g2.player.skills[k].lv === 0), '沒給起始技能（測試用）都是 0 級');
+      ok(Ch.rollSkills('warrior', 'sword', FE.makeRng(5), 'focus').levels.bow === undefined, '池子外的技能抽不到');
+    }
+    useClasses('legacy');
+  }
   FE.Combat.hook = hook0;
 }
 UNITS.growth29 = () => { try { testGrowth29(); } catch (e) { fail('角色與成長測試拋出例外：' + e.stack); } };
@@ -4518,7 +4898,7 @@ function runJob(id) {
   else if (kind === 'sim4') {
     simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 2000 : 3000, untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
-  else if (kind === 'unit') { useAttrs('legacy'); UNITS[a](); }
+  else if (kind === 'unit') { useClasses('legacy'); UNITS[a](); }
   else if (kind === 'arena') runArena(a);
   else throw new Error('不認得的工作 ' + id);
 }

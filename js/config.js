@@ -2,7 +2,7 @@
 window.FE = window.FE || {};
 
 FE.CONFIG = {
-  SAVE_VERSION: 17,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
+  SAVE_VERSION: 18,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（18：六個職業、技能合併與穿甲拆三項、起始技能、防具換成十二件、投擲、精通一律要技能 5 級；17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
   // 世界的比例：一塊世界 64×64（第十九版從 32×24 放大四倍成 64×48，第二十一版高度再加到 64）。
   // 按「每塊幾個」算的數字照面積乘 4（第二十一版再乘 4/3），按「走幾步」算的距離照長寬乘 2；每步的算力與事件間隔不變，冒險者身邊的密度跟原本一樣
   CHUNK_W: 64,          // 一塊世界的寬（世界是二維的區塊格，新的一塊長在離冒險者最近的邊界上）
@@ -51,7 +51,12 @@ FE.CONFIG = {
   SKILL_BLOCK: 0.02,    // 盾牌使用每級，格擋機率 +2%
   // 穿甲技能減輕身上防具的重量（照 Dwarf Fortress 的表，依技能等級 0、1、2⋯⋯15 以上）
   ARMOR_WEIGHT_MUL: [1, 1, 0.8125, 0.75, 0.6875, 0.625, 0.5625, 0.5, 0.4375, 0.375, 0.3125, 0.25, 0.1875, 0.125, 0.0625, 0],
-  ARMOR_FREE_DODGE: 15, // 穿甲行動這一級起，重甲不再扣閃避
+  // 閃避的敏捷加成看防具類別（第二十九版追加）：輕甲與無甲照加、負的照扣；中甲最多 +MEDIUM_DEX_CAP 點修正值（負的照扣）；重甲不加也不扣
+  MEDIUM_DEX_CAP: 2,
+  STR_REQ_TICKS: 15,    // 力量不到防具的需求，走一步花幾刻（跟被扭曲的地面、超重取最大的）
+  THROW_RANGE: [4, 12], // 投擲的正常射程與最遠射程（所有武器一律，再加感知修正值）
+  THROW_JUNK_DIE: [1, 4], // 丟沒有投擲特質的武器：臨時武器的傷害骰（鈍擊，加力量修正值）；弓、輕弩只有 1 點
+  LIGHT_DIE: [1, 8],    // 牧師的神聖之光：傷害骰（神聖，加感知修正值）
   BARE_DMG: 1,          // 徒手（主手空著）固定造成幾點鈍擊傷害（再加力量修正值，最少 1）；武器的傷害骰見 FE.GEAR
   QUEST_EXP: 15,       // 一個任務的基本經驗值
   QUEST_GOLD: 10,       // 一個任務的基本金幣
@@ -175,8 +180,8 @@ FE.CONFIG = {
   BASH_DIE: [1, 4],                       // 戰士盾擊的傷害骰（鈍擊，加力量修正值）
   OFF_CLUMSY_DIE: [1, 4],                 // 副手拿非輕型武器時那一下的傷害骰（另外有劣勢）；之後定好單手雙手或有雙持技能再放回
   BOW_MELEE_DIE: [1, 4],                 // 拿弓近戰打人的傷害骰（鈍擊，加力量修正值；當臨時武器，沒有精通、不算技能）
-  HOLY_DIE: [1, 8],                       // 牧師：每個動作第一下命中時，目標多受的神聖傷害
-  HEAL_DIE: [1, 8],                       // 牧師治療：回 1d8＋魅力修正值（最少 1），只治自己
+  HOLY_DIE: [1, 8],                       // 聖騎士：每個動作第一下命中時，目標多受的神聖傷害
+  HEAL_DIE: [1, 8],                       // 牧師、聖騎士治療：回 1d8＋修正值（牧師加感知、聖騎士加魅力，最少 1），只治自己
   HEAL_COOLDOWN: 3,                       // 治療用完冷卻幾回合
   SPELL_DIE: [1, 6],                      // 法師拿法杖按 F 的範圍魔攻：傷害骰（魔法，加智力修正值）
   SPELL_RANGE: [5, 20],                   // 範圍魔攻的正常射程與最遠射程（規格沒寫，先照弓箭；再加感知修正值）
@@ -390,7 +395,7 @@ FE.QUALITIES = [
 // 兩個門檻之間只能雙手拿（副手要空著）；弓、輕弩射擊一律雙手（twoHand）。ammo 是用哪種彈藥（arrow 箭矢、bolt 弩矢）
 FE.GEAR = {
   sword: { cat: 'weapon', name: '長劍', die: [1, 8], type: 'slash', versatile: 10, mastery: 'sap', skill: 'sword', grip: [52500, 57500], weight: 3, price: 30, ore: 3, dur: 200, sold: true, drop: true },
-  spear: { cat: 'weapon', name: '長槍', die: [1, 10], type: 'pierce', heavy: true, reach: true, mastery: 'push', skill: 'pike', grip: [62500, 77500], weight: 18, price: 25, ore: 3, dur: 200, sold: true, drop: true },
+  spear: { cat: 'weapon', name: '長槍', die: [1, 10], type: 'pierce', heavy: true, reach: true, mastery: 'push', skill: 'spear', grip: [62500, 77500], weight: 18, price: 25, ore: 3, dur: 200, sold: true, drop: true },
   shortspear: { cat: 'weapon', name: '短矛', die: [1, 6], type: 'pierce', thrown: [4, 12], versatile: 8, mastery: 'sap', skill: 'spear', grip: [5000, 47500], weight: 3, price: 20, ore: 3, dur: 200, sold: true, drop: true },
   dagger: { cat: 'weapon', name: '短刀', die: [1, 4], type: 'pierce', finesse: true, light: true, thrown: [4, 12], mastery: 'nick', skill: 'knife', grip: [5000, 27500], weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
   bow: { cat: 'weapon', name: '弓箭', die: [1, 6], type: 'pierce', ammo: 'arrow', range: [5, 20], twoHand: true, mastery: 'vex', skill: 'bow', meleeSkill: 'sword', grip: [15000, 0], weight: 2, price: 30, dur: 200, sold: true, drop: true },
@@ -401,17 +406,29 @@ FE.GEAR = {
   greataxe: { cat: 'weapon', name: '巨斧', die: [1, 12], type: 'slash', heavy: true, mastery: 'cleave', skill: 'axe', grip: [62500, 77500], weight: 7, price: 45, ore: 5, dur: 200, sold: true, drop: true },
   greatsword: { cat: 'weapon', name: '巨劍', die: [2, 6], type: 'slash', heavy: true, mastery: 'graze', skill: 'sword', grip: [62500, 77500], weight: 6, price: 50, ore: 5, dur: 200, sold: true, drop: true },
   club: { cat: 'weapon', name: '硬頭錘', die: [1, 6], type: 'blunt', mastery: 'sap', skill: 'mace', grip: [32500, 37500], weight: 4, price: 15, ore: 3, dur: 200, sold: true, drop: true },
-  warhammer: { cat: 'weapon', name: '戰錘', die: [1, 8], type: 'blunt', versatile: 10, mastery: 'push', skill: 'hammer', grip: [32500, 37500], weight: 5, price: 30, ore: 3, dur: 200, sold: true, drop: true },
+  warhammer: { cat: 'weapon', name: '戰錘', die: [1, 8], type: 'blunt', versatile: 10, mastery: 'push', skill: 'mace', grip: [32500, 37500], weight: 5, price: 30, ore: 3, dur: 200, sold: true, drop: true },
   whip: { cat: 'weapon', name: '鞭子', die: [1, 4], type: 'slash', finesse: true, reach: true, mastery: 'slow', skill: 'whip', grip: [22500, 27500], weight: 3, price: 10, dur: 200, sold: true, drop: true },
-  crossbow: { cat: 'weapon', name: '輕弩', die: [1, 8], type: 'pierce', ammo: 'bolt', range: [5, 20], loading: true, twoHand: true, mastery: 'slow', skill: 'crossbow', meleeSkill: 'hammer', grip: [15000, 0], weight: 5, price: 35, dur: 200, sold: true, drop: true },
+  crossbow: { cat: 'weapon', name: '輕弩', die: [1, 8], type: 'pierce', ammo: 'bolt', range: [5, 20], loading: true, twoHand: true, mastery: 'slow', skill: 'crossbow', meleeSkill: 'mace', grip: [15000, 0], weight: 5, price: 35, dur: 200, sold: true, drop: true },
   arrow: { cat: 'ammo', name: '箭矢', weight: 1, price: 5, bundle: 20, sold: true, drop: true },
   bolt: { cat: 'ammo', name: '弩矢', weight: 1.5, price: 5, bundle: 20, sold: true, drop: true },
-  heavy: { cat: 'armor', name: '重甲', phys: 3, magic: 1, ticks: 2, dodge: -0.05, weight: 55, price: 60, ore: 5, dur: 150, sold: true, drop: true },
-  medium: { cat: 'armor', name: '中甲', phys: 2, magic: 2, ticks: 1, dodge: 0, weight: 45, price: 40, ore: 4, dur: 150, sold: true, drop: true },
-  light: { cat: 'armor', name: '輕甲', phys: 1, magic: 1, ticks: 0, dodge: 0, weight: 10, price: 20, ore: 2, dur: 150, sold: true, drop: true },
-  robe: { cat: 'armor', name: '一般衣袍', phys: 0, magic: 1, ticks: 0, dodge: 0, weight: 4, price: 10, dur: 150, sold: true, drop: true },
-  mrobe: { cat: 'armor', name: '魔法衣袍', phys: 0, magic: 3, ticks: 0, dodge: 0, weight: 4, price: 40, dur: 150, sold: false, drop: true },
-  shield: { cat: 'shield', name: '盾牌', block: 0.25, value: 4, weight: 6, price: 25, ore: 2, dur: 100, sold: true, drop: true },
+  // 防具（第二十九版追加）：cls 類別（light 輕甲、medium 中甲、heavy 重甲、none 無甲＝衣袍）決定敏捷加不加閃避、多花幾刻、練哪一項穿甲技能；
+  // str 力量需求（力量不到，走一步 15 刻）；stealth 隱匿劣勢（只建標籤，潛行第 3 階段才做）；desc 遊戲裡的一句說明。
+  // 內部 id：light＝皮甲、medium＝鱗甲、heavy＝鎖子甲（原本的輕甲、中甲、重甲改名）
+  padded: { cat: 'armor', cls: 'light', name: '布甲', phys: 0, magic: 1, ticks: 0, weight: 8, price: 22, ore: 2, stealth: true, desc: '縫了棉絮的布衣，擋不了刀劍，勉強隔一點魔力。', dur: 150, sold: true, drop: true },
+  light: { cat: 'armor', cls: 'light', name: '皮甲', phys: 0, magic: 1, ticks: 0, weight: 10, price: 32, ore: 2, desc: '鞣過的皮革，輕便，動作不受拘束。', dur: 150, sold: true, drop: true },
+  studded: { cat: 'armor', cls: 'light', name: '鑲釘皮甲', phys: 1, magic: 1, ticks: 0, weight: 13, price: 67, ore: 3, desc: '皮甲上釘了金屬釘，多擋一點砍刺。', dur: 150, sold: true, drop: true },
+  hide: { cat: 'armor', cls: 'medium', name: '厚皮甲', phys: 1, magic: 2, ticks: 1, weight: 12, price: 32, ore: 3, desc: '獸皮縫成的厚甲，不重，但走起來有點悶。', dur: 150, sold: true, drop: true },
+  chainshirt: { cat: 'armor', cls: 'medium', name: '鎖子襯衫', phys: 1, magic: 2, ticks: 1, weight: 20, price: 71, ore: 4, desc: '貼身穿的短鎖環衫，罩住上身。', dur: 150, sold: true, drop: true },
+  medium: { cat: 'armor', cls: 'medium', name: '鱗甲', phys: 2, magic: 2, ticks: 1, weight: 45, price: 71, ore: 4, stealth: true, desc: '一片片金屬鱗疊成的甲，扎實但吵。', dur: 150, sold: true, drop: true },
+  breastplate: { cat: 'armor', cls: 'medium', name: '胸甲', phys: 2, magic: 2, ticks: 1, weight: 20, price: 200, ore: 5, desc: '整片鍛成的胸甲，輕又擋得住，價錢也高。', dur: 150, sold: true, drop: true },
+  halfplate: { cat: 'armor', cls: 'medium', name: '半身板甲', phys: 2, magic: 2, ticks: 1, weight: 40, price: 274, ore: 5, stealth: true, desc: '護住軀幹與肩臂的板甲，稜角分明，動起來叮噹響。', dur: 150, sold: true, drop: true },
+  ringmail: { cat: 'armor', cls: 'heavy', name: '環甲', phys: 2, magic: 1, ticks: 2, weight: 40, price: 55, ore: 5, stealth: true, desc: '把鐵環縫在皮底上，粗糙但便宜的重甲。', dur: 150, sold: true, drop: true },
+  heavy: { cat: 'armor', cls: 'heavy', name: '鎖子甲', phys: 3, magic: 1, ticks: 2, str: 13, weight: 50, price: 87, ore: 5, stealth: true, desc: '一整套鎖環編成的長甲，擋砍很好，要有點力氣才穿得動。', dur: 150, sold: true, drop: true },
+  splint: { cat: 'armor', cls: 'heavy', name: '條板甲', phys: 3, magic: 1, ticks: 2, str: 15, weight: 55, price: 141, ore: 6, stealth: true, desc: '縱向的鐵條板綁在皮底上，護得周全，穿脫費事。', dur: 150, sold: true, drop: true },
+  plate: { cat: 'armor', cls: 'heavy', name: '全身板甲', phys: 4, magic: 1, ticks: 2, str: 15, weight: 60, price: 387, ore: 7, stealth: true, desc: '從頭到腳的鋼板，什麼都擋得住，也最沉最貴。', dur: 150, sold: true, drop: true },
+  robe: { cat: 'armor', cls: 'none', name: '一般衣袍', phys: 0, magic: 1, ticks: 0, weight: 4, price: 10, dur: 150, sold: true, drop: true },
+  mrobe: { cat: 'armor', cls: 'none', name: '魔法衣袍', phys: 0, magic: 3, ticks: 0, weight: 4, price: 40, dur: 150, sold: false, drop: true },
+  shield: { cat: 'shield', name: '盾牌', block: 0.25, value: 4, weight: 6, price: 32, ore: 2, dur: 100, sold: true, drop: true },
   pick: { cat: 'tool', name: '礦鎬', weight: 10, price: 20, dur: 50, sold: true },
   sickle: { cat: 'tool', name: '鐮刀', weight: 2, price: 20, dur: 50, sold: true },
 };
@@ -420,7 +437,7 @@ FE.GEAR = {
 FE.DMG_TYPES = { slash: '揮砍', pierce: '穿刺', blunt: '鈍擊', magic: '魔法', holy: '神聖' };
 // 武器特質的名字（說明與商店用）
 FE.WEAPON_TAGS = { versatile: '可雙手', heavy: '重型', light: '輕型', finesse: '靈巧', reach: '觸及', twoHand: '雙手', thrown: '投擲', ammo: '彈藥', loading: '裝填' };
-// 精通（第二十八版）：戰士、遊俠一開始就會；法師、牧師要那把武器的技能 5 級才解鎖（MASTERY_SKILL）；怪物沒有
+// 精通（第二十八版；第二十九版再追加：不分職業，一律要那把武器的技能 5 級才解鎖，MASTERY_SKILL）；怪物沒有
 FE.MASTERIES = {
   sap: { name: '削弱', desc: '命中後，目標下一次出手有劣勢' },
   vex: { name: '侵擾', desc: '命中且造成傷害後，你下一次打牠有優勢' },
@@ -442,24 +459,22 @@ FE.NODES = {
 // 智力（法師的範圍魔攻：命中、傷害、範圍）、感知（射程、暴擊）、魅力（價錢、金幣獎勵、牧師的治療）
 FE.ATTRS = [
   { key: 'str', name: '力量', info: '近戰與投擲的傷害、能背的重量（力量值×15 磅）；戰士拿盾牌時格擋值與盾擊也加' },
-  { key: 'dex', name: '敏捷', info: '出手擲骰、遠程傷害、閃避機率、攻擊與走路的快慢' },
+  { key: 'dex', name: '敏捷', info: '出手擲骰、遠程傷害、閃避機率（穿中甲最多算 +2、穿重甲不算）、攻擊與走路的快慢' },
   { key: 'con', name: '體質', info: '生命上限、休息的回復量、挨到的物理傷害再減一些' },
   { key: 'int', name: '智力', info: '技能練得快（每點修正值經驗 ±10%）；法師拿法杖施法：命中、傷害、範圍' },
-  { key: 'wis', name: '感知', info: '射程；+2 起擲出 19 也算暴擊' },
-  { key: 'cha', name: '魅力', info: '向工匠買東西更便宜、賣東西更貴，委託的金幣獎勵更多；牧師的治療' },
+  { key: 'wis', name: '感知', info: '射程（射擊、投擲、施法）；+2 起擲出 19 也算暴擊；牧師的治療與神聖之光' },
+  { key: 'cha', name: '魅力', info: '向工匠買東西更便宜、賣東西更貴，委託的金幣獎勵更多；聖騎士的治療' },
 ];
 // 技能（第二十九版，照 Dwarf Fortress：用了就累積經驗，升到第 N 級要 400＋100N 點，等級沒有上限，15 級以上都是傳奇）。
 // weapon 是武器技能（FE.GEAR 的 skill 欄指到它），近戰出手命中每 5 級 +1、傷害每 3 級 +1；遠程（射箭、射弩、投擲）命中看射擊，武器技能只加傷害。
 // 格鬥：所有近戰出手都練（含徒手），命中每 10 級 +1，跟武器技能疊加；徒手只吃格鬥。射擊：所有遠程都練（含投擲），命中每 5 級 +1
 FE.SKILLS = {
   sword: { name: '劍術', weapon: true },      // 長劍、短劍、巨劍、拿弓近戰
-  spear: { name: '矛術', weapon: true },      // 短矛
-  pike: { name: '長矛術', weapon: true },     // 長槍
+  spear: { name: '槍術', weapon: true },      // 短矛、長槍（第二十九版追加：矛術與長矛術合併）
   knife: { name: '刀術', weapon: true },      // 短刀
   staff: { name: '杖術', weapon: true },      // 法杖（含法師的範圍魔攻）
   axe: { name: '斧術', weapon: true },        // 戰斧、巨斧
-  mace: { name: '錘術', weapon: true },       // 硬頭錘
-  hammer: { name: '重錘術', weapon: true },   // 戰錘、拿弩近戰
+  mace: { name: '錘術', weapon: true },       // 硬頭錘、戰錘、拿弩近戰（錘術與重錘術合併）
   whip: { name: '鞭術', weapon: true },       // 鞭子
   bow: { name: '弓術', weapon: true },        // 弓箭射擊，管傷害
   crossbow: { name: '弩術', weapon: true },   // 輕弩射擊，管傷害
@@ -467,9 +482,13 @@ FE.SKILLS = {
   fight: { name: '格鬥' },
   shoot: { name: '射擊' },
   dodge: { name: '閃避' },
-  armor: { name: '穿甲' },
+  light: { name: '輕甲' },     // 穿輕甲被打中而且防具擋下傷害（第二十九版追加：穿甲拆成輕甲、中甲、重甲三項）
+  medium: { name: '中甲' },
+  heavy: { name: '重甲' },
   shield: { name: '盾牌使用' },
 };
+// 防具類別對應的穿甲技能（無甲＝衣袍沒有）
+FE.ARMOR_SKILL = { light: 'light', medium: 'medium', heavy: 'heavy' };
 // 技能等級的名稱（0～15；15 以上寫「傳奇 +N」）
 FE.SKILL_LEVELS = ['涉獵', '新手', '尚可', '稱職', '熟練', '精熟', '有天分', '老練', '專家', '職業級', '卓越', '傑出', '大師', '高階大師', '宗師', '傳奇'];
 FE.skillLevelName = (lv) => (lv >= FE.CONFIG.SKILL_LEGEND ? (lv > FE.CONFIG.SKILL_LEGEND ? `傳奇 +${lv - FE.CONFIG.SKILL_LEGEND}` : '傳奇') : FE.SKILL_LEVELS[Math.max(0, lv)]);
@@ -495,37 +514,82 @@ FE.START_OPTS = {
   bow: { label: '弓箭', gear: 'bow', arrows: 20, desc: '1d6 穿刺，按 F 射擊（5／20 格），要用兩手，附一捆 20 支箭。精通侵擾：射中後你下一次打牠有優勢。' },
   staff: { label: '法杖', gear: 'staff', desc: '1d6 鈍擊，副手空著時 1d8。法師拿著按 F 施放範圍魔法。精通失衡。' },
   shield: { label: '盾牌', gear: 'shield', desc: '拿在副手，有機率擋下一部分傷害。' },
-  medium: { label: '中甲', gear: 'medium', desc: '物理與魔法都擋得住一些，每個動作多花 1 刻。' },
-  light: { label: '輕甲', gear: 'light', desc: '擋得不多，但不拖慢動作。' },
+  waraxe: { label: '戰斧', gear: 'waraxe', desc: '1d8 揮砍，副手空著時 1d10。精通失衡：打中後有機會讓對方倒地。' },
+  greataxe: { label: '巨斧', gear: 'greataxe', desc: '1d12 揮砍，很重（力量不到 13 出手有劣勢），體型夠大才拿得起來。精通順劈：打中後可以順手打旁邊另一隻。' },
+  warhammer: { label: '戰錘', gear: 'warhammer', desc: '1d8 鈍擊，副手空著時 1d10。精通推擊。' },
+  shortsword: { label: '短劍', gear: 'shortsword', desc: '1d6 穿刺，靈巧、輕巧，副手也拿輕武器可以雙持。精通侵擾。' },
+  club: { label: '硬頭錘', gear: 'club', desc: '1d6 鈍擊。精通削弱。' },
+  medium: { label: '鱗甲', gear: 'medium', desc: '一片片金屬鱗疊成的甲，擋得住不少物理傷害，每個動作多花 1 刻。' },
+  light: { label: '皮甲', gear: 'light', desc: '鞣過的皮革，擋不了刀劍，但輕便、不拖慢動作。' },
+  heavy: { label: '鎖子甲', gear: 'heavy', desc: '鎖環編成的長甲，擋砍很好，每個動作多花 2 刻，力量要 13 才穿得順。' },
   robe: { label: '一般衣袍', gear: 'robe', desc: '幾乎擋不住傷害，輕得不占負重。' },
   herb: { label: '2 份藥草', herb: 2, desc: '放進背包，每份吃下去回復生命上限的四分之一。' },
   gold: { label: '20 金幣', gold: 20, desc: '到聚落向工匠買裝備或修理。' },
 };
-// 職業：base 職業基礎（生命用；負重第二十九版起看力量，不看職業）、attr 起始屬性、fixed 固定給的裝備、groups 自己選的（每組從 of 裡挑 pick 樣）、
-// primary 是測試機器人加點的主屬性（其次體質；不是玩家的限制）。職業不綁武器和防具，裝備欄沒有職業限制。
-// 第二十八版的職業能力：mastery 一開始就會精通（其他職業要那把武器的技能 5 級）、bash 戰士盾擊（按 5）、spell 法師拿法杖按 F 範圍魔攻、
-// holy 牧師每個動作第一下命中多 1d8 神聖傷害、heal 牧師治療（按 4）
+// 職業（第二十九版追加改成六個）：base 職業基礎（生命用；負重看力量，不看職業）、attr 起始屬性、fixed 固定給的裝備（武器放主手，多的武器放背包）、
+// groups 自己選的（每組從 of 裡挑 pick 樣）、primary 是測試機器人加點的主屬性（其次體質；不是玩家的限制）、
+// pool 起始技能池（'melee' 代表各近戰武器技能：劍術、槍術、刀術、杖術、斧術、錘術、鞭術）。職業不綁武器和防具，裝備欄沒有職業限制，只有野蠻人不能穿中甲、重甲。
+// 職業能力：bash 戰士盾擊（按 5）、spell 法師拿法杖按 F 範圍魔攻、light 牧師按 F 放神聖之光、
+// holy 聖騎士每個動作第一下命中多 1d8 神聖傷害、heal 治療（按 4，healAttr 是加哪一項屬性的修正值）。精通不分職業，一律要該武器的技能 5 級
 FE.CLASSES = {
   warrior: {
     name: '戰士', base: 10, attr: { str: 15, dex: 13, con: 14, int: 10, wis: 12, cha: 8 },
-    desc: '生命最多、背得最多。一開始就會武器的精通。拿盾牌時格擋值再加力量修正值，還能按 5 用盾牌撞。',
-    fixed: ['medium'], groups: [{ pick: 1, of: ['sword', 'spear', 'shortspear'] }, { pick: 2, of: ['shield', 'herb', 'gold'] }], primary: 'str', mastery: true, bash: true,
+    desc: '生命多、背得多，什麼近戰武器都上手。拿盾牌時格擋值再加力量修正值，還能按 5 用盾牌撞。',
+    fixed: ['medium'], groups: [{ pick: 1, of: ['sword', 'waraxe', 'shortspear', 'spear'] }, { pick: 2, of: ['shield', 'herb', 'gold'] }], primary: 'str', bash: true,
+    pool: ['fight', 'medium', 'heavy', 'shield', 'dodge', 'melee'],
   },
   ranger: {
     name: '遊俠', base: 8, attr: { str: 12, dex: 15, con: 13, int: 8, wis: 14, cha: 10 },
-    desc: '腳步輕、閃得開，擅長弓箭。一開始就會武器的精通。',
-    fixed: ['light'], groups: [{ pick: 1, of: ['bow', 'dagger', 'shortspear', 'spear'] }], primary: 'dex', mastery: true,
+    desc: '腳步輕、閃得開，擅長弓箭。一開始就帶著弓和一捆箭。',
+    fixed: ['light', 'bow'], groups: [{ pick: 1, of: ['dagger', 'shortsword'] }], primary: 'dex',
+    pool: ['shoot', 'dodge', 'fight', 'knife', 'sword', 'light'],
   },
   mage: {
     name: '法師', base: 4, attr: { str: 8, dex: 13, con: 12, int: 15, wis: 14, cha: 10 },
     desc: '生命少、背不動多少東西。拿法杖按 F，魔力會炸開一片，打中目標和周圍的怪物。',
-    fixed: ['robe'], groups: [{ pick: 1, of: ['staff', 'dagger'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'int', spell: true,
+    fixed: ['robe', 'staff'], groups: [{ pick: 1, of: ['dagger', 'herb'] }], primary: 'int', spell: true,
+    pool: ['dodge', 'shoot', 'knife', 'fight'],
   },
   priest: {
-    name: '牧師', base: 8, attr: { str: 13, dex: 8, con: 14, int: 10, wis: 12, cha: 15 },
-    desc: '生命不少，談起價錢也比較吃香。每次出手第一下打中時，神聖之力多傷對方一些；按 4 治療自己。',
-    fixed: [], groups: [{ pick: 1, of: ['medium', 'shield'] }, { pick: 1, of: ['staff', 'sword'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'wis', holy: true, heal: true,
+    name: '牧師', base: 8, attr: { str: 13, dex: 10, con: 14, int: 8, wis: 15, cha: 12 },
+    desc: '靠感知吃飯。按 F 對一個目標放神聖之光（過渡的一招，施法系統還沒談），按 4 治療自己（加感知修正值）。',
+    fixed: ['medium', 'club'], groups: [{ pick: 1, of: ['shield', 'staff'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'wis', light: true, heal: true, healAttr: 'wis',
+    pool: ['shield', 'medium', 'fight', 'dodge'],
   },
+  paladin: {
+    name: '聖騎士', base: 10, attr: { str: 14, dex: 10, con: 13, int: 8, wis: 12, cha: 15 },
+    desc: '披甲持盾的戰鬥者。每個動作第一下打中時，神聖之力多傷對方一些；按 4 治療自己（加魅力修正值）。',
+    fixed: ['heavy', 'shield'], groups: [{ pick: 1, of: ['sword', 'warhammer', 'shortspear'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'cha', holy: true, heal: true, healAttr: 'cha',
+    pool: ['shield', 'medium', 'heavy', 'fight', 'melee'],
+  },
+  barbarian: {
+    name: '野蠻人', base: 12, attr: { str: 14, dex: 13, con: 15, int: 8, wis: 12, cha: 10 },
+    desc: '生命最多，揮著大斧硬衝。不能穿中甲、重甲（輕甲、衣袍、盾牌可以）。',
+    fixed: ['light'], groups: [{ pick: 1, of: ['greataxe', 'waraxe'] }, { pick: 1, of: ['shortspear', 'herb'] }], primary: 'str', noHeavyArmor: true,
+    pool: ['fight', 'dodge', 'light', 'shoot', 'melee'],
+  },
+};
+// 各近戰武器技能（職業技能池的 'melee'）
+FE.MELEE_SKILLS = ['sword', 'spear', 'knife', 'staff', 'axe', 'mace', 'whip'];
+// 起始技能的組合（第二十九版追加）：精熟（5 級）一項固定是起始主手武器那一項，其餘從職業技能池隨機抽，抽不到的都是涉獵
+FE.SKILL_PACKS = {
+  focus: { name: '專精', levels: [4, 4, 3, 3, 3] },  // 熟練 2 項、稱職 3 項
+  broad: { name: '全面', levels: [3, 3, 3, 3, 3, 3] }, // 稱職 6 項
+};
+FE.START_MAIN_LEVEL = 5;
+// 身高、體格（1～7）出現的機率（%，第二十九版追加；體型公式不變）
+FE.BODY_ODDS = {
+  human: { height: [8, 13, 19, 22, 18, 12, 8], build: [9, 14, 20, 21, 17, 12, 7] },
+  dwarf: { height: [24, 27, 20, 13, 9, 5, 2], build: [3, 6, 11, 17, 23, 24, 16] },
+  elf: { height: [2, 6, 12, 18, 25, 22, 15], build: [21, 28, 22, 14, 8, 5, 2] },
+};
+FE.rollOdds = (rng, odds) => {
+  let r = rng() * odds.reduce((s, x) => s + x, 0);
+  for (let i = 0; i < odds.length; i++) {
+    r -= odds[i];
+    if (r < 0) return i + 1;
+  }
+  return odds.length;
 };
 FE.ITEMS = ['修補符文', '舊地圖', '發光苔蘚', '空白卷軸', '鐵釘', '藥草'];
 FE.QUEST_LINES = [

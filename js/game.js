@@ -579,7 +579,7 @@
     // 生命上限照公式重算（職業基礎、體質、等級），多出來的部分同時補到目前的生命；回傳多了幾點
     recalc() {
       const p = this.player;
-      const max = FE.Char.maxHp(p, this.level);
+      const max = FE.Char.maxHp(p, this.level) + (p.ward ? p.ward.hp || 0 : 0); // 神聖加護、守護加的生命上限
       const gain = max - p.maxHp;
       p.maxHp = max;
       if (gain > 0) p.hp += gain;
@@ -651,6 +651,8 @@
     beginAction() {
       if (this.battle.cooldown > 0) this.battle.cooldown--;
       if (this.battle.healCd > 0) this.battle.healCd--;
+      const sc = this.battle.spellCd || {};
+      for (const k of Object.keys(sc)) if (sc[k] > 0) sc[k]--;
       this.aim = null;
     }
 
@@ -832,6 +834,7 @@
       const p = this.player;
       const fell = this.fell;
       this.fell = false;
+      if (p.ward && this.ticks >= p.ward.until) this.endWard();
       this.unstrand();
       const collapsed = p.exhaust >= C.EXHAUST_MAX;
       if (collapsed) {
@@ -961,14 +964,24 @@
         if (!quiet) this.say(text, 'sys');
         return null;
       };
+      // 第三十一版的施法：kind 是要瞄準的法術（魔法攻擊、大魔法攻擊、神聖攻擊）；沒指定就是這個職業的單體攻擊招（機器人用）
+      const spells = this.spellsOf();
+      if (spells.length && kind !== 'shoot') {
+        const id = FE.SPELLS[kind] ? kind : spells.find((k) => FE.SPELLS[k].aim && !FE.SPELLS[k].area);
+        if (id && FE.SPELLS[id].aim) {
+          const cd = this.spellCd(id);
+          if (cd > 0) return no(`${FE.SPELLS[id].name}還要 ${cd} 回合才能再用。`);
+          return { mode: id, weapon: null, range: FE.Char.range(p, C.SPELL_RANGE) };
+        }
+      }
       // 牧師按 F 放神聖之光（不用拿武器）
-      if (FE.Char.cls(p).light) return { mode: 'light', weapon: null, range: FE.Char.range(p, C.SPELL_RANGE) };
+      if (FE.Char.cls(p).light && !spells.length) return { mode: 'light', weapon: null, range: FE.Char.range(p, C.SPELL_RANGE) };
       if (d && d.ammo) {
         if (!this.bagCount(d.ammo)) return no(`沒有${FE.GEAR[d.ammo].name}了（鐵匠、武器匠有賣）。`);
         return { mode: 'shoot', weapon: w, range: FE.Char.range(p, d.range) };
       }
       if (d && d.thrown) return this.throwMode(quiet);
-      if (d && w.type === 'staff' && FE.Char.cls(p).spell) return { mode: 'spell', weapon: w, range: FE.Char.range(p, C.SPELL_RANGE) };
+      if (d && w.type === 'staff' && FE.Char.cls(p).spell && !spells.length) return { mode: 'spell', weapon: w, range: FE.Char.range(p, C.SPELL_RANGE) };
       if (d && w.type === 'staff') return no('法杖在你手上只能近戰（只有法師施得出法術）。');
       return no(w ? `${FE.Gear.name(w)}不能按 F 遠程攻擊。拿弓箭、輕弩可以射擊；任何武器都可以按 T 丟出去。` : '手上沒有武器，不能遠程攻擊。');
     }
@@ -1044,7 +1057,9 @@
       const w = r.weapon;
       const ticks = FE.Char.attackTicks(p, w);
       let holy = !!FE.Char.cls(p).holy;
-      if (r.mode === 'shoot') {
+      if (FE.SPELLS[r.mode]) {
+        this.castOn(r.mode, m, r.range);
+      } else if (r.mode === 'shoot') {
         // 先記在怪物身上：牠倒下或冒險者脫離戰鬥時撿回一半（見 recoverArrows）；箭矢記在 m.arrows，弩矢記在 m.bolts
         const q = this.takeArrow(FE.Gear.def(w).ammo);
         const field = FE.Gear.def(w).ammo === 'bolt' ? 'bolts' : 'arrows';
@@ -1082,6 +1097,133 @@
       }
       this.endTurn(false, ticks);
       return true;
+    }
+
+    // ---- 施法（第三十一版）：法師、牧師、聖騎士的招式；按 F 打開招式清單（介面），瞄準的招走 aimStart／fireAt，其他的直接 cast ----
+    spellsOf() {
+      const p = this.player;
+      return FE.CLASSES[p.cls] && FE.CLASSES[p.cls].allGear ? FE.CLASS_SPELLS[p.cls] || [] : [];
+    }
+    spellCd(id) {
+      return (this.battle.spellCd && this.battle.spellCd[id]) || 0;
+    }
+    // 瞄準的攻擊招打出去（fireAt 叫，已經算了動作）：單體打目標；大魔法攻擊打目標與周圍（法杖只磨一次、技能只練一次）
+    castOn(id, m, range) {
+      const p = this.player;
+      const sp = FE.SPELLS[id];
+      const staff = !sp.noStaff && p.equip.main && p.equip.main.type === 'staff' ? p.equip.main : null;
+      this.battle.spellCd = this.battle.spellCd || {};
+      this.battle.spellCd[id] = sp.cd || 0;
+      this.say(`你施放${sp.name}。`, 'sys');
+      if (sp.area !== 'target') {
+        FE.Combat.resolveAttack(this, p, m, 'attack', { mode: id, weapon: staff, range });
+        return;
+      }
+      const rad = FE.Char.attrMod(p, 'int') >= C.SPELL_BIG_INT ? C.SPELL_RADIUS[1] : C.SPELL_RADIUS[0];
+      const hit = this.monsters.filter((o) => Math.max(Math.abs(o.x - m.x), Math.abs(o.y - m.y)) <= rad).sort((a, b) => (a === m ? -1 : b === m ? 1 : a.id - b.id));
+      hit.forEach((o, i) => {
+        if (this.fell || !this.monsters.includes(o)) return;
+        FE.Combat.resolveAttack(this, p, o, 'attack', { mode: id, weapon: staff, range, noWear: i > 0, noTrain: i > 0 });
+      });
+    }
+    // 不用瞄準的招（大神聖攻擊、懲戒、三種防禦招）：算一個動作。回傳有沒有放出去
+    cast(id) {
+      const p = this.player;
+      const sp = FE.SPELLS[id];
+      if (!sp || !this.spellsOf().includes(id)) {
+        this.say('你不會這一招。', 'sys');
+        return false;
+      }
+      if (sp.aim) {
+        this.aimStart(id);
+        return false;
+      }
+      if (sp.ward) return this.castWard(id);
+      const cd = this.spellCd(id);
+      if (cd > 0) {
+        this.say(`${sp.name}還要 ${cd} 回合才能再用。`, 'sys');
+        return false;
+      }
+      if (this.world.inVillage(p.x, p.y)) {
+        this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
+        return false;
+      }
+      const around = this.monsters.filter((o) => Math.max(Math.abs(o.x - p.x), Math.abs(o.y - p.y)) <= 1 && FE.Combat.adjacent(this, p, o));
+      if (!around.length) {
+        this.say(`周圍沒有怪物，${sp.name}打不到東西。`, 'sys');
+        return false;
+      }
+      this.beginAction();
+      this.battle.spellCd = this.battle.spellCd || {};
+      this.battle.spellCd[id] = sp.cd || 0;
+      this.earn(C.COMPUTE_PER_ATTACK);
+      const staff = !sp.noStaff && p.equip.main && p.equip.main.type === 'staff' ? p.equip.main : null;
+      this.say(`你施放${sp.name}。`, 'sys');
+      around.sort((a, b) => a.id - b.id).forEach((o, i) => {
+        if (this.fell || !this.monsters.includes(o)) return;
+        const r = FE.Combat.resolveAttack(this, p, o, 'attack', { mode: id, weapon: staff, noWear: i > 0, noTrain: i > 0 });
+        // 大神聖攻擊：打中（還活著）就推開，大型推不動
+        if (sp.push && r && r.hit && this.monsters.includes(o) && !o.boss) FE.Combat.push(this, p, o, sp.push);
+      });
+      this.endTurn(false, FE.Char.attackTicks(p, staff));
+      return true;
+    }
+    // 防禦招：AC、生命（照 Aid 加上限與目前生命）、持續時間與被打中次數；效果還在就不能再放
+    castWard(id) {
+      const p = this.player;
+      const sp = FE.SPELLS[id];
+      if (p.ward) {
+        this.say(`${FE.SPELLS[p.ward.id].name}還在，效果結束才能再放。`, 'sys');
+        return false;
+      }
+      if (sp.unarmored && this.armored()) {
+        this.say(`穿著防具，${sp.name}沒有效果（衣袍可以）。`, 'sys');
+        return false;
+      }
+      this.beginAction();
+      const m = sp.hpAttr ? FE.Char.attrMod(p, sp.hpAttr) : 0;
+      const hp = sp.hp ? Math.max(1, sp.hp + m) : 0;
+      p.ward = { id, ac: sp.ac, until: this.ticks + sp.ticks, hits: sp.hits ? Math.max(1, sp.hits + m) : null, hp };
+      if (hp) {
+        p.maxHp += hp;
+        p.hp += hp;
+      }
+      this.say(`你施放${sp.name}：怪物比較打不中你${hp ? `，生命上限 +${hp}` : ''}。`, 'good');
+      this.endTurn(false);
+      return true;
+    }
+    armored() {
+      const b = this.player.equip.body;
+      return !!b && FE.GEAR[b.type].cls !== 'none';
+    }
+    // 加護給的 AC（combat 叫）：魔法防禦穿上防具就結束
+    wardAC() {
+      const w = this.player.ward;
+      if (!w) return 0;
+      if (FE.SPELLS[w.id].unarmored && this.armored()) {
+        this.endWard('你穿上了防具，魔法防禦散掉了。');
+        return 0;
+      }
+      return w.ac;
+    }
+    // 被打中一次（combat 叫）：守護數次數
+    wardHit() {
+      const w = this.player.ward;
+      if (!w || w.hits == null) return;
+      w.hits--;
+      if (w.hits <= 0) this.endWard(`${FE.SPELLS[w.id].name}擋到極限，散掉了。`);
+    }
+    // 加護結束：生命上限扣回去，目前生命最少留 1
+    endWard(text) {
+      const p = this.player;
+      const w = p.ward;
+      if (!w) return;
+      p.ward = null;
+      if (w.hp) {
+        p.maxHp -= w.hp;
+        p.hp = Math.max(1, Math.min(p.hp, p.maxHp));
+      }
+      this.say(text || `${FE.SPELLS[w.id].name}的效果結束了。`, 'sys');
     }
 
     // 射向這隻怪物的箭撿回一半（捨去，照射出去的品質放回背包）：牠倒下、或冒險者脫離戰鬥時

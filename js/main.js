@@ -122,6 +122,24 @@
     step();
   }
 
+  // 選了招式清單的第 i 項：要瞄準的進入瞄準（F 或 Enter 出手），其他的直接施放
+  function pickSpell(i) {
+    const o = FE.UI.spellAt(i);
+    if (!o || !o.ok) return;
+    FE.UI.closeSpells();
+    if (o.id === 'shoot') {
+      game.aimStart('shoot');
+      FE.UI.update();
+    } else if (FE.SPELLS[o.id].aim) {
+      game.aimStart(o.id);
+      FE.UI.update();
+    } else dispatch('施法：' + o.id, () => game.cast(o.id));
+  }
+  document.getElementById('modal').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-spell]');
+    if (b && !b.disabled) pickSpell([...b.parentNode.children].indexOf(b));
+  });
+
   const DIRS = {
     arrowup: [0, -1], arrowdown: [0, 1], arrowleft: [-1, 0], arrowright: [1, 0],
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
@@ -171,6 +189,13 @@
     if (game.player.points > 0) {
       e.preventDefault();
       if (/^[1-6]$/.test(k)) dispatch('升級加點', () => game.spendPoint(FE.ATTRS[Number(k) - 1].key));
+      return;
+    }
+    // 施法的招式清單開著：數字鍵選招，Esc 取消
+    if (FE.UI.spellsOpen()) {
+      e.preventDefault();
+      if (k === 'escape') FE.UI.closeSpells();
+      else if (/^[1-9]$/.test(k)) pickSpell(Number(k) - 1);
       return;
     }
     // 住一晚的確認視窗開著：Enter 住下、Esc 取消，其他鍵不作用
@@ -263,6 +288,10 @@
     if (ACTS[k]) {
       e.preventDefault();
       // F 只是進入瞄準，不算動作、不存檔
+      if (ACTS[k] === 'fire' && game.spellsOf().length) {
+        FE.UI.openSpells();
+        return;
+      }
       if (ACTS[k] === 'fire' || ACTS[k] === 'throw') {
         game.act(ACTS[k]);
         FE.UI.update();
@@ -307,6 +336,10 @@
     const b = e.target.closest && e.target.closest('[data-act]');
     const act = b && b.dataset.act;
     if (!act || b.disabled || !ready || game.talking != null || FE.UI.win()) return;
+    if (act === 'fire' && !game.aim && game.spellsOf().length) {
+      FE.UI.openSpells();
+      return;
+    }
     if (act === 'fire' || act === 'throw') {
       if (game.aim) dispatch('戰鬥：遠程', () => game.aimFire());
       else {

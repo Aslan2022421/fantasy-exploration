@@ -121,7 +121,7 @@
     // 瞄準中的怪物（白框之外另一種顏色），範圍魔攻會波及的格子塗上底色
     const aimed = game.aimTarget();
     const area = new Set();
-    if (aimed && game.aim.mode === 'spell') {
+    if (aimed && (game.aim.mode === 'spell' || game.aim.mode === 'blast')) {
       const rad = FE.Char.attrMod(p, 'int') >= C.SPELL_BIG_INT ? C.SPELL_RADIUS[1] : C.SPELL_RADIUS[0];
       for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) area.add(key(aimed.x + dx, aimed.y + dy));
     }
@@ -398,6 +398,8 @@
     const vex = game.monsters.filter((m) => m.vexed && Math.abs(m.x - game.player.x) + Math.abs(m.y - game.player.y) <= C.SIGHT * 3);
     const fx = vex.map((m) => `侵擾：下一次打${m.name}有優勢`);
     const ex = game.player.exhaust || 0;
+    const wd = game.player.ward;
+    if (wd) fx.push(`${FE.SPELLS[wd.id].name}：怪物出手 −${wd.ac}${wd.hp ? `、生命上限 +${wd.hp}` : ''}，還剩 ${Math.max(0, Math.ceil((wd.until - game.ticks) / 100))} 小時${wd.hits != null ? `或被打中 ${wd.hits} 次` : ''}`);
     if (ex) fx.push(`力竭 ${ex}：出手 −${C.EXHAUST_D20 * ex}，走路慢 ${Math.round((FE.Char.exhaustMoveMul(game.player) - 1) * 100)}%`);
     $('fxText').textContent = fx.length ? fx.join('　') : '無';
   }
@@ -447,7 +449,9 @@
     document.querySelector('#quick [data-act="bash"]').classList.toggle('hidden', !cls.bash);
     document.querySelector('#quick [data-act="fire"]').classList.toggle('hidden', !ranged);
     document.querySelector('#quick [data-act="throw"]').classList.toggle('hidden', !can.throw);
-    document.querySelector('#quick [data-act="fire"] .qn').textContent = ranged && ranged.mode === 'spell' ? '施法' : ranged && ranged.mode === 'light' ? '神聖之光' : ranged && ranged.mode === 'throw' ? '投擲' : '射擊';
+    if (game.spellsOf().length) document.querySelector('#quick [data-act="fire"]').classList.remove('hidden');
+    document.querySelector('#quick [data-act="fire"]').disabled = false;
+    document.querySelector('#quick [data-act="fire"] .qn').textContent = game.spellsOf().length ? '施法' : ranged && ranged.mode === 'spell' ? '施法' : ranged && ranged.mode === 'light' ? '神聖之光' : ranged && ranged.mode === 'throw' ? '投擲' : '射擊';
     document.querySelector('#quick [data-act="deep"] .qcd').textContent = adj && cd > 0 ? `冷卻 ${cd}` : '';
     document.querySelector('#quick [data-act="heal"] .qcd').textContent = hcd > 0 ? `冷卻 ${hcd}` : '';
     // 右下角的視窗按鈕：開著的那顆亮起來
@@ -998,12 +1002,33 @@
       <p class="dim dlg-hint">Enter 住下　Esc 取消</p></div>`;
   }
 
+  // 施法的招式清單（第三十一版，法師、牧師、聖騎士按 F）：數字鍵選，冷卻中的不能選；手上有遠程武器另外列「射擊」
+  function spellMenu() {
+    const p = game.player;
+    const list = game.spellsOf().map((id) => ({ id, sp: FE.SPELLS[id] }));
+    const out = list.map(({ id, sp }) => {
+      const cd = game.spellCd(id);
+      const busy = sp.ward && p.ward;
+      const note = cd > 0 ? `冷卻 ${cd}` : busy ? '效果還在' : sp.aim ? '要瞄準' : '';
+      return { id, label: sp.name, desc: sp.desc, note, ok: !(cd > 0) && !busy };
+    });
+    const w = p.equip.main && FE.GEAR[p.equip.main.type];
+    if (w && w.ammo) out.push({ id: 'shoot', label: '射擊', desc: `用${w.name}射擊`, note: '要瞄準', ok: true });
+    return out;
+  }
+  function drawSpellMenu() {
+    $('modalBody').className = 'win';
+    $('modal').classList.remove('full');
+    $('modalBody').innerHTML = `<h2>施法 <span class="dim">（F）</span></h2><div class="winbody"><div class="dlg-opts">${spellMenu().map((o, i) => `<button data-spell="${o.id}" ${o.ok ? '' : 'disabled'}><kbd>${i + 1}</kbd><b>${esc(o.label)}</b>${o.note ? `　<span class="dim">${esc(o.note)}</span>` : ''}<br><span class="dim">${esc(o.desc)}</span></button>`).join('')}</div><p class="dim dlg-hint">按數字選，Esc 取消</p></div>`;
+  }
+
   function drawModal() {
-    const open = !!ui.start || !!ui.restAsk || (game && game.player && game.player.points > 0);
+    const open = !!ui.start || !!ui.restAsk || !!ui.spellMenu || (game && game.player && game.player.points > 0);
     $('modal').classList.toggle('hidden', !open);
     if (!open) return;
     if (ui.start) drawStart();
     else if (ui.restAsk) drawRestAsk();
+    else if (ui.spellMenu) drawSpellMenu();
     else drawLevelUp();
   }
 
@@ -1105,6 +1130,17 @@
       return true;
     },
     restAsking: () => !!ui.restAsk,
+    // 施法的招式清單：開、關、第 i 項
+    openSpells() {
+      ui.spellMenu = true;
+      update();
+    },
+    spellsOpen: () => !!ui.spellMenu,
+    closeSpells() {
+      ui.spellMenu = false;
+      update();
+    },
+    spellAt: (i) => spellMenu()[i] || null,
     cellAt,
     // 滑鼠右鍵查看那一格（開查看視窗）
     look(x, y) {

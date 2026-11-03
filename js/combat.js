@@ -130,7 +130,7 @@
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
     const mode = aP ? opts.mode || 'melee' : null;
-    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'spell' || mode === 'light';
+    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'spell' || mode === 'light' || !!(FE.SPELLS[mode] && FE.SPELLS[mode].aim);
     // 冒險者這一下用的武器（反擊用主手）與算法；先記下，免得這一下把武器磨壞了找不到
     const wpn = aP ? (opts.counter ? A.equip.main : opts.weapon !== undefined ? opts.weapon : A.equip.main) : null;
     const prof = aP ? FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
@@ -139,6 +139,8 @@
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值
     // 力竭（第三十版）：冒險者出手的 d20 每級 −2
     let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + prof.hit - C.EXHAUST_D20 * (A.exhaust || 0) : 0;
+    // 魔法防禦、神聖加護、守護（第三十一版）：怪物打冒險者的 d20 減掉加護的 AC
+    if (dP && game.wardAC) mod -= game.wardAC();
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
     else if (cA.h < cD.h) mod -= C.HIGH_GROUND;
     // 優勢與劣勢：各自有幾個來源，兩者同時有就抵消（擲一次）
@@ -245,6 +247,7 @@
     // 第二十九版：出手命中 10 點經驗、沒命中 5 點；閃開一次、格擋成功一次、穿著防具被打中而且防具擋下了傷害各 10 點（再乘智力的倍率）
     if (aP && !opts.counter && !opts.noTrain) for (const s of prof.skills) FE.Char.useSkill(game, s, hitKey ? C.SKILL_EXP_HIT : C.SKILL_EXP_MISS);
     if (dP && dodged) FE.Char.useSkill(game, 'dodge', C.SKILL_EXP_DODGE);
+    if (dP && dmg > 0 && game.wardHit) game.wardHit(); // 守護：被打中幾次就結束
     if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield', C.SKILL_EXP_BLOCK);
     if (dP && reduced > 0 && armorId) FE.Char.useSkill(game, armorId, C.SKILL_EXP_ARMOR); // 穿哪一類就練哪一項（輕甲、中甲、重甲）
 

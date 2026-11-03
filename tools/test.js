@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 global.require = require; // 載進來的檔不是模組，借用這支的 require
-for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30']) {
+for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30', 'test-skills31']) {
   vm.runInThisContext(fs.readFileSync(path.join(__dirname, f + '.js'), 'utf8'), { filename: path.join(__dirname, f + '.js') });
 }
 
@@ -59,7 +59,7 @@ function collectState() {
     problems, pcount: problems.count || 0,
     stats, geo, reachCheck, bufferViolations, cutOff, stuckFixes, dlgStats, combat,
     measure: { armorCmp: measure.armorCmp },
-    checks: { dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks, econ: econChecks },
+    checks: { dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks, econ: econChecks, spell: spellChecks },
     corruptCal,
     botDrops,
     sims: simResults, arena: arenaData,
@@ -90,7 +90,7 @@ function mergeState(part) {
   cutOff.push(...part.cutOff);
   const c = part.checks;
   dlgChecks += c.dlg; creationChecks += c.creation; wlChecks += c.wl; soldierChecks += c.soldier; bagChecks += c.bag;
-  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth; econChecks += c.econ;
+  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth; econChecks += c.econ; spellChecks += c.spell;
   mergeDeep(corruptCal, part.corruptCal);
   simResults.push(...part.sims);
   mergeDeep(arenaData, part.arena);
@@ -99,7 +99,7 @@ function mergeState(part) {
 function buildJobs() {
   const jobs = [];
   const add = (id, w) => jobs.push({ id, w });
-  const units = ['gear', 'character', 'combat28', 'growth29', 'economy30', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
+  const units = ['gear', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
   if (MODE === 'arena') {
     for (const cls of BOT_CLASSES) add('arena:' + cls, 30);
     return jobs;
@@ -246,7 +246,7 @@ console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${b
 }
 // 第三十版：時間與經濟
 {
-  console.log(`時間與經濟（第三十版）的場景檢查 ${econChecks} 項`);
+  console.log(`時間與經濟（第三十版）的場景檢查 ${econChecks} 項｜施法（第三十一版）的場景檢查 ${spellChecks} 項`);
   const cal = Object.keys(corruptCal).sort((a, b) => a - b).map((k) => { const r = corruptCal[k]; return `每回合 ${k}：${r.nights} 晚、附近怪物 ${r.monsters} 隻、侵蝕 ${r.corrupt} 次（每隻 ${(r.corrupt / Math.max(1, r.monsters)).toFixed(2)} 次、每晚多出 ${(r.tiles / Math.max(1, r.nights)).toFixed(1)} 格扭曲地面）`; });
   if (cal.length) console.log(`  侵蝕校準（長休一晚 80 回合）：${cal.join('｜')}`);
   const all = sim.concat(sim4);

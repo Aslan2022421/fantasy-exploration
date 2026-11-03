@@ -94,7 +94,11 @@ function arenaFight(game, tier, wl, i) {
     if (game.bagCount('arrow') < 5) game.bagAdd('arrow', 20);
     const rm = game.rangedMode(true);
     if (rm && rm.mode !== 'throw' && game.shootTargets(rm.range).includes(m)) game.fireAt(m);
-    else {
+    else if (!game.targetMonster() && !game.reachTarget()) {
+      // 法術冷卻中、怪物還沒貼上來：站著過一回合，等牠走過來（第三十一版，法術有冷卻）
+      game.beginAction();
+      game.endTurn(false);
+    } else {
       game.battle.targetId = m.id;
       game.act(game.battle.cooldown === 0 && m.hp > 8 ? 'deep' : 'attack');
     }

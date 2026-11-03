@@ -641,28 +641,33 @@ function testCombat28() {
       ok(ev2.length > 100 && ev2.every((e) => e.holy === 0), '牧師沒有命中的神聖附加傷害（那是聖騎士的）');
     }
 
-    // 牧師的神聖之光（按 F）：1d8 神聖傷害加感知修正值，命中加感知修正值，射程 5／20 加感知修正值，不用武器、不練技能、不丟武器
+    // 牧師的神聖攻擊（第三十一版取代神聖之光，按 F 選）：1d8 神聖傷害加感知修正值，命中加感知修正值，射程 5／20 加感知修正值；
+    // 沒拿法杖就沒有杖術加成、不練技能；穿中甲施法 −2；冷卻 1 回合（連兩下第二下放不出來）
     {
       const { g, p, w } = arena(435, 'priest', ['staff', 'gold']);
       p.attr.wis = 14;
       p.skills = Ch.freshSkills();
       const club = p.equip.main;
       const r = g.rangedMode(true);
-      ok(r && r.mode === 'light' && r.range.join() === '7,22', `神聖之光射程 5／20 加感知修正值 +2：${r && r.range}`);
-      const pf = Ch.profile(p, null, 'light');
-      ok(pf.type === 'holy' && pf.die.join() === '1,8' && pf.dmg === 2 && pf.hit === 2 && pf.mastery === null && pf.skills.length === 0, '神聖之光的算法：1d8 神聖、傷害與命中各加感知修正值');
+      ok(r && r.mode === 'holy' && r.range.join() === '7,22', `神聖攻擊射程 5／20 加感知修正值 +2：${r && r.range}`);
+      const pf = Ch.profile(p, null, 'holy');
+      ok(pf.type === 'holy' && pf.die.join() === '1,8' && pf.dmg === 2 && pf.hit === 2 - 2 && pf.mastery === null && pf.skills.length === 0, `神聖攻擊的算法：1d8 神聖、傷害加感知修正值、命中加感知修正值再扣中甲 2（${pf.hit}）`);
       const m = mon(g, p.x + 3, p.y);
       const t0 = g.turn;
-      const ev = events(() => { for (let i = 0; i < 300; i++) { p.hp = p.maxHp = 1e6; g.fireAt(m); } }).filter((e) => e.by === 'player');
+      const ev = events(() => { for (let i = 0; i < 300; i++) { p.hp = p.maxHp = 1e6; g.battle.spellCd = {}; g.fireAt(m); } }).filter((e) => e.by === 'player');
       const cl = ev.filter((e) => (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.resisted);
-      ok(g.turn === t0 + 300 && ev.length === 300 && ev.every((e) => e.mode === 'light' && e.dmgType === 'holy' && e.holy === 0) && spread(cl.map((e) => e.dmg)) === '3～10', `神聖之光 1d8+2：${spread(cl.map((e) => e.dmg))}`);
-      ok(Object.keys(FE.SKILLS).every((k) => uses(p, k) === 0) && p.equip.main === club && w.items.length === 0, '神聖之光不練技能、不丟武器');
+      ok(g.turn === t0 + 300 && ev.length === 300 && ev.every((e) => e.mode === 'holy' && e.dmgType === 'holy' && e.holy === 0) && spread(cl.map((e) => e.dmg)) === '3～10', `神聖攻擊 1d8+2：${spread(cl.map((e) => e.dmg))}`);
+      ok(Object.keys(FE.SKILLS).every((k) => uses(p, k) === 0) && p.equip.main === club && w.items.length === 0, '沒拿法杖的神聖攻擊不練技能、不丟武器');
+      g.battle.spellCd = {};
+      g.fireAt(m);
+      ok(g.spellCd('holy') === 1 && g.rangedMode(true) === null && !g.fireAt(m), '神聖攻擊冷卻 1 回合');
+      g.battle.spellCd = {};
       p.attr.wis = 8;
       ok(g.rangedMode(true).range.join() === '4,19', '感知修正值 -1 射程縮 1');
       p.equip.main = null;
-      ok(g.rangedMode(true).mode === 'light', '手上沒有武器也能放神聖之光');
+      ok(g.rangedMode(true).mode === 'holy', '手上沒有武器也能放神聖攻擊');
       const wr = arena(436, 'warrior', ['sword', 'shield', 'herb']);
-      ok(wr.g.rangedMode(true) === null && arena(437, 'mage', ['herb']).g.rangedMode(true).mode === 'spell', '戰士按 F 不能遠程、法師拿法杖是範圍魔攻');
+      ok(wr.g.rangedMode(true) === null && arena(437, 'mage', ['herb']).g.rangedMode(true).mode === 'bolt', '戰士按 F 不能遠程、法師的單體法術是魔法攻擊');
     }
 
     // 野蠻人不能穿中甲、重甲（輕甲、衣袍、盾牌可以）

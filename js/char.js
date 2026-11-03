@@ -112,6 +112,7 @@
     const dex = attrMod(p, 'dex');
     const fight = fightHit(p);
     const out = { die: null, type: 'blunt', hit: 0, dmg: 0, attr: 0, heavy: false, crit: critMin(p, w), mastery: null, skills: [], clear: q.clear, pierce: q.pierce };
+    if (FE.SPELLS[mode] && FE.SPELLS[mode].die) return spellProfile(p, FE.SPELLS[mode]);
     if (mode === 'light') {
       // 牧師的神聖之光（過渡的一招，施法系統還沒談）：1d8 神聖傷害加感知修正值，命中也加感知修正值；沒有神聖傷害附加（那是聖騎士的）
       const wis = attrMod(p, 'wis');
@@ -184,6 +185,27 @@
     // 重型：近戰力量、遠程敏捷不到 13 出手有劣勢
     out.heavy = !!d.heavy && (ranged ? p.attr.dex : p.attr.str) < C.HEAVY_MIN;
     return out;
+  }
+
+  // 穿甲施法的減值（第三十一版，法師、牧師）：中甲 2、重甲 4，那一類甲的技能 5 級減半（捨去）、10 級歸零
+  function castPenalty(p) {
+    const k = p.equip && p.equip.body ? FE.GEAR[p.equip.body.type].cls : 'none';
+    const base = FE.CAST_PENALTY[k] || 0;
+    if (!base) return 0;
+    const lv = skillLv(p, FE.ARMOR_SKILL[k]);
+    return lv >= 10 ? 0 : lv >= 5 ? Math.floor(base / 2) : base;
+  }
+  // 法術的出手算法（第三十一版）：命中與傷害加施法屬性的修正值；拿著法杖再加杖術（命中每 5 級 +1、傷害每 3 級 +1）、法杖品質的命中加值，
+  // 用得上法杖的效果（失衡），練杖術；命中再扣穿甲的施法減值。聖騎士（noStaff）兩者都沒有
+  function spellProfile(p, sp) {
+    const a = attrMod(p, sp.attr);
+    const w = p.equip.main;
+    const staff = !sp.noStaff && !!w && w.type === 'staff';
+    const q = staff ? FE.QUALITIES[w.q || 0] : FE.QUALITIES[0];
+    return {
+      die: sp.die.slice(), type: sp.type, hit: a + (staff ? q.hit + lvHit(p, 'staff') : 0) - (sp.noStaff ? 0 : castPenalty(p)), dmg: a + (staff ? lvDmg(p, 'staff') : 0),
+      attr: a, heavy: false, crit: critMin(p, null), mastery: staff ? mastery(p, w) : null, skills: staff ? ['staff'] : [], clear: staff ? q.clear : 0, pierce: 0, staff: staff ? w : null,
+    };
   }
 
   // 攻擊動作花幾刻：輕型 8、一般 10、重型 12，減敏捷修正值，最少 6（防具多花的刻另外疊加，見 game.js 的 endTurn）
@@ -404,7 +426,7 @@
     sizeOf, grip, GRIP_NAMES, canWieldType,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,
     armorSkillId, armorWeightMul, armorTicks, strShort, dexForDodge, canWear, startMainSkill, rollSkills, startPlusOne, rollBody, conCut,
-    mastery, critMin, range, profile, attackTicks,
+    mastery, critMin, range, profile, attackTicks, castPenalty, spellProfile,
     validPicks, startOk, groupOptions, defaultPicks, bodyOf, create,
   };
 })();

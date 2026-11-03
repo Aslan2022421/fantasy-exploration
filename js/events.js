@@ -82,8 +82,10 @@
     if (huntQuest(game, givers)) return { found: null };
     givers.sort((a, b) => dist(a, p) - dist(b, p));
     const giver = FE.pick(game.rng, givers.slice(0, 3));
-    if (game.rng() < C.GATHER_QUEST_CHANCE) {
-      gatherQuest(game, giver, game.rng() < 0.5 ? 'herb' : 'ore');
+    // 採藥、採礦委託只在世界上有那種採集點時才發（第三十二版修：原本沒有礦坑也會發採礦委託，根本做不到）
+    const kinds = ['herb', 'ore'].filter((k) => w.nodes.some((n) => n.kind === k));
+    if (kinds.length && game.rng() < C.GATHER_QUEST_CHANCE) {
+      gatherQuest(game, giver, kinds.length > 1 ? (game.rng() < 0.5 ? 'herb' : 'ore') : kinds[0]);
       return { found: null };
     }
 

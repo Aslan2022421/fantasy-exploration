@@ -328,6 +328,8 @@
     };
     const big = S === 1 ? 3 : 5;
     for (const ch of W.chests) dot(ch.x, ch.y, P['map-chest']);
+    // 採集點（第三十二版補上）：礦脈畫大點、藥草畫小點，採完還沒長回來的不畫
+    for (const nd of W.nodes) if (!(nd.regrowAt > game.ticks)) dot(nd.x, nd.y, P['map-node-' + nd.kind], nd.kind === 'ore' ? big : S);
     for (const n of W.npcs) {
       const target = handIn(n);
       dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : P['map-npc'], target ? big : S);

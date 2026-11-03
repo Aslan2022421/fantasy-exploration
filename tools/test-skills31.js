@@ -89,6 +89,7 @@ function testSpells31() {
     const p = g.player;
     ok(!g.cast('nova') && /打不到/.test(g.log[0].text), '周圍沒有怪物不能放大神聖攻擊');
     const m = mon(g, p.x + 1, p.y);
+    m.ac = FE.ROLL_OLD_AC; // 這裡量的是打中就推開；第三十三版起怪物 AC 15，20 次裡打中的次數看運氣，AC 照第三十二版的分段（等於 AC 6）
     const t0 = g.turn;
     let pushed = 0;
     for (let i = 0; i < 20; i++) {

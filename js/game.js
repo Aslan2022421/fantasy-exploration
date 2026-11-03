@@ -652,7 +652,7 @@
         y = free.y;
       }
       // 新生成的怪物照生成當下的世界等級套用加成
-      const m = FE.dressMonster(FE.makeMonster(Object.assign({}, d, { x, y }), this.nextMonsterId++, FE.Stability.worldLevel(this)), this.world);
+      const m = FE.dressMonster(FE.makeMonster(Object.assign({}, d, { x, y }), this.nextMonsterId++, FE.Stability.worldLevel(this)), this.world, this.rng);
       this.monsters.push(m);
       return m;
     }

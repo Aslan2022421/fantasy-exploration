@@ -411,22 +411,55 @@ FE.BIOMES = {
 // 怪物種族：系統把 BUG 包裝成怪物時，看 B 點所在的環境決定種族（外形字母與名字）；
 // 錯誤種類變成牠身上的「異常」，決定抗性、行為與閃爍方式（bugs.js 的 BUG_TYPES）。
 // 以下對照是 Claude 的提議，使用者還沒逐項確認，名字與字母可以直接改這裡。
+// 第三十三版之一：每個生態區 3～5 種（使用者同意的表），生成時照 weight 隨機套一種，原本那種最常見（每區第一個，weight 4，新的各 1：提議）；
+// 字母大寫是大型或單獨行動的，小寫是成群的。near 是看附近的地貌、不看生態區的種族（遺跡、墓地附近的殭屍與食屍鬼，見 FE.raceAt）
 FE.RACES = {
-  goblin:     { name: '哥布林', glyph: 'g', biomes: ['grassland', 'shrubland', 'plain'] },
-  bugbear:    { name: '熊地精', glyph: 'b', biomes: ['forest'] },
-  werewolf:   { name: '狼人', glyph: 'w', biomes: ['taiga'] },
-  yeti:       { name: '雪怪', glyph: 'Y', biomes: ['tundra', 'glacier'] },
-  lizardfolk: { name: '蜥蜴人', glyph: 'l', biomes: ['jungle'] },
-  gnoll:      { name: '豺狼人', glyph: 'n', biomes: ['savanna'] },
-  skeleton:   { name: '骷髏', glyph: 's', biomes: ['desert'] },
-  troll:      { name: '沼澤巨魔', glyph: 'R', biomes: ['marsh', 'swamp', 'lake'] },
-  kobold:     { name: '狗頭人', glyph: 'k', biomes: ['mountain'] },
+  goblin:     { name: '哥布林', glyph: 'g', biomes: ['grassland', 'shrubland', 'plain'], weight: 4 },
+  wolf:       { name: '狼', glyph: 'C', biomes: ['grassland', 'shrubland', 'plain'], weight: 1 },
+  giantrat:   { name: '巨鼠', glyph: 'r', biomes: ['grassland', 'shrubland', 'plain'], weight: 1 },
+  bugbear:    { name: '熊地精', glyph: 'b', biomes: ['forest'], weight: 4 },
+  boar:       { name: '野豬', glyph: 'q', biomes: ['forest'], weight: 1 },
+  spider:     { name: '巨蜘蛛', glyph: 'S', biomes: ['forest'], weight: 1 },
+  tree:       { name: '甦醒樹', glyph: 'T', biomes: ['forest'], weight: 1 },
+  owlbear:    { name: '梟熊', glyph: 'E', biomes: ['forest'], weight: 1 }, // 使用者新加；字母 E 是 Claude 挑的（避開現有的）
+  werewolf:   { name: '狼人', glyph: 'w', biomes: ['taiga'], weight: 4 },
+  direwolf:   { name: '恐狼', glyph: 'D', biomes: ['taiga'], weight: 1 },
+  brownbear:  { name: '棕熊', glyph: 'B', biomes: ['taiga'], weight: 1 },
+  yeti:       { name: '雪怪', glyph: 'Y', biomes: ['tundra', 'glacier'], weight: 4 },
+  winterwolf: { name: '冬狼', glyph: 'F', biomes: ['tundra', 'glacier'], weight: 1 },
+  icemephit:  { name: '冰霜魔', glyph: 'i', biomes: ['tundra', 'glacier'], weight: 1 },
+  lizardfolk: { name: '蜥蜴人', glyph: 'l', biomes: ['jungle'], weight: 4 },
+  constrictor: { name: '巨蟒', glyph: 'J', biomes: ['jungle'], weight: 1 },
+  ape:        { name: '猿', glyph: 'a', biomes: ['jungle'], weight: 1 },
+  gnoll:      { name: '豺狼人', glyph: 'n', biomes: ['savanna'], weight: 4 },
+  lion:       { name: '獅子', glyph: 'L', biomes: ['savanna'], weight: 1 },
+  hyena:      { name: '鬣狗', glyph: 'h', biomes: ['savanna'], weight: 1 },
+  skeleton:   { name: '骷髏', glyph: 's', biomes: ['desert'], weight: 4 },
+  scorpion:   { name: '巨蠍', glyph: 'x', biomes: ['desert'], weight: 1 },
+  mummy:      { name: '木乃伊', glyph: 'M', biomes: ['desert'], weight: 1 },
+  dustmephit: { name: '塵霧魔', glyph: 'd', biomes: ['desert'], weight: 1 },
+  troll:      { name: '沼澤巨魔', glyph: 'R', biomes: ['marsh', 'swamp', 'lake'], weight: 4 },
+  frog:       { name: '巨蛙', glyph: 'f', biomes: ['marsh', 'swamp', 'lake'], weight: 1 },
+  crocodile:  { name: '鱷魚', glyph: 'K', biomes: ['marsh', 'swamp', 'lake'], weight: 1 },
+  shambler:   { name: '泥沼怪', glyph: 'U', biomes: ['marsh', 'swamp', 'lake'], weight: 1 },
+  kobold:     { name: '狗頭人', glyph: 'k', biomes: ['mountain'], weight: 4 },
+  harpy:      { name: '鷹身女妖', glyph: 'H', biomes: ['mountain'], weight: 1 },
+  gargoyle:   { name: '石像鬼', glyph: 'G', biomes: ['mountain'], weight: 1 },
+  ogre:       { name: '食人魔', glyph: 'O', biomes: ['mountain'], weight: 1 },
+  zombie:     { name: '殭屍', glyph: 'z', biomes: [], near: true, weight: 2 },
+  ghoul:      { name: '食屍鬼', glyph: 'u', biomes: [], near: true, weight: 1 },
 };
 // 第三十二版：怪物成群。一處錯誤套皮成一群同族的怪物（帶頭的那隻帶著錯誤，全群倒下才修好）；
-// 每族一群幾隻（開局每處最多 START_SITE_MAX 隻）。以下數字是 Claude 的提議，使用者同意先這樣試
+// 每族一群幾隻（開局每處最多 START_SITE_MAX 隻）。原本 9 族的數字是 Claude 的提議，使用者同意先這樣試；
+// 第三十三版之一的新種族照使用者同意的表
 FE.GROUP_SIZE = {
   goblin: [3, 12], kobold: [3, 10], skeleton: [2, 8], gnoll: [2, 6], lizardfolk: [2, 6],
   werewolf: [1, 3], bugbear: [1, 2], yeti: [1, 2], troll: [1, 2],
+  wolf: [2, 6], giantrat: [4, 12], boar: [1, 4], spider: [1, 3], tree: [1, 1], owlbear: [1, 1],
+  direwolf: [2, 5], brownbear: [1, 2], winterwolf: [2, 4], icemephit: [2, 5], constrictor: [1, 2], ape: [3, 8],
+  lion: [1, 3], hyena: [3, 8], scorpion: [1, 2], mummy: [1, 1], dustmephit: [2, 5],
+  frog: [2, 6], crocodile: [1, 3], shambler: [1, 1], harpy: [2, 5], gargoyle: [1, 3], ogre: [1, 2],
+  zombie: [2, 8], ghoul: [1, 4],
 };
 // 第三十三版：怪物的數值照《D&D》2024 的 SRD 5.2.1（System Reference Document 5.2.1，Wizards of the Coast，CC BY 4.0，
 // https://creativecommons.org/licenses/by/4.0/）。第三十三版之一起照原件對過：data/srd-monsters.md、data/srd-monsters.json
@@ -480,10 +513,121 @@ FE.MONSTER_BLOCKS = {
     // 第三十三版之一：照原件補上 Rend 的 1d4 寒冷
     mid: { srd: 'White Dragon Wyrmling', proposed: true, ac: 16, hd: [5, 8], con: 14, hit: 4, die: [1, 8], dmg: 2, type: 'slash', extraDie: [1, 4], extraType: 'cold', traits: [] }, // Rend
   },
+  // ---- 第三十三版之一的新種族：對應全是 Claude 的提議（proposed）；data 裡只有一個數值塊的，中型用同一個多 3 級（up）----
+  // 草原、灌木地、空地
+  wolf: {
+    small: { srd: 'Wolf', proposed: true, ac: 12, hd: [2, 8], con: 12, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: ['pack'] }, // Bite
+    mid: { srd: 'Wolf', up: 3, proposed: true, ac: 12, hd: [5, 8], con: 12, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: ['pack'] }, // 恐狼是另一個種族，不用 Dire Wolf
+  },
+  giantrat: {
+    small: { srd: 'Giant Rat', proposed: true, ac: 13, hd: [2, 6], con: 11, hit: 5, die: [1, 4], dmg: 3, type: 'pierce', traits: ['pack'] }, // Bite
+    mid: { srd: 'Swarm of Rats', proposed: true, ac: 10, hd: [4, 8], con: 9, hit: 2, die: [2, 4], dmg: 0, type: 'pierce', traits: [] }, // Bites
+  },
+  // 溫帶森林
+  boar: {
+    small: { srd: 'Boar', proposed: true, ac: 11, hd: [2, 8], con: 14, hit: 3, die: [1, 6], dmg: 1, type: 'pierce', traits: [] }, // Tusk
+    mid: { srd: 'Giant Boar', proposed: true, ac: 13, hd: [5, 10], con: 16, hit: 5, die: [2, 6], dmg: 3, type: 'pierce', traits: [] }, // Tusk
+  },
+  spider: {
+    small: { srd: 'Giant Wolf Spider', proposed: true, ac: 13, hd: [2, 8], con: 13, hit: 5, die: [1, 4], dmg: 3, type: 'pierce', extraDie: [2, 4], extraType: 'poison', traits: [] }, // Bite
+    mid: { srd: 'Giant Spider', proposed: true, ac: 14, hd: [4, 10], con: 12, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 6], extraType: 'poison', traits: [] }, // Bite
+  },
+  tree: {
+    small: { srd: 'Awakened Shrub', proposed: true, ac: 9, hd: [3, 6], con: 11, hit: 1, die: [1, 1], dmg: 0, type: 'slash', traits: [], vuln: ['fire'] }, // Rake（1 點）
+    mid: { srd: 'Awakened Tree', proposed: true, ac: 13, hd: [7, 12], con: 15, hit: 6, die: [3, 6], dmg: 4, type: 'blunt', traits: [], vuln: ['fire'] }, // Slam
+  },
+  owlbear: {
+    small: { srd: 'Owlbear', proposed: true, ac: 13, hd: [7, 10], con: 17, hit: 7, die: [2, 8], dmg: 5, type: 'slash', traits: [] }, // Rend
+    mid: { srd: 'Owlbear', up: 3, proposed: true, ac: 13, hd: [10, 10], con: 17, hit: 7, die: [2, 8], dmg: 5, type: 'slash', traits: [] },
+  },
+  // 針葉林
+  direwolf: {
+    small: { srd: 'Dire Wolf', proposed: true, ac: 14, hd: [3, 10], con: 15, hit: 5, die: [1, 10], dmg: 3, type: 'pierce', traits: ['pack'] }, // Bite
+    mid: { srd: 'Dire Wolf', up: 3, proposed: true, ac: 14, hd: [6, 10], con: 15, hit: 5, die: [1, 10], dmg: 3, type: 'pierce', traits: ['pack'] },
+  },
+  brownbear: {
+    small: { srd: 'Brown Bear', proposed: true, ac: 11, hd: [3, 10], con: 15, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', traits: [] }, // Bite（不用 Claw）
+    mid: { srd: 'Brown Bear', up: 3, proposed: true, ac: 11, hd: [6, 10], con: 15, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', traits: [] }, // 雪怪用了 Polar Bear
+  },
+  // 苔原、冰川
+  winterwolf: {
+    small: { srd: 'Winter Wolf', proposed: true, ac: 13, hd: [10, 10], con: 14, hit: 6, die: [2, 6], dmg: 4, type: 'pierce', traits: ['pack'] }, // Bite
+    mid: { srd: 'Winter Wolf', up: 3, proposed: true, ac: 13, hd: [13, 10], con: 14, hit: 6, die: [2, 6], dmg: 4, type: 'pierce', traits: ['pack'] },
+  },
+  icemephit: {
+    small: { srd: 'Ice Mephit', proposed: true, ac: 11, hd: [6, 6], con: 10, hit: 3, die: [1, 4], dmg: 1, type: 'slash', extraDie: [1, 4], extraType: 'cold', traits: [], vuln: ['fire'] }, // Claw
+    mid: { srd: 'Ice Mephit', up: 3, proposed: true, ac: 11, hd: [9, 6], con: 10, hit: 3, die: [1, 4], dmg: 1, type: 'slash', extraDie: [1, 4], extraType: 'cold', traits: [], vuln: ['fire'] },
+  },
+  // 熱帶雨林
+  constrictor: {
+    small: { srd: 'Constrictor Snake', proposed: true, ac: 13, hd: [2, 10], con: 12, hit: 4, die: [1, 8], dmg: 2, type: 'pierce', traits: [] }, // Bite
+    mid: { srd: 'Giant Constrictor Snake', proposed: true, ac: 12, hd: [8, 12], con: 12, hit: 6, die: [2, 6], dmg: 4, type: 'pierce', traits: [] }, // Bite
+  },
+  ape: {
+    small: { srd: 'Ape', proposed: true, ac: 12, hd: [3, 8], con: 14, hit: 5, die: [1, 4], dmg: 3, type: 'blunt', traits: [] }, // Fist
+    mid: { srd: 'Ape', up: 3, proposed: true, ac: 12, hd: [6, 8], con: 14, hit: 5, die: [1, 4], dmg: 3, type: 'blunt', traits: [] }, // Giant Ape（CR 7）太強，不用
+  },
+  // 莽原
+  lion: {
+    small: { srd: 'Lion', proposed: true, ac: 12, hd: [4, 10], con: 11, hit: 5, die: [1, 8], dmg: 3, type: 'slash', traits: ['pack'] }, // Rend
+    mid: { srd: 'Lion', up: 3, proposed: true, ac: 12, hd: [7, 10], con: 11, hit: 5, die: [1, 8], dmg: 3, type: 'slash', traits: ['pack'] },
+  },
+  hyena: {
+    small: { srd: 'Hyena', proposed: true, ac: 11, hd: [1, 8], con: 12, hit: 2, die: [1, 6], dmg: 0, type: 'pierce', traits: ['pack'] }, // Bite
+    mid: { srd: 'Giant Hyena', proposed: true, ac: 12, hd: [6, 10], con: 14, hit: 5, die: [2, 6], dmg: 3, type: 'pierce', traits: [] }, // Bite
+  },
+  // 沙漠
+  scorpion: {
+    small: { srd: 'Giant Scorpion', proposed: true, ac: 15, hd: [7, 10], con: 15, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 10], extraType: 'poison', traits: [] }, // Sting（不用 Claw）
+    mid: { srd: 'Giant Scorpion', up: 3, proposed: true, ac: 15, hd: [10, 10], con: 15, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 10], extraType: 'poison', traits: [] },
+  },
+  mummy: {
+    small: { srd: 'Mummy', proposed: true, ac: 11, hd: [9, 8], con: 15, hit: 5, die: [1, 10], dmg: 3, type: 'blunt', extraDie: [3, 6], extraType: 'necrotic', traits: [], vuln: ['fire'] }, // Rotting Fist
+    mid: { srd: 'Mummy', up: 3, proposed: true, ac: 11, hd: [12, 8], con: 15, hit: 5, die: [1, 10], dmg: 3, type: 'blunt', extraDie: [3, 6], extraType: 'necrotic', traits: [], vuln: ['fire'] },
+  },
+  dustmephit: {
+    small: { srd: 'Dust Mephit', proposed: true, ac: 12, hd: [5, 6], con: 10, hit: 4, die: [1, 4], dmg: 2, type: 'slash', traits: [], vuln: ['fire'] }, // Claw
+    mid: { srd: 'Dust Mephit', up: 3, proposed: true, ac: 12, hd: [8, 6], con: 10, hit: 4, die: [1, 4], dmg: 2, type: 'slash', traits: [], vuln: ['fire'] },
+  },
+  // 沼澤、濕地
+  frog: {
+    small: { srd: 'Giant Frog', proposed: true, ac: 11, hd: [4, 8], con: 11, hit: 3, die: [1, 6], dmg: 2, type: 'pierce', traits: [] }, // Bite
+    mid: { srd: 'Giant Frog', up: 3, proposed: true, ac: 11, hd: [7, 8], con: 11, hit: 3, die: [1, 6], dmg: 2, type: 'pierce', traits: [] },
+  },
+  crocodile: {
+    small: { srd: 'Crocodile', proposed: true, ac: 12, hd: [2, 10], con: 13, hit: 4, die: [1, 8], dmg: 2, type: 'pierce', traits: [] }, // Bite
+    mid: { srd: 'Giant Crocodile', proposed: true, ac: 14, hd: [9, 12], con: 17, hit: 8, die: [3, 10], dmg: 5, type: 'pierce', traits: [] }, // Bite（不用 Tail）
+  },
+  shambler: {
+    small: { srd: 'Shambling Mound', proposed: true, ac: 15, hd: [13, 10], con: 16, hit: 7, die: [1, 6], dmg: 4, type: 'blunt', extraDie: [2, 4], extraType: 'lightning', traits: [] }, // Charged Tendril
+    mid: { srd: 'Shambling Mound', up: 3, proposed: true, ac: 15, hd: [16, 10], con: 16, hit: 7, die: [1, 6], dmg: 4, type: 'blunt', extraDie: [2, 4], extraType: 'lightning', traits: [] },
+  },
+  // 山地
+  harpy: {
+    small: { srd: 'Harpy', proposed: true, ac: 11, hd: [7, 8], con: 12, hit: 3, die: [2, 4], dmg: 1, type: 'slash', traits: [] }, // Claw
+    mid: { srd: 'Harpy', up: 3, proposed: true, ac: 11, hd: [10, 8], con: 12, hit: 3, die: [2, 4], dmg: 1, type: 'slash', traits: [] },
+  },
+  gargoyle: {
+    small: { srd: 'Gargoyle', proposed: true, ac: 15, hd: [9, 8], con: 16, hit: 4, die: [2, 4], dmg: 2, type: 'slash', traits: [] }, // Claw
+    mid: { srd: 'Gargoyle', up: 3, proposed: true, ac: 15, hd: [12, 8], con: 16, hit: 4, die: [2, 4], dmg: 2, type: 'slash', traits: [] },
+  },
+  ogre: {
+    small: { srd: 'Ogre', proposed: true, ac: 11, hd: [8, 10], con: 16, hit: 6, die: [2, 8], dmg: 4, type: 'blunt', traits: [] }, // Greatclub
+    mid: { srd: 'Ogre', up: 3, proposed: true, ac: 11, hd: [11, 10], con: 16, hit: 6, die: [2, 8], dmg: 4, type: 'blunt', traits: [] }, // Ogre Zombie 給殭屍用
+  },
+  // 遺跡、墓地附近
+  zombie: {
+    small: { srd: 'Zombie', proposed: true, ac: 8, hd: [2, 8], con: 16, hit: 3, die: [1, 8], dmg: 1, type: 'blunt', traits: [] }, // Slam
+    mid: { srd: 'Ogre Zombie', proposed: true, ac: 8, hd: [9, 10], con: 18, hit: 6, die: [2, 8], dmg: 4, type: 'blunt', traits: [] }, // Slam
+  },
+  ghoul: {
+    small: { srd: 'Ghoul', proposed: true, ac: 12, hd: [5, 8], con: 10, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', extraDie: [1, 6], extraType: 'necrotic', traits: [] }, // Bite（不用會麻痺的 Claw）
+    mid: { srd: 'Ghast', proposed: true, ac: 13, hd: [8, 8], con: 10, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 8], extraType: 'necrotic', traits: [] }, // Bite（不用會麻痺的 Claw）
+  },
 };
 FE.MONSTER_TRAITS = { pack: '群體戰術', nimble: '靈巧脫身' };
 // 怪物多擲的傷害種類的名字（查看怪物時顯示；遊戲裡還沒有這些種類的減傷與抗性，照一般傷害算）
-FE.EXTRA_DMG_TYPES = { poison: '毒', necrotic: '死靈', cold: '寒冷', lightning: '閃電' };
+FE.EXTRA_DMG_TYPES = { poison: '毒', necrotic: '死靈', cold: '寒冷', lightning: '閃電', fire: '火', acid: '酸' };
 Object.assign(FE.CONFIG, {
   REGEN_STOP: ['fire', 'acid'], // 再生被這兩種傷害打到，下一回合不回（目前沒有火與酸的傷害來源，先留著）
   START_SITES: 4,         // 開局挑 4 處錯誤生怪物，至少 1 處在興趣點
@@ -501,7 +645,28 @@ Object.assign(FE.CONFIG, {
   CALM_DAYS: [5, 7],
   CALM_RADIUS: 10,
 });
-FE.raceFor = (biome) => Object.keys(FE.RACES).find((k) => FE.RACES[k].biomes.includes(biome)) || 'goblin';
+// 照權重從清單抽一種（沒給亂數就是第一種，也就是那一區原本的種族）
+const pickRace = (keys, rng) => {
+  if (!keys.length) return 'goblin';
+  if (!rng) return keys[0];
+  const total = keys.reduce((s, k) => s + FE.RACES[k].weight, 0);
+  let r = rng() * total;
+  for (const k of keys) if ((r -= FE.RACES[k].weight) < 0) return k;
+  return keys[keys.length - 1];
+};
+// 這個生態區的種族（第三十三版之一：照權重隨機套一種）
+FE.racesOf = (biome) => Object.keys(FE.RACES).filter((k) => !FE.RACES[k].near && FE.RACES[k].biomes.includes(biome));
+FE.raceFor = (biome, rng) => pickRace(FE.racesOf(biome), rng);
+// 這一格的種族：遺跡、墓地附近（地貌的範圍往外 UNDEAD_RADIUS 格以內）是殭屍或食屍鬼，不看生態區；其他照生態區
+FE.UNDEAD_SITES = ['fort', 'graves']; // 廢棄的堡壘、墓地
+FE.raceAt = (world, x, y, rng) => {
+  const r = FE.CONFIG.UNDEAD_RADIUS;
+  const near = (world.landmarks || []).some((l) => FE.UNDEAD_SITES.includes(l.kind) && x >= l.x0 - r && x <= l.x1 + r && y >= l.y0 - r && y <= l.y1 + r);
+  if (near) return pickRace(Object.keys(FE.RACES).filter((k) => FE.RACES[k].near), rng);
+  const c = world.cell(x, y);
+  return FE.raceFor(c ? c.biome : 'grassland', rng);
+};
+FE.CONFIG.UNDEAD_RADIUS = 6; // 遺跡、墓地往外幾格算「附近」（提議）
 
 // 冷的生態區跟熱的直接相鄰，就是「氣候算錯了」的地形錯位
 FE.isClimateConflict = (a, b) => {

@@ -155,10 +155,10 @@
   };
   FE.hasTrait = (m, k) => !!(m && m.traits && m.traits.includes(k));
 
-  // 依 B 點所在的環境決定種族，名字與數值跟著改
-  FE.dressMonster = (m, world) => {
-    const c = world.cell(m.x, m.y);
-    m.race = FE.raceFor(c ? c.biome : 'grassland');
+  // 依 B 點所在的環境決定種族，名字與數值跟著改。第三十三版之一：每個生態區有 3～5 種，給了 rng 就照權重隨機套一種
+  // （沒給就是那一區原本的種族）；遺跡、墓地附近是殭屍或食屍鬼（FE.raceAt）
+  FE.dressMonster = (m, world, rng) => {
+    m.race = FE.raceAt(world, m.x, m.y, rng);
     m.name = FE.monsterName(m);
     FE.statMonster(m);
     return m;

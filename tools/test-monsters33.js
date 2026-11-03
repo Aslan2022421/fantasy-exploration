@@ -61,13 +61,13 @@ function testMonsters33() {
     // AC、生命骰（骰數扣掉多加的 up 級）、體質值、攻擊加值、傷害骰與加值、傷害種類、多擲的傷害骰；有群體戰術、易傷的要跟原件一樣
     const SRD = require('fs').existsSync('data/srd-monsters.json') ? JSON.parse(require('fs').readFileSync('data/srd-monsters.json', 'utf8')).monsters : [];
     ok(SRD.length === 55, `讀到原件的數值塊 ${SRD.length} 個（要在倉庫根目錄跑）`);
-    const TY = { tranchants: 'slash', perforants: 'pierce', contondants: 'blunt' };
+    const TY = { tranchants: 'slash', perforants: 'pierce', contondants: 'blunt', tranchant: 'slash' };
     const EX = { poison: 'poison', nécrotiques: 'necrotic', froid: 'cold', foudre: 'lightning' };
     const parseSrd = (t) => {
       const g1 = (re) => { const r = re.exec(t); return r ? r[1] : null; };
       const hp = /Points de vie : \d+ \((\d+)d(\d+)/.exec(t);
       const atks = [];
-      const re = /: (?:Corps à corps)[^:]*: \+(\d+)[^\n]*?Touché : \d+ \((\d+)d(\d+)(?: ([+−-]) (\d+))?\) dégâts? (\w+)(?: plus \d+ \((\d+)d(\d+)\) dégâts de (\S+))?/g;
+      const re = /: (?:Corps à corps)[^:]*: \+(\d+)[^\n]*?Touché : \d+ \((\d+)d(\d+)(?: ([+−-]) (\d+))?\) dégâts? (\w+)(?: plus \d+ \((\d+)d(\d+)\) dégâts (?:de )?(\S+))?/g;
       let r;
       while ((r = re.exec(t))) atks.push({ hit: +r[1], die: [+r[2], +r[3]], dmg: r[4] ? (r[4] === '+' ? 1 : -1) * +r[5] : 0, type: TY[r[6]], extra: r[7] ? [+r[7], +r[8]] : null, extraType: r[9] ? EX[r[9].replace(/\.$/, '')] : null });
       // 甦醒灌木的爪子只有 1 點（沒有骰子）
@@ -305,6 +305,57 @@ function testMonsters33() {
     const relTo = (k) => FE.Steading.relOk([], 2, a, k);
     ok(!relTo('誓約關係') && !relTo('貿易關係') && relTo('敵對關係'), '對方已經敵對，這邊只能是敵對');
     ok(!FE.Steading.relOk([{ k: '貿易關係', rel: 1 }], 2, a, '敵對關係'), '這邊已經有關係就不能再加');
+  }
+  // 10. 第三十三版之一：擴充種族。每個生態區抽得到原本的種族、也抽得到新的，原本的最常見；遺跡、墓地附近是殭屍或食屍鬼；同一群同族
+  {
+    const OLD = { plain: 'goblin', grassland: 'goblin', shrubland: 'goblin', forest: 'bugbear', taiga: 'werewolf', tundra: 'yeti', glacier: 'yeti', jungle: 'lizardfolk', savanna: 'gnoll', desert: 'skeleton', marsh: 'troll', swamp: 'troll', lake: 'troll', mountain: 'kobold' };
+    const rng = FE.makeRng(3310);
+    for (const biome of Object.keys(FE.BIOMES)) {
+      const want = FE.racesOf(biome);
+      const cnt = {};
+      for (let i = 0; i < 2000; i++) { const k = FE.raceFor(biome, rng); cnt[k] = (cnt[k] || 0) + 1; }
+      const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+      ok(FE.raceFor(biome) === OLD[biome] && top === OLD[biome] && want.length >= 3 && want.every((k) => cnt[k] > 0) && Object.keys(cnt).every((k) => want.includes(k)), `${FE.BIOMES[biome].name}：${JSON.stringify(cnt)}`);
+    }
+    ok(Object.keys(FE.RACES).every((k) => FE.GROUP_SIZE[k] && FE.MONSTER_BLOCKS[k] && FE.RACES[k].glyph.length === 1), '每個種族都要有字母、一處幾隻、數值塊');
+    const glyphs = Object.values(FE.RACES).map((r) => r.glyph);
+    ok(new Set(glyphs).size === glyphs.length, `種族的字母不能重複：${glyphs.join('')}`);
+    // 遺跡、墓地附近：不看生態區
+    const g = new FE.Game(3311);
+    g.start();
+    const w = g.world;
+    const lm = { kind: 'graves', x0: 10, y0: 10, x1: 14, y1: 14 };
+    w.landmarks.push(lm);
+    const near = {};
+    for (let i = 0; i < 300; i++) { const k = FE.raceAt(w, 18, 12, rng); near[k] = (near[k] || 0) + 1; }
+    ok(near.zombie > near.ghoul && near.ghoul > 0 && Object.keys(near).length === 2, `墓地附近：${JSON.stringify(near)}`);
+    lm.kind = 'fort';
+    ok(['zombie', 'ghoul'].includes(FE.raceAt(w, 9, 9, rng)), '廢棄的堡壘附近也是殭屍或食屍鬼');
+    const far = FE.raceAt(w, 14 + C.UNDEAD_RADIUS + 1, 12, rng);
+    ok(!FE.RACES[far].near, `遠一點就照生態區：${far}`);
+    w.landmarks.pop();
+    // 世界裡生出來的群：同一群同族，種族都在那一區的名單裡（或遺跡、墓地附近的不死者）
+    let groups = 0;
+    let bad = 0;
+    const races = new Set();
+    for (const seed of [3312, 3313, 3314]) {
+      const g2 = new FE.Game(seed);
+      g2.start();
+      for (let i = 0; i < 6; i++) g2.createChunk(false);
+      const by = {};
+      for (const o of g2.monsters) if (o.group != null) (by[o.group] = by[o.group] || []).push(o);
+      for (const a of Object.values(by)) {
+        groups++;
+        if (!a.every((o) => o.race === a[0].race)) bad++;
+        races.add(a[0].race);
+      }
+    }
+    ok(groups > 10 && bad === 0, `同一群同族：${groups} 群，混族 ${bad} 群`);
+    ok(races.size >= 8 && [...races].some((k) => FE.RACES[k].weight === 1), `世界裡生出的種族 ${races.size} 種：${[...races].map((k) => FE.RACES[k].name).join('、')}`);
+    // 新名字出得來（滑鼠提示與查看都寫 m.name）
+    const m = FE.makeMonster({ type: 'VALUE', x: 0, y: 0, cells: [], scope: 6, race: 'owlbear' }, 1, 1);
+    m.name = FE.monsterName(m);
+    ok(m.name === '中型梟熊（狂亂）', `新種族的名字：${m.name}`);
   }
   FE.Combat.hook = hook0;
   useClasses('legacy');

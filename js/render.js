@@ -1188,7 +1188,7 @@
   // 怪物的特性：群體戰術、靈巧脫身、易傷、再生
   function monTraitText(m) {
     const out = (m.traits || []).map((k) => FE.MONSTER_TRAITS[k]).filter(Boolean);
-    for (const t of m.vuln || []) out.push(`怕${FE.DMG_TYPES[t]}（傷害加倍）`);
+    for (const t of m.vuln || []) out.push(`怕${FE.DMG_TYPES[t] || FE.EXTRA_DMG_TYPES[t]}（傷害加倍）`);
     if (m.regen) out.push(`再生（每回合 ${m.regen} 點）`);
     return out.join('、');
   }

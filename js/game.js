@@ -615,6 +615,7 @@
         const m = FE.makeMonster(Object.assign({}, d, { x: at.x, y: at.y, scope }), this.nextMonsterId++, FE.Stability.worldLevel(this));
         m.race = lead.race;
         m.name = FE.monsterName(m);
+        FE.statMonster(m); // 換了種族，數值塊跟著換
         Object.assign(m, { group: lead.id, guard });
         this.monsters.push(m);
         group.push(m);

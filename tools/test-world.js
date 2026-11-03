@@ -252,7 +252,9 @@ function testWorldLevel() {
   const mk = (wl, scope, type) => FE.makeMonster({ type: type || 'TERRAIN', x: 0, y: 0, cells: [], scope }, 1, wl);
   const a = mk(1, 4);
   const b = mk(4, 4);
-  ok(b.maxHp === Math.round(a.maxHp * (1 + 3 * C.WL_BONUS.HP)) && b.atk === Math.round(a.atk * 1.3), `等級 4 的血量／攻擊力 ${b.maxHp}/${b.atk}（等級 1 是 ${a.maxHp}/${a.atk}）`);
+  // 第三十三版：攻擊力是一下的平均傷害（傷害骰的平均＋傷害加值）乘世界等級的加成；AC 與攻擊加值不隨世界等級變
+  const avgHit = a.die[0] * (a.die[1] + 1) / 2 + a.dmgBonus;
+  ok(b.maxHp === Math.round(a.maxHp * (1 + 3 * C.WL_BONUS.HP)) && b.atk === Math.round(avgHit * 1.3) && a.atk === Math.round(avgHit) && b.ac === a.ac && b.toHit === a.toHit, `等級 4 的血量／攻擊力 ${b.maxHp}/${b.atk}（等級 1 是 ${a.maxHp}/${a.atk}）`);
   ok(b.exp === Math.round(a.exp * 1.3) && Math.abs(b.compute - Math.round(a.compute * 1.3 * 10) / 10) < 1e-9, `等級 4 的經驗值／算力 ${b.exp}/${b.compute}`);
   ok(a.compute === 3 && mk(1, 6).compute === 11, `等級 1 的算力 ${a.compute}／${mk(1, 6).compute}（小怪物 3、影響範圍 6 的中型怪物 8＋3）`);
   const da = FE.monsterDef(a);
@@ -517,7 +519,7 @@ function testBackpack() {
   const side = DIRS.find(([dx, dy]) => w.canStep(p.x, p.y, p.x + dx, p.y + dy) && !w.npcAt(p.x + dx, p.y + dy) && !g.nodeAt(p.x + dx, p.y + dy));
   if (side && !w.inVillage(p.x, p.y)) {
     const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + side[0], y: p.y + side[1], cells: [], scope: 1, data: {} }, null);
-    Object.assign(m, { x: p.x + side[0], y: p.y + side[1], home: { x: p.x + side[0], y: p.y + side[1] }, atk: 0 });
+    Object.assign(m, { x: p.x + side[0], y: p.y + side[1], home: { x: p.x + side[0], y: p.y + side[1] }, atk: 0, die: null }); // die: null：照固定的攻擊力算傷害（第三十三版起怪物用 SRD 的傷害骰）
     p.hp = 5;
     t0 = g.turn;
     const fighting = g.adjacentMonsters().includes(m);

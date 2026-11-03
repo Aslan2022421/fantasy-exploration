@@ -135,7 +135,7 @@ function testGear() {
     const p = g.player;
     const px = p.x, py = p.y;
     const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 901, 1), g.world);
-    Object.assign(m, { home: { x: px + 1, y: py }, atk: 3, maxHp: 1e9, hp: 1e9 });
+    Object.assign(m, { home: { x: px + 1, y: py }, atk: 3, die: null, maxHp: 1e9, hp: 1e9 }); // die: null：照固定的攻擊力算傷害（第三十三版起怪物用 SRD 的傷害骰）
     g.monsters = [m];
     const sample = (body, n) => {
       p.equip.body = body;

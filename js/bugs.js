@@ -106,19 +106,59 @@
     return Math.round(base * FE.wlScale(wl, C.WL_BONUS.REWARD) * 10) / 10;
   };
 
-  // 士兵的數值：以同世界等級、影響範圍 2 的小怪物為準，血量 ×0.9、攻擊力 －1（至少 1）；不升級
+  // 士兵的數值：以同世界等級、影響範圍 2 的小怪物（哥布林，SRD 的 Goblin Warrior）為準，血量 ×0.9、傷害加值 －1、攻擊力 －1（至少 1）；
+  // AC、攻擊加值、傷害骰跟牠一樣（第三十三版），沒有怪物的特性；不升級
   FE.soldierStats = (wl) => {
     const C = FE.CONFIG;
     const base = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: C.SOLDIER_BASE_SCOPE }, 0, wl);
     const maxHp = Math.max(1, Math.round(base.maxHp * C.SOLDIER_HP_MUL));
-    return { maxHp, hp: maxHp, atk: Math.max(1, base.atk - C.SOLDIER_ATK_MINUS) };
+    return {
+      maxHp, hp: maxHp, atk: Math.max(1, base.atk - C.SOLDIER_ATK_MINUS),
+      ac: base.ac, toHit: base.toHit, die: base.die.slice(), dmgBonus: base.dmgBonus - C.SOLDIER_ATK_MINUS, dmgType: base.dmgType,
+    };
   };
 
-  // 依 B 點所在的環境決定種族，名字跟著改
+  // ---- 第三十三版：怪物的數值照 SRD 5.2.1（資料與出處見 config.js 的 FE.MONSTER_BLOCKS）----
+  // 這個種族、這個分級用哪一個數值塊：小怪物用 small，中型以上用 mid；沒有的種族當哥布林
+  FE.monsterBlock = (race, tier) => (FE.MONSTER_BLOCKS[race] || FE.MONSTER_BLOCKS.goblin)[tier === 'small' ? 'small' : 'mid'];
+  // 生命：跟冒險者同一套（char.js 的 maxHp）：（生命骰面數＋體質值）×1.5 無條件捨去，每多一級（生命骰多 1 顆）再加 面數÷2＋體質修正值
+  FE.monsterHp = (b) => {
+    const [n, f] = b.hd;
+    return Math.floor((f + b.con) * FE.CONFIG.HP_MULT) + (n - 1) * (Math.floor(f / 2) + Math.floor((b.con - 10) / 2));
+  };
+  // 傷害骰的平均（顯示攻擊力與合體的難度評級用）
+  const avgDie = (die) => (die[0] * (die[1] + 1)) / 2;
+  // 套上數值塊：AC、攻擊加值、傷害、特性與生命（生命再乘異常的倍率與世界等級的加成；血量回滿）。
+  // 傷害加值再加異常的 atkMod（斷層 −1、碎裂 +1）；m.atk 是一下的平均傷害（含世界等級的加成），只拿來顯示與算難度評級
+  FE.statMonster = (m) => {
+    const b = FE.monsterBlock(m.race, m.tier);
+    const T = FE.BUG_TYPES[m.type];
+    const B = FE.CONFIG.WL_BONUS;
+    Object.assign(m, {
+      srd: b.srd,
+      ac: b.ac,
+      toHit: b.hit,
+      die: b.die.slice(),
+      dmgBonus: b.dmg + T.atkMod,
+      dmgType: b.type,
+      advDie: b.advDie ? b.advDie.slice() : null,
+      stealth: b.stealth || 0,
+      traits: b.traits.slice(),
+      vuln: (b.vuln || []).slice(),
+      regen: b.regen || 0,
+    });
+    m.atk = Math.max(1, Math.round((avgDie(m.die) + m.dmgBonus) * FE.wlScale(m.wl, B.ATK)));
+    m.maxHp = m.hp = Math.max(1, Math.round(FE.monsterHp(b) * T.hpMul * FE.wlScale(m.wl, B.HP)));
+    return m;
+  };
+  FE.hasTrait = (m, k) => !!(m && m.traits && m.traits.includes(k));
+
+  // 依 B 點所在的環境決定種族，名字與數值跟著改
   FE.dressMonster = (m, world) => {
     const c = world.cell(m.x, m.y);
     m.race = FE.raceFor(c ? c.biome : 'grassland');
     m.name = FE.monsterName(m);
+    FE.statMonster(m);
     return m;
   };
 
@@ -136,7 +176,9 @@
     return `${FE.KIND_NAMES[r.kind]}傷害減半（武器要${q.sym}${q.name}${q.sym}以上才不減半）`;
   };
 
-  // wl 是生成當下的世界等級：血量、攻擊力、打倒時的經驗值與算力照等級加成，之後不再變
+  // wl 是生成當下的世界等級：血量、傷害、打倒時的經驗值與算力照等級加成，之後不再變。
+  // 第三十三版：血量、AC、攻擊加值、傷害照種族與分級的 SRD 數值塊（statMonster）；影響範圍只決定分級、經驗值與算力。
+  // 種族沒給先當哥布林，dressMonster 看環境換種族時數值跟著換
   FE.makeMonster = function (d, id, wl) {
     const T = FE.BUG_TYPES[d.type];
     const B = FE.CONFIG.WL_BONUS;
@@ -144,11 +186,7 @@
     // 這一版創世時的大錯也只算中型；大怪物（tier 'big'）要由世界級事件指定，d.tier 是留給第 2 階段用的
     const tier = d.tier || (d.scope >= FE.CONFIG.MID_SCOPE ? 'mid' : 'small');
     const boss = tier === 'big';
-    // 第二十六版有了職業與技能，冒險者傷害變高：小怪物血量 ×1.5、中型 ×1.2（以戰士校準）
-    const tierMul = tier === 'small' ? FE.CONFIG.SMALL_HP_MUL : FE.CONFIG.MID_HP_MUL;
-    const maxHp = Math.max(1, Math.round(Math.min(100, Math.round((8 + d.scope * 2) * T.hpMul * tierMul)) * FE.wlScale(wl, B.HP)));
-    const atk = Math.max(1, Math.round(Math.max(1, Math.min(8, 2 + Math.floor(Math.sqrt(d.scope)) + T.atkMod)) * FE.wlScale(wl, B.ATK)));
-    return {
+    const m = {
       id,
       wl,                       // 生成當下的世界等級（防禦加成看它）
       type: d.type,
@@ -159,11 +197,11 @@
       data: d.data || {},
       tier,
       boss,                     // 大怪物：打倒時寫進歷史紀錄（這一版不會出現）
-      race: 'goblin',
+      race: d.race || 'goblin',
       name: TIER_PREFIX[tier] + T.name, // spawnMonster 會依環境改成「種族（異常）」
-      maxHp,
-      hp: maxHp,
-      atk,
+      maxHp: 1,                 // 生命、AC、攻擊加值、傷害由 statMonster 照數值塊填
+      hp: 1,
+      atk: 1,
       exp: Math.round((4 + d.scope * 2) * FE.wlScale(wl, B.REWARD)), // 打倒時一次結算
       compute: FE.killCompute(tier, d.scope, wl), // 打倒時給的算力（單人份量，創世門檻也照這個加總）
       home: { x: d.x, y: d.y }, // 徘徊時繞著這一點
@@ -175,6 +213,7 @@
       returnTurns: 0,
       members: null,            // 合體怪物：原本那幾隻小怪物，打倒時一起修
     };
+    return FE.statMonster(m);
   };
 
   FE.progress = (m) => Math.round((1 - m.hp / m.maxHp) * 100);

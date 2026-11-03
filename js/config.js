@@ -2,7 +2,7 @@
 window.FE = window.FE || {};
 
 FE.CONFIG = {
-  SAVE_VERSION: 21,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（20：建角改版（擲 5 項技能、從全部裝備挑）、反擊、逃跑取代撤退與撤離、施法與加護（player.ward、battle.spellCd）；19：時鐘（一天 2,400 刻）、野外短休與村莊長休、生活開支、聚落經濟值、貨幣改銅記帳、採藥與採礦委託、四種委託各接一個、世界裡的人有種族、力竭；18：六個職業、技能合併與穿甲拆三項、起始技能、防具換成十二件、投擲、精通一律要技能 5 級；17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
+  SAVE_VERSION: 22,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（21：世界一圈一圈擴散、怪物成群、冷卻區；22：怪物數值照 SRD 5.2.1（AC、攻擊加值、傷害骰、生命骰）、命中改 AC 制、怪物特性、士兵帶 AC；20：建角改版（擲 5 項技能、從全部裝備挑）、反擊、逃跑取代撤退與撤離、施法與加護（player.ward、battle.spellCd）；19：時鐘（一天 2,400 刻）、野外短休與村莊長休、生活開支、聚落經濟值、貨幣改銅記帳、採藥與採礦委託、四種委託各接一個、世界裡的人有種族、力竭；18：六個職業、技能合併與穿甲拆三項、起始技能、防具換成十二件、投擲、精通一律要技能 5 級；17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
   // 世界的比例：一塊世界 64×64（第十九版從 32×24 放大四倍成 64×48，第二十一版高度再加到 64）。
   // 按「每塊幾個」算的數字照面積乘 4（第二十一版再乘 4/3），按「走幾步」算的距離照長寬乘 2；每步的算力與事件間隔不變，冒險者身邊的密度跟原本一樣
   // 第三十二版：世界由 24×24 的小塊組成。開局 4×4 塊（96×96），之後一圈一圈往外長（每圈每邊 +24：144、192、240、288），
@@ -265,8 +265,6 @@ FE.CONFIG = {
 
   // 世界等級（隱藏，不顯示給玩家）：＝1＋floor((創出的塊數－1)／CHUNKS_PER_WORLD_LEVEL)。
   // 每升一級（以等級 1 為基準，線性加上去）：下面每一項加上對應的比例或數值
-  SMALL_HP_MUL: 1.5,                      // 小怪物血量倍率（第二十六版以戰士校準）
-  MID_HP_MUL: 1.2,                        // 中型以上怪物血量倍率
   CHUNKS_PER_WORLD_LEVEL: 2,             // 每創出幾塊世界，世界等級加一（規格預設 3；調成 2，失序才落在世界等級 4～5 左右）
   WL_BONUS: {
     HP: 0.3,        // 怪物血量（第二十四版 0.1→0.2；第二十六版以戰士校準再加到 0.3：技能與加點讓傷害成長，小怪物約 3 下、中型怪物約 6 下打倒，見 DESIGN.md「世界等級」）
@@ -428,8 +426,58 @@ FE.GROUP_SIZE = {
   goblin: [3, 12], kobold: [3, 10], skeleton: [2, 8], gnoll: [2, 6], lizardfolk: [2, 6],
   werewolf: [1, 3], bugbear: [1, 2], yeti: [1, 2], troll: [1, 2],
 };
+// 第三十三版：怪物的數值照《D&D》2024 的 SRD 5.2.1（System Reference Document 5.2.1，Wizards of the Coast，CC BY 4.0，
+// https://creativecommons.org/licenses/by/4.0/）。原本指定的 https://dd2024.fr/monsters 在雲端工作階段連不上，
+// 改用 SRD 5.2.1 的 Markdown 版 https://github.com/downfallx/dnd-5e-srd-markdown（monsters-A-Z.md、animals.md）抄數字。
+// 每個種族一組：small 小怪物、mid 中型以上（大怪物也用 mid）。srd 是用的數值塊名字，proposed 是 Claude 提議的代用（SRD 沒有這個種族，
+// 或這個種族只有一個數值塊），等使用者確認。
+//   ac：AC；hd：生命骰 [骰數（＝等級）, 面數]；con：體質值；hit：攻擊加值；die：傷害骰 [顆數, 面數]、dmg：傷害加值、type：傷害種類（FE.DMG_TYPES）；
+//   advDie：有優勢時多擲的傷害骰（哥布林的彎刀）；stealth：潛行加值（靈巧脫身用）；
+//   traits：特性（pack 群體戰術、nimble 靈巧脫身）；vuln：易傷的傷害種類（傷害加倍）；regen：再生（每回合開頭回多少生命）
+// 生命＝（面數＋體質值）×1.5 無條件捨去，每多一級（骰數多 1）再加 面數÷2＋體質修正值（跟冒險者同一套，見 bugs.js 的 FE.monsterHp）。
+// 只用第一個近戰攻擊（SRD 的 Multiattack、擒抱、遠程與其他特性這一版不做，見 DESIGN.md「第三十三版待確認的數字」）
+FE.MONSTER_BLOCKS = {
+  goblin: {
+    small: { srd: 'Goblin Warrior', ac: 15, hd: [3, 6], con: 10, hit: 4, die: [1, 6], dmg: 2, type: 'slash', advDie: [1, 4], stealth: 6, traits: ['nimble'] },
+    mid: { srd: 'Goblin Boss', ac: 17, hd: [6, 6], con: 10, hit: 4, die: [1, 6], dmg: 2, type: 'slash', advDie: [1, 4], stealth: 6, traits: ['nimble'] },
+  },
+  bugbear: {
+    small: { srd: 'Bugbear Warrior', ac: 14, hd: [6, 8], con: 13, hit: 4, die: [3, 4], dmg: 2, type: 'blunt', traits: [] }, // Light Hammer
+    mid: { srd: 'Bugbear Stalker', ac: 15, hd: [10, 8], con: 14, hit: 5, die: [2, 8], dmg: 3, type: 'pierce', traits: [] }, // Morningstar
+  },
+  werewolf: {
+    small: { srd: 'Wolf', proposed: true, ac: 12, hd: [2, 8], con: 12, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: ['pack'] }, // Bite
+    mid: { srd: 'Werewolf', ac: 15, hd: [11, 8], con: 14, hit: 5, die: [2, 6], dmg: 3, type: 'slash', traits: ['pack'] }, // Scratch
+  },
+  yeti: {
+    small: { srd: 'Ape', proposed: true, ac: 12, hd: [3, 8], con: 14, hit: 5, die: [1, 4], dmg: 3, type: 'blunt', traits: [] }, // Fist
+    mid: { srd: 'Polar Bear', proposed: true, ac: 12, hd: [5, 10], con: 16, hit: 7, die: [1, 8], dmg: 5, type: 'slash', traits: [] }, // Rend
+  },
+  lizardfolk: {
+    small: { srd: 'Sahuagin Warrior', proposed: true, ac: 12, hd: [4, 8], con: 12, hit: 3, die: [1, 6], dmg: 1, type: 'slash', traits: [] }, // Claw
+    mid: { srd: 'Allosaurus', proposed: true, ac: 13, hd: [6, 10], con: 17, hit: 6, die: [2, 10], dmg: 4, type: 'pierce', traits: [] }, // Bite
+  },
+  gnoll: {
+    small: { srd: 'Gnoll Warrior', ac: 15, hd: [6, 8], con: 11, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: [] }, // Rend
+    mid: { srd: 'Giant Hyena', proposed: true, ac: 12, hd: [6, 10], con: 14, hit: 5, die: [2, 6], dmg: 3, type: 'pierce', traits: [] }, // Bite
+  },
+  skeleton: {
+    small: { srd: 'Skeleton', ac: 14, hd: [2, 8], con: 15, hit: 5, die: [1, 6], dmg: 3, type: 'pierce', traits: [], vuln: ['blunt'] }, // Shortsword
+    mid: { srd: 'Minotaur Skeleton', ac: 12, hd: [6, 10], con: 15, hit: 6, die: [2, 10], dmg: 4, type: 'blunt', traits: [], vuln: ['blunt'] }, // Slam
+  },
+  troll: {
+    small: { srd: 'Troll Limb', ac: 13, hd: [4, 6], con: 10, hit: 6, die: [2, 4], dmg: 4, type: 'slash', traits: [], regen: 5 }, // Rend
+    mid: { srd: 'Troll', ac: 15, hd: [9, 10], con: 20, hit: 7, die: [2, 6], dmg: 4, type: 'slash', traits: [], regen: 15 }, // Rend
+  },
+  kobold: {
+    small: { srd: 'Kobold Warrior', ac: 14, hd: [3, 6], con: 9, hit: 4, die: [1, 4], dmg: 2, type: 'pierce', traits: ['pack'] }, // Dagger
+    mid: { srd: 'White Dragon Wyrmling', proposed: true, ac: 16, hd: [5, 8], con: 14, hit: 4, die: [1, 8], dmg: 2, type: 'slash', traits: [] }, // Rend
+  },
+};
+FE.MONSTER_TRAITS = { pack: '群體戰術', nimble: '靈巧脫身' };
 Object.assign(FE.CONFIG, {
-  START_SITES: 4,          // 開局挑 4 處錯誤生怪物，至少 1 處在興趣點
+  REGEN_STOP: ['fire', 'acid'], // 再生被這兩種傷害打到，下一回合不回（目前沒有火與酸的傷害來源，先留著）
+  START_SITES: 4,         // 開局挑 4 處錯誤生怪物，至少 1 處在興趣點
   START_SITE_MAX: 6,       // 開局每處最多 6 隻
   START_MONSTER_MAX: 24,   // 開局最多 24 隻
   // 之後每段 2～3 處（試做：照 Dungeon World〈前置〉「一個冒險前置有 2～3 個危害」，一段就是一場戰役；原本照面積 1～3 處）
@@ -453,8 +501,10 @@ FE.isClimateConflict = (a, b) => {
   return (A.cold && B.hot) || (A.hot && B.cold);
 };
 
-// 擲 d20 的五段結果（參考《奇幻探索物語》，判定流程見 combat.js），由高往低比對：
-// 暴擊、命中、命中且對方必定反擊（只在冒險者出手時，見 combat.js）、沒命中、失手（失手後防守方還要擲閃避）
+// 擲 d20 的五段結果（參考《奇幻探索物語》，判定流程見 combat.js）。第三十三版改成 AC 制：
+// 擲出的點數到暴擊門檻（平常 20）一定暴擊、擲出 1 一定失手（失手後防守方還要擲閃避）；
+// 其他看 d20＋加值比對方 AC 高多少（margin），由高往低比對：高 HARD_MARGIN 以上命中、0～4 勉強命中（只在冒險者出手時對方必定反擊，見 combat.js）、
+// 不到 AC 沒命中。第三十二版是照總點數分段（11～19 命中、6～10 必定反擊、2～5 沒命中），等於 AC 6
 FE.ROLL_BANDS = [
   { min: 20, key: 'crit', name: '暴擊' },
   { min: 11, key: 'hit', name: '命中' },
@@ -492,8 +542,9 @@ FE.QUALITIES = [
 // 武器（第二十八版）：die 傷害骰 [顆數, 面數]、type 傷害種類（FE.DMG_TYPES）、mastery 精通（FE.MASTERIES）；
 // 特質（標籤，規則照標籤走，名字見 FE.WEAPON_TAGS）：versatile 可雙手（副手空著時改用這個面數）、heavy 重型、light 輕型（副手只能拿輕型）、
 // finesse 靈巧、reach 觸及、twoHand 雙手、thrown 投擲 [正常射程, 最遠射程]、ammo 彈藥（要箭矢）、range 射程 [正常, 最遠]、loading 裝填（只建標籤，現有武器都沒有）；
-// 防具 phys／magic 物理／魔法的固定減傷（扣完至少吃 1 點）、ticks 每個動作多花幾刻、dodge 閃避加減；
-// 盾牌 block 格擋機率、value 格擋值；weight 重量，單位磅（箭矢、弩矢是一捆）；price 普通品質的原價（箭矢、弩矢是一捆）；ore 打造要幾顆礦石（沒寫的不能打造）；dur 耐久；
+// 防具 ac 基本 AC（第三十三版，照 SRD 5.2.1 的防具表；輕甲加整個敏捷修正值、中甲最多 +2、重甲不加，衣袍沒有 ac 算沒穿防具＝10＋敏捷）、
+// phys／magic 物理／魔法的固定減傷（扣完至少吃 1 點）、ticks 每個動作多花幾刻；
+// 盾牌 ac 加的 AC（+2）、block 格擋機率、value 格擋值；weight 重量，單位磅（箭矢、弩矢是一捆）；price 普通品質的原價（箭矢、弩矢是一捆）；ore 打造要幾顆礦石（沒寫的不能打造）；dur 耐久；
 // sold 商店有沒有賣（魔法衣袍只從掉落來，price 是賣回與修復用的暫定值）；drop 寶箱與怪物會不會掉。
 // 第二十九版：skill 這把武器練哪一項技能（FE.SKILLS）、meleeSkill 拿來近戰時練哪一項（弓、弩）、
 // grip [能拿, 能單手]：冒險者體型（種族與身高、體格決定）不到「能拿」就拿不起來，到「能單手」可以單手拿（配盾、雙持），
@@ -519,21 +570,21 @@ FE.GEAR = {
   // 防具（第二十九版追加）：cls 類別（light 輕甲、medium 中甲、heavy 重甲、none 無甲＝衣袍）決定敏捷加不加閃避、多花幾刻、練哪一項穿甲技能；
   // str 力量需求（力量不到，走一步 15 刻）；stealth 隱匿劣勢（只建標籤，潛行第 3 階段才做）；desc 遊戲裡的一句說明。
   // 內部 id：light＝皮甲、medium＝鱗甲、heavy＝鎖子甲（原本的輕甲、中甲、重甲改名）
-  padded: { cat: 'armor', cls: 'light', name: '布甲', phys: 0, magic: 1, ticks: 0, weight: 8, price: 22, ore: 2, stealth: true, desc: '縫了棉絮的布衣，擋不了刀劍，勉強隔一點魔力。', dur: 150, sold: true, drop: true },
-  light: { cat: 'armor', cls: 'light', name: '皮甲', phys: 0, magic: 1, ticks: 0, weight: 10, price: 32, ore: 2, desc: '鞣過的皮革，輕便，動作不受拘束。', dur: 150, sold: true, drop: true },
-  studded: { cat: 'armor', cls: 'light', name: '鑲釘皮甲', phys: 1, magic: 1, ticks: 0, weight: 13, price: 67, ore: 3, desc: '皮甲上釘了金屬釘，多擋一點砍刺。', dur: 150, sold: true, drop: true },
-  hide: { cat: 'armor', cls: 'medium', name: '厚皮甲', phys: 1, magic: 2, ticks: 1, weight: 12, price: 32, ore: 3, desc: '獸皮縫成的厚甲，不重，但走起來有點悶。', dur: 150, sold: true, drop: true },
-  chainshirt: { cat: 'armor', cls: 'medium', name: '鎖子襯衫', phys: 1, magic: 2, ticks: 1, weight: 20, price: 71, ore: 4, desc: '貼身穿的短鎖環衫，罩住上身。', dur: 150, sold: true, drop: true },
-  medium: { cat: 'armor', cls: 'medium', name: '鱗甲', phys: 2, magic: 2, ticks: 1, weight: 45, price: 71, ore: 4, stealth: true, desc: '一片片金屬鱗疊成的甲，扎實但吵。', dur: 150, sold: true, drop: true },
-  breastplate: { cat: 'armor', cls: 'medium', name: '胸甲', phys: 2, magic: 2, ticks: 1, weight: 20, price: 200, ore: 5, desc: '整片鍛成的胸甲，輕又擋得住，價錢也高。', dur: 150, sold: true, drop: true },
-  halfplate: { cat: 'armor', cls: 'medium', name: '半身板甲', phys: 2, magic: 2, ticks: 1, weight: 40, price: 274, ore: 5, stealth: true, desc: '護住軀幹與肩臂的板甲，稜角分明，動起來叮噹響。', dur: 150, sold: true, drop: true },
-  ringmail: { cat: 'armor', cls: 'heavy', name: '環甲', phys: 2, magic: 1, ticks: 2, weight: 40, price: 55, ore: 5, stealth: true, desc: '把鐵環縫在皮底上，粗糙但便宜的重甲。', dur: 150, sold: true, drop: true },
-  heavy: { cat: 'armor', cls: 'heavy', name: '鎖子甲', phys: 3, magic: 1, ticks: 2, str: 13, weight: 50, price: 87, ore: 5, stealth: true, desc: '一整套鎖環編成的長甲，擋砍很好，要有點力氣才穿得動。', dur: 150, sold: true, drop: true },
-  splint: { cat: 'armor', cls: 'heavy', name: '條板甲', phys: 3, magic: 1, ticks: 2, str: 15, weight: 55, price: 141, ore: 6, stealth: true, desc: '縱向的鐵條板綁在皮底上，護得周全，穿脫費事。', dur: 150, sold: true, drop: true },
-  plate: { cat: 'armor', cls: 'heavy', name: '全身板甲', phys: 4, magic: 1, ticks: 2, str: 15, weight: 60, price: 387, ore: 7, stealth: true, desc: '從頭到腳的鋼板，什麼都擋得住，也最沉最貴。', dur: 150, sold: true, drop: true },
+  padded: { cat: 'armor', ac: 11, cls: 'light', name: '布甲', phys: 0, magic: 1, ticks: 0, weight: 8, price: 22, ore: 2, stealth: true, desc: '縫了棉絮的布衣，擋不了刀劍，勉強隔一點魔力。', dur: 150, sold: true, drop: true },
+  light: { cat: 'armor', ac: 11, cls: 'light', name: '皮甲', phys: 0, magic: 1, ticks: 0, weight: 10, price: 32, ore: 2, desc: '鞣過的皮革，輕便，動作不受拘束。', dur: 150, sold: true, drop: true },
+  studded: { cat: 'armor', ac: 12, cls: 'light', name: '鑲釘皮甲', phys: 1, magic: 1, ticks: 0, weight: 13, price: 67, ore: 3, desc: '皮甲上釘了金屬釘，多擋一點砍刺。', dur: 150, sold: true, drop: true },
+  hide: { cat: 'armor', ac: 12, cls: 'medium', name: '厚皮甲', phys: 1, magic: 2, ticks: 1, weight: 12, price: 32, ore: 3, desc: '獸皮縫成的厚甲，不重，但走起來有點悶。', dur: 150, sold: true, drop: true },
+  chainshirt: { cat: 'armor', ac: 13, cls: 'medium', name: '鎖子襯衫', phys: 1, magic: 2, ticks: 1, weight: 20, price: 71, ore: 4, desc: '貼身穿的短鎖環衫，罩住上身。', dur: 150, sold: true, drop: true },
+  medium: { cat: 'armor', ac: 14, cls: 'medium', name: '鱗甲', phys: 2, magic: 2, ticks: 1, weight: 45, price: 71, ore: 4, stealth: true, desc: '一片片金屬鱗疊成的甲，扎實但吵。', dur: 150, sold: true, drop: true },
+  breastplate: { cat: 'armor', ac: 14, cls: 'medium', name: '胸甲', phys: 2, magic: 2, ticks: 1, weight: 20, price: 200, ore: 5, desc: '整片鍛成的胸甲，輕又擋得住，價錢也高。', dur: 150, sold: true, drop: true },
+  halfplate: { cat: 'armor', ac: 15, cls: 'medium', name: '半身板甲', phys: 2, magic: 2, ticks: 1, weight: 40, price: 274, ore: 5, stealth: true, desc: '護住軀幹與肩臂的板甲，稜角分明，動起來叮噹響。', dur: 150, sold: true, drop: true },
+  ringmail: { cat: 'armor', ac: 14, cls: 'heavy', name: '環甲', phys: 2, magic: 1, ticks: 2, weight: 40, price: 55, ore: 5, stealth: true, desc: '把鐵環縫在皮底上，粗糙但便宜的重甲。', dur: 150, sold: true, drop: true },
+  heavy: { cat: 'armor', ac: 16, cls: 'heavy', name: '鎖子甲', phys: 3, magic: 1, ticks: 2, str: 13, weight: 50, price: 87, ore: 5, stealth: true, desc: '一整套鎖環編成的長甲，擋砍很好，要有點力氣才穿得動。', dur: 150, sold: true, drop: true },
+  splint: { cat: 'armor', ac: 17, cls: 'heavy', name: '條板甲', phys: 3, magic: 1, ticks: 2, str: 15, weight: 55, price: 141, ore: 6, stealth: true, desc: '縱向的鐵條板綁在皮底上，護得周全，穿脫費事。', dur: 150, sold: true, drop: true },
+  plate: { cat: 'armor', ac: 18, cls: 'heavy', name: '全身板甲', phys: 4, magic: 1, ticks: 2, str: 15, weight: 60, price: 387, ore: 7, stealth: true, desc: '從頭到腳的鋼板，什麼都擋得住，也最沉最貴。', dur: 150, sold: true, drop: true },
   robe: { cat: 'armor', cls: 'none', name: '一般衣袍', phys: 0, magic: 1, ticks: 0, weight: 4, price: 10, dur: 150, sold: true, drop: true },
   mrobe: { cat: 'armor', cls: 'none', name: '魔法衣袍', phys: 0, magic: 3, ticks: 0, weight: 4, price: 40, dur: 150, sold: false, drop: true },
-  shield: { cat: 'shield', name: '盾牌', block: 0.25, value: 4, weight: 6, price: 32, ore: 2, dur: 100, sold: true, drop: true },
+  shield: { cat: 'shield', name: '盾牌', ac: 2, block: 0.25, value: 4, weight: 6, price: 32, ore: 2, dur: 100, sold: true, drop: true },
   pick: { cat: 'tool', name: '礦鎬', weight: 10, price: 20, dur: 50, sold: true },
   sickle: { cat: 'tool', name: '鐮刀', weight: 2, price: 20, dur: 50, sold: true },
 };

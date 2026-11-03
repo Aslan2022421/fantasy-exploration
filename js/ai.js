@@ -173,10 +173,11 @@
       wl
     );
     big.tier = 'mid'; // 合體生出的一律是中型怪物，就算加總的影響範圍不到 5
+    // 種族看環境，AC、攻擊加值、傷害照那個種族中型怪物的數值塊（第三十三版，原本是群裡最高的攻擊力 +1、最多 9）；
+    // 血量照舊是群裡的血量加總，最多 150（乘世界等級的加成）
     FE.dressMonster(big, game.world);
     big.maxHp = Math.min(Math.round(150 * FE.wlScale(wl, C.WL_BONUS.HP)), group.reduce((s, m) => s + m.maxHp, 0));
     big.hp = Math.min(big.maxHp, group.reduce((s, m) => s + m.hp, 0));
-    big.atk = Math.min(Math.round(9 * FE.wlScale(wl, C.WL_BONUS.ATK)), Math.max(...group.map((m) => m.atk)) + 1);
     big.exp = group.reduce((s, m) => s + m.exp, 0);
     big.compute = group.reduce((s, m) => s + m.compute, 0); // 合進去的怪物給的算力加總
     big.members = group;

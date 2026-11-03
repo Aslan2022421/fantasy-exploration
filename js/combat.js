@@ -42,13 +42,21 @@
 
   // 傷害（還沒算閃避、抗性、格擋、減傷）。times 是傷害骰擲幾次：暴擊、重擊各讓次數加倍。
   // 冒險者：骰子＋傷害加值（見 char.js 的 profile），徒手固定 BARE_DMG，最少 1；冒險者的反擊是固定值（gear.js 的 counterDamage，暴擊算兩次）。
-  // 怪物與士兵照自己的攻擊力（狂亂忽高忽低），暴擊時擲兩次加總
-  function baseDamage(game, A, prof, times, opts) {
+  // 怪物與士兵（第三十三版）：照 SRD 數值塊的傷害骰（暴擊時骰子擲兩次）＋傷害加值，有優勢時再加 advDie（哥布林的彎刀），
+  // 再乘世界等級的攻擊加成、四捨五入，至少 1；狂亂把這個數字變成 0～兩倍之間忽高忽低。
+  // 沒有傷害骰的（場景檢查直接設 m.atk、m.die = null）照第三十二版的攻擊力算：攻擊力 ±1，狂亂 0～兩倍，暴擊時擲兩次加總
+  function baseDamage(game, A, prof, times, opts, adv) {
     const r = game.rng;
     if (isPlayer(game, A) && opts && opts.counter) return FE.Gear.counterDamage(A) * times;
     if (isPlayer(game, A)) {
       const raw = prof.die ? FE.rollDice(r, prof.die, times) : C.BARE_DMG * times;
       return Math.max(1, raw + prof.dmg);
+    }
+    if (A.die) {
+      let n = FE.rollDice(r, A.die, times) + (A.dmgBonus || 0);
+      if (adv > 0 && A.advDie) n += FE.rollDice(r, A.advDie, times);
+      n = Math.round(Math.max(1, n) * FE.wlScale(A.wl, C.WL_BONUS.ATK));
+      return A.type === 'VALUE' ? FE.randInt(r, 0, n * 2) : Math.max(1, n);
     }
     let sum = 0;
     for (let i = 0; i < times; i++) sum += A.type === 'VALUE' ? FE.randInt(r, 0, A.atk * 2) : FE.randInt(r, Math.max(1, A.atk - 1), A.atk + 1);

@@ -5388,7 +5388,7 @@ function runJob(id) {
     simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 2000 : 3000, untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
   else if (kind === 'unit') { useClasses('legacy'); NO_TIRE = a !== 'economy30'; UNITS[a](); NO_TIRE = false; }
-  else if (kind === 'arena') runArena(a);
+  else if (kind === 'arena') { NO_TIRE = true; runArena(a); NO_TIRE = false; } // 競技場量的是幾下打倒，不讓角色累
   else throw new Error('不認得的工作 ' + id);
 }
 // 這個行程累積的所有結果（交給主行程合併）

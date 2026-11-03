@@ -203,13 +203,14 @@ console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${b
 // 把角色（屬性點照主屬性分配、技能練到合理等級、裝備品質照世界等級）和怪物直接放在一塊空地對打，量打倒小怪物、中型怪物各要幾下
 // （冒險者自己出手的次數，不含反擊；遠程職業站在 3 格外射）和被怪物打一下的平均傷害。目標：小怪物約 3 下、中型怪物約 6 下
 {
-  const mean = (c, t) => (c[t].n ? (c[t].sum / c[t].n).toFixed(1) : '-');
+  // 平均幾下；有 200 下打不倒的場次在後面加「*N」（N 場照 200 下算進平均，第三十三版）
+  const mean = (c, t) => (c[t].n ? (c[t].sum / c[t].n).toFixed(1) + (c[t].stuck ? `*${c[t].stuck}` : '') : '-');
   const taken = (c, t) => (c[t].n ? (c[t].dmg / c[t].n).toFixed(2) : '-');
   const hitDmg = (c, t) => (c[t].n ? (c[t].dmg / Math.max(1, c[t].hit)).toFixed(2) : '-');
   const levels = QUICK ? [1, 15] : ARENA_LEVELS;
   const wls = QUICK ? [1, 4, 7] : [1, 2, 3, 4, 5, 6, 7];
   const trialsText = QUICK ? 10 : 40;
-  console.log(`競技場量測（每格 ${trialsText} 場對打；怪物血量的世界等級加成 ${C.WL_BONUS.HP}／級；技能經驗照機器人實測的比例（主武器 ×${SKILL_PER_EXP.main}、格鬥或射擊 ×${SKILL_PER_EXP.fight}、穿甲 ×${SKILL_PER_EXP.armor}、閃避 ×${SKILL_PER_EXP.dodge}、盾牌使用 ×${SKILL_PER_EXP.shield} 角色累計經驗值）；裝備品質隨世界等級）：打倒小怪物／中型怪物平均幾下`);
+  console.log(`競技場量測（怪物種族 ${FE.RACES[ARENA_RACE].name}；每格 ${trialsText} 場對打；*N 是 200 下打不倒的場數；怪物血量的世界等級加成 ${C.WL_BONUS.HP}／級；技能經驗照機器人實測的比例（主武器 ×${SKILL_PER_EXP.main}、格鬥或射擊 ×${SKILL_PER_EXP.fight}、穿甲 ×${SKILL_PER_EXP.armor}、閃避 ×${SKILL_PER_EXP.dodge}、盾牌使用 ×${SKILL_PER_EXP.shield} 角色累計經驗值）；裝備品質隨世界等級）：打倒小怪物／中型怪物平均幾下`);
   for (const cls of BOT_CLASSES) {
     const a = arenaData[cls];
     if (!a) continue;

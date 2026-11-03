@@ -71,10 +71,14 @@ function arenaGame(cls, level, wl, seed) {
 }
 const ARENA_TYPES = process.env.FE_ARENA_TYPES ? process.env.FE_ARENA_TYPES.split(',') : ['TERRAIN', 'UNREACHABLE', 'VALUE', 'REFERENCE', 'CLIFF']; // 各種異常輪流，不含碎裂；FE_ARENA_TYPES 可以指定只量哪幾種（查哪一種異常拖慢下數用）
 const ARENA_SCOPE = { small: [2, 4], mid: [6, 10] };
+// 第三十三版起種族決定數值塊：競技場一律用同一個種族（預設哥布林，整平的空地本來就是哥布林；FE_ARENA_RACE 可以指定別的種族）。
+// 原本看腳下的生態區，對打途中怪物侵蝕地面（苔原、沙漠）之後，後面生的怪物會變成雪怪、骷髏
+const ARENA_RACE = process.env.FE_ARENA_RACE || 'goblin';
 function arenaMonster(game, tier, wl, i, dx) {
   const p = game.player;
   const sc = ARENA_SCOPE[tier][i % 2];
-  const m = FE.dressMonster(FE.makeMonster({ type: ARENA_TYPES[i % ARENA_TYPES.length], x: p.x + dx, y: p.y, cells: [], scope: sc, data: {} }, 700000 + i, wl), game.world);
+  const m = FE.makeMonster({ type: ARENA_TYPES[i % ARENA_TYPES.length], x: p.x + dx, y: p.y, cells: [], scope: sc, data: {}, race: ARENA_RACE }, 700000 + i, wl);
+  m.name = FE.monsterName(m);
   m.home = { x: m.x, y: m.y };
   game.monsters = [m];
   return m;
@@ -88,7 +92,8 @@ function arenaFight(game, tier, wl, i) {
   game.battle.cooldown = 0;
   const maxHp = p.maxHp;
   p.maxHp = 1e9; // 對打時冒險者不會倒下（倒下會被送回聚落，後面就打不下去了）
-  for (; n < 200 && game.monsters.includes(m); n++) {
+  let low = m.hp; // 整場最低的血量（會再生的沼澤巨魔每回合回血，傷害追不上時血量一直是滿的，不拿來判斷競技場壞了）
+  for (; n < 200 && game.monsters.includes(m); n++, low = Math.min(low, m.hp)) {
     p.hp = p.maxHp;
     for (const g of FE.Gear.equipped(p)) g.dur = g.max;
     if (game.bagCount('arrow') < 5) game.bagAdd('arrow', 20);
@@ -105,7 +110,9 @@ function arenaFight(game, tier, wl, i) {
   }
   p.maxHp = maxHp;
   p.hp = maxHp;
-  if (n >= 200) fail(`競技場 ${game.player.cls} 打不倒 ${m.name}（世界等級 ${wl}）：怪物 ${m.hp}/${m.maxHp}，相對位置 ${m.x - p.x},${m.y - p.y}，${game.log.slice(0, 2).map((l) => l.text).join('｜')}`);
+  // 200 下打不倒：第三十三版起是量測結果（怪物照 SRD 變硬，低等級角色打中型怪物可能打不完），記下場數、照 200 下算進平均，不算問題；
+  // 怪物沒受傷（打不到、卡住）才是競技場本身壞了
+  if (n >= 200 && low >= m.maxHp && !m.regen) fail(`競技場 ${game.player.cls} 一下都沒打到 ${m.name}（世界等級 ${wl}）：相對位置 ${m.x - p.x},${m.y - p.y}，${game.log.slice(0, 2).map((l) => l.text).join('｜')}`);
   game.monsters = [];
   return n;
 }
@@ -147,7 +154,7 @@ function runArena(cls) {
     out[L] = {};
     for (const wl of wls) {
       const game = arenaGame(cls, L, wl, 9001 + BOT_CLASSES.indexOf(cls));
-      const cell = (out[L][wl] = { small: { n: 0, sum: 0 }, mid: { n: 0, sum: 0 }, takenSmall: { n: 0, dmg: 0, hit: 0 }, takenMid: { n: 0, dmg: 0, hit: 0 } });
+      const cell = (out[L][wl] = { small: { n: 0, sum: 0, stuck: 0 }, mid: { n: 0, sum: 0, stuck: 0 }, takenSmall: { n: 0, dmg: 0, hit: 0 }, takenMid: { n: 0, dmg: 0, hit: 0 } });
       const snap = JSON.stringify(game.player.skills);
       for (const tier of ['small', 'mid']) {
         for (let i = 0; i < trials; i++) {
@@ -155,6 +162,7 @@ function runArena(cls) {
           const k = arenaFight(game, tier, wl, i);
           cell[tier].n++;
           cell[tier].sum += k;
+          if (k >= 200) cell[tier].stuck++; // 200 下打不倒的場數
         }
         game.player.skills = JSON.parse(snap);
         const t = arenaTaken(game, tier, wl, trials * 10, 0);

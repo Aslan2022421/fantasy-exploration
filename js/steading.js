@@ -966,8 +966,11 @@
 
   // 放在聚落外面 3～12 格、整塊落在這塊世界裡，不壓到水、湖、路、出生點；
   // 地貌不改高度，所以挑畫上去的格子之間沒有斷崖的位置（室內才走得通）
-  function placeLandmark(world, rng, rect, v) {
-    const kind = landmarkKind(rng, v);
+  // 第三十二版：opts.kind 指定種類；opts.side（'west'、'east'）是開局的興趣點，放在聚落的那一側、離聚落 12～40 格
+  function placeLandmark(world, rng, rect, v, opts) {
+    opts = opts || {};
+    const kind = opts.kind || landmarkKind(rng, v);
+    const far = opts.side ? [12, 40] : [3, 12];
     const L = LANDMARKS[kind];
     const H = L.art.length;
     const W = L.art[0].length;
@@ -977,22 +980,26 @@
       // 離這塊世界的邊至少一格，門外才不會是還沒創出來的地方
       if (x0 <= rect.x0 || y0 <= rect.y0 || x0 + W >= rect.x1 || y0 + H >= rect.y1) return false;
       const gap = Math.max(v.x0 - (x0 + W - 1), x0 - v.x1, v.y0 - (y0 + H - 1), y0 - v.y1);
-      if (gap < 3 || gap > 12) return false;
+      if (gap < far[0] || gap > far[1]) return false;
+      if (opts.side === 'west' && x0 + W - 1 >= v.x0) return false;
+      if (opts.side === 'east' && x0 <= v.x1) return false;
       for (let y = y0; y < y0 + H; y++) {
         for (let x = x0; x < x0 + W; x++) {
           const c = world.cell(x, y);
+          if (!c) return false; // 還沒長出來的地方
           if (c.t === '≈' || c.t === '·' || c.biome === 'lake' || world.landmarkAt(x, y) || world.villageAt(x, y) || (s && s.x === x && s.y === y)) return false;
           if (!painted(x - x0, y - y0)) continue;
           for (const [dx, dy] of [[1, 0], [0, 1]]) {
-            if (painted(x - x0 + dx, y - y0 + dy) && Math.abs(c.h - world.cell(x + dx, y + dy).h) > 1) return false;
+            if (painted(x - x0 + dx, y - y0 + dy) && (!world.cell(x + dx, y + dy) || Math.abs(c.h - world.cell(x + dx, y + dy).h) > 1)) return false;
           }
         }
       }
       return true;
     };
-    for (let tries = 0; tries < 120; tries++) {
-      const x0 = FE.randInt(rng, v.x0 - 12 - W, v.x1 + 12);
-      const y0 = FE.randInt(rng, v.y0 - 12 - H, v.y1 + 12);
+    for (let tries = 0; tries < (opts.side ? 400 : 120); tries++) {
+      const x0 = FE.randInt(rng, v.x0 - far[1] - W, v.x1 + far[1]);
+      const y0 = FE.randInt(rng, v.y0 - far[1] - H, v.y1 + far[1]);
+      if (!world.inBounds(x0, y0) || !world.inBounds(x0 + W, y0 + H)) continue;
       if (!ok(x0, y0)) continue;
       const prev = [];
       for (let dy = 0; dy < H; dy++) {

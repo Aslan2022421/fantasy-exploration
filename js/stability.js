@@ -25,7 +25,8 @@
       corrupt: 0, longRests: 0, restPaid: 0, shortRests: 0, econUp: 0, econDown: 0, exhaustMax: 0, jobs: { hunt: 0, deliver: 0, herb: 0, ore: 0 },
     });
   const state = (game) => game.worldState || 0;
-  const worldLevel = (game) => FE.worldLevelFor(game.world.chunks.length);
+  // 第三十二版：世界等級＝1＋長滿的圈數（開局 1 級，長到 288×288 是 5 級）
+  const worldLevel = (game) => 1 + (game.world.ringsDone || 0);
   const mult = (game, key) => C['STATE_' + key][state(game)];
   const total = (game) => game.monsters.reduce((s, m) => s + m.scope, 0);
   // 世界等級的加成倍率，例如 scale(game, 'CORRUPT')

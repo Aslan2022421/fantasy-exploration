@@ -166,7 +166,7 @@ function testCreation() {
       const ids0 = new Set(k > 0 ? g.monsters.map((m) => m.id) : []);
       const prev = k > 0 ? g.nextChunkAt : 0;
       if (k > 0) g.createChunk(false);
-      const chunk = g.world.chunks[g.world.chunks.length - 1];
+      const chunk = g.lastRegion; // 第三十二版：一段（開局是整個 96×96）
       const newM = g.monsters.filter((m) => !ids0.has(m.id));
       const delta = g.nextChunkAt - prev;
       const mp = newM.reduce((s, m) => s + m.compute, 0) * S;
@@ -210,9 +210,6 @@ UNITS.creation = () => { try { testCreation(); } catch (e) { fail('創世門檻�
 let wlChecks = 0;
 function testWorldLevel() {
   const ok = (cond, msg) => { wlChecks++; if (!cond) fail('世界等級 ' + msg); };
-  const P = C.CHUNKS_PER_WORLD_LEVEL;
-  const lvOf = [[1, 1], [P, 1], [P + 1, 2], [2 * P, 2], [2 * P + 1, 3], [3 * P + 1, 4], [4 * P + 1, 5], [5 * P + 1, 6]];
-  for (const [n, wl] of lvOf) ok(FE.worldLevelFor(n) === wl, `${n} 塊應該是等級 ${wl}，算出 ${FE.worldLevelFor(n)}`);
   ok(C.MERGE_RATIO === 1.5, '合體門檻基準不是 1.5');
   const mk = (wl, scope, type) => FE.makeMonster({ type: type || 'TERRAIN', x: 0, y: 0, cells: [], scope }, 1, wl);
   const a = mk(1, 4);
@@ -227,10 +224,15 @@ function testWorldLevel() {
   g.start();
   g.worldState = 0;
   ok(FE.Stability.worldLevel(g) === 1 && FE.Stability.maxScope(g) === 3, `等級 1 的影響範圍上限 ${FE.Stability.maxScope(g)}`);
-  while (g.world.chunks.length < 4 * P + 1) g.createChunk(false);
+  // 第三十二版：世界等級＝1＋長滿的圈數；一圈 4 段，長滿第 1 圈是 2 級，長到 288×288（4 圈、16 段）是 5 級，之後不再長
+  const lvAt = [];
+  while (g.createChunk(false) !== false) lvAt.push(FE.Stability.worldLevel(g));
+  ok(lvAt.length === 4 * C.RING_MAX && lvAt[2] === 1 && lvAt[3] === 2 && lvAt[7] === 3 && lvAt[15] === 5, `各段後的世界等級 ${lvAt.join(',')}`);
+  const full = g.world.bounds();
+  ok(full.x1 - full.x0 === 288 && full.y1 - full.y0 === 288, `長滿後 ${full.x1 - full.x0}×${full.y1 - full.y0}`);
   g.monsters = [];
   g.worldState = 0;
-  ok(FE.Stability.worldLevel(g) === 5, `${4 * P + 1} 塊的世界等級 ${FE.Stability.worldLevel(g)}`);
+  ok(FE.Stability.worldLevel(g) === 5, `長滿的世界等級 ${FE.Stability.worldLevel(g)}`);
   ok(FE.Stability.maxScope(g) === Math.round(3 * 1.4) && Math.abs(FE.Stability.scale(g, 'CORRUPT') - 1.4) < 1e-9, '等級 5 的影響範圍上限或侵蝕頻率不對');
   // 世界狀態的分界跟著升高：整體 BUG 值是第一個分界的 1.15 倍，在等級 1 是動盪，在等級 5（分界 ×1.4）還是安穩
   const cut0 = C.STATE_CUTS[0];
@@ -281,8 +283,7 @@ function testSoldiers() {
 
   // 失序：場上有一隻事件生的小怪物（m.small，血量 1）跟一隻創世時的怪物；士兵只打前一隻
   const reach = flood(w, [[mine()[0].x, mine()[0].y]]);
-  const chunk = w.chunkAt(town.cx, town.cy);
-  const cand = [...reach].map((k) => k.split(',').map(Number)).filter(([x, y]) => !w.inBuffer(x, y) && w.chunkAt(x, y) === chunk && w.passable(x, y))
+  const cand = [...reach].map((k) => k.split(',').map(Number)).filter(([x, y]) => !w.inBuffer(x, y) && w.passable(x, y))
     .sort((a, b) => Math.abs(a[0] - town.cx) + Math.abs(a[1] - town.cy) - (Math.abs(b[0] - town.cx) + Math.abs(b[1] - town.cy)));
   ok(cand.length > 20, '城鎮外面找不到放怪物的地方');
   const put = ([x, y], small) => {

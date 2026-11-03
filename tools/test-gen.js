@@ -17,18 +17,16 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
   }
   verifyReach = false;
   const w = game.world;
-  // 城鎮出現時機：世界等級 3 才開始，第一座就在世界等級剛好達到 3 的那一塊，之後每隔 4 或 5 塊一座；第 1 塊是村莊
-  const townChunks = w.villages.filter((v) => v.kind === 'town').map((v) => w.chunkNumber(v.cx, v.cy)).sort((a, b) => a - b);
-  let firstTown = 1;
-  while (FE.worldLevelFor(firstTown) < C.TOWN_FIRST_LEVEL) firstTown++;
-  if (townChunks[0] !== firstTown) fail(`生成 seed${seed} 第一座城鎮在第 ${townChunks[0]} 塊（應該是第 ${firstTown} 塊）`);
-  stats.firstTowns.push(townChunks[0]);
-  for (let i = 1; i < townChunks.length; i++) {
-    const gap = townChunks[i] - townChunks[i - 1];
+  // 城鎮出現時機（第三十二版照圈算）：蓋城鎮的那一段創出時世界等級至少 3，之後至少隔 4 段（4 或 5 段；最外圈放不下就再等）；開局是村莊
+  const towns = w.villages.filter((v) => v.kind === 'town').sort((a, b) => a.region - b.region);
+  for (const t of towns) if (t.wl < C.TOWN_FIRST_LEVEL) fail(`生成 seed${seed} ${t.name} 在世界等級 ${t.wl} 就蓋了`);
+  if (towns.length) stats.firstTowns.push(towns[0].region);
+  for (let i = 1; i < towns.length; i++) {
+    const gap = towns[i].region - towns[i - 1].region;
     stats.townGaps.push(gap);
-    if (gap !== 4 && gap !== 5) fail(`生成 seed${seed} 兩座城鎮隔了 ${gap} 塊`);
+    if (gap < 4) fail(`生成 seed${seed} 兩座城鎮只隔了 ${gap} 段`);
   }
-  if (w.villages[0].kind !== 'village') fail(`生成 seed${seed} 第 1 塊不是村莊`);
+  if (w.villages[0].kind !== 'village') fail(`生成 seed${seed} 開局不是村莊`);
   // 士兵：每座城鎮固定 3 位，站在自己城鎮的室外，數值以同世界等級的小怪物為準
   for (const v of w.villages) {
     const mine = game.soldiers.filter((s) => s.villageId === v.id);

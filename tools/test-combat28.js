@@ -16,11 +16,16 @@ function testCombat28() {
     for (let i = 0; i < 3; i++) g.createChunk(false);
     g.monsters = [];
     g.soldiers = [];
+    // 第三十二版開局是 96×96、怪物多，可能已經失序（動作花兩倍刻）：清掉怪物後世界狀態跟著更新
+    FE.Stability.update(g, true);
     const w = g.world;
     const R = 15;
     let c = null;
-    for (const ch of w.chunks) {
-      const x = ch.x0 + 32, y = ch.y0 + 32;
+    // 第三十二版小塊是 24×24：改成在整個世界每 6 格找一個 35×35 都不在聚落周圍的中心
+    const B = w.bounds();
+    const centers = [];
+    for (let y = B.y0 + R + 2; y < B.y1 - R - 2; y += 6) for (let x = B.x0 + R + 2; x < B.x1 - R - 2; x += 6) centers.push({ x, y });
+    for (const { x, y } of centers) {
       let clean = true;
       for (let dy = -R - 2; dy <= R + 2 && clean; dy++) for (let dx = -R - 2; dx <= R + 2; dx++) if (w.inBuffer(x + dx, y + dy) || !w.inBounds(x + dx, y + dy)) { clean = false; break; }
       if (clean) { c = { x, y }; break; }
@@ -494,7 +499,8 @@ function testCombat28() {
     const { g, p } = A;
     p.equip.body = null;
     const m = mon(g, p.x + 1, p.y);
-    const dt = (fn) => { const t = g.ticks; fn(); return g.ticks - t; };
+    // 只量動作本身：每次量之前清掉侵蝕生出來的怪物、世界回到安穩（失序時動作花兩倍刻）、怪物放回旁邊（長槍會把牠推開）
+    const dt = (fn) => { g.monsters = g.monsters.filter((o) => o === m); g.worldState = 0; Object.assign(m, { x: p.x + 1, y: p.y }); const t = g.ticks; fn(); return g.ticks - t; };
     const hit = () => { g.battle.targetId = m.id; g.act('attack'); };
     p.attr.dex = 13; // +1
     const tw = {};

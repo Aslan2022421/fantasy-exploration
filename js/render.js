@@ -342,12 +342,12 @@
     const cam = camera();
     ctx.strokeStyle = P['m-view'];
     ctx.strokeRect((cam.x - x0) * S + 0.5, (cam.y - y0) * S + 0.5, C.VIEW_W * S - 1, C.VIEW_H * S - 1);
-    // 下一塊會長在哪：離冒險者最近的邊界，用虛線框標出來
-    const slot = W.nearestFrontier(p.x, p.y);
+    // 下一段會長在哪：這一圈裡離冒險者最近的那一邊，用虛線框標出來（第三十二版）
+    const slot = W.nextSegmentRect(p.x, p.y);
     if (slot) {
       ctx.setLineDash([3, 3]);
       ctx.strokeStyle = P['m-slot'];
-      ctx.strokeRect((slot.cx * C.CHUNK_W - x0) * S + 0.5, (slot.cy * C.CHUNK_H - y0) * S + 0.5, C.CHUNK_W * S - 1, C.CHUNK_H * S - 1);
+      ctx.strokeRect((slot.x0 - x0) * S + 0.5, (slot.y0 - y0) * S + 0.5, (slot.x1 - slot.x0) * S - 1, (slot.y1 - slot.y0) * S - 1);
       ctx.setLineDash([]);
     }
   }

@@ -70,16 +70,15 @@
     // 加總後乘 PLAYER_COMPUTE_SCALE 與 CREATION_SHARE，就是到下一塊要累積的創世力。
     // 清光這塊世界，一定解得出下一塊；途中的移動、出手、清掉事件與侵蝕生的怪物，都會讓它更快。
     // 新的一塊長在離冒險者最近的邊界上（第一塊在原點）
+    // 第三十二版：開局是 96×96 一大塊，之後每次長一段（一圈的上下左右其中一邊，離冒險者最近的先長）；長滿了回傳 false
     createChunk(first) {
-      let cx = 0;
-      let cy = 0;
+      let seg = null;
       if (!first) {
         const at = this.player || this.world.spawn;
-        const slot = this.world.nearestFrontier(at.x, at.y);
-        cx = slot.cx;
-        cy = slot.cy;
+        seg = this.world.nextSegment(at.x, at.y);
+        if (!seg) return false;
       }
-      const { index, rect, village } = this.world.addChunk(cx, cy);
+      const { index, rect, village } = this.world.addRegion(seg);
       // 新聚落的周圍那一圈可能伸進舊的區塊：已經在那裡的怪物挪到圈外
       // （站在圈外、但生成點在圈內的，生成點改成現在站的位置）
       const bad = (m) => this.world.inBuffer(m.x, m.y) || this.world.inBuffer(m.home.x, m.home.y);
@@ -148,6 +147,8 @@
         : '';
       this.say(`${head}${vtext}出現 ${spawned.length} 隻怪物${mids ? `（其中 ${mids} 隻中型怪物）` : ''}、${quests.length} 個任務。`, 'world');
       FE.Stability.update(this, first);
+      this.lastRegion = rect; // 這一段的範圍（測試算門檻用）
+      return true;
     }
 
     // 一塊區域在冒險者的哪個方位（八方位）
@@ -627,7 +628,7 @@
     // 創世力累積到門檻就解出下一塊（可能連續解出幾塊）。
     // 新的一塊沒有怪物也沒有任務時，門檻不會往後推，會連續往下創；設上限避免無窮迴圈
     checkCreate() {
-      for (let i = 0; i < 10 && this.creation >= this.nextChunkAt; i++) this.createChunk(false);
+      for (let i = 0; i < 10 && this.creation >= this.nextChunkAt; i++) if (this.createChunk(false) === false) break; // 長滿 288×288 就停
     }
 
     // ---- 冒險者行動 ----

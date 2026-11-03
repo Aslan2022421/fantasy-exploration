@@ -699,7 +699,10 @@ function testCharacter() {
       const p = g.player;
       const at = outside(g);
       p.x = at.x; p.y = at.y;
+      // 站的地方整平成平地（地形與高低差會加減命中，第三十二版世界變了，找到的位置不一定是平地）
+      for (const dx of [0, 1]) { g.world.setCell(p.x + dx, p.y, '.', 'plain'); g.world.setHeight(p.x + dx, p.y, g.world.cell(p.x, p.y).h); }
       const m = arena(g, 'RUNTIME');
+      g.worldState = 0; // 第三十二版開局 96×96，有的種子一開局就動盪；這裡只測出手
       m.type = 'RUNTIME';
       m.atk = 0;
       p.equip.main.dur = p.equip.main.max = 1000;
@@ -797,12 +800,11 @@ function testCharacter() {
       for (let i = 0; i < 300; i++) {
         p.hp = p.maxHp = 1e9;
         const t = arena(g, 'RUNTIME');
-        t.hp = 1;
+        t.hp = i % 2 ? 1 : 1e9; // 一半一下就倒、一半打不倒（命中加值高時幾乎不落空，只靠血量 1 量不到「兩下都出」）
         ev = [];
         g.battle.targetId = null;
         g.strike('attack', t);
-        const main = ev.filter((e) => !e.counter);
-        if (main[0] && main[0].killed) { if (main.length !== 1) bad++; early++; } else if (main.length === 2) both++;
+        const main = ev.filter((e) => !e.counter);        if (main[0] && main[0].killed) { if (main.length !== 1) bad++; early++; } else if (main.length === 2) both++;
         else if (main.length !== 2) bad++;
       }
       FE.Combat.hook = hook0;

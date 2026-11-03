@@ -397,10 +397,11 @@
       if (!v) continue;
       const home = (x, y) => w.villageAt(x, y) === v;
       if (disorder) {
-        // 該塊世界裡事件與侵蝕生的小怪物（m.small），創世時的怪物不碰
-        const chunk = w.chunkAt(v.cx, v.cy);
-        if (!preyCache.has(chunk)) preyCache.set(chunk, game.monsters.filter((m) => m.small && w.chunkAt(m.x, m.y) === chunk));
-        const prey = preyCache.get(chunk).filter((m) => game.monsters.includes(m));
+        // 城鎮外 16 格內事件與侵蝕生的小怪物（m.small），創世時的怪物不碰
+        // （第三十二版小塊變成 24×24，不再用「城鎮所在那一塊」，改成跟原本 64×64 一塊差不多的範圍）
+        const around = (m) => m.x >= v.x0 - 16 && m.x <= v.x1 + 16 && m.y >= v.y0 - 16 && m.y <= v.y1 + 16;
+        if (!preyCache.has(v)) preyCache.set(v, game.monsters.filter((m) => m.small && around(m)));
+        const prey = preyCache.get(v).filter((m) => game.monsters.includes(m));
         const adj = prey.filter((m) => FE.Combat.adjacent(game, s, m)).sort((a, b) => a.hp - b.hp)[0];
         // 士兵比小怪物弱，要一起打才贏：同一座城鎮的士兵跟著第一位（隊長）走，
         // 隊長等其他人都跟到 2 步內，才往同一隻小怪物前進

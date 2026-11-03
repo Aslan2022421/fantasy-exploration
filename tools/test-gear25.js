@@ -9,7 +9,8 @@ function testGear() {
   const hook0 = FE.Combat.hook; // 這裡的判定不算進戰鬥統計
   const plain = { kind: 'village', steading: { prosperity: 2, tags: [] } };           // 經濟普通、沒有市場：價錢倍率 1
   const poorMarket = { kind: 'village', steading: { prosperity: 0, tags: [{ k: '市場' }] } }; // 荒蕪 1.6、有市場再 ×0.9
-  const newGame = (seed) => { const g = new FE.Game(seed); g.start(); g.checkCreate = () => {}; g.monsters = []; return g; };
+  // 第三十二版開局 96×96，有的種子一開局就動盪：清掉怪物後世界狀態也歸零
+  const newGame = (seed) => { const g = new FE.Game(seed); g.start(); g.checkCreate = () => {}; g.monsters = []; g.worldState = 0; return g; };
 
   // 1. 品質倍率與四捨五入
   {
@@ -748,16 +749,16 @@ function testGear() {
     const b = w.bounds();
     let spot = null;
     for (let y = b.y0; y < b.y1 - 5 && !spot; y++) {
-      for (let x = b.x0; x < b.x1 - 7 && !spot; x++) {
+      for (let x = b.x0; x < b.x1 - 8 && !spot; x++) {
         let good = true;
-        for (let dy = 0; dy < 5 && good; dy++) for (let dx = 0; dx < 7 && good; dx++) {
+        for (let dy = 0; dy < 5 && good; dy++) for (let dx = 0; dx < 8 && good; dx++) {
           const c = w.cell(x + dx, y + dy);
           good = !!c && w.passable(x + dx, y + dy) && !w.inBuffer(x + dx, y + dy) && w.heightOk(x, y, x + dx, y + dy) && !w.chestAt(x + dx, y + dy) && !g.nodeAt(x + dx, y + dy);
         }
         if (good) spot = { x, y };
       }
     }
-    ok(!!spot, '找不到 7×5 的空地');
+    ok(!!spot, '找不到 8×5 的空地'); // 第三十二版：加寬一格，往後退到第 4 步還在空地裡
     if (spot) {
       const mk = (id, x, y) => {
         const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x, y, cells: [[x, y]], scope: 2, data: {} }, id, 1), w);
@@ -768,7 +769,7 @@ function testGear() {
       const dodge0 = C.PLAYER_DODGE;
       const flee0 = [C.FLEE_MIN, C.FLEE_MAX];
       C.WANDER_CHANCE = 0;
-      const cx = spot.x + 3, cy = spot.y + 2;
+      const cx = spot.x + 4, cy = spot.y + 2;
       const touching = (a) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y) === 1;
       const events = [];
       let rolls = 0;

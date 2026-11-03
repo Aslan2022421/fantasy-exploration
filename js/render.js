@@ -287,25 +287,35 @@
     return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
   }
 
+  // 地圖（第三十二版重畫）：整個世界一次畫完（最大 288×288），一格幾像素照視窗放得下的整數倍；
+  // 畫布照螢幕的實際像素畫（devicePixelRatio），不讓瀏覽器縮放，才不會糊。聚落與地貌標上名字；
+  // 滑鼠移到哪裡，提示框寫那裡的地形、聚落、地貌、採集點與怪物；點聚落，下面的資訊換成那一座
+  let mapView = null; // 最近一次畫的範圍與比例：{ x0, y0, S }
   function drawMinimap() {
     if (ui.win !== 'minimap') return;
     const cv = $('minimap');
     const W = game.world;
     const p = game.player;
-    // 一格幾像素：視窗放得下的最大值（最多 4）
-    const S = Math.max(1, Math.min(4, Math.floor((window.innerWidth - 80) / C.MINIMAP_W), Math.floor((window.innerHeight - 140) / C.MINIMAP_H)));
-    const MW = C.MINIMAP_W;
-    const MH = C.MINIMAP_H;
     const b = W.bounds();
-    const x0 = clamp(p.x - Math.floor(MW / 2), b.x0, Math.max(b.x0, b.x1 - MW));
-    const y0 = clamp(p.y - Math.floor(MH / 2), b.y0, Math.max(b.y0, b.y1 - MH));
-    if (cv.width !== MW * S) {
-      cv.width = MW * S;
-      cv.height = MH * S;
+    const MW = b.x1 - b.x0;
+    const MH = b.y1 - b.y0;
+    const room = Math.max(200, ($('miniwrap').clientWidth || 680) - 4);
+    const S = Math.max(1, Math.min(6, Math.floor(room / MW), Math.floor((window.innerHeight * 0.62) / MH)));
+    const x0 = b.x0;
+    const y0 = b.y0;
+    mapView = { x0, y0, S };
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(MW * S * dpr) || cv.height !== Math.round(MH * S * dpr)) {
+      cv.width = Math.round(MW * S * dpr);
+      cv.height = Math.round(MH * S * dpr);
+      cv.style.width = MW * S + 'px';
+      cv.style.height = MH * S + 'px';
     }
     const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = P.void; // 還沒創出來的地方
-    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillRect(0, 0, MW * S, MH * S);
     for (let y = y0; y < y0 + MH; y++) {
       for (let x = x0; x < x0 + MW; x++) {
         const c = W.cell(x, y);
@@ -313,36 +323,50 @@
         const base = c.t === '#' ? P['m-rock'] : P['m-' + c.biome] || '#444444';
         const vv = W.villageAt(x, y);
         // 地貌上的人造物（斷牆、立石、塔⋯⋯）畫成土黃色
-        const relic = /[▓░ΠΘ†Ω‡+¤]/.test(c.t);
+        const relic = /[▓░▒ΠΘ†Ω‡+¤≥≤]/.test(c.t);
         const building = /[⌂∩♦]/.test(c.t);
         const wall = c.t === 'W' || c.t === 'w';
         ctx.fillStyle = wall ? (c.t === 'W' ? P['m-stonewall'] : P['m-woodwall']) : building ? P['m-building'] : vv ? (vv.kind === 'town' ? P['m-town'] : P['m-village']) : relic ? P['m-relic'] : shade(base, c.h);
         ctx.fillRect((x - x0) * S, (y - y0) * S, S, S);
       }
     }
+    const px = (x) => (x - x0) * S + S / 2;
+    const py = (y) => (y - y0) * S + S / 2;
     const dot = (x, y, color, size) => {
-      if (x < x0 || x >= x0 + MW || y < y0 || y >= y0 + MH) return;
-      const s = size || S;
+      const s2 = size || S;
       ctx.fillStyle = color;
-      ctx.fillRect((x - x0) * S - (s - S) / 2, (y - y0) * S - (s - S) / 2, s, s);
+      ctx.fillRect(px(x) - s2 / 2, py(y) - s2 / 2, s2, s2);
     };
-    const big = S === 1 ? 3 : 5;
-    for (const ch of W.chests) dot(ch.x, ch.y, P['map-chest']);
-    // 採集點（第三十二版補上）：礦脈畫大點、藥草畫小點，採完還沒長回來的不畫
-    for (const nd of W.nodes) if (!(nd.regrowAt > game.ticks)) dot(nd.x, nd.y, P['map-node-' + nd.kind], nd.kind === 'ore' ? big : S);
+    const big = Math.max(4, S + 2);
+    for (const ch of W.chests) dot(ch.x, ch.y, P['map-chest'], Math.max(2, S));
+    // 採集點：礦脈畫菱形、藥草畫小點，採完還沒長回來的不畫
+    for (const nd of W.nodes) {
+      if (nd.regrowAt > game.ticks) continue;
+      if (nd.kind !== 'ore') { dot(nd.x, nd.y, P['map-node-herb'], Math.max(2, S)); continue; }
+      const r = big / 2 + 1;
+      ctx.fillStyle = P['map-node-ore'];
+      ctx.beginPath();
+      ctx.moveTo(px(nd.x), py(nd.y) - r); ctx.lineTo(px(nd.x) + r, py(nd.y)); ctx.lineTo(px(nd.x), py(nd.y) + r); ctx.lineTo(px(nd.x) - r, py(nd.y));
+      ctx.closePath();
+      ctx.fill();
+    }
     for (const n of W.npcs) {
       const target = handIn(n);
-      dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : P['map-npc'], target ? big : S);
+      dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : P['map-npc'], target ? big : Math.max(2, S));
     }
+    for (const sd of game.soldiers) dot(sd.x, sd.y, P['map-soldier'], Math.max(2, S));
     // 地形重算的地方：亮紫色的點，100 刻後消失
-    for (const s of game.soldiers) dot(s.x, s.y, P['map-soldier']);
-    for (const f of game.flashes || []) if (f.until > (game.ticks || 0)) dot(f.x, f.y, P['m-flash'], big);
-    for (const m of game.monsters) dot(m.x, m.y, m.tier !== 'small' ? P['m-boss'] : P['m-mon'], m.tier !== 'small' ? big : S);
+    for (const fl of game.flashes || []) if (fl.until > (game.ticks || 0)) dot(fl.x, fl.y, P['m-flash'], big);
+    for (const m of game.monsters) dot(m.x, m.y, m.tier !== 'small' ? P['m-boss'] : P['m-mon'], m.tier !== 'small' ? big : Math.max(3, S + 1));
+    // 冒險者：白點加深色外框，一眼找得到
+    ctx.fillStyle = '#000';
+    ctx.fillRect(px(p.x) - big / 2 - 1, py(p.y) - big / 2 - 1, big + 2, big + 2);
     dot(p.x, p.y, P['map-player-fg'], big);
     const cam = camera();
     ctx.strokeStyle = P['m-view'];
+    ctx.lineWidth = 1;
     ctx.strokeRect((cam.x - x0) * S + 0.5, (cam.y - y0) * S + 0.5, C.VIEW_W * S - 1, C.VIEW_H * S - 1);
-    // 下一段會長在哪：這一圈裡離冒險者最近的那一邊，用虛線框標出來（第三十二版）
+    // 下一段會長在哪：這一圈裡離冒險者最近的那一邊，用虛線框標出來
     const slot = W.nextSegmentRect(p.x, p.y);
     if (slot) {
       ctx.setLineDash([3, 3]);
@@ -350,6 +374,83 @@
       ctx.strokeRect((slot.x0 - x0) * S + 0.5, (slot.y0 - y0) * S + 0.5, (slot.x1 - slot.x0) * S - 1, (slot.y1 - slot.y0) * S - 1);
       ctx.setLineDash([]);
     }
+    // 名字：聚落寫在上方（點選中的那一座框起來），地貌寫在下方；字有深色描邊，壓在地形上也看得清
+    const label = (text, x, y, color, size) => {
+      ctx.font = `${size}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+    };
+    for (const v of W.villages) {
+      if (v.id === ui.mapSel) {
+        ctx.strokeStyle = P['map-player-fg'];
+        ctx.strokeRect((v.x0 - x0) * S - 1.5, (v.y0 - y0) * S - 1.5, (v.x1 - v.x0 + 1) * S + 3, (v.y1 - v.y0 + 1) * S + 3);
+      }
+      label(v.name, ((v.x0 + v.x1 + 1) / 2 - x0) * S, (v.y0 - y0) * S - 7, v.kind === 'town' ? '#e0b0ff' : '#ffe08a', 12);
+    }
+    for (const l of W.landmarks) label(l.name, ((l.x0 + l.x1 + 1) / 2 - x0) * S, (l.y1 + 1 - y0) * S + 7, '#e8c890', 11);
+  }
+
+  // 地圖上某一格的大概狀況（滑鼠提示用）：沒創出來的地方寫明；其他寫地形、聚落、地貌、採集點、附近的怪物
+  function mapCellInfo(x, y) {
+    const W = game.world;
+    const c = W.cell(x, y);
+    const slot = W.nextSegmentRect(game.player.x, game.player.y);
+    const inSlot = slot && x >= slot.x0 && x < slot.x1 && y >= slot.y0 && y < slot.y1;
+    if (!c) return inSlot ? '還沒創出來（下一段會長在這裡）' : '還沒創出來';
+    const out = [];
+    const B = FE.BIOMES[c.biome];
+    out.push(`<b>${esc(B ? B.name : c.biome)}</b>　高度 ${c.h}${c.t === '≈' ? '，水' : c.t === '#' ? '，巨石' : ''}`);
+    const v = W.villageAt(x, y) || W.villages.find((o) => x >= o.x0 - 2 && x <= o.x1 + 2 && y >= o.y0 - 2 && y <= o.y1 + 2);
+    if (v) out.push(`${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}${v.steading ? `，${FE.PROSPERITY[v.steading.prosperity]}、${FE.POPULATION[v.steading.population]}` : ''}）<span class="dim">點一下看詳細</span>`);
+    const l = W.landmarkAt(x, y);
+    if (l) out.push(esc(l.name));
+    const near = (o, r) => Math.abs(o.x - x) <= r && Math.abs(o.y - y) <= r;
+    const nodes = W.nodes.filter((n) => near(n, 1) && !(n.regrowAt > game.ticks));
+    if (nodes.some((n) => n.kind === 'ore')) out.push('礦脈（要礦鎬）');
+    if (nodes.some((n) => n.kind === 'herb')) out.push('藥草（要鐮刀）');
+    const ms = game.monsters.filter((m) => near(m, 2));
+    if (ms.length) {
+      const names = {};
+      for (const m of ms) names[m.name] = (names[m.name] || 0) + 1;
+      out.push('怪物：' + Object.entries(names).map(([n, k]) => (k > 1 ? `${esc(n)} ×${k}` : esc(n))).join('、'));
+    }
+    if (inSlot) out.push('<span class="dim">下一段會長在這一帶</span>');
+    if (x === game.player.x && y === game.player.y) out.push('你在這裡');
+    return out.join('<br>');
+  }
+  const mapCellAt = (e) => {
+    if (!mapView) return null;
+    const r = $('minimap').getBoundingClientRect();
+    return { x: mapView.x0 + Math.floor((e.clientX - r.left) / mapView.S), y: mapView.y0 + Math.floor((e.clientY - r.top) / mapView.S) };
+  };
+  function bindMap() {
+    const cv = $('minimap');
+    const tip = $('mapTip');
+    cv.addEventListener('mousemove', (e) => {
+      const at = mapCellAt(e);
+      if (!at || !game) return;
+      tip.innerHTML = mapCellInfo(at.x, at.y);
+      tip.classList.remove('hidden');
+      const wrap = $('miniwrap').getBoundingClientRect();
+      const left = e.clientX - wrap.left + 14;
+      tip.style.left = Math.min(left, wrap.width - tip.offsetWidth - 4) + 'px';
+      tip.style.top = e.clientY - wrap.top + 14 + 'px';
+    });
+    cv.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+    cv.addEventListener('click', (e) => {
+      const at = mapCellAt(e);
+      if (!at || !game) return;
+      const W = game.world;
+      const v = W.villageAt(at.x, at.y) || W.villages.find((o) => at.x >= o.x0 - 2 && at.x <= o.x1 + 2 && at.y >= o.y0 - 2 && at.y <= o.y1 + 2);
+      ui.mapSel = v ? v.id : null; // 點空地回到所在或最近的聚落
+      drawMinimap();
+      drawSteading();
+    });
   }
 
   // ---- 上方：一行狀態、生命與經驗兩條長條 ----
@@ -594,8 +695,9 @@
     const el = $('steading');
     const W = game.world;
     const p = game.player;
-    let v = W.villageAt(p.x, p.y);
-    const inside = !!v;
+    const picked = ui.mapSel != null ? W.villageById(ui.mapSel) : null;
+    let v = picked || W.villageAt(p.x, p.y);
+    const inside = !picked && !!v;
     if (!v) {
       const dist = (a) => Math.abs(a.cx - p.x) + Math.abs(a.cy - p.y);
       v = W.villages.slice().sort((a, b) => dist(a) - dist(b))[0];
@@ -611,7 +713,7 @@
       .map((t) => `<li><b>${esc(t.text)}</b><span class="dim">　${esc(t.info)}</span></li>`)
       .join('');
     el.innerHTML = `
-      <h3 style="margin-top:0">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）${inside ? '' : `<span class="dim">　你不在這裡，這是離你最近的聚落，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
+      <h3 style="margin-top:0">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）${inside || W.villageAt(p.x, p.y) === v ? '' : `<span class="dim">　${picked ? '在地圖上點選的聚落' : '你不在這裡，這是離你最近的聚落'}，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
       <div class="row"><span>經濟</span><span>${FE.PROSPERITY[s.prosperity]}（裝備售價 ×${FE.Steading.shopFactor(v).toFixed(2)}）</span></div>
       <div class="row"><span>住一晚</span><span>${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}（${FE.PROSPERITY[s.prosperity]}的生活${C.LIVING_REPAIR[s.prosperity] ? `，身上裝備的耐久回 ${Math.round(C.LIVING_REPAIR[s.prosperity] * 100)}%` : ''}${C.LIVING_QUEST[s.prosperity] ? `，這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[s.prosperity] * 100)}%` : ''}）</span></div>
       <div class="row"><span>人口</span><span>${FE.POPULATION[s.population]}</span></div>
@@ -1007,19 +1109,32 @@
       <p class="dim dlg-hint">加完才能繼續。生命 ${p.hp} / ${p.maxHp}</p></div>`;
   }
 
-  // 在聚落按 R 住一晚之前的確認視窗（第三十一版）：寫出這一晚的開支與效果
-  function drawRestAsk() {
+  // 在聚落按 R 住一晚的選項視窗（第三十一版；第三十二版改成照對話視窗的數字選項）：
+  // 每一級生活水準一個選項，最高到這個聚落的經濟等級，付不起的不能選；最便宜的一級永遠能選（錢不夠就付身上全部）；最後一項是不住
+  function restOptions() {
     const p = game.player;
     const v = game.world.villageAt(p.x, p.y);
     const k = v && v.steading ? v.steading.prosperity : 0;
-    const fx = [C.LIVING_REPAIR[k] ? `身上裝備耐久回 ${Math.round(C.LIVING_REPAIR[k] * 100)}%` : '', C.LIVING_QUEST[k] ? `這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[k] * 100)}%` : ''].filter(Boolean);
+    const out = [];
+    for (let lv = 0; lv <= k; lv++) {
+      const cost = C.LIVING_COST[lv] * C.SILVER;
+      const fx = [C.LIVING_REPAIR[lv] ? `身上裝備耐久回 ${Math.round(C.LIVING_REPAIR[lv] * 100)}%` : '', C.LIVING_QUEST[lv] ? `這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[lv] * 100)}%` : ''].filter(Boolean);
+      const short = p.copper < cost;
+      out.push({ id: String(lv), label: `${FE.PROSPERITY[lv]}的生活，付 ${FE.money(lv === 0 && short ? p.copper : cost)}`, desc: `生命回滿、力竭 −1${fx.length ? '；' + fx.join('、') : ''}`, note: short ? (lv === 0 ? '錢不夠，付身上全部' : '錢不夠') : '', ok: lv === 0 || !short });
+    }
+    out.push({ id: 'leave', label: '不住了', desc: '', note: '', ok: true });
+    return { v, k, out };
+  }
+  function drawRestAsk() {
+    const p = game.player;
+    const { v, k, out } = restOptions();
     $('modalBody').className = 'win';
     $('modal').classList.remove('full');
     $('modalBody').innerHTML = `
       <h2>住一晚（8 小時）</h2>
-      <div class="winbody"><p>開支 <b>${FE.money(C.LIVING_COST[k] * C.SILVER)}</b>（經濟：${FE.PROSPERITY[k]}）　身上 ${FE.money(p.copper)}</p>
-      <p>生命回滿、力竭 −1${fx.length ? '；' + fx.join('、') : ''}。</p>
-      <p class="dim dlg-hint">Enter 住下　Esc 取消</p></div>`;
+      <div class="winbody"><p>${esc(v ? v.name : '')}　經濟：${FE.PROSPERITY[k]}　身上 ${FE.money(p.copper)}</p>
+      <div class="dlg-opts">${out.map((o, i) => `<button data-rest="${o.id}" ${o.ok ? '' : 'disabled'}><kbd>${i + 1}</kbd><b>${esc(o.label)}</b>${o.note ? `　<span class="dim">${esc(o.note)}</span>` : ''}${o.desc ? `<br><span class="dim">${esc(o.desc)}</span>` : ''}</button>`).join('')}</div>
+      <p class="dim dlg-hint">按數字選，Esc 取消</p></div>`;
   }
 
   // 施法的招式清單（第三十一版，法師、牧師、聖騎士按 F）：數字鍵選，冷卻中的不能選；手上有遠程武器另外列「射擊」
@@ -1137,6 +1252,8 @@
       layout();
       if (window.ResizeObserver) new ResizeObserver(relayout).observe($('mapwrap'));
       window.addEventListener('resize', relayout);
+      if (!ui.mapBound) { bindMap(); ui.mapBound = true; } // 地圖的滑鼠提示與點選聚落（開新世界時不重綁）
+      ui.mapSel = null;
       setInterval(drawMap, C.GLITCH_MS);
       update();
     },
@@ -1150,6 +1267,7 @@
       return true;
     },
     restAsking: () => !!ui.restAsk,
+    restOptions: () => restOptions().out,
     // 施法的招式清單：開、關、第 i 項
     openSpells() {
       ui.spellMenu = true;

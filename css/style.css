@@ -360,8 +360,12 @@ ul.tags li { margin: 2px 0; }
 ol { margin: 0; padding-left: 20px; }
 li { margin: 2px 0; }
 .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-#miniwrap { display: flex; justify-content: center; }
-#minimap { display: block; max-width: 100%; image-rendering: pixelated; border: 1px solid var(--line); background: var(--void); }
+#miniwrap { display: flex; justify-content: center; position: relative; }
+/* 地圖照實際像素畫（render.js 設好寬高），不讓瀏覽器縮放 */
+#minimap { display: block; image-rendering: pixelated; border: 1px solid var(--line); background: var(--void); cursor: crosshair; }
+#mapTip { position: absolute; z-index: 5; max-width: 260px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--line2); font-size: 13px; line-height: 1.5; pointer-events: none; }
+#mapTip.hidden { display: none; }
+.maplegend { font-size: 12px; margin: 4px 0 8px; }
 
 button {
   padding: 6px 10px;

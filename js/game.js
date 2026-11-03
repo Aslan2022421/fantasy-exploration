@@ -1447,7 +1447,8 @@
     // 休息（第三十版）。旁邊有怪物時不能休息；休息一次只把修補力存起來（不進創世力）。
     // 野外短休：1 小時（100 刻，世界同步跑 10 回合），回 1d10＋體質修正值（最少 1），不花錢；途中有怪物貼上來就被打斷，沒回生命。
     // 聚落裡長休：8 小時（800 刻，世界同步跑 80 回合），生命回滿、力竭 −1，付生活開支（見 payLiving）
-    rest() {
+    // lv：在聚落住一晚選的生活水準（0 荒蕪～這個聚落的經濟等級）；沒給就照聚落的經濟、付不起就住最便宜的（機器人用）
+    rest(lv) {
       if (this.adjacentMonsters().length) {
         this.say('旁邊有怪物，沒辦法休息。', 'sys');
         return;
@@ -1457,7 +1458,7 @@
       const v = this.world.villageAt(p.x, p.y);
       this.earn(C.REST_COMPUTE, { repairOnly: true });
       if (v) {
-        const paid = this.payLiving(v);
+        const paid = this.payLiving(v, lv);
         this.endTurn(false, C.LONG_REST_TICKS, { exact: true, sleep: true });
         this.rested();
         this.say(`你在${v.name}睡了一晚（${paid}），生命回滿。${p.exhaust ? `還有點累（力竭 ${p.exhaust}）。` : ''}`, 'good');
@@ -1475,19 +1476,17 @@
       this.say(`你歇了一個小時，生命回復 ${got}。`, 'sys');
     }
 
-    // 長休付生活開支：生活水準照聚落的經濟標籤（玩家不選）：荒蕪 3 銀，沒有加成；貧窮 6 銀，身上裝備的耐久回 3%；
+    // 長休付生活開支：荒蕪 3 銀，沒有加成；貧窮 6 銀，身上裝備的耐久回 3%；
     // 普通 15 銀，耐久回 5%、這個聚落的委託獎勵 +5%；繁盛（與富裕）30 銀，耐久回 10%、委託獎勵 +10%。
-    // 錢不夠就住最便宜的那一級（荒蕪的效果），付得出多少付多少（最多 3 銀）。回傳一句付了什麼
-    payLiving(v) {
+    // 第三十二版：玩家在選項視窗選生活水準（最高到這個聚落的經濟等級，付不起的不能選）；最便宜的一級永遠能選，錢不夠就付身上全部。
+    // 沒給 want（機器人）就照聚落的經濟、付不起就住最便宜的。回傳一句付了什麼
+    payLiving(v, want) {
       const p = this.player;
       const tier = v.steading ? v.steading.prosperity : 0;
-      const cost = C.LIVING_COST[tier] * C.SILVER;
-      let lv = tier;
-      let paid = cost;
-      if (p.copper < cost) {
-        lv = 0;
-        paid = Math.min(p.copper, C.LIVING_COST[0] * C.SILVER);
-      }
+      let lv = want === undefined ? tier : Math.max(0, Math.min(tier, want));
+      if (want === undefined && p.copper < C.LIVING_COST[lv] * C.SILVER) lv = 0;
+      if (lv > 0 && p.copper < C.LIVING_COST[lv] * C.SILVER) lv = 0;
+      const paid = Math.min(p.copper, C.LIVING_COST[lv] * C.SILVER);
       p.copper -= paid;
       const st = FE.Stability.stat(this);
       st.restPaid += paid;
@@ -1506,7 +1505,7 @@
       p.lodging = bonus > 0 ? { villageId: v.id, bonus } : null;
       this.spend(v, paid);
       const level = FE.PROSPERITY[lv];
-      const head = lv < tier ? `錢不夠，只住得起最便宜的，付了 ${FE.money(paid)}` : `${level}的生活，付了 ${FE.money(paid)}`;
+      const head = `${level}的生活，付了 ${FE.money(paid)}`;
       return head + (fixed ? '，身上的裝備也順手整理了一下' : '') + (bonus > 0 ? `，這裡的委託獎勵 +${Math.round(bonus * 100)}%` : '');
     }
 

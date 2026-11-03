@@ -138,7 +138,14 @@
   document.getElementById('modal').addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-spell]');
     if (b && !b.disabled) pickSpell([...b.parentNode.children].indexOf(b));
+    const r = e.target.closest && e.target.closest('[data-rest]');
+    if (r && !r.disabled) pickRest(r.dataset.rest);
   });
+  // 住一晚的選項：生活水準 0～4（字串），leave 不住
+  function pickRest(id) {
+    FE.UI.closeRestAsk();
+    if (id !== 'leave') dispatch('休息', () => game.rest(Number(id)));
+  }
 
   const DIRS = {
     arrowup: [0, -1], arrowdown: [0, 1], arrowleft: [-1, 0], arrowright: [1, 0],
@@ -198,13 +205,13 @@
       else if (/^[1-9]$/.test(k)) pickSpell(Number(k) - 1);
       return;
     }
-    // 住一晚的確認視窗開著：Enter 住下、Esc 取消，其他鍵不作用
+    // 住一晚的選項視窗開著：數字選生活水準或不住，Esc 不住，其他鍵不作用
     if (FE.UI.restAsking()) {
       e.preventDefault();
-      if (k === 'enter' || k === ' ') {
-        FE.UI.closeRestAsk();
-        dispatch('休息', () => game.rest());
-      } else if (k === 'escape') FE.UI.closeRestAsk();
+      if (/^[1-9]$/.test(k)) {
+        const o = FE.UI.restOptions()[Number(k) - 1];
+        if (o && o.ok) pickRest(o.id);
+      } else if (k === 'escape') pickRest('leave');
       return;
     }
     // 在輸入框裡打字時只認 Esc（關掉設定視窗）

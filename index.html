@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fantasy Exploration</title>
-  <link rel="stylesheet" href="css/style.css?v=25">
+  <link rel="stylesheet" href="css/style.css?v=26">
 </head>
 <body>
   <!-- 版面參考 Caves of Qud 的文字模式：上方一行狀態＋右上圖示列＋生命與經驗兩條長條；
@@ -53,12 +53,10 @@
             <nav id="quick" aria-label="快捷列">
               <button class="qs" data-act="attack"><svg viewBox="0 0 24 24"><path d="M5 19L19 5M14 5h5v5M6.5 14.5l3 3M4 20l2-2"/></svg><span class="qn">攻擊</span><span class="qk">&lt;1&gt;</span></button>
               <button class="qs" data-act="deep"><svg viewBox="0 0 24 24"><path d="M14 4l6 6-3 3-6-6zM12 11L4.5 18.5a1.5 1.5 0 0 0 2 2L14 13"/></svg><span class="qn">重擊</span><span class="qcd"></span><span class="qk">&lt;2&gt;</span></button>
-              <button class="qs" data-act="flee"><svg viewBox="0 0 24 24"><path d="M10 6L4 12l6 6M4 12h12a4 4 0 0 1 4 4v2"/></svg><span class="qn">撤退</span><span class="qk">&lt;3&gt;</span></button>
+              <button class="qs" data-act="flee"><svg viewBox="0 0 24 24"><path d="M10 6L4 12l6 6M4 12h12a4 4 0 0 1 4 4v2"/></svg><span class="qn">逃跑</span><span class="qk">&lt;3&gt;</span></button>
               <button class="qs" data-act="fire"><svg viewBox="0 0 24 24"><path d="M4 20L20 4M14 4h6v6M4 14l6 6M7 11l6 6"/></svg><span class="qn">射擊</span><span class="qk">&lt;F&gt;</span></button>
               <button class="qs" data-act="heal"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="qn">治療</span><span class="qcd"></span><span class="qk">&lt;4&gt;</span></button>
               <button class="qs" data-act="bash"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg><span class="qn">盾擊</span><span class="qk">&lt;5&gt;</span></button>
-              <button class="qs" data-act="disengage"><svg viewBox="0 0 24 24"><path d="M4 12h12M12 6l6 6-6 6M20 5v14"/></svg><span class="qn">撤離</span><span class="qk">&lt;6&gt;</span></button>
-              <button class="qs" data-act="dodge"><svg viewBox="0 0 24 24"><path d="M15 4a2 2 0 1 0 0.01 0M12 8l-4 5 4 2-2 6M12 8l4 3 3-1M12 15l4 2"/></svg><span class="qn">閃避</span><span class="qk">&lt;7&gt;</span></button>
               <button class="qs" data-act="throw"><svg viewBox="0 0 24 24"><path d="M4 20L16 8M12 4h8v8M4 14l6 6"/></svg><span class="qn">投擲</span><span class="qk">&lt;T&gt;</span></button>
               <button class="qs qw" data-win="backpack"><svg viewBox="0 0 24 24"><path d="M7 9h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z"/><path d="M9 9V6a3 3 0 0 1 6 0v3M5 14h14"/></svg><span class="qn">背包</span><span class="qk">&lt;B&gt;</span></button>
               <button class="qs" data-win="character"><svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.4"/><path d="M5.5 20c0-4 3-6.5 6.5-6.5s6.5 2.5 6.5 6.5z"/></svg><span class="qn">角色</span><span class="qk">&lt;C&gt;</span></button>
@@ -111,7 +109,7 @@
         <p>怪物身上的異常會讓字母閃成別的字元：數字是狂亂，問號是虛影，<code>*</code> <code>:</code> 是氣候錯位，<code>▲</code> <code>▼</code> 是斷崖，<code>%</code> <code>#</code> 是斷層，<code>!</code> 是碎裂。紅色閃爍的格子是被異常扭曲的地面，變淡的區域是走不到的地方。</p>
         <p><b>小地圖</b>（按右上角的小地圖圖示或 M 開啟，Esc 關閉）：白點是你，紅點是怪物，亮紫色的點是剛被創世神重新算過的地面（100 刻後消失），粉紅是村民，藍點是鐵匠或武器匠，橘點是盔甲匠，鋼灰色的點是士兵，綠色大點是你要找的人，黃點是寶箱，土黃色是聚落附近的地貌，白框是主畫面的範圍，紫色虛線框是下一塊世界會長出來的位置（離你最近的邊界），黑色是還沒創出來的地方。</p>
         <p><b>戰鬥</b>：傷害看武器的骰子（例如長劍 1d8），加力量（近戰、投擲）或敏捷（射擊）的修正值。擲兩次 d20 取高是優勢、取低是劣勢。武器的特質：可雙手（副手空著時骰子變大）、重型（力量不到 13 有劣勢）、輕型、靈巧、觸及（長槍、鞭子打得到直線 2 格外）、投擲、彈藥（射一次用一支箭或弩矢）、裝填（輕弩一個動作只能射一次）。武器拿不拿得起來、能不能單手拿，看你的體型（種族、身高、體格）：體型夠大才能單手拿（配盾牌或雙持），不夠大只能雙手，再小就拿不動。精通：削弱、侵擾、失衡、推擊、迅切、順劈、擦掠、緩速，每一種都要那把武器的技能練到 5 級（精熟）才會。投擲：任何武器都能丟（按 T），副手有武器先丟副手的，射程 4／12 格再加感知修正值；有投擲特質的武器照自己的骰子、練自己的技能，其他武器是臨時武器（1d4 鈍擊），弓和輕弩只有 1 點，丟出去的都掉在目標那格，走過去撿回來，一律練射擊。防具分輕甲、中甲、重甲：輕甲與沒穿的敏捷全額加到閃避，中甲最多算 +2，重甲不加也不扣；力量不到防具的需求，走一步花 15 刻；穿哪一類就練哪一項穿甲技能。擲出 20 暴擊，傷害骰擲兩次。</p>
-        <p><b>按鍵</b>：方向鍵或 WASD 移動，R 休息，1 攻擊、2 重擊、3 撤退、F 射擊／投擲／施法（先瞄準，Tab 換目標，F 或 Enter 出手，Esc 取消；牧師的 F 是神聖之光，不用拿武器）、T 投擲（任何武器，瞄準方式同 F）、4 治療（牧師加感知、聖騎士加魅力）、5 盾擊（戰士）、6 撤離（這個動作之後到你下一個動作之前，你走開不會被趁機攻擊、纏上的目標也不會趁隙出手）、7 閃避（到你下一個動作之前，打你的攻擊都有劣勢）（下方快捷列也能點），B 背包（按數字使用），C 角色（職業、屬性、技能），－／＋ 縮放，M 小地圖，L 圖例，H 世界的歷史紀錄，J 完整訊息紀錄，I 聚落資訊，<code>`</code>（反引號）錯誤報告，Esc 關掉視窗（沒有視窗時打開設定）。右上角的圖示列對應這些視窗，滑鼠移上去會顯示名稱與按鍵。</p>
+        <p><b>按鍵</b>：方向鍵或 WASD 移動，R 休息，1 攻擊、2 重擊、3 逃跑（成功就甩開貼身的怪物，跳到 2～5 格外；貼身的怪物越多越難）、F 射擊／投擲／施法（先瞄準，Tab 換目標，F 或 Enter 出手，Esc 取消；牧師的 F 是神聖之光，不用拿武器）、T 投擲（任何武器，瞄準方式同 F）、4 治療（牧師加感知、聖騎士加魅力）、5 盾擊（戰士）（下方快捷列也能點），B 背包（按數字使用），C 角色（職業、屬性、技能），－／＋ 縮放，M 小地圖，L 圖例，H 世界的歷史紀錄，J 完整訊息紀錄，I 聚落資訊，<code>`</code>（反引號）錯誤報告，Esc 關掉視窗（沒有視窗時打開設定）。右上角的圖示列對應這些視窗，滑鼠移上去會顯示名稱與按鍵。</p>
       </div></div>
     </section>
 
@@ -196,21 +194,21 @@
   </div>
 
   <!-- ?v= 只是為了讓瀏覽器丟掉換伺服器之前的舊快取 -->
-  <script src="js/config.js?v=25"></script>
-  <script src="js/rng.js?v=25"></script>
-  <script src="js/world.js?v=25"></script>
-  <script src="js/checker.js?v=25"></script>
-  <script src="js/bugs.js?v=25"></script>
-  <script src="js/steading.js?v=25"></script>
-  <script src="js/char.js?v=25"></script>
-  <script src="js/gear.js?v=25"></script>
-  <script src="js/combat.js?v=25"></script>
-  <script src="js/stability.js?v=25"></script>
-  <script src="js/events.js?v=25"></script>
-  <script src="js/ai.js?v=25"></script>
-  <script src="js/game.js?v=25"></script>
-  <script src="js/save.js?v=25"></script>
-  <script src="js/render.js?v=25"></script>
-  <script src="js/main.js?v=25"></script>
+  <script src="js/config.js?v=26"></script>
+  <script src="js/rng.js?v=26"></script>
+  <script src="js/world.js?v=26"></script>
+  <script src="js/checker.js?v=26"></script>
+  <script src="js/bugs.js?v=26"></script>
+  <script src="js/steading.js?v=26"></script>
+  <script src="js/char.js?v=26"></script>
+  <script src="js/gear.js?v=26"></script>
+  <script src="js/combat.js?v=26"></script>
+  <script src="js/stability.js?v=26"></script>
+  <script src="js/events.js?v=26"></script>
+  <script src="js/ai.js?v=26"></script>
+  <script src="js/game.js?v=26"></script>
+  <script src="js/save.js?v=26"></script>
+  <script src="js/render.js?v=26"></script>
+  <script src="js/main.js?v=26"></script>
 </body>
 </html>

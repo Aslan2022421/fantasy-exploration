@@ -186,7 +186,14 @@ FE.CONFIG = {
   VIEW_MIN: 17,                         // 地圖短邊至少幾格
   CHASE_MEMORY: 3,                        // 看不到之後還會往原方向追幾回合，追丟了就回生成點
   CHASE_LIMIT: 12,                        // 一趟最多追幾步，沒纏上冒險者就回生成點
-  FLEE_FAIL: 0.3,                         // 撤退失敗的機率；失敗會挨一下，成功就移到那隻怪物的視野外
+  // 逃跑（第三十一版，取代撤退與撤離）：成功率＝FLEE_BASE＋敏捷修正值×FLEE_DEX，貼身的怪物每多 1 隻 −FLEE_SURROUND，介於 FLEE_MIN～FLEE_MAX；
+  // 成功就直接移到離所有怪物 2 格以上、走得到的地方，最多走 2＋敏捷修正值格（FLEE_STEPS 之間）
+  FLEE_BASE: 0.8,
+  FLEE_DEX: 0.05,
+  FLEE_SURROUND: 0.15,
+  FLEE_MIN: 0.1,
+  FLEE_MAX: 0.95,
+  FLEE_STEPS: [2, 5],
   WANDER_CHANCE: 0.3,                     // 每回合徘徊一步的機率
   WANDER_LEASH: 2,                        // 徘徊時離自己的 B 點最多幾步
   CORRUPT_CHANCE: 0.019,                  // 每隻怪物每回合侵蝕周遭的機率（再乘上世界狀態的倍率）。第三十版照新時鐘校準：長休一晚（80 回合）每隻附近的怪物量到 1.35 次（原本 0.012 量到 0.88 次；圈邊的怪物有些格子不能侵蝕，所以比 80×機率少一點）

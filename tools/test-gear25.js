@@ -473,7 +473,7 @@ function testGear() {
     g.move(side[0], side[1]);
     ok(g.ticks - t0 === 60 && (p.x !== x0 || p.y !== y0), `超過能背走一步花 ${g.ticks - t0} 刻（應該 60）`);
     const t1 = g.ticks;
-    g.act('dodge'); // 第三十版起休息是 1 小時或 8 小時，改用「閃避」當作一般的動作
+    g.beginAction(); g.endTurn(false); // 一般的動作（第三十一版起沒有主動閃避，直接過一個動作）
     ok(g.ticks - t1 === 10, `超過能背其他動作還是 ${g.ticks - t1} 刻（應該 10）`);
     p.equip.main = G.make('sword', 3, g.nextGearId++);
     ok(G.hitMod(p) === 3, `超重第一段、優秀劍的出手加減 ${G.hitMod(p)}（應該 +3，沒有減值）`);
@@ -523,7 +523,7 @@ function testGear() {
       const w0 = FE.AI.worldTurn;
       let turns = 0;
       FE.AI.worldTurn = (gg) => { turns++; return w0(gg); };
-      for (let i = 0; i < actions; i++) g.act('dodge'); // 一般的動作（第三十版起休息要 1 小時以上）
+      for (let i = 0; i < actions; i++) { g.beginAction(); g.endTurn(false); } // 一般的動作（第三十一版起沒有主動閃避，直接過一個動作）
       FE.AI.worldTurn = w0;
       return { turns, ticks: g.ticks };
     };
@@ -766,7 +766,7 @@ function testGear() {
       };
       const wander0 = C.WANDER_CHANCE;
       const dodge0 = C.PLAYER_DODGE;
-      const flee0 = C.FLEE_FAIL;
+      const flee0 = [C.FLEE_MIN, C.FLEE_MAX];
       C.WANDER_CHANCE = 0;
       const cx = spot.x + 3, cy = spot.y + 2;
       const touching = (a) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y) === 1;
@@ -818,17 +818,17 @@ function testGear() {
       ok(touching(c2) && !touching(a) && g.battle.targetId === c2.id, '換目標後新目標該纏上、舊目標不再跟著');
       C.PLAYER_DODGE = dodge0;
 
-      // C. 撤退失敗不解除纏上，撤退成功才解除
+      // C. 逃跑（第三十一版取代撤退）失敗不解除纏上，成功才解除
       const f = mk(913, cx + 1, cy);
       reset([f]);
       g.move(1, 0);
-      C.FLEE_FAIL = 1;
+      C.FLEE_MIN = C.FLEE_MAX = 0;
       g.flee();
-      ok(g.battle.targetId === f.id, '撤退失敗不該解除纏上');
-      C.FLEE_FAIL = 0;
+      ok(g.battle.targetId === f.id, '逃跑失敗不該解除纏上');
+      C.FLEE_MIN = C.FLEE_MAX = 1;
       g.flee();
-      ok(g.battle.targetId === null && !touching(f), '撤退成功該解除纏上');
-      C.FLEE_FAIL = flee0;
+      ok(g.battle.targetId === null && !touching(f), '逃跑成功該解除纏上');
+      [C.FLEE_MIN, C.FLEE_MAX] = flee0;
 
       FE.rollD20 = roll0;
       C.WANDER_CHANCE = wander0;

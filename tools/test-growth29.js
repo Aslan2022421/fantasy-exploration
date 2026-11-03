@@ -540,75 +540,64 @@ function testGrowth29() {
     ok(n >= 1 && n < 60 && A.monsters.length === 0, `競技場打倒小怪物用 ${n} 下`);
   }
 
-  // 16b. 撤離（按 6）與閃避（按 7）：各花一個動作；撤離管到下一個動作之前走開不被趁機攻擊、纏上的目標不趁隙出手；閃避管到下一個動作之前打你的攻擊都有劣勢
+  // 16b. 逃跑（第三十一版，按 3，取代撤退與撤離）：成功率看敏捷與貼身的怪物數；成功跳到離怪物 2 格以上、最多 2＋敏捷修正值格，不被趁機攻擊
   {
     const g = arena('warrior', 9130);
     const p = g.player;
     p.equip.main = gear('sword');
-    const step = (disengage) => {
+    const lim = [C.FLEE_MIN, C.FLEE_MAX];
+    const setup = (n) => {
       g.monsters = [];
-      p.x = g.world.spawn ? p.x : p.x;
-      const m = mon(g, p.x + 1, p.y);
-      const o = mon(g, p.x, p.y + 1); // 貼著、但不是目標的另一隻（趁機攻擊的對象）
-      m.atk = o.atk = 3;
-      g.battle.targetId = m.id;
-      if (disengage) g.disengage();
-      const t = g.turn;
-      const ev = events(() => { for (let i = 0; i < 1; i++) g.move(-1, 0); });
-      return { ev, m, o, turn: t };
+      const ms = [[1, 0], [0, 1], [-1, 0], [0, -1]].slice(0, n).map(([dx, dy]) => mon(g, p.x + dx, p.y + dy));
+      for (const m of ms) m.atk = 3;
+      g.battle.targetId = ms[0].id;
+      return ms;
     };
-    const t0 = g.turn;
-    g.disengage();
-    ok(g.turn === t0 + 1 && g.battle.disengage === true && g.ticks > 0, '撤離花一個動作');
-    g.rest();
-    ok(!g.battle.disengage, '下一個動作之後撤離就結束了');
-    // 沒撤離：走開時纏上的目標一定趁隙出手（cling），另一隻貼著的有機率趁機攻擊
-    let cling = 0;
-    let opp = 0;
-    for (let i = 0; i < 60; i++) { p.x = p.x > 0 ? p.x : p.x; const r = step(false); cling += r.ev.filter((e) => e.cling).length; opp += r.ev.filter((e) => e.opportunity).length; g.player.hp = g.player.maxHp = 1e6; p.x += 1; }
-    ok(cling > 30 && opp > 5, `沒撤離：趁隙 ${cling} 次、趁機攻擊 ${opp} 次`);
-    // 撤離之後走開：兩種都沒有
-    let cling2 = 0;
-    let opp2 = 0;
-    let moved = 0;
-    for (let i = 0; i < 60; i++) { const x0 = p.x; const r = step(true); cling2 += r.ev.filter((e) => e.cling || e.opportunity).length; if (p.x === x0 - 1) moved++; p.x += 1; p.hp = p.maxHp = 1e6; }
-    ok(cling2 === 0 && moved === 60, `撤離之後走開：被攻擊 ${cling2} 次、走開 ${moved}/60`);
-    // 撤離只管到下一個動作之前：走一步之後再走開（又貼上另一隻）就沒保護了
+    // 成功率：敏捷修正值 0、貼身 1 隻 80%；每多 1 隻 −15%
+    const rate = (n, dex) => {
+      p.attr.dex = 10 + dex * 2;
+      let won = 0;
+      for (let i = 0; i < 400; i++) {
+        const x0 = p.x, y0 = p.y;
+        setup(n);
+        p.hp = p.maxHp = 1e6;
+        g.flee();
+        if (p.x !== x0 || p.y !== y0) won++;
+        p.x = x0; p.y = y0;
+      }
+      return won / 400;
+    };
+    const r1 = rate(1, 0);
+    const r3 = rate(3, 0);
+    const rd = rate(1, 3);
+    ok(Math.abs(r1 - 0.8) < 0.07 && Math.abs(r3 - 0.5) < 0.08 && Math.abs(rd - 0.95) < 0.04, `逃跑成功率：1 隻 ${r1}、3 隻 ${r3}、敏捷 +3 ${rd}`);
+    // 成功：離所有怪物 2 格以上，最多 2＋敏捷修正值格；沒有趁機攻擊；甩掉目標；花的刻照走的格數
+    C.FLEE_MIN = C.FLEE_MAX = 1;
+    p.attr.dex = 10;
+    const x0 = p.x, y0 = p.y;
+    setup(2);
+    const t0 = g.ticks;
+    const ev = events(() => g.flee());
+    const far = Math.min(...g.monsters.map((m) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y))));
+    const moved = Math.abs(p.x - x0) + Math.abs(p.y - y0);
+    ok(far >= 2 && moved >= 2 && moved <= 2 && g.battle.targetId === null, `逃跑成功：離怪物 ${far} 格、走 ${moved} 格（敏捷 10 最多 2 格）`);
+    ok(!ev.some((e) => e.cling || e.opportunity), '逃跑時不會被趁機攻擊');
+    ok(g.ticks - t0 >= 2 * FE.Char.moveTicks(p), `逃跑花的刻照走的格數：${g.ticks - t0}`);
+    // 失敗：留在原地、算一個動作
+    C.FLEE_MIN = C.FLEE_MAX = 0;
+    p.x = x0; p.y = y0;
+    setup(1);
+    const turn0 = g.turn;
+    g.flee();
+    ok(p.x === x0 && p.y === y0 && g.turn === turn0 + 1, '逃跑失敗：留在原地、花一個動作');
+    // 旁邊沒有怪物：不算動作
     g.monsters = [];
-    const m1 = mon(g, p.x + 1, p.y);
-    g.battle.targetId = m1.id;
-    g.disengage();
-    g.move(-1, 0);
-    ok(!g.battle.disengage && !g.prevStance.dod, '走開之後撤離就結束了');
-    // 撤離的纏上照舊：牠還是會跟上來
-    FE.AI.worldTurn(g);
-    ok(Math.abs(m1.x - p.x) + Math.abs(m1.y - p.y) === 1 || Math.abs(m1.x - p.x) + Math.abs(m1.y - p.y) === 2, '纏上的目標還是會跟上來');
-    // 閃避：所有打你的攻擊都有劣勢（擲兩次取低）
-    g.monsters = [];
-    const mm = mon(g, p.x + 1, p.y);
-    mm.atk = 2;
-    const adv = (n) => events(() => { for (let i = 0; i < n; i++) { p.hp = p.maxHp = 1e6; FE.Combat.resolveAttack(g, mm, p, 'attack', { noCounter: true }); } }).filter((e) => e.by === 'monster');
-    ok(adv(50).every((e) => e.adv === 0), '平常怪物出手沒有優劣勢');
-    const t1 = g.turn;
-    g.dodgeStance();
-    ok(g.turn === t1 + 1 && g.battle.dodge === true, '閃避花一個動作');
-    const e1 = adv(80);
-    ok(e1.every((e) => e.adv === -1 && e.dice.length === 2), '閃避：打你的攻擊都擲兩次取低（劣勢）');
-    // 你自己出手不受影響
-    const mine = events(() => { for (let i = 0; i < 20; i++) { mm.hp = 1e9; FE.Combat.resolveAttack(g, p, mm, 'attack', { noCounter: true }); } }).filter((e) => e.by === 'player');
-    ok(mine.every((e) => e.adv === 0), '閃避不影響你自己出手');
-    g.move(-1, 0);
-    mm.x = p.x + 1;
-    mm.y = p.y;
-    ok(!g.battle.dodge && adv(30).every((e) => e.adv === 0), '下一個動作之後閃避就結束了');
-    // 快捷鍵：act('disengage')／act('dodge')
-    const t2 = g.turn;
-    g.act('disengage');
-    g.act('dodge');
-    ok(g.turn === t2 + 2 && g.battle.dodge && !g.battle.disengage, '按 6、7 就是這兩個動作');
-    // 存檔不會把狀態弄壞
-    FE.Save.save(g);
-    ok(!!FE.Save.load().game, '有撤離、閃避狀態時存檔讀得回來');
+    const turn1 = g.turn;
+    g.flee();
+    ok(g.turn === turn1 && /不需要逃跑/.test(g.log[0].text), '旁邊沒有怪物不用逃跑');
+    // 快捷鍵 3 是逃跑；6、7 拿掉了
+    ok(typeof g.disengage === 'undefined' && typeof g.dodgeStance === 'undefined', '撤離與主動閃避拿掉了');
+    [C.FLEE_MIN, C.FLEE_MAX] = lim;
   }
 
   // 17. 存檔：種族、身高、體格、體型與技能經驗（小數）都存得回來

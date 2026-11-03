@@ -146,7 +146,6 @@
     const dis = [];
     if (D.prone) adv.push('倒地');
     if (aP && D.vexed) adv.push('侵擾');
-    if (dP && game.battle.dodge) dis.push('閃避姿態');
     if (A.sapped && !opts.cling) dis.push('削弱');
     if (prof && prof.heavy && !opts.counter) dis.push('重型');
     if (prof && prof.offClumsy) dis.push('副手不順手');

@@ -127,7 +127,7 @@
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
   };
   // 1 攻擊、2 重擊、3 撤退、4 治療（牧師、聖騎士）、5 盾擊（戰士）、6 撤離、7 閃避、F 遠程（射擊、投擲、施法、神聖之光：先進入瞄準）、T 投擲（任何武器）
-  const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', 6: 'disengage', 7: 'dodge', f: 'fire', t: 'throw' };
+  const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', f: 'fire', t: 'throw' }; // 第三十一版：撤退與撤離合併成 3 逃跑，主動閃避拿掉
   // 按鍵視窗：同時只開一個
   const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'minimap', b: 'backpack', c: 'character', m: 'minimap', q: 'quests', '`': 'reports' }; // 第三十一版：聚落資訊併進地圖（I、M 都開地圖），委託 Q
 

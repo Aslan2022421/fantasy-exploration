@@ -273,7 +273,7 @@ function testSoldiers() {
   g.player.hp = g.player.maxHp;
   const stat = FE.Stability.stat(g);
   // 等一個動作（10 刻，世界與士兵走一回合）；第三十版起休息是 1 小時以上，改用「閃避」
-  const wait = () => { g.player.awakeAt = g.ticks; g.act('dodge'); };
+  const wait = () => { g.player.awakeAt = g.ticks; g.beginAction(); g.endTurn(false); };
 
   // 安穩：士兵在城鎮裡室外走動，不出城鎮
   for (let i = 0; i < 80; i++) wait();

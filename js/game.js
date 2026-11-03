@@ -651,10 +651,6 @@
     beginAction() {
       if (this.battle.cooldown > 0) this.battle.cooldown--;
       if (this.battle.healCd > 0) this.battle.healCd--;
-      // 撤離、閃避只管到下一個動作之前：下一個動作開始時記下上一個動作留下的狀態（這個動作本身要用），然後清掉
-      this.prevStance = { dis: !!this.battle.disengage, dod: !!this.battle.dodge };
-      this.battle.disengage = false;
-      this.battle.dodge = false;
       this.aim = null;
     }
 
@@ -728,7 +724,6 @@
       // 其他貼著的怪物各有機率白打一下（走判定流程，但這一下不觸發反擊）
       for (const o of leaving) {
         if (!this.monsters.includes(o) || FE.AI.touching(this, o, p)) continue;
-        if (this.prevStance && this.prevStance.dis) continue; // 撤離：走開不會被趁機攻擊，纏上的目標也不趁隙出手（牠還是會跟上來）
         if (o.id === this.battle.targetId) {
           FE.Combat.resolveAttack(this, o, p, 'attack', { noCounter: true, cling: true, clingWord: '後退' });
         } else {
@@ -1152,23 +1147,6 @@
       const got = Math.min(p.maxHp - p.hp, Math.max(1, FE.rollDice(this.rng, C.HEAL_DIE, 1) + FE.Char.attrMod(p, FE.Char.cls(p).healAttr || 'cha')));
       p.hp += got;
       this.say(`你低聲祈禱，傷口癒合了，生命回復 ${got}。`, 'good');
-      this.endTurn(false);
-    }
-
-    // 按 6 撤離（《D&D》2024 的 Disengage）：花一個動作；這個動作之後到你下一個動作之前，你移動離開怪物旁邊時不會被趁機攻擊，
-    // 纏上的目標也不會趁隙出手（纏上照舊，牠還是會跟上來）
-    disengage() {
-      this.beginAction();
-      this.battle.disengage = true;
-      this.say('你小心地拉開架式，準備脫身：下一步走開，貼著你的怪物不會趁機出手。', 'sys');
-      this.endTurn(false);
-    }
-
-    // 按 7 閃避（《D&D》2024 的 Dodge）：花一個動作；到你下一個動作之前，所有打你的攻擊都有劣勢
-    dodgeStance() {
-      this.beginAction();
-      this.battle.dodge = true;
-      this.say('你專心閃躲：下一個動作之前，打你的攻擊都會打得比較差。', 'sys');
       this.endTurn(false);
     }
 
@@ -1727,64 +1705,74 @@
     }
 
     // ---- 回合制戰鬥 ----
-    // 攻防判定在 combat.js。方向鍵撞上怪物只設成目標（不出手、不算動作）；按 1、2 打目前的目標（要貼著）；3 撤退。
+    // 攻防判定在 combat.js。方向鍵撞上怪物只設成目標（不出手、不算動作）；按 1、2 打目前的目標（要貼著）；3 逃跑。
 
-    // 從冒險者走得到的地方，找最近一格離那隻怪物超過視野、旁邊也沒有別的怪物的空地
-    findRetreat(m) {
+    // 逃跑要去的地方：從冒險者走得到、最多 steps 步內（不穿過水、巨石、斷崖、怪物與人），離所有怪物都 2 格以上的格子裡，挑離怪物最遠的；
+    // 一樣遠就挑走得少的。走得到的不到 2 步就算沒有退路
+    findRetreat(steps) {
       const w = this.world;
       const p = this.player;
-      const seen = new Set([p.x + ',' + p.y]);
+      const dist = new Map([[p.x + ',' + p.y, 0]]);
       const q = [[p.x, p.y]];
+      let best = null;
       for (let h = 0; h < q.length; h++) {
         const [x, y] = q[h];
-        const far = Math.abs(x - m.x) + Math.abs(y - m.y) > C.SIGHT;
-        const safe = !this.monsters.some((o) => Math.abs(o.x - x) + Math.abs(o.y - y) <= 1);
-        if (far && safe && !w.chestAt(x, y)) return { x, y };
+        const d = dist.get(x + ',' + y);
+        const near = this.monsters.length ? Math.min(...this.monsters.map((o) => Math.max(Math.abs(o.x - x), Math.abs(o.y - y)))) : 99;
+        if (d >= 2 && near >= 2 && !w.chestAt(x, y) && (!best || near > best.near || (near === best.near && d < best.d))) best = { x, y, d, near };
+        if (d >= steps) continue;
         for (const [dx, dy] of DIRS) {
           const nx = x + dx;
           const ny = y + dy;
           const k = nx + ',' + ny;
-          if (seen.has(k) || !w.canStep(x, y, nx, ny) || this.monsterAt(nx, ny) || w.npcAt(nx, ny) || this.soldierAt(nx, ny)) continue;
-          seen.add(k);
+          if (dist.has(k) || !w.canStep(x, y, nx, ny) || this.monsterAt(nx, ny) || w.npcAt(nx, ny) || this.soldierAt(nx, ny)) continue;
+          dist.set(k, d + 1);
           q.push([nx, ny]);
         }
       }
-      return null;
+      return best;
     }
 
-    // 撤退算一個動作，有 30% 機率失敗；失敗時這一回合照常過（貼著的怪物照樣攻擊）。
-    // 成功就直接移到離目標怪物 9 步外、旁邊沒有怪物的最近空地，那隻怪物走回生成點。
-    // 四周沒有這樣的空地時只出訊息，不算動作（跟撞上斷崖一樣）
+    // 按 3 逃跑（第三十一版，取代撤退與撤離）：擲成功率（敏捷越高越容易，貼身的怪物越多越難），算一個動作。
+    // 成功就直接移到離所有怪物 2 格以上的地方（最多 2＋敏捷修正值格，2～5），一路上不會被趁機攻擊、也甩掉纏上的目標，花的刻照走的格數；
+    // 失敗就留在原地，這一回合照常過（貼身的怪物照樣出手）。四周沒有退路時只出訊息，不算動作
     flee() {
-      const m = this.targetMonster();
-      if (!m) {
-        this.say('旁邊沒有怪物，不需要撤退。', 'sys');
+      const adj = this.adjacentMonsters();
+      if (!adj.length) {
+        this.say('旁邊沒有怪物，不需要逃跑。', 'sys');
         return;
       }
-      // 超重太多（超過上限＋2）：不能撤退
+      // 超過推拖上限：跑不動
       if (this.loadTier() >= 2) {
         this.say(`你背得太重了（${this.weight()} / ${this.carryLimit()}），跑不動。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
         return;
       }
-      const spot = this.findRetreat(m);
+      const p = this.player;
+      const dex = FE.Char.attrMod(p, 'dex');
+      const steps = Math.max(C.FLEE_STEPS[0], Math.min(C.FLEE_STEPS[1], C.FLEE_STEPS[0] + dex));
+      const spot = this.findRetreat(steps);
       if (!spot) {
-        this.say('四周沒有退路，撤不走。', 'sys');
+        this.say('四周沒有退路，逃不掉。', 'sys');
         return;
       }
+      const chance = Math.max(C.FLEE_MIN, Math.min(C.FLEE_MAX, C.FLEE_BASE + C.FLEE_DEX * dex - C.FLEE_SURROUND * (adj.length - 1)));
       this.beginAction();
-      if (this.rng() < C.FLEE_FAIL) {
-        this.say('撤退失敗！', 'bad');
+      if (this.rng() >= chance) {
+        this.say(`逃跑失敗！（成功率 ${Math.round(chance * 100)}%）`, 'bad');
         this.endTurn(false);
         return;
       }
-      this.player.x = spot.x;
-      this.player.y = spot.y;
+      p.x = spot.x;
+      p.y = spot.y;
       this.battle.targetId = null;
-      m.chase = 0;
-      m.chaseSteps = 0;
-      if (m.small) m.returning = true;
-      this.say(`你撤退到安全的地方。${m.name}的血量還剩 ${m.hp} / ${m.maxHp}，不會回復。`, 'sys');
-      this.endTurn(false);
+      for (const m of adj) {
+        m.chase = 0;
+        m.chaseSteps = 0;
+        if (m.small) m.returning = true;
+      }
+      this.discover();
+      this.say(`你逃開了 ${spot.d} 格。`, 'sys');
+      this.endTurn(false, Math.round(FE.Char.moveTicks(p) * FE.Char.exhaustMoveMul(p)) * spot.d);
     }
 
     // 按鍵 1、2、3、4、5：一般攻擊、重擊、撤退、治療（牧師）、盾擊（戰士），打目前的目標；F 是遠程（見 aimStart）
@@ -1799,14 +1787,6 @@
       }
       if (kind === 'bash') {
         this.bash();
-        return;
-      }
-      if (kind === 'disengage') {
-        this.disengage();
-        return;
-      }
-      if (kind === 'dodge') {
-        this.dodgeStance();
         return;
       }
       if (kind === 'fire') {

@@ -397,8 +397,6 @@
   function drawEffects() {
     const vex = game.monsters.filter((m) => m.vexed && Math.abs(m.x - game.player.x) + Math.abs(m.y - game.player.y) <= C.SIGHT * 3);
     const fx = vex.map((m) => `侵擾：下一次打${m.name}有優勢`);
-    if (game.battle.disengage) fx.push('撤離：下一步走開不會被趁機攻擊');
-    if (game.battle.dodge) fx.push('閃避：打你的攻擊都有劣勢');
     const ex = game.player.exhaust || 0;
     if (ex) fx.push(`力竭 ${ex}：出手 −${C.EXHAUST_D20 * ex}，走路慢 ${Math.round((FE.Char.exhaustMoveMul(game.player) - 1) * 100)}%`);
     $('fxText').textContent = fx.length ? fx.join('　') : '無';
@@ -439,9 +437,6 @@
       fire: !!ranged,
       heal: hcd <= 0 && p.hp < p.maxHp,
       bash: !!adj && !!FE.Gear.shieldOf(p),
-      // 撤離：旁邊有怪物才用得上；閃避：附近（視野內）有怪物才用得上（第三十一版，原本一直亮著）
-      disengage: game.adjacentMonsters().length > 0,
-      dodge: game.monsters.some((m) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= C.SIGHT),
       throw: !!game.throwMode(true),
     };
     document.querySelectorAll('#quick .qs[data-act]').forEach((b) => {

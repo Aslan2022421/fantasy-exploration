@@ -300,7 +300,8 @@
     const MW = b.x1 - b.x0;
     const MH = b.y1 - b.y0;
     const room = Math.max(200, ($('miniwrap').clientWidth || 680) - 4);
-    const S = Math.max(1, Math.min(6, Math.floor(room / MW), Math.floor((window.innerHeight * 0.62) / MH)));
+    // 照寬度決定（288 格寬是每格 2 像素）；比視窗高時視窗本身捲動，不再為了高度縮到每格 1 像素
+    const S = Math.max(1, Math.min(6, Math.floor(room / MW), Math.max(2, Math.floor((window.innerHeight * 0.62) / MH))));
     const x0 = b.x0;
     const y0 = b.y0;
     mapView = { x0, y0, S };
@@ -310,6 +311,7 @@
       cv.height = Math.round(MH * S * dpr);
       cv.style.width = MW * S + 'px';
       cv.style.height = MH * S + 'px';
+      $('mapTip').classList.add('hidden'); // 地圖大小變了，舊的提示框位置不對
     }
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -375,8 +377,14 @@
       ctx.setLineDash([]);
     }
     // 名字：聚落寫在上方（點選中的那一座框起來），地貌寫在下方；字有深色描邊，壓在地形上也看得清
+    // 名字疊到先寫的名字時，往下挪到不疊為止
+    const placed = [];
     const label = (text, x, y, color, size) => {
       ctx.font = `${size}px sans-serif`;
+      const w = ctx.measureText(text).width + 4;
+      const hit = () => placed.some((r) => Math.abs(r.x - x) * 2 < r.w + w && Math.abs(r.y - y) < size + 2);
+      for (let i = 0; i < 6 && hit(); i++) y += size + 2;
+      placed.push({ x, y, w });
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 3;

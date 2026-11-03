@@ -82,15 +82,18 @@
     return Object.keys(count).sort((a, b) => count[b] - count[a])[0] || 'plain';
   }
 
-  // 跟另一個聚落的關係：優先挑還沒跟這裡有任何關係的聚落（免得同一個聚落又是誓約又是敵對），
-  // 沒有的話挑還沒有同種關係的；還沒有別的聚落時先空著，等下一個聚落出現再補上
+  // 同一對聚落只會有一種關係（第三十三版修）：a 這邊已經跟 b 有任何關係，就不能再加；
+  // b 那邊已經對 a 有關係時，a 只能跟著用同一種（例如 b 對 a 是誓約，a 對 b 就不能是敵對）
+  const relsOf = (tags) => tags.filter((t) => RELATIONS.includes(t.k) && t.rel != null);
+  function relOk(aTags, aId, b, k) {
+    if (relsOf(aTags).some((t) => t.rel === b.id)) return false;
+    return !b.steading || relsOf(b.steading.tags).every((t) => t.rel !== aId || t.k === k);
+  }
+
+  // 跟另一個聚落的關係：只挑還沒跟這裡有任何關係、而且對方對這裡沒有別種關係的聚落；
+  // 沒有的話先空著，等下一個聚落出現再補上（原本找不到時會挑「還沒有同種關係」的，同一對聚落可能又是誓約又是敵對）
   function pickOther(world, rng, v, s, k) {
-    const rels = s.tags.filter((t) => t.rel !== undefined);
-    const any = new Set(rels.map((t) => t.rel));
-    const same = new Set(rels.filter((t) => t.k === k).map((t) => t.rel));
-    const others = world.villages.filter((o) => o.id !== v.id);
-    const fresh = others.filter((o) => !any.has(o.id));
-    const pool = fresh.length ? fresh : others.filter((o) => !same.has(o.id));
+    const pool = world.villages.filter((o) => o.id !== v.id && relOk(s.tags, v.id, o, k));
     return pool.length ? FE.pick(rng, pool).id : null;
   }
 
@@ -99,7 +102,7 @@
       if (o.id === v.id || !o.steading) continue;
       for (const t of o.steading.tags) {
         if (!RELATIONS.includes(t.k) || t.rel !== null) continue;
-        if (o.steading.tags.some((u) => u.k === t.k && u.rel === v.id)) continue;
+        if (!relOk(o.steading.tags, o.id, v, t.k)) continue;
         t.rel = v.id;
       }
     }
@@ -1026,7 +1029,7 @@
   }
 
   FE.Steading = {
-    roll, layout, has, villagerCount, shopFactor, rewardFactor, econ, econTier, addEcon, questEcon, isHoly, related, describe, tagText, placeLandmark,
+    roll, relOk, layout, has, villagerCount, shopFactor, rewardFactor, econ, econTier, addEcon, questEcon, isHoly, related, describe, tagText, placeLandmark,
     roomAt, canWalk, freeHome, siteScore, exitViable, landmarkKind, NEUTRAL_LANDMARKS,
   };
 })();

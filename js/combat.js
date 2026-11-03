@@ -167,6 +167,12 @@
     if (prof && prof.offClumsy) dis.push('副手不順手');
     if (aP && ranged && opts.range && dist(A, D) > opts.range[0]) dis.push('超出正常射程');
     if (aP && ranged && game.adjacentMonsters().length) dis.push('貼著怪物');
+    // 怪物的特性（第三十三版，照 SRD 5.2.1）：
+    //   群體戰術：目標旁邊（八個方向貼著，SRD 的 5 呎）有這隻以外的怪物同伴，出手有優勢
+    //   靈巧脫身：哥布林貼上來時躲進死角（ai.js 的 nimbleHide），藏著的下一次出手有優勢（用掉就沒了）
+    const isMon = !aP && !aS;
+    if (isMon && FE.hasTrait(A, 'pack') && game.monsters.some((o) => o !== A && o.hp > 0 && Math.max(Math.abs(o.x - D.x), Math.abs(o.y - D.y)) === 1)) adv.push('群體戰術');
+    if (isMon && A.hidden && !opts.cling) adv.push('靈巧脫身');
     const advState = adv.length && dis.length ? 0 : adv.length ? 1 : dis.length ? -1 : 0;
     // opts.cling：纏著冒險者的目標趁冒險者移開或換目標時出手，不擲 d20 命中，只看冒險者的閃避（閃開就沒事），
     // 沒閃開照一般傷害，不暴擊、不格擋，護甲照扣
@@ -175,9 +181,13 @@
     // 削弱與侵擾用掉了：削弱的目標下一次擲 d20 出手有劣勢；侵擾讓冒險者下一次打牠有優勢
     if (!opts.cling) A.sapped = false;
     if (aP) D.vexed = false;
+    if (!opts.cling) A.hidden = false; // 靈巧脫身的藏身處，出手就露出來了
     const dd = defense(game, D);
     const hitKey = HITS.includes(roll.key);
     const dmgType = prof ? prof.type : null;
+    // 易傷與再生看的傷害種類：冒險者看這一下的算法，怪物與士兵看數值塊（怪物打冒險者的減傷照舊不分種類，見 reduction）
+    const hitType = prof ? prof.type : A.dmgType || null;
+    let vulnerable = false;
 
     let dmg = 0;
     let dodged = false;
@@ -223,6 +233,11 @@
       } else {
         crit = roll.key === 'crit';
         dmg = baseDamage(game, A, prof, deep * (crit ? 2 : 1), opts, advState); // 沒閃開：暴擊時傷害骰擲兩次加總
+      }
+      // 易傷（第三十三版，骷髏怕鈍擊）：暴擊之後、抗性之前，這種傷害加倍
+      if (dmg > 0 && !dP && !dS && D.vuln && D.vuln.includes(hitType)) {
+        dmg *= 2;
+        vulnerable = true;
       }
       // 抗性在暴擊之後、格擋之前減半（冒險者打怪物時）
       if (aP && dmg > 0 && FE.isResisted(D, kind, prof.clear)) {
@@ -284,6 +299,8 @@
         }
       } else {
         D.hp = Math.max(0, D.hp - dmg);
+        // 再生（沼澤巨魔）：被火或酸打到，下一回合不回（REGEN_STOP；目前遊戲裡還沒有火與酸的傷害）
+        if (D.regen && C.REGEN_STOP.includes(hitType)) D.noRegen = true;
         if (D.hp <= 0 && game.monsters.includes(D)) {
           killed = true;
           fall = () => game.defeat(D, aS ? A : null); // 士兵打倒的怪物，冒險者不拿經驗值也不拿算力
@@ -358,6 +375,7 @@
         if (crit) parts.push('暴擊，傷害骰擲兩次');
         let tail = dmg > 0 ? `造成 ${dmg} 點傷害` : absorbed > 0 ? '傷害全被擋下' : '沒有造成傷害';
         if (holy > 0) tail += `（其中 ${holy} 點是神聖之力）`;
+        if (vulnerable) tail += '（正中弱點，傷害加倍）';
         if (resisted) tail += '（有抗性，傷害減半）';
         if (absorbed > 0 && dmg > 0) tail += `（${pD}格擋，擋下 ${absorbed} 點）`;
         if (reduced > 0) tail += `（護甲擋下 ${reduced} 點）`;
@@ -376,7 +394,7 @@
     const forced = countered && aP && roll.key === 'hard' && !opts.noForced;
     if (FE.Combat.hook) {
       FE.Combat.hook({
-        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, resisted, reduced, conCut, grazed, dmg, holy,
+        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, resisted, vulnerable, advWhy: adv.slice(), ac, reduced, conCut, grazed, dmg, holy,
         dmgType, mastery: mastery && hitKey && alive ? mastery : null, effects, weapon: wpn, off: !!opts.off,
         counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D,
       });

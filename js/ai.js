@@ -185,14 +185,40 @@
     game.say(`${group.length} 隻怪物沒有清掉，合成了一隻${big.name}！`, 'bug');
   }
 
+  // ---- 怪物的特性（第三十三版，照 SRD 5.2.1；群體戰術與易傷在 combat.js）----
+  // 再生（沼澤巨魔，SRD 的 Troll 15 點、Troll Limb 5 點）：每回合開頭回 regen 點生命；上一次被火或酸打到（m.noRegen）這一回合不回。
+  // SRD 裡生命歸零還要「回合開頭沒有再生」才死，這一版照舊歸零就倒下
+  function regenerate(game, m) {
+    if (!m.regen) return;
+    if (m.noRegen) {
+      m.noRegen = false;
+      return;
+    }
+    if (m.hp <= 0 || m.hp >= m.maxHp) return;
+    const n = Math.min(m.regen, m.maxHp - m.hp);
+    m.hp += n;
+    if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}的傷口蠕動著長了回來（+${n}）。`, 'sys');
+  }
+  // 靈巧脫身（哥布林，SRD 的 Nimble Escape：附贈動作躲藏）：貼上冒險者的那一回合（剛移動，還不能出手）擲 d20＋潛行（SRD 的 Stealth +6）
+  // 對冒險者的被動察覺（10＋感知修正值），到了就藏著，下一次出手有優勢（彎刀再多擲 1d4，見 combat.js）。SRD 的躲藏要有遮蔽，這一版不看地形
+  function nimbleHide(game, m) {
+    if (!FE.hasTrait(m, 'nimble') || m.hidden) return;
+    const passive = 10 + FE.Char.attrMod(game.player, 'wis');
+    if (FE.randInt(game.rng, 1, 20) + (m.stealth || 0) < passive) return;
+    m.hidden = true;
+    game.say(`${m.name}一閃身，躲進了你看不到的地方。`, 'bad');
+  }
+
   // 每個怪物做一件事：貼在冒險者旁邊就攻擊，不然追人、回生成點或徘徊（移動一步）。
   // 回合開頭就貼著才攻擊，剛移動到旁邊的那一回合不攻擊（移動或攻擊擇一）。
   function worldTurn(game) {
     const p = game.player;
     const safe = game.world.inVillage(p.x, p.y);
+    const before = new Map(game.monsters.map((m) => [m, m.x + ',' + m.y])); // 靈巧脫身看這一回合有沒有移動
     for (const m of game.monsters.slice()) {
       if (!game.monsters.includes(m)) continue; // 被反擊打倒了
       FE.Combat.regenBlock(game, m);
+      regenerate(game, m);
       // 倒地（失衡）：這一回合不能動，爬起來就過了
       if (m.prone) {
         m.prone = false;
@@ -260,6 +286,8 @@
       }
       wander(game, m);
     }
+    // 靈巧脫身：這一回合移動之後貼著冒險者的哥布林，躲進冒險者的死角
+    if (!safe) for (const m of game.monsters) if (before.has(m) && before.get(m) !== m.x + ',' + m.y && touching(game, m, p)) nimbleHide(game, m);
 
     const smallCount = game.monsters.filter((m) => m.small).length;
     // 只有冒險者附近的怪物會侵蝕；不然整個世界的怪物一起侵蝕，怪物會越生越多。世界越亂侵蝕越勤
@@ -459,5 +487,5 @@
     }
   }
 
-  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free };
+  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free, regenerate, nimbleHide };
 })();

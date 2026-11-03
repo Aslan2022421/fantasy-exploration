@@ -366,7 +366,13 @@ FE.TERRAIN = {
   '▌': { name: '物品櫃', pass: false, cls: 't-furniture' },
   '╤': { name: '工作台', pass: false, cls: 't-furniture' },
   '¤': { name: '祭台', pass: false, cls: 't-furniture' },
-  '╥': { name: '市場攤位', pass: false, cls: 't-furniture' },
+  '╥': { name: '椅子', pass: true, cls: 't-furniture' },      // 第三十二版：椅子能走（DF 的椅子也不擋路）
+  '■': { name: '市場攤位', pass: false, cls: 't-furniture' },  // 第三十二版：原本的 ╥ 讓給椅子
+  '÷': { name: '木桶', pass: false, cls: 't-furniture' },
+  'Æ': { name: '箱子', pass: false, cls: 't-furniture' },
+  '▒': { name: '窗', pass: false, cls: 't-house' },          // 建築的窗，跟牆一樣擋路；遺跡裡是崩了一半的牆
+  '≥': { name: '碎片', pass: true, cls: 't-ruin' },
+  '≤': { name: '碎片', pass: true, cls: 't-ruin' },
   // 聚落附近的獨特地貌：法師塔、聖所、礦坑、堡壘是有外框的建築
   '▓': { name: '斷牆', pass: false, cls: 't-ruin' },
   '░': { name: '碎石地', pass: true, cls: 't-ruin' },

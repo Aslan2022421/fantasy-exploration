@@ -75,7 +75,7 @@
   };
   function wallGlyph(W, x, y, t) {
     // 建築的牆（第三十二版）：民房、神殿、市場與地貌的牆都照雙線接（門不算牆，牆在門口斷開，同 DF）
-    const join = JOIN_WALLS[t] ? (o) => !!o && !!JOIN_WALLS[o.t] : (o) => !!o && o.t === t;
+    const join = JOIN_WALLS[t] ? (o) => !!o && (!!JOIN_WALLS[o.t] || o.t === '▒') : (o) => !!o && o.t === t; // 窗也算牆
     const same = (dx, dy) => join(W.cell(x + dx, y + dy));
     const bits = (same(0, -1) ? 1 : 0) | (same(1, 0) ? 2 : 0) | (same(0, 1) ? 4 : 0) | (same(-1, 0) ? 8 : 0);
     return WALL_GLYPHS[JOIN_WALLS[t] ? 'W' : t][bits];
@@ -84,7 +84,7 @@
   const JOIN_WALLS = { '⌂': 1, '∩': 1, '♦': 1, 'Θ': 1, '†': 1, 'Ω': 1 };
   // 畫面上的字元照 Dwarf Fortress〈Tilesets〉的用法（第三十二版）：地圖資料裡的代碼不變，只換畫出來的字。
   // 床 Θ、桌 ╤、櫃 π、鐵砧 σ（工坊的工作台）、祭壇 É、市場攤位 ■、巨石 ∞、立石 ■、墓碑換成石碑 ∩
-  const SHOW = { '≡': 'Θ', 'π': '╤', '▌': 'π', '╤': 'σ', '¤': 'É', '╥': '■', '#': '∞', 'Π': '■', '‡': '∩' };
+  const SHOW = { '≡': 'Θ', 'π': '╤', '▌': 'π', '╤': 'σ', '¤': 'É', '#': '∞', 'Π': '■', '‡': '∩' };
   // 一格畫成什麼字：牆照相鄰自動接；門照 DF 木門 ║（城鎮與神殿用石門 ┼）；室內地板照 DF 砌好的地板 +；其他照 SHOW
   function showGlyph(W, x, y, c, vv, indoor) {
     if (WALL_GLYPHS[c.t] || JOIN_WALLS[c.t]) return wallGlyph(W, x, y, c.t);

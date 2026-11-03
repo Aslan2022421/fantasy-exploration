@@ -229,12 +229,9 @@
   const BUILDING_WALLS = '⌂∩♦';
   // 排版用的格子：' ' 聚落外面、'.' 空地、'·' 路、W／w 外牆、',' 室內地板（寫進世界時換成 '.'）、'+' 門，
   // 其他是建築外牆與家具
-  const WALK = new Set(['.', '·', ',', '+', '≡']);
-  const BLOCKING = new Set(['π', '▌', '╤', '¤', '╥']);
+  const WALK = new Set(['.', '·', ',', '+', '≡', '╥']);
+  const BLOCKING = new Set(['π', '▌', '╤', '¤', '■', '÷', 'Æ']);
 
-  // 室內形狀：最小的房屋用俄羅斯方塊 J、L、O、S、T、Z（4 格，不用 I），8 格的房屋用兩條 I 並排（2×4）
-  const TETROMINOES = [['#..', '###'], ['..#', '###'], ['##', '##'], ['.##', '##.'], ['###', '.#.'], ['##.', '.##']];
-  const fromRows = (rows) => rows.flatMap((r, y) => [...r].map((ch, x) => (ch === '#' ? [x, y] : null)).filter(Boolean));
   const rectCells = (w, h) => Array.from({ length: w * h }, (_, i) => [i % w, Math.floor(i / w)]);
   // 旋轉、翻面後所有不同的擺法
   function orientations(cells) {
@@ -254,14 +251,16 @@
   }
 
   // 建築：外牆字元、室內形狀、門數、家具。spot 是站人的格子（住戶、鐵匠），貼著門內那一格，進門就能對話；
-  // 擋路的家具不能把室內切開；門內那一格一律空著。家具先只有符號，還沒有作用
+  // 擋路的家具不能把室內切開；門內那一格一律空著。家具先只有符號，還沒有作用。
+  // 第三十二版照 Dwarf Fortress 的蓋法：室內一律是長方形（原本民房是俄羅斯方塊的形狀），家具照房間的用途擺：
+  // 民房有床、櫃、椅；大房子多一張桌；工坊有鐵砧（╤，畫成 σ）與木桶或箱子；神殿有祭壇與椅；市場有攤位與木桶
   const BUILDINGS = {
-    house: { wall: '⌂', shapes: TETROMINOES.flatMap((r) => orientations(fromRows(r))), doors: 1, spot: true, items: ['≡', '▌'] },
-    big: { wall: '⌂', shapes: orientations(rectCells(4, 2)), doors: 1, items: ['π', '▌'] }, // 住 2～3 人，床另外加
-    smithy: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['╤'] },
-    armory: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['╤'] }, // 盔甲匠工坊（只在城鎮），蓋法跟鐵匠工坊一樣
-    temple: { wall: '∩', shapes: orientations(rectCells(4, 3)), doors: 1, items: ['¤'] },
-    market: { wall: '♦', shapes: orientations(rectCells(5, 2)), doors: 2, items: ['╥', '╥', '╥'] },
+    house: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['≡', '▌', '╥'] },
+    big: { wall: '⌂', shapes: orientations(rectCells(4, 3)), doors: 1, items: ['π', '▌', '╥', '╥'] }, // 住 2～3 人，床另外加
+    smithy: { wall: '⌂', shapes: orientations(rectCells(4, 2)), doors: 1, spot: true, items: ['╤', '÷'] },
+    armory: { wall: '⌂', shapes: orientations(rectCells(4, 2)), doors: 1, spot: true, items: ['╤', 'Æ'] }, // 盔甲匠工坊（只在城鎮），蓋法跟鐵匠工坊一樣
+    temple: { wall: '∩', shapes: orientations(rectCells(5, 3)), doors: 1, items: ['¤', '╥', '╥'] },
+    market: { wall: '♦', shapes: orientations(rectCells(5, 2)), doors: 2, items: ['■', '■', '■', '÷'] },
   };
 
   function shuffle(rng, arr) {
@@ -819,6 +818,22 @@
         if (ch !== ' ') world.setCell(x + ox, y + oy, ch === ',' ? '.' : ch, 'plain');
       }
     }
+    // 窗（第三十二版，照 DF）：牆的內側是室內、外側是室外，而且不在轉角、不貼著門的牆格，挑幾格開成窗（▒，跟牆一樣擋路）
+    v.buildings.forEach((b, i) => {
+      const cand = [];
+      for (let y = b.y0 - 1; y <= b.y1 + 1; y++) {
+        for (let x = b.x0 - 1; x <= b.x1 + 1; x++) {
+          const c = world.cell(x, y);
+          if (!c || c.t !== BUILDINGS[b.kind].wall) continue;
+          const inner = DIRS.filter(([dx, dy]) => roomAt(v, x + dx, y + dy) === i && world.cell(x + dx, y + dy).t !== '+');
+          const outer = DIRS.filter(([dx, dy]) => roomAt(v, x + dx, y + dy) < 0 && world.passable(x + dx, y + dy));
+          const nearDoor = b.doors.some(([dx, dy]) => Math.abs(dx - x) + Math.abs(dy - y) <= 1);
+          if (inner.length === 1 && outer.length === 1 && inner[0][0] === -outer[0][0] && inner[0][1] === -outer[0][1] && !nearDoor) cand.push([x, y]);
+        }
+      }
+      const n = Math.min(cand.length, b.kind === 'house' || b.kind === 'smithy' || b.kind === 'armory' ? 1 + Math.floor(rng() * 2) : 2 + Math.floor(rng() * 2));
+      for (const [x, y] of shuffle(rng, cand).slice(0, n)) world.setCell(x, y, '▒', 'plain');
+    });
     // 出入口外的路不算聚落，保留原本的生態區；還沒創出來的地方跳過
     for (const [lx, ly] of approach) {
       const [x, y] = toWorld([lx, ly]);
@@ -864,15 +879,16 @@
     fort: {
       name: '廢棄的堡壘',
       desc: '斷牆圍著一片碎石地，早就沒有人守了。',
+      // 第三十二版：斷牆 ▓、崩了一半的牆 ▒、地上的碎片 ≥ ≤、倒塌的石柱（巨石 #，畫成 ∞）
       art: [
-        '▓▓▓▓▓▓▓▓▓▓▓.',
-        '▓░░░▓░░░░░▓.',
-        '▓░░░+░░░░░░░',
-        '▓▓+▓▓░░░░░▓.',
-        '▓░░░▓▓▓+▓▓▓.',
-        '▓░░░+░░░░░▓.',
-        '▓▓▓▓▓▓▓▓░▓▓.',
-        '........░...',
+        '▓▓▓▒▓▓▓▓▒▓▓.',
+        '▓░≥░▓░░≤░░▓.',
+        '▓░░░+░░#░░░░',
+        '▒▓+▓▓░≥░░░▒.',
+        '▓░░░▓▓▒+▓▓▓.',
+        '▓≤░#+░░░≥░▓.',
+        '▓▓▒▓▓▓▓▓░▓▓.',
+        '........░≤..',
       ],
     },
     stones: {
@@ -888,7 +904,7 @@
     graves: {
       name: '墓地',
       desc: '一排排墓碑，有些名字已經被風磨平。',
-      art: ['‡░‡░‡', '░░░░░', '‡░‡░‡'],
+      art: ['‡░‡≥‡', '░≤░░░', '‡░‡░‡'],
     },
     tower: {
       name: '法師塔',

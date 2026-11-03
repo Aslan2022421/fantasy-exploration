@@ -142,12 +142,14 @@
       dmgBonus: b.dmg + T.atkMod,
       dmgType: b.type,
       advDie: b.advDie ? b.advDie.slice() : null,
+      extraDie: b.extraDie ? b.extraDie.slice() : null, // 每次命中都多擲的傷害（毒、死靈、寒冷、閃電），照一般傷害算
+      extraType: b.extraType || null,
       stealth: b.stealth || 0,
       traits: b.traits.slice(),
       vuln: (b.vuln || []).slice(),
       regen: b.regen || 0,
     });
-    m.atk = Math.max(1, Math.round((avgDie(m.die) + m.dmgBonus) * FE.wlScale(m.wl, B.ATK)));
+    m.atk = Math.max(1, Math.round((avgDie(m.die) + (m.extraDie ? avgDie(m.extraDie) : 0) + m.dmgBonus) * FE.wlScale(m.wl, B.ATK)));
     m.maxHp = m.hp = Math.max(1, Math.round(FE.monsterHp(b) * T.hpMul * FE.wlScale(m.wl, B.HP)));
     return m;
   };

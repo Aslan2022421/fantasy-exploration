@@ -62,6 +62,7 @@
     if (A.die) {
       let n = FE.rollDice(r, A.die, times) + (A.dmgBonus || 0);
       if (adv > 0 && A.advDie) n += FE.rollDice(r, A.advDie, times);
+      if (A.extraDie) n += FE.rollDice(r, A.extraDie, times); // 每次命中都多擲的（毒、死靈、寒冷、閃電；第三十三版之一），暴擊也擲兩次
       n = Math.round(Math.max(1, n) * FE.wlScale(A.wl, C.WL_BONUS.ATK));
       return A.type === 'VALUE' ? FE.randInt(r, 0, n * 2) : Math.max(1, n);
     }

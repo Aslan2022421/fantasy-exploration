@@ -1182,7 +1182,8 @@
   function monAttackText(m) {
     if (!m.die) return `傷害約 ${m.atk}`;
     const b = m.dmgBonus || 0;
-    return `${m.toHit >= 0 ? '+' : ''}${m.toHit}，${FE.Gear.dieText(m.die)}${b ? (b > 0 ? '+' : '') + b : ''} ${FE.DMG_TYPES[m.dmgType] || ''}`;
+    const extra = m.extraDie ? `＋${FE.Gear.dieText(m.extraDie)} ${FE.EXTRA_DMG_TYPES[m.extraType] || ''}` : ''; // 第三十三版之一：毒、死靈、寒冷、閃電
+    return `${m.toHit >= 0 ? '+' : ''}${m.toHit}，${FE.Gear.dieText(m.die)}${b ? (b > 0 ? '+' : '') + b : ''} ${FE.DMG_TYPES[m.dmgType] || ''}${extra}`;
   }
   // 怪物的特性：群體戰術、靈巧脫身、易傷、再生
   function monTraitText(m) {

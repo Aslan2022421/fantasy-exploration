@@ -429,15 +429,16 @@ FE.GROUP_SIZE = {
   werewolf: [1, 3], bugbear: [1, 2], yeti: [1, 2], troll: [1, 2],
 };
 // 第三十三版：怪物的數值照《D&D》2024 的 SRD 5.2.1（System Reference Document 5.2.1，Wizards of the Coast，CC BY 4.0，
-// https://creativecommons.org/licenses/by/4.0/）。原本指定的 https://dd2024.fr/monsters 在雲端工作階段連不上，
-// 改用 SRD 5.2.1 的 Markdown 版 https://github.com/downfallx/dnd-5e-srd-markdown（monsters-A-Z.md、animals.md）抄數字。
+// https://creativecommons.org/licenses/by/4.0/）。第三十三版之一起照原件對過：data/srd-monsters.md、data/srd-monsters.json
+// （使用者在本機從 https://dd2024.fr/monsters 逐頁抓下的法文版，含英文原名；第三十三版原本是從 GitHub 的轉寫版抄的）。
 // 每個種族一組：small 小怪物、mid 中型以上（大怪物也用 mid）。srd 是用的數值塊名字，proposed 是 Claude 提議的代用（SRD 沒有這個種族，
-// 或這個種族只有一個數值塊），等使用者確認。
+// 或這個種族只有一個數值塊），等使用者確認；up 是同一個數值塊多加幾級當中型（hd 的骰數已經加上去）。
 //   ac：AC；hd：生命骰 [骰數（＝等級）, 面數]；con：體質值；hit：攻擊加值；die：傷害骰 [顆數, 面數]、dmg：傷害加值、type：傷害種類（FE.DMG_TYPES）；
-//   advDie：有優勢時多擲的傷害骰（哥布林的彎刀）；stealth：潛行加值（靈巧脫身用）；
+//   advDie：有優勢時多擲的傷害骰（哥布林的彎刀）；extraDie／extraType：每次命中都多擲的傷害骰與它的種類（毒、死靈、寒冷、閃電，
+//   遊戲裡還沒有這些種類，照一般傷害算進去）；stealth：潛行加值（靈巧脫身用）；
 //   traits：特性（pack 群體戰術、nimble 靈巧脫身）；vuln：易傷的傷害種類（傷害加倍）；regen：再生（每回合開頭回多少生命）
 // 生命＝（面數＋體質值）×1.5 無條件捨去，每多一級（骰數多 1）再加 面數÷2＋體質修正值（跟冒險者同一套，見 bugs.js 的 FE.monsterHp）。
-// 只用第一個近戰攻擊（SRD 的 Multiattack、擒抱、遠程與其他特性這一版不做，見 DESIGN.md「第三十三版待確認的數字」）
+// 只用一個近戰攻擊（有兩個時挑後面註解寫的那個；SRD 的 Multiattack、擒抱、遠程與其他特性這一版不做，見 DESIGN.md「第三十三版待確認的數字」）
 FE.MONSTER_BLOCKS = {
   goblin: {
     small: { srd: 'Goblin Warrior', ac: 15, hd: [3, 6], con: 10, hit: 4, die: [1, 6], dmg: 2, type: 'slash', advDie: [1, 4], stealth: 6, traits: ['nimble'] },
@@ -448,12 +449,14 @@ FE.MONSTER_BLOCKS = {
     mid: { srd: 'Bugbear Stalker', ac: 15, hd: [10, 8], con: 14, hit: 5, die: [2, 8], dmg: 3, type: 'pierce', traits: [] }, // Morningstar
   },
   werewolf: {
-    small: { srd: 'Wolf', proposed: true, ac: 12, hd: [2, 8], con: 12, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: ['pack'] }, // Bite
+    // 第三十三版之一：狼是獨立的種族（使用者定的），小狼人改用 Worg 代用
+    small: { srd: 'Worg', proposed: true, ac: 13, hd: [4, 10], con: 13, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', traits: [] }, // Bite
     mid: { srd: 'Werewolf', ac: 15, hd: [11, 8], con: 14, hit: 5, die: [2, 6], dmg: 3, type: 'slash', traits: ['pack'] }, // Scratch
   },
   yeti: {
-    small: { srd: 'Ape', proposed: true, ac: 12, hd: [3, 8], con: 14, hit: 5, die: [1, 4], dmg: 3, type: 'blunt', traits: [] }, // Fist
-    mid: { srd: 'Polar Bear', proposed: true, ac: 12, hd: [5, 10], con: 16, hit: 7, die: [1, 8], dmg: 5, type: 'slash', traits: [] }, // Rend
+    // 第三十三版之一：猿是獨立的種族（使用者定的），小雪怪改用 Polar Bear，中型是 Polar Bear 多 3 級（data 裡沒有別的寒地數值塊）
+    small: { srd: 'Polar Bear', proposed: true, ac: 12, hd: [5, 10], con: 16, hit: 7, die: [1, 8], dmg: 5, type: 'slash', traits: [] }, // Rend
+    mid: { srd: 'Polar Bear', up: 3, proposed: true, ac: 12, hd: [8, 10], con: 16, hit: 7, die: [1, 8], dmg: 5, type: 'slash', traits: [] }, // Rend
   },
   lizardfolk: {
     small: { srd: 'Sahuagin Warrior', proposed: true, ac: 12, hd: [4, 8], con: 12, hit: 3, die: [1, 6], dmg: 1, type: 'slash', traits: [] }, // Claw
@@ -461,7 +464,8 @@ FE.MONSTER_BLOCKS = {
   },
   gnoll: {
     small: { srd: 'Gnoll Warrior', ac: 15, hd: [6, 8], con: 11, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: [] }, // Rend
-    mid: { srd: 'Giant Hyena', proposed: true, ac: 12, hd: [6, 10], con: 14, hit: 5, die: [2, 6], dmg: 3, type: 'pierce', traits: [] }, // Bite
+    // 第三十三版之一：鬣狗是新的種族，Giant Hyena 給牠用；中型豺狼人改成 Gnoll Warrior 多 3 級
+    mid: { srd: 'Gnoll Warrior', up: 3, proposed: true, ac: 15, hd: [9, 8], con: 11, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: [] }, // Rend
   },
   skeleton: {
     small: { srd: 'Skeleton', ac: 14, hd: [2, 8], con: 15, hit: 5, die: [1, 6], dmg: 3, type: 'pierce', traits: [], vuln: ['blunt'] }, // Shortsword
@@ -473,10 +477,13 @@ FE.MONSTER_BLOCKS = {
   },
   kobold: {
     small: { srd: 'Kobold Warrior', ac: 14, hd: [3, 6], con: 9, hit: 4, die: [1, 4], dmg: 2, type: 'pierce', traits: ['pack'] }, // Dagger
-    mid: { srd: 'White Dragon Wyrmling', proposed: true, ac: 16, hd: [5, 8], con: 14, hit: 4, die: [1, 8], dmg: 2, type: 'slash', traits: [] }, // Rend
+    // 第三十三版之一：照原件補上 Rend 的 1d4 寒冷
+    mid: { srd: 'White Dragon Wyrmling', proposed: true, ac: 16, hd: [5, 8], con: 14, hit: 4, die: [1, 8], dmg: 2, type: 'slash', extraDie: [1, 4], extraType: 'cold', traits: [] }, // Rend
   },
 };
 FE.MONSTER_TRAITS = { pack: '群體戰術', nimble: '靈巧脫身' };
+// 怪物多擲的傷害種類的名字（查看怪物時顯示；遊戲裡還沒有這些種類的減傷與抗性，照一般傷害算）
+FE.EXTRA_DMG_TYPES = { poison: '毒', necrotic: '死靈', cold: '寒冷', lightning: '閃電' };
 Object.assign(FE.CONFIG, {
   REGEN_STOP: ['fire', 'acid'], // 再生被這兩種傷害打到，下一回合不回（目前沒有火與酸的傷害來源，先留著）
   START_SITES: 4,         // 開局挑 4 處錯誤生怪物，至少 1 處在興趣點

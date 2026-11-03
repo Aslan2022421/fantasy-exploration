@@ -45,8 +45,8 @@ function testMonsters33() {
   {
     const want = {
       goblin: ['Goblin Warrior', 30, 'Goblin Boss', 39], bugbear: ['Bugbear Warrior', 56, 'Bugbear Stalker', 87],
-      werewolf: ['Wolf', 35, 'Werewolf', 93], yeti: ['Ape', 45, 'Polar Bear', 71], lizardfolk: ['Sahuagin Warrior', 45, 'Allosaurus', 80],
-      gnoll: ['Gnoll Warrior', 48, 'Giant Hyena', 71], skeleton: ['Skeleton', 40, 'Minotaur Skeleton', 72],
+      werewolf: ['Worg', 52, 'Werewolf', 93], yeti: ['Polar Bear', 71, 'Polar Bear', 95], lizardfolk: ['Sahuagin Warrior', 45, 'Allosaurus', 80],
+      gnoll: ['Gnoll Warrior', 48, 'Gnoll Warrior', 60], skeleton: ['Skeleton', 40, 'Minotaur Skeleton', 72],
       troll: ['Troll Limb', 33, 'Troll', 125], kobold: ['Kobold Warrior', 26, 'White Dragon Wyrmling', 57],
     };
     ok(Object.keys(FE.MONSTER_BLOCKS).sort().join() === Object.keys(FE.RACES).sort().join(), '每個種族都要有數值塊');
@@ -56,10 +56,44 @@ function testMonsters33() {
       const d = FE.monsterBlock(race, 'mid');
       ok(s.srd === sName && d.srd === mName && FE.monsterBlock(race, 'big') === d, `${FE.RACES[race].name}的數值塊：${s.srd}／${d.srd}`);
       ok(FE.monsterHp(s) === sHp && FE.monsterHp(d) === mHp, `${FE.RACES[race].name}的生命 ${FE.monsterHp(s)}／${FE.monsterHp(d)}（應該 ${sHp}／${mHp}）`);
-      for (const b of [s, d]) ok(b.ac >= 10 && b.hd[0] >= 1 && b.die[0] >= 1 && Number.isInteger(b.hit) && FE.DMG_TYPES[b.type], `${b.srd} 的欄位不齊`);
     }
-    const proposed = Object.values(FE.MONSTER_BLOCKS).flatMap((r) => [r.small, r.mid]).filter((b) => b.proposed).map((b) => b.srd).sort().join();
-    ok(proposed === ['Allosaurus', 'Ape', 'Giant Hyena', 'Polar Bear', 'Sahuagin Warrior', 'White Dragon Wyrmling', 'Wolf'].join(), `標成提議的代用數值塊：${proposed}`);
+    // 第三十三版之一：每個數值塊（含新種族）跟原件 data/srd-monsters.json（dd2024.fr 法文版）逐欄比對：
+    // AC、生命骰（骰數扣掉多加的 up 級）、體質值、攻擊加值、傷害骰與加值、傷害種類、多擲的傷害骰；有群體戰術、易傷的要跟原件一樣
+    const SRD = require('fs').existsSync('data/srd-monsters.json') ? JSON.parse(require('fs').readFileSync('data/srd-monsters.json', 'utf8')).monsters : [];
+    ok(SRD.length === 55, `讀到原件的數值塊 ${SRD.length} 個（要在倉庫根目錄跑）`);
+    const TY = { tranchants: 'slash', perforants: 'pierce', contondants: 'blunt' };
+    const EX = { poison: 'poison', nécrotiques: 'necrotic', froid: 'cold', foudre: 'lightning' };
+    const parseSrd = (t) => {
+      const g1 = (re) => { const r = re.exec(t); return r ? r[1] : null; };
+      const hp = /Points de vie : \d+ \((\d+)d(\d+)/.exec(t);
+      const atks = [];
+      const re = /: (?:Corps à corps)[^:]*: \+(\d+)[^\n]*?Touché : \d+ \((\d+)d(\d+)(?: ([+−-]) (\d+))?\) dégâts? (\w+)(?: plus \d+ \((\d+)d(\d+)\) dégâts de (\S+))?/g;
+      let r;
+      while ((r = re.exec(t))) atks.push({ hit: +r[1], die: [+r[2], +r[3]], dmg: r[4] ? (r[4] === '+' ? 1 : -1) * +r[5] : 0, type: TY[r[6]], extra: r[7] ? [+r[7], +r[8]] : null, extraType: r[9] ? EX[r[9].replace(/\.$/, '')] : null });
+      // 甦醒灌木的爪子只有 1 點（沒有骰子）
+      const flat = /: Corps à corps : \+(\d+)[^\n]*?Touché : 1 dégât (\w+)/.exec(t);
+      if (flat) atks.push({ hit: +flat[1], die: [1, 1], dmg: 0, type: TY[flat[2]], extra: null, extraType: null });
+      return { ac: +g1(/Classe d'armure : (\d+)/), hd: hp ? [+hp[1], +hp[2]] : null, con: +g1(/CON (\d+)/), atks, pack: /Tactique de meute/.test(t), vuln: (g1(/Vulnérabilités : ([^\n]+)/) || '').split(', ').map((v) => ({ contondants: 'blunt', feu: 'fire' })[v]).filter(Boolean) };
+    };
+    let srdBad = [];
+    for (const race of Object.keys(FE.MONSTER_BLOCKS)) for (const tier of ['small', 'mid']) {
+      const b = FE.monsterBlock(race, tier);
+      const src = SRD.find((m) => m.en === b.srd);
+      if (!src) { srdBad.push(`${race}.${tier} 找不到 ${b.srd}`); continue; }
+      const s = parseSrd(src.text);
+      const a = s.atks.find((x) => x.hit === b.hit && x.die.join() === b.die.join() && x.dmg === b.dmg && x.type === b.type);
+      const why = [];
+      if (s.ac !== b.ac) why.push(`AC ${b.ac}≠${s.ac}`);
+      if (!s.hd || s.hd[0] + (b.up || 0) !== b.hd[0] || s.hd[1] !== b.hd[1]) why.push(`生命骰 ${b.hd}≠${s.hd}`);
+      if (s.con !== b.con) why.push(`體質 ${b.con}≠${s.con}`);
+      if (!a) why.push(`攻擊 +${b.hit} ${b.die}+${b.dmg} ${b.type} 不在原件裡`);
+      else if ((a.extra || []).join() !== (b.extraDie || []).join() || (a.extraType || null) !== (b.extraType || null)) why.push(`多擲的傷害 ${b.extraDie}≠${a.extra}`);
+      if (s.pack !== (b.traits || []).includes('pack')) why.push('群體戰術不一致');
+      if (s.vuln.join() !== (b.vuln || []).join()) why.push(`易傷 ${b.vuln}≠${s.vuln}`);
+      if (why.length) srdBad.push(`${race}.${tier}（${b.srd}）：${why.join('、')}`);
+    }
+    ok(srdBad.length === 0, `數值塊跟原件不一致：${srdBad.join('｜')}`);
+    for (const r of Object.values(FE.MONSTER_BLOCKS)) for (const b of [r.small, r.mid]) ok(b.ac >= 5 && b.hd[0] >= 1 && b.die[0] >= 1 && Number.isInteger(b.hit) && FE.DMG_TYPES[b.type] && FE.monsterHp(b) > 0, `${b.srd} 的欄位不齊`);
     // 套到怪物身上：AC、攻擊加值、傷害、生命乘異常倍率與世界等級加成
     const g = mk(3301);
     const t = mon(g, 0, 0, 'troll', 'mid', 'CLIFF');
@@ -143,7 +177,7 @@ function testMonsters33() {
   {
     const g = mk(3305, 'warrior', ['sword', 'shield', 'herb']);
     const p = g.player;
-    const wolf = mon(g, p.x + 1, p.y, 'werewolf', 'small');
+    const wolf = mon(g, p.x + 1, p.y, 'werewolf', 'mid') // 第三十三版之一：小狼人改用 Worg（沒有群體戰術），這裡用中型狼人;
     const advOf = (A) => events(() => { for (let i = 0; i < 40; i++) { p.hp = 1e6; FE.Combat.resolveAttack(g, A, p, 'attack', { noCounter: true }); } });
     ok(advOf(wolf).every((e) => e.adv === 0), '旁邊沒有同伴時沒有優勢');
     const pal = mon(g, p.x - 1, p.y + 1, 'goblin', 'small'); // 斜對角也算
@@ -154,7 +188,7 @@ function testMonsters33() {
     ok(advOf(kob).every((e) => e.adv === 1), '狗頭人有群體戰術');
     g.monsters = [kob, mon(g, p.x + 3, p.y, 'goblin', 'small')];
     ok(advOf(kob).every((e) => e.adv === 0), '同伴不貼著目標就沒有');
-    ok(FE.monsterBlock('werewolf', 'mid').traits.includes('pack') && !FE.monsterBlock('kobold', 'mid').traits.includes('pack'), '狼人中型有、狗頭人中型（代用的白龍幼龍）沒有');
+    ok(FE.monsterBlock('werewolf', 'mid').traits.includes('pack') && !FE.monsterBlock('kobold', 'mid').traits.includes('pack') && !FE.monsterBlock('werewolf', 'small').traits.includes('pack'), '狼人中型有、小狼人（代用的 Worg）與狗頭人中型（代用的白龍幼龍）沒有');
   }
 
   // 6. 靈巧脫身：哥布林貼上來的那一回合擲潛行，到了就藏著，下一次出手有優勢（彎刀多 1d4），出手後露出來

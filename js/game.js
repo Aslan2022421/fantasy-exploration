@@ -663,7 +663,8 @@
       this.compute = Math.min(C.COMPUTE_CAP, this.compute + n * FE.Stability.mult(this, 'COMPUTE'));
     }
 
-    move(dx, dy) {
+    // opts.noTalk（第三十一版，介面的方向鍵與滑鼠自動行走用）：撞上村民、工匠、士兵只是被擋住，不開對話；對話改成滑鼠點他
+    move(dx, dy, opts) {
       const p = this.player;
       const nx = p.x + dx;
       const ny = p.y + dy;
@@ -701,6 +702,7 @@
       }
       const npc = this.world.npcAt(nx, ny) || this.soldierAt(nx, ny);
       if (npc) {
+        if (opts && opts.noTalk) return;
         // 對話不移動，算一個動作但不算步數；打開對話視窗，選項在視窗裡選（村民、武器匠、士兵都一樣）
         this.openTalk(npc);
         return;

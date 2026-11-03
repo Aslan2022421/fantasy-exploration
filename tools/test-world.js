@@ -497,8 +497,8 @@ function testBackpack() {
     if (e.by === 'monster' && e.key === 'hard' && !e.counter) { seen.mHard++; if (e.countered) seen.mHardCountered++; }
     if (e.by === 'player' && e.key === 'hard' && !e.counter) { seen.pHard++; if (e.countered) seen.pHardCountered++; }
   };
-  const counter0 = C.PLAYER_COUNTER;
-  C.PLAYER_COUNTER = 0;
+  const counter0 = FE.Gear.counterChance;
+  FE.Gear.counterChance = () => 0;
   p.equip.main = FE.Gear.make('sword', 0, g.nextGearId++);
   p.equip.main.dur = p.equip.main.max = 1e9; // 這裡只量判定，不要劍磨壞了
   for (let i = 0; i < 600; i++) {
@@ -507,7 +507,7 @@ function testBackpack() {
     FE.Combat.resolveAttack(g, m, p, 'attack');
     FE.Combat.resolveAttack(g, p, m, 'attack');
   }
-  C.PLAYER_COUNTER = counter0;
+  FE.Gear.counterChance = counter0;
   FE.Combat.hook = hook0;
   ok(seen.mHard > 50 && seen.mHardCountered === 0, `怪物擲出 6～10 ${seen.mHard} 次，冒險者反擊了 ${seen.mHardCountered} 次（反擊機率設成 0，應該是 0）`);
   ok(seen.pHard > 50 && seen.pHardCountered === seen.pHard, `冒險者擲出 6～10 ${seen.pHard} 次，怪物只反擊了 ${seen.pHardCountered} 次（應該每次都反擊）`);

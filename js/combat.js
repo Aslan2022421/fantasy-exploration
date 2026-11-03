@@ -41,11 +41,11 @@
   }
 
   // 傷害（還沒算閃避、抗性、格擋、減傷）。times 是傷害骰擲幾次：暴擊、重擊各讓次數加倍。
-  // 冒險者：骰子＋傷害加值（見 char.js 的 profile），徒手固定 BARE_DMG，最少 1；冒險者的反擊固定 COUNTER_DAMAGE（暴擊擲兩次就是 2）。
+  // 冒險者：骰子＋傷害加值（見 char.js 的 profile），徒手固定 BARE_DMG，最少 1；冒險者的反擊是固定值（gear.js 的 counterDamage，暴擊算兩次）。
   // 怪物與士兵照自己的攻擊力（狂亂忽高忽低），暴擊時擲兩次加總
   function baseDamage(game, A, prof, times, opts) {
     const r = game.rng;
-    if (isPlayer(game, A) && opts && opts.counter) return C.COUNTER_DAMAGE * times;
+    if (isPlayer(game, A) && opts && opts.counter) return FE.Gear.counterDamage(A) * times;
     if (isPlayer(game, A)) {
       const raw = prof.die ? FE.rollDice(r, prof.die, times) : C.BARE_DMG * times;
       return Math.max(1, raw + prof.dmg);

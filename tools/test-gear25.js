@@ -651,11 +651,44 @@ function testGear() {
     ok(Math.abs(chestGot / chestRuns - 0.1) < 0.02, `寶箱多開出裝備的比例 ${(chestGot / chestRuns).toFixed(3)}（應該約 0.1）`);
     ok(Object.keys(ch).every((q) => q >= 0 && q <= 5) && Object.keys(ch).length === 6 && ch[0] > ch[1] && ch[1] > ch[2] && ch[2] > ch[3], `寶箱開出的品質 ${JSON.stringify(ch)}（應該普通～傑作，越高越少）`);
   }
-  // 10. 冒險者的反擊：機率 0、命中固定 1 點（暴擊 2、被閃開減半最少 0）；反擊的訊息不寫「必定反擊」；倒下在最近的聚落醒來
+  // 10. 冒險者的反擊（第三十一版改）：沒穿甲、沒拿重型武器與盾牌時機率 0；傷害是固定值（長劍 4，暴擊 8、被閃開減半）；反擊的訊息不寫「必定反擊」；倒下在最近的聚落醒來
   {
     const g = newGame(20);
     const p = g.player;
-    ok(C.PLAYER_COUNTER === 0 && G.playerDefense(p).counter === 0, '冒險者反擊機率該是 0');
+    ok(G.playerDefense(p).counter === 0, '沒穿甲、沒拿重型武器與盾牌時，反擊機率該是 0');
+    {
+      // 反擊機率的來源：防具（技能照等級、練過才加敏捷）、重型武器、盾牌（技能＋品質），相加最多 50%；傷害是主手類別＋盾牌，照技能加到傳奇 ×1.5
+      const q = { main: p.equip.main, off: p.equip.off, body: p.equip.body, skills: JSON.stringify(p.skills), dex: p.attr.dex };
+      const near = (a, b) => Math.abs(a - b) < 1e-9;
+      p.attr.dex = 16;
+      p.equip.body = G.make('light', 0, g.nextGearId++);
+      ok(near(G.counterChance(p), 0), '皮甲沒練過：不加敏捷，機率 0');
+      p.skills.light.lv = 15;
+      ok(near(G.counterChance(p), 0.15 + 0.03), `輕甲傳奇＋敏捷 16：${G.counterChance(p)}`);
+      p.skills.light.lv = 5;
+      ok(near(G.counterChance(p), 0.05 + 0.03), `輕甲 5 級：${G.counterChance(p)}`);
+      p.equip.body = G.make('heavy', 0, g.nextGearId++);
+      p.skills.heavy.lv = 15;
+      ok(near(G.counterChance(p), 0.0375), `重甲傳奇不加敏捷：${G.counterChance(p)}`);
+      p.equip.body = null;
+      p.equip.main = G.make('greataxe', 0, g.nextGearId++);
+      p.skills.axe.lv = 15;
+      ok(near(G.counterChance(p), 0.12) && G.counterDamage(p) === 9, `巨斧傳奇：機率 ${G.counterChance(p)}、傷害 ${G.counterDamage(p)}`);
+      p.equip.main = G.make('spear', 6, g.nextGearId++);
+      p.skills.spear.lv = 15;
+      p.equip.off = G.make('shield', 6, g.nextGearId++);
+      p.skills.shield.lv = 15;
+      p.equip.body = G.make('light', 0, g.nextGearId++);
+      p.skills.light.lv = 15;
+      p.attr.dex = 18;
+      ok(near(G.counterChance(p), 0.5) && G.counterDamage(p) === 9 + 5, `全部疊滿最多 50%：${G.counterChance(p)}、傷害 ${G.counterDamage(p)}`);
+      p.equip.main = G.make('dagger', 0, g.nextGearId++);
+      p.equip.off = null;
+      ok(G.counterDamage(p) === 3, `短刀（輕型）反擊 3 點：${G.counterDamage(p)}`);
+      Object.assign(p.equip, { main: q.main, off: q.off, body: q.body });
+      p.skills = JSON.parse(q.skills);
+      p.attr.dex = q.dex;
+    }
     const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 904, 1), g.world);
     Object.assign(m, { home: { x: m.x, y: m.y }, atk: 1, maxHp: 1e9, hp: 1e9 });
     g.monsters = [m];
@@ -663,14 +696,14 @@ function testGear() {
     FE.Combat.hook = (e) => { if (e.by === 'player' && e.counter) counters++; };
     for (let i = 0; i < 2000; i++) { p.hp = p.maxHp = 1e9; FE.Combat.resolveAttack(g, m, p, 'attack'); }
     ok(counters === 0, `反擊機率 0 卻反擊了 ${counters} 次`);
-    // 直接叫反擊：傷害只會是 0、1、2
+    // 直接叫反擊：長劍 4 點（暴擊 8、被閃開減半、格擋吸收一部分），不會超過 8
     const seen = {};
     let hard = 0;
     FE.Combat.hook = (e) => { if (e.by === 'player' && e.counter) { seen[e.dmg] = (seen[e.dmg] || 0) + 1; if (e.key === 'hard') hard++; } };
     p.equip.main.dur = p.equip.main.max = 1e9;
     for (let i = 0; i < 3000; i++) { m.hp = 1e9; FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, counter: true }); }
     FE.Combat.hook = hook0;
-    ok(Object.keys(seen).every((d) => [0, 1, 2].includes(Number(d))) && seen[1] > 100 && hard > 100, `反擊傷害分布 ${JSON.stringify(seen)}`);
+    ok(Object.keys(seen).every((d) => Number(d) >= 0 && Number(d) <= 8) && seen[4] > 100 && hard > 100, `反擊傷害分布 ${JSON.stringify(seen)}`);
     ok(!g.log.some((l) => l.text.startsWith('你反擊') && l.text.includes('必定反擊')), '反擊的訊息不該寫「對方必定反擊」');
     // 倒下：在離倒下的地方最近的聚落（不看神聖）醒來，醒在離聚落中央最近的路上
     const g2 = new FE.Game(5151);

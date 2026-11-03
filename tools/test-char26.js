@@ -237,13 +237,13 @@ function testCharacter() {
     ok(r[0] === 4 && r[1] === 4, `徒手力量 16 該是 1＋3 ＝ 4，量到 ${r}`);
     p.attr.str = 12;
     p.equip.main = G.make('sword', 0, g.nextGearId++);
-    // 反擊固定 1 點，不加力量
+    // 反擊是固定值（第三十一版：一般武器 4 點，照技能加），不加力量
     p.attr.str = 18;
     const cs = [];
     FE.Combat.hook = (e) => { if (e.by === 'player' && e.counter && (e.key === 'hit' || e.key === 'hard') && !e.dodged && !e.crit && !e.resisted) cs.push(e.dmg); };
     for (let i = 0; i < 100; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true, counter: true });
     FE.Combat.hook = hook0;
-    ok(cs.length > 0 && cs.every((d) => d === C.COUNTER_DAMAGE), '反擊該固定 1 點，不加力量');
+    ok(cs.length > 0 && cs.every((d) => d === G.counterDamage(p)) && G.counterDamage(p) === 4, '反擊是固定值（長劍 4 點），不加力量');
     // 法師拿法杖近戰：1d6 鈍擊（副手空著 1d8）加力量（力量 8 → -1）
     const gm = mk(31, 'mage', ['staff', 'gold']);
     const pm = gm.player;

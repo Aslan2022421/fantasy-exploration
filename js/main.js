@@ -52,6 +52,76 @@
     FE.UI.update();
   }
 
+  // ---- 滑鼠自動行走（第三十一版）：左鍵點地圖上的一格，照最短路一步一步走過去；按空白鍵（或任何鍵）停下 ----
+  // 點的是村民、工匠或士兵：走到他旁邊再開對話。途中看到新的怪物、有怪物貼上來、開了視窗或對話，就停下
+  let walk = null;
+  const WALK_MS = 90;
+  const blockedAt = (x, y) => game.monsterAt(x, y) || game.world.npcAt(x, y) || game.soldierAt(x, y);
+  // 從冒險者走到 (tx, ty) 的路（不含起點）；goalAdj 時走到它旁邊就算到。只走能走、高度接得上、沒人擋的格子，最多搜 4000 格
+  function findPath(tx, ty, goalAdj) {
+    const p = game.player;
+    const W = game.world;
+    const key = (x, y) => x + ',' + y;
+    const prev = new Map([[key(p.x, p.y), null]]);
+    const q = [[p.x, p.y]];
+    const done = (x, y) => (goalAdj ? Math.abs(x - tx) + Math.abs(y - ty) === 1 && W.heightOk(x, y, tx, ty) : x === tx && y === ty);
+    for (let h = 0; h < q.length && q.length < 4000; h++) {
+      const [x, y] = q[h];
+      if (done(x, y)) {
+        const path = [];
+        for (let k = key(x, y); prev.get(k); k = prev.get(k)) path.unshift(k.split(',').map(Number));
+        return path;
+      }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (prev.has(key(nx, ny)) || !W.inBounds(nx, ny) || !W.passable(nx, ny) || !W.heightOk(x, y, nx, ny) || blockedAt(nx, ny)) continue;
+        prev.set(key(nx, ny), key(x, y));
+        q.push([nx, ny]);
+      }
+    }
+    return null;
+  }
+  const seenMonsters = () => game.monsters.filter((m) => Math.max(Math.abs(m.x - game.player.x), Math.abs(m.y - game.player.y)) <= FE.CONFIG.SIGHT).length;
+  function stopWalk(why) {
+    if (!walk) return;
+    clearInterval(walk.timer);
+    walk = null;
+    if (why) {
+      game.say(why, 'sys');
+      FE.UI.update();
+    }
+  }
+  function walkTo(tx, ty, npc) {
+    stopWalk();
+    const path = findPath(tx, ty, !!npc);
+    if (!path) {
+      game.say('走不到那裡。', 'sys');
+      FE.UI.update();
+      return;
+    }
+    walk = { path, npc, seen: seenMonsters(), timer: null };
+    const step = () => {
+      if (!walk || game.talking != null || FE.UI.win() || game.player.points > 0) return stopWalk();
+      if (!walk.path.length) {
+        const n = walk.npc;
+        stopWalk();
+        if (n) dispatch('對話', () => game.openTalk(n));
+        return;
+      }
+      const [x, y] = walk.path.shift();
+      const p = game.player;
+      if (blockedAt(x, y)) return stopWalk('有東西擋住了路，停了下來。');
+      dispatch('移動', () => game.move(x - p.x, y - p.y, { noTalk: true }));
+      if (game.player.x !== x || game.player.y !== y) return stopWalk();
+      const now = seenMonsters();
+      if (game.adjacentMonsters().length || now > walk.seen) return stopWalk('看到怪物，停下腳步。');
+      walk.seen = now;
+    };
+    walk.timer = setInterval(step, WALK_MS);
+    step();
+  }
+
   const DIRS = {
     arrowup: [0, -1], arrowdown: [0, 1], arrowleft: [-1, 0], arrowright: [1, 0],
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
@@ -59,7 +129,7 @@
   // 1 攻擊、2 重擊、3 撤退、4 治療（牧師、聖騎士）、5 盾擊（戰士）、6 撤離、7 閃避、F 遠程（射擊、投擲、施法、神聖之光：先進入瞄準）、T 投擲（任何武器）
   const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', 6: 'disengage', 7: 'dodge', f: 'fire', t: 'throw' };
   // 按鍵視窗：同時只開一個
-  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'steading', b: 'backpack', c: 'character', m: 'minimap', '`': 'reports' };
+  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', i: 'minimap', b: 'backpack', c: 'character', m: 'minimap', q: 'quests', '`': 'reports' }; // 第三十一版：聚落資訊併進地圖（I、M 都開地圖），委託 Q
 
   // 在對話視窗裡選第 i 個選項（選項本身不再花動作）
   function choose(i) {
@@ -91,10 +161,25 @@
       if (FE.UI.startKey(k)) e.preventDefault();
       return;
     }
+    // 自動行走中：空白鍵（或任何鍵）停下
+    if (walk) {
+      e.preventDefault();
+      stopWalk('你停下了腳步。');
+      return;
+    }
     // 升級加點視窗開著：只能按 1～6 選屬性，其他鍵都不作用
     if (game.player.points > 0) {
       e.preventDefault();
       if (/^[1-6]$/.test(k)) dispatch('升級加點', () => game.spendPoint(FE.ATTRS[Number(k) - 1].key));
+      return;
+    }
+    // 住一晚的確認視窗開著：Enter 住下、Esc 取消，其他鍵不作用
+    if (FE.UI.restAsking()) {
+      e.preventDefault();
+      if (k === 'enter' || k === ' ') {
+        FE.UI.closeRestAsk();
+        dispatch('休息', () => game.rest());
+      } else if (k === 'escape') FE.UI.closeRestAsk();
       return;
     }
     // 在輸入框裡打字時只認 Esc（關掉設定視窗）
@@ -186,10 +271,10 @@
       dispatch('戰鬥：' + ACTS[k], () => game.act(ACTS[k]));
     } else if (DIRS[k]) {
       e.preventDefault();
-      dispatch('移動', () => game.move(DIRS[k][0], DIRS[k][1]));
+      dispatch('移動', () => game.move(DIRS[k][0], DIRS[k][1], { noTalk: true }));
     } else if (k === 'r') {
       e.preventDefault();
-      dispatch('休息', () => game.rest());
+      if (!FE.UI.askRest()) dispatch('休息', () => game.rest());
     }
   });
 
@@ -213,6 +298,12 @@
 
   // 底部快捷列：攻擊、重擊、撤退、射擊／施法、治療、盾擊。瞄準中再點射擊就是出手
   document.getElementById('quick').addEventListener('click', (e) => {
+    // 右下角的視窗按鈕：背包、角色、地圖
+    const wb = e.target.closest && e.target.closest('[data-win]');
+    if (wb) {
+      if (ready && game.talking == null && game.player.points <= 0) toggleWindow(wb.dataset.win);
+      return;
+    }
     const b = e.target.closest && e.target.closest('[data-act]');
     const act = b && b.dataset.act;
     if (!act || b.disabled || !ready || game.talking != null || FE.UI.win()) return;
@@ -228,11 +319,49 @@
     dispatch('戰鬥：' + act, () => game.act(act));
   });
 
+  // 地圖上的滑鼠（第三十一版）：右鍵查看那一格；左鍵點怪物把牠設成目標（不出手、不算動作，同撞上去）
+  document.getElementById('map').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (!ready || game.talking != null || game.player.points > 0) return;
+    const c = FE.UI.cellAt(e.clientX, e.clientY);
+    if (c) FE.UI.look(c.x, c.y);
+  });
+  document.getElementById('map').addEventListener('click', (e) => {
+    if (!ready || game.talking != null || FE.UI.win() || game.player.points > 0) return;
+    const c = FE.UI.cellAt(e.clientX, e.clientY);
+    if (!c) return;
+    const m = game.monsterAt(c.x, c.y);
+    const n = game.world.npcAt(c.x, c.y) || game.soldierAt(c.x, c.y);
+    if (m) {
+      stopWalk();
+      game.battle.targetId = m.id;
+      FE.UI.update();
+    } else if (n) walkTo(n.x, n.y, n);
+    else if (c.x !== game.player.x || c.y !== game.player.y) walkTo(c.x, c.y, null);
+  });
+  // 查看視窗裡的按鈕：對話（走過去）、設成目標
+  document.getElementById('win-look').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-look]');
+    if (!b) return;
+    const [kind, x, y] = b.dataset.look.split(',');
+    FE.UI.closeWindow();
+    if (kind === 'talk') {
+      const n = game.world.npcAt(+x, +y) || game.soldierAt(+x, +y);
+      if (n) walkTo(n.x, n.y, n);
+    } else if (kind === 'target') {
+      const m = game.monsterAt(+x, +y);
+      if (m) game.battle.targetId = m.id;
+      FE.UI.update();
+    }
+  });
+
   document.getElementById('dpad').addEventListener('click', (e) => {
     const dir = e.target.dataset && e.target.dataset.dir;
     if (!dir || game.talking != null || FE.UI.win()) return;
-    if (dir === 'rest') dispatch('休息', () => game.rest());
-    else dispatch('移動', () => game.move(DIRS[dir][0], DIRS[dir][1]));
+    if (dir === 'rest') {
+      if (!FE.UI.askRest()) dispatch('休息', () => game.rest());
+    }
+    else dispatch('移動', () => game.move(DIRS[dir][0], DIRS[dir][1], { noTalk: true }));
   });
 
   // 視窗：右上角的圖示列開關各視窗；設定裡也有各視窗的按鈕；點視窗外面或「Esc 關閉」關掉

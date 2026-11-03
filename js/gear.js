@@ -119,6 +119,34 @@
   // 盾牌在副手才擋得住：格擋機率與格擋值（值乘品質倍率，四捨五入）；沒拿盾牌是 0
   const shieldOf = (p) => (p.equip.off && def(p.equip.off).cat === 'shield' ? p.equip.off : null);
 
+  // 冒險者的反擊機率（第三十一版）：防具、重型武器、盾牌三個來源相加，最多 COUNTER_MAX
+  const legendShare = (lv) => Math.min(lv, C.SKILL_LEGEND) / C.SKILL_LEGEND;
+  function counterChance(p) {
+    let c = 0;
+    const body = p.equip.body ? def(p.equip.body) : null;
+    const aid = body ? FE.ARMOR_SKILL[body.cls] : null;
+    if (aid) {
+      const lv = FE.Char.skillLv(p, aid);
+      c += C.COUNTER_ARMOR[aid] * legendShare(lv);
+      if (lv >= 1) c += C.COUNTER_DEX * Math.max(0, FE.Char.dexForDodge(p));
+    }
+    const w = p.equip.main;
+    if (w && def(w).heavy) c += C.COUNTER_HEAVY * legendShare(FE.Char.skillLv(p, def(w).skill)) + C.COUNTER_CLEAR * qual(w).clear;
+    const sh = shieldOf(p);
+    if (sh) c += C.COUNTER_SHIELD * legendShare(FE.Char.skillLv(p, 'shield')) + C.COUNTER_CLEAR * qual(sh).clear;
+    return Math.min(C.COUNTER_MAX, c);
+  }
+  // 冒險者反擊打中時的傷害：主手武器的類別（重型、一般、輕型；遠程武器與徒手算輕型）＋盾牌，各照自己的技能加到傳奇 ×1.5
+  function counterDamage(p) {
+    const up = (n, lv) => Math.round(n * (1 + C.COUNTER_DMG_LEGEND * legendShare(lv)));
+    const w = p.equip.main;
+    const d = w ? def(w) : null;
+    const kind = !d || d.ammo ? 'light' : d.heavy ? 'heavy' : d.light ? 'light' : 'normal';
+    let dmg = up(C.COUNTER_DMG[kind], d ? FE.Char.skillLv(p, d.skill) : FE.Char.skillLv(p, 'fight'));
+    if (shieldOf(p)) dmg += up(C.COUNTER_DMG.shield, FE.Char.skillLv(p, 'shield'));
+    return dmg;
+  }
+
   // 冒險者的防禦數字：
   //   閃避＝PLAYER_DODGE＋敏捷修正值×2%（輕甲與無甲照加、中甲最多 +2 點修正值、重甲不加不扣，見 Char.dexForDodge）＋閃避技能每級 1%，最低 0
   //   格擋機率＝盾牌的機率＋盾牌使用每級 2%；格擋值＝盾牌與品質的格擋值，戰士再加力量修正值（其他職業只照盾牌）；沒拿盾牌都是 0
@@ -127,7 +155,7 @@
     const blockMax = sh ? Math.max(0, Math.round(def(sh).value * qual(sh).armor) + (p.cls === 'warrior' ? FE.Char.attrMod(p, 'str') : 0)) : 0;
     return {
       dodge: Math.max(0, C.PLAYER_DODGE + C.DEX_DODGE * FE.Char.dexForDodge(p) + C.SKILL_DODGE * FE.Char.skillLv(p, 'dodge')),
-      counter: C.PLAYER_COUNTER,
+      counter: FE.Gear.counterChance(p),
       block: sh ? def(sh).block + C.SKILL_BLOCK * FE.Char.skillLv(p, 'shield') : 0,
       blockMax,
     };
@@ -283,7 +311,7 @@
 
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
-    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense, wearTier, wearPenalty,
+    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense, counterChance, counterDamage, wearTier, wearPenalty,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText,
     SHOPS, CAT_NAMES, craftCats, shopOf, isShopkeeper, offOk,
   };

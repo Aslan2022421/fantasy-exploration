@@ -356,7 +356,7 @@
   function drawStatus() {
     const p = game.player;
     const W = game.world;
-    // 名字與職業、時間（第幾天幾時）、世界狀態、錢（金銀銅），後面是戰鬥數字：攻擊力、物理／魔法減傷、閃避 %、格擋機率
+    // 名字與職業、時間（第幾天幾時）、世界狀態、錢（金銀銅），後面是戰鬥數字：攻擊力、物理／魔法減傷、閃避 %、格擋機率；最右邊是所在的地方
     $('stName').innerHTML = `<b>${esc(p.name)}</b>（${esc(FE.Char.cls(p).name)}）`;
     $('stTime').textContent = FE.clockText(game.ticks);
     const lvl = FE.Stability.state(game);
@@ -439,41 +439,38 @@
       fire: !!ranged,
       heal: hcd <= 0 && p.hp < p.maxHp,
       bash: !!adj && !!FE.Gear.shieldOf(p),
-      disengage: true,
-      dodge: true,
+      // 撤離：旁邊有怪物才用得上；閃避：附近（視野內）有怪物才用得上（第三十一版，原本一直亮著）
+      disengage: game.adjacentMonsters().length > 0,
+      dodge: game.monsters.some((m) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= C.SIGHT),
       throw: !!game.throwMode(true),
     };
-    document.querySelectorAll('#quick .qs').forEach((b) => {
+    document.querySelectorAll('#quick .qs[data-act]').forEach((b) => {
       b.disabled = !can[b.dataset.act];
     });
+    // 用不上的格子不出現（第三十一版）：治療只有牧師、聖騎士，盾擊只有戰士，遠程要手上的武器射得出、丟得出（或會施法），投擲要手上有武器
     document.querySelector('#quick [data-act="heal"]').classList.toggle('hidden', !cls.heal);
     document.querySelector('#quick [data-act="bash"]').classList.toggle('hidden', !cls.bash);
+    document.querySelector('#quick [data-act="fire"]').classList.toggle('hidden', !ranged);
+    document.querySelector('#quick [data-act="throw"]').classList.toggle('hidden', !can.throw);
     document.querySelector('#quick [data-act="fire"] .qn').textContent = ranged && ranged.mode === 'spell' ? '施法' : ranged && ranged.mode === 'light' ? '神聖之光' : ranged && ranged.mode === 'throw' ? '投擲' : '射擊';
     document.querySelector('#quick [data-act="deep"] .qcd').textContent = adj && cd > 0 ? `冷卻 ${cd}` : '';
     document.querySelector('#quick [data-act="heal"] .qcd').textContent = hcd > 0 ? `冷卻 ${hcd}` : '';
+    // 右下角的視窗按鈕：開著的那顆亮起來
+    document.querySelectorAll('#quick .qw, #quick [data-win]').forEach((b) => b.classList.toggle('on', b.dataset.win === ui.win));
   }
 
-  // 地點資訊（左下）：所在的聚落，或環境的簡短資訊
+  // 地點（第三十一版，照 Caves of Qud 放在頂部狀態列最右邊）：所在的聚落，或環境與在這裡出手的加減
   function drawPlace() {
-    const el = $('place');
     const W = game.world;
     const p = game.player;
     const v = W.villageAt(p.x, p.y);
-    if (v && v.steading) {
-      const s = v.steading;
-      el.innerHTML = `
-        <div class="t-head"><b style="color:var(--accent)">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）</b><span class="dim">安全區</span></div>
-        <p>經濟 ${FE.PROSPERITY[s.prosperity]}　人口 ${FE.POPULATION[s.population]}　住一晚 ${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}</p>
-        <p class="t-extra dim">裝備售價是原價的 ${FE.Steading.shopFactor(v).toFixed(2)} 倍。按 R 在這裡住一晚（8 小時）。按 I 看聚落資訊，撞上村民或工匠可以對話、買賣、修理。</p>`;
+    if (v) {
+      $('stPlace').textContent = `${v.name}・${v.kind === 'town' ? '城鎮' : '村莊'}（安全區）`;
       return;
     }
-    const c = W.cell(p.x, p.y);
-    const b = FE.BIOMES[c.biome];
+    const b = FE.BIOMES[W.cell(p.x, p.y).biome];
     const lm = W.landmarkAt(p.x, p.y);
-    el.innerHTML = `
-      <div class="t-head"><b style="color:var(--accent)">${esc(b.name)}</b><span class="dim">高度 ${c.h}</span></div>
-      <p>${b.hit ? `在這裡出手 ${b.hit > 0 ? '+' : ''}${b.hit}` : '在這裡出手沒有加減'}${lm ? `，${esc(lm.name)}` : ''}</p>
-      ${game.targetMonster() ? '' : '<p class="t-extra dim">旁邊沒有怪物。撞上怪物只會把牠設成目標，按 1 攻擊、2 重擊；拿弓箭、短刀、短矛（法師拿法杖）按 F 遠程出手。</p>'}`;
+    $('stPlace').textContent = `${b.name}${lm ? '・' + lm.name : ''}（出手 ${b.hit > 0 ? '+' : ''}${b.hit || 0}）`;
   }
 
   // 這個村民現在可以交件或回報（地圖上綠底、小地圖上大綠點）：清完了的清除委託的委託人、送貨的收貨人、採藥採礦湊夠了的委託人
@@ -484,14 +481,13 @@
     return ['herb', 'ore'].some((k) => j[k] && j[k].giverId === n.id && game.bagCount(k) >= j[k].n);
   }
 
-  // 右側欄最上面：手上的委託，清除、送貨、採藥、採礦每種一行（第三十版）
+  // 委託視窗（Q，第三十一版從右側欄搬進視窗）：手上的委託，有的才列
   function drawQuest() {
     const j = game.player.jobs;
     const pay = (c) => `獎勵 經驗值 ${c.exp}、${FE.money(game.questPay(c, c.villageId))}`;
     const line = (k) => {
       const c = j[k];
       const head = `${FE.JOB_NAMES[k]}：`;
-      if (!c) return `${head}<span class="dim">沒有</span>`;
       if (k === 'hunt') {
         const left = game.huntRemaining(c.monsterIds);
         return head + esc(left ? `清掉${c.village}附近的小怪物，還剩 ${left} / ${c.total} 隻（紫框）。${pay(c)}` : `小怪物都清掉了，回${c.village}找委託人（綠底的 &）領獎勵`);
@@ -504,7 +500,8 @@
       const have = game.bagCount(k);
       return head + esc(have >= c.n ? `${c.n} ${unit}湊齊了，拿回${c.village}給委託人（綠底的 &）。${pay(c)}` : `帶 ${c.n} ${unit}回${c.village}（背包裡有 ${have}）。${pay(c)}`);
     };
-    $('questText').innerHTML = FE.JOB_KINDS.map((k) => `<div>${line(k)}</div>`).join('');
+    const have = FE.JOB_KINDS.filter((k) => j[k]);
+    $('questText').innerHTML = have.length ? have.map((k) => `<p>${line(k)}</p>`).join('') : '<p class="dim">手上沒有委託。紫底的 &amp; 有委託可以接。</p>';
   }
 
   // 右側欄的訊息紀錄：由上到下，最新的在最下面（放不下的從最上面切掉）
@@ -991,23 +988,75 @@
       <p class="dim dlg-hint">加完才能繼續。生命 ${p.hp} / ${p.maxHp}</p></div>`;
   }
 
+  // 在聚落按 R 住一晚之前的確認視窗（第三十一版）：寫出這一晚的開支與效果
+  function drawRestAsk() {
+    const p = game.player;
+    const v = game.world.villageAt(p.x, p.y);
+    const k = v && v.steading ? v.steading.prosperity : 0;
+    const fx = [C.LIVING_REPAIR[k] ? `身上裝備耐久回 ${Math.round(C.LIVING_REPAIR[k] * 100)}%` : '', C.LIVING_QUEST[k] ? `這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[k] * 100)}%` : ''].filter(Boolean);
+    $('modalBody').className = 'win';
+    $('modal').classList.remove('full');
+    $('modalBody').innerHTML = `
+      <h2>住一晚（8 小時）</h2>
+      <div class="winbody"><p>開支 <b>${FE.money(C.LIVING_COST[k] * C.SILVER)}</b>（經濟：${FE.PROSPERITY[k]}）　身上 ${FE.money(p.copper)}</p>
+      <p>生命回滿、力竭 −1${fx.length ? '；' + fx.join('、') : ''}。</p>
+      <p class="dim dlg-hint">Enter 住下　Esc 取消</p></div>`;
+  }
+
   function drawModal() {
-    const open = !!ui.start || (game && game.player && game.player.points > 0);
+    const open = !!ui.start || !!ui.restAsk || (game && game.player && game.player.points > 0);
     $('modal').classList.toggle('hidden', !open);
     if (!open) return;
     if (ui.start) drawStart();
+    else if (ui.restAsk) drawRestAsk();
     else drawLevelUp();
+  }
+
+  // 查看（滑鼠右鍵點地圖，第三十一版）：那一格的怪物、村民、工匠、士兵或地形
+  function drawLook() {
+    const L = ui.look;
+    const el = $('lookInfo');
+    if (!L) return;
+    const W = game.world;
+    const m = game.monsterAt(L.x, L.y);
+    const n = W.npcAt(L.x, L.y) || game.soldierAt(L.x, L.y);
+    const c = W.cell(L.x, L.y);
+    if (m) {
+      const T = FE.BUG_TYPES[m.type];
+      const st = monStates(m);
+      const chasing = game.battle.targetId === m.id ? '你的目標' : m.chase > 0 ? '正在追你' : '還沒發現你';
+      el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>異常</dt><dd>${esc(T.name)}</dd><dt>抗性</dt><dd>${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</dd><dt>攻擊力</dt><dd>${m.atk}</dd>${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl>${T.desc ? `<p class="dim">${esc(T.desc)}</p>` : ''}<div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
+    } else if (n) {
+      const role = n.role === 'smith' ? (W.villageAt(n.x, n.y) && W.villageAt(n.x, n.y).kind === 'town' ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'soldier' ? '士兵' : '村民';
+      const race = FE.PLAYER_RACES[FE.npcRace(W, n)];
+      const quest = handIn(n) ? '可以交件或回報' : n.quest && !n.quest.accepted && !n.quest.done ? '有委託可以接' : '';
+      const home = W.villageById ? W.villageById(n.villageId) : null;
+      el.innerHTML = `<p><b>${esc(n.name)}</b>　<span class="dim">${role}・${race ? race.name : ''}${home ? `・${esc(home.name)}` : ''}</span></p>${quest ? `<p>${quest}</p>` : ''}<div class="dlg-opts"><button data-look="talk,${n.x},${n.y}">走過去對話</button></div>`;
+    } else {
+      const b = FE.BIOMES[c.biome];
+      el.innerHTML = `<p><b>${esc(b.name)}</b>　<span class="dim">高度 ${c.h}</span></p><p>${b.hit ? `站在這裡出手 ${b.hit > 0 ? '+' : ''}${b.hit}` : '站在這裡出手沒有加減'}</p>`;
+    }
+  }
+  // 地圖上滑鼠的位置換成世界座標
+  function cellAt(clientX, clientY) {
+    const r = $('map').getBoundingClientRect();
+    const cam = camera();
+    const gx = Math.floor((clientX - r.left - ui.ox) / ui.cell);
+    const gy = Math.floor((clientY - r.top - ui.oy) / ui.cell);
+    if (gx < 0 || gy < 0 || gx >= ui.cols || gy >= ui.rows) return null;
+    return { x: cam.x + gx, y: cam.y + gy };
   }
 
   const WINDOWS = {
     legend: null,
+    quests: drawQuest,
+    look: drawLook,
     backpack: drawBackpack,
     character: drawCharacter,
     history: drawHistory,
     messages: drawLogAll,
-    steading: drawSteading,
     reports: drawReports,
-    minimap: drawMinimap,
+    minimap: () => { drawMinimap(); drawSteading(); }, // 第三十一版：小地圖與聚落資訊合在同一個視窗（M、I）
     settings: null,
   };
 
@@ -1025,7 +1074,6 @@
     drawEffects();
     drawTarget();
     drawPlace();
-    drawQuest();
     drawLog();
     drawDialog();
     drawWindow();
@@ -1054,6 +1102,24 @@
     },
     update,
     relayout,
+    // 在聚落按 R：先開確認視窗（restAsk）；回傳 true 表示開了視窗，還沒休息
+    askRest() {
+      if (!game.world.villageAt(game.player.x, game.player.y)) return false;
+      ui.restAsk = true;
+      update();
+      return true;
+    },
+    restAsking: () => !!ui.restAsk,
+    cellAt,
+    // 滑鼠右鍵查看那一格（開查看視窗）
+    look(x, y) {
+      ui.look = { x, y };
+      FE.UI.openWindow('look');
+    },
+    closeRestAsk() {
+      ui.restAsk = false;
+      update();
+    },
     // 開新世界時選職業與起始裝備：選完呼叫 done(職業, 挑的裝備)
     startMenu(done) {
       ui.start = { step: 'race', race: null, bonus: {}, height: 4, build: 4, cls: null, gi: 0, cur: 0, picks: [], sel: [], done };

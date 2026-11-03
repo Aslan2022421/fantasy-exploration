@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fantasy Exploration</title>
-  <link rel="stylesheet" href="css/style.css?v=27">
+  <link rel="stylesheet" href="css/style.css?v=28">
 </head>
 <body>
   <!-- 版面參考 Caves of Qud 的文字模式：上方一行狀態＋右上圖示列＋生命與經驗兩條長條；
@@ -86,18 +86,18 @@
     <section id="win-legend" class="win hidden">
       <h2>圖例 <span class="dim">（L）</span></h2><button class="x" data-close>Esc 關閉</button>
       <div class="winbody"><div class="legend">
-        <div class="row"><span><b class="player">@</b> 冒險者</span><span><b class="npc">&amp;</b> 村民</span><span><b class="npc smith">&amp;</b> 鐵匠（城鎮裡是武器匠）</span><span><b class="npc armorer">&amp;</b> 盔甲匠（城鎮才有）</span><span><b class="npc soldier">&amp;</b> 士兵（城鎮才有）</span><span><b class="chest">$</b> 寶箱</span><span><b class="node-ore">◊</b> 礦脈（礦坑裡，要礦鎬）</span><span><b class="node-herb">♥</b> 藥草（森林裡，要鐮刀）</span><span><b class="item">)</b> 地上的武器（擲出去的，走過去撿回來）</span></div>
+        <div class="row"><span><b class="player">@</b> 冒險者</span><span><b class="npc">&amp;</b> 村民</span><span><b class="npc smith">&amp;</b> 鐵匠（城鎮裡是武器匠）</span><span><b class="npc armorer">&amp;</b> 盔甲匠（城鎮才有）</span><span><b class="npc soldier">&amp;</b> 士兵（城鎮才有）</span><span><b class="chest">$</b> 寶箱</span><span><b class="node-ore">☼</b> 礦脈（礦坑裡，要礦鎬）</span><span><b class="node-herb">♥</b> 藥草（森林裡，要鐮刀）</span><span><b class="item">)</b> 地上的武器（擲出去的，走過去撿回來）</span></div>
         <div class="row"><span><b class="npc has-quest">&amp;</b> 有委託</span><span><b class="npc recipient">&amp;</b> 你要找的人</span><span><b class="t-plain village">.</b> 村莊（安全區）</span><span><b class="t-plain town">.</b> 大城鎮（安全區，世界長大後才會出現）</span></div>
-        <p>地形字元參考矮人要塞的字元表。<b>擋路的只有</b> <b class="t-water">≈</b> 水和 <b class="t-rock">#</b> 巨石，其他都能走。括號裡是站在那裡出手時擲骰的加減。</p>
+        <p>地形字元參考矮人要塞的字元表。<b>擋路的只有</b> <b class="t-water">≈</b> 水和 <b class="t-rock">∞</b> 巨石，其他都能走。括號裡是站在那裡出手時擲骰的加減。</p>
         <div class="row"><span><b class="t-grass">"</b> 草原（+2）</span><span><b class="t-grass">,</b> 灌木地（0）</span><span><b class="t-forest">♣</b> 溫帶森林（-2）</span><span><b class="t-forest">↑</b> 針葉林（-2）</span></div>
         <div class="row"><span><b class="t-plain">.</b> 苔原（+1）</span><span><b class="t-snow">*</b> 冰川（-1）</span><span><b class="t-forest">♠</b> 熱帶雨林（-3）</span><span><b class="t-grass">,</b> 莽原（+2）</span></div>
         <div class="row"><span><b class="t-sand">:</b> 沙漠（+1）</span><span><b class="t-plain">;</b> 沼澤（-2）</span><span><b class="t-plain">;</b> 濕地（-3）</span><span><b class="t-mount">▲</b> 山坡（-1）</span></div>
         <p>村莊用 <b class="t-woodwall">┌─┐</b> 木牆圍起來，有 3 或 4 個出入口（東、西，再加南北其中一個或兩個）；城鎮用 <b class="t-stonewall">╔═╗</b> 石牆圍起來，東西南北各一個出入口（外面被水擋住的方向不開，至少 3 個）。出入口都寬 3 格。外牆貼著建築蓋，跟著建築凹凸；碰到水或巨石的那一側不蓋牆。外牆外一圈怪物不能進來，也不會冒出怪物：村莊 8 格、城鎮 12 格。</p>
-        <p>村莊和城鎮裡：<b class="t-road">·</b> 小路與廣場。建築有外牆和門 <b class="t-door">+</b>，從門走進室內：<b class="t-house">⌂</b> 民房與工坊（鐵匠或武器匠在工坊裡；城鎮另有一間盔甲匠工坊）、<b class="t-temple">∩</b> 神殿（神聖的城鎮）、<b class="t-market">♦</b> 市場（有市場的城鎮）。每個村民有自己的家，會在聚落裡走動，也會走回家。</p>
-        <p>家具（還沒有作用）：<b class="t-bed">≡</b> 床（能走）、<b class="t-furniture">π</b> 桌子、<b class="t-furniture">▌</b> 物品櫃、<b class="t-furniture">╤</b> 工作台、<b class="t-furniture">¤</b> 祭台、<b class="t-furniture">╥</b> 市場攤位。</p>
-        <p>每個村莊和城鎮附近有一處獨特的地貌（走得到的是 <b class="t-ruin">░</b> 碎石地、<b class="t-relic">‡</b> 墓碑和建築的室內，其他擋路）：</p>
-        <div class="row"><span><b class="t-ruin">▓</b> 斷牆（廢棄的堡壘，隔成幾個房間）</span><span><b class="t-relic">Π</b> 立石</span><span><b class="t-relic">Θ</b> 法師塔</span><span><b class="t-relic">†</b> 聖所（裡面有祭台）</span><span><b class="t-relic">Ω</b> 礦坑（留著坑口）</span></div>
-        <p><b>採集點</b>：<b class="node-ore">◊</b> 礦脈在礦坑的空地上，<b class="node-herb">♥</b> 藥草長在溫帶森林、針葉林、熱帶雨林裡。都可以走過去；拿著礦鎬或鐮刀（鐵匠、武器匠有賣）撞上去就採，得到 1～2 份，採完那一格變回普通地面，過一陣子（2000 刻）長回來；工具用 50 次就壞。藥草吃一份回生命上限的四分之一；礦石一顆賣 5 銀，也能請工匠打造新的裝備。藥草與礦石也能交給採藥、採礦委託的委託人。</p>
+        <p>村莊和城鎮裡：<b class="t-road">·</b> 小路與廣場。建築的牆照 Dwarf Fortress 砌好的牆，依相鄰的牆自動接成 <b class="t-house">╔═╗</b> 雙線框；門是 <b class="t-door">║</b>（城鎮是石門 <b class="t-door">┼</b>），室內的地板是 <b class="t-plain">+</b>。從門走進室內：民房與工坊（鐵匠或武器匠在工坊裡；城鎮另有一間盔甲匠工坊）、神殿（神聖的城鎮，牆是紫色）、市場（有市場的城鎮）。每個村民有自己的家，會在聚落裡走動，也會走回家。</p>
+        <p>家具（字元照 Dwarf Fortress，還沒有作用）：<b class="t-bed">Θ</b> 床（能走）、<b class="t-furniture">╤</b> 桌子、<b class="t-furniture">π</b> 物品櫃、<b class="t-furniture">σ</b> 工坊的鐵砧、<b class="t-furniture">É</b> 祭壇、<b class="t-furniture">■</b> 市場攤位。</p>
+        <p>每個村莊和城鎮附近有一處獨特的地貌（走得到的是 <b class="t-ruin">░</b> 碎石地、<b class="t-relic">∩</b> 石碑（墓）和建築的室內，其他擋路）：</p>
+        <div class="row"><span><b class="t-ruin">▓</b> 斷牆（廢棄的堡壘，隔成幾個房間）</span><span><b class="t-relic">■</b> 立石</span><span><b class="t-relic">╔═╗</b> 法師塔、聖所（裡面有祭壇）、礦坑（留著坑口）的牆</span></div>
+        <p><b>採集點</b>：<b class="node-ore">☼</b> 礦脈在礦坑的空地上，<b class="node-herb">♥</b> 藥草長在溫帶森林、針葉林、熱帶雨林裡。都可以走過去；拿著礦鎬或鐮刀（鐵匠、武器匠有賣）撞上去就採，得到 1～2 份，採完那一格變回普通地面，過一陣子（2000 刻）長回來；工具用 50 次就壞。藥草吃一份回生命上限的四分之一；礦石一顆賣 5 銀，也能請工匠打造新的裝備。藥草與礦石也能交給採藥、採礦委託的委託人。</p>
         <p><b>時間與錢</b>：一刻 36 秒，一小時 100 刻，一天 2,400 刻，狀態列寫第幾天幾時。錢是 1 金＝10 銀＝100 銅，硬幣沒有重量。在野外按 R 歇一個小時（回 1d10 加體質修正值，怪物貼上來會被打斷），在聚落裡按 R 住一晚（8 小時，生命回滿），照聚落的經濟付錢：荒蕪 3 銀、貧窮 6 銀（裝備耐久回 3%）、普通 15 銀（耐久回 5%、這裡的委託獎勵 +5%）、繁盛 30 銀（耐久回 10%、委託獎勵 +10%）；錢不夠就住最便宜的。一整天沒在聚落睡過就會力竭（出手 −2、走一步多 1 刻，每級疊加），睡一晚少一級，到 6 級會倒下。委託有清除、送貨、採藥、採礦四種，每種同時能接一個。</p>
         <p><b>裝備</b>：身上有主手（武器）、副手（盾牌）、身上（防具）三格。裝備有品質，名字兩邊的符號從低到高是：（普通不加）、<b>-做工好-</b>、<b>+精良+</b>、<b>*優秀*</b>、<b>≡卓越≡</b>、<b>☼傑作☼</b>。品質高的武器好打中，也能對付有抗性的怪物；防具和盾牌減傷與格擋值更高。每件裝備都會磨損，壞了就消失，剩兩成時會提醒；鐵匠、武器匠、盔甲匠能修。東西有重量，背太重會變慢，太重就走不動。</p>
         <p>▲ 是坡（矮人要塞的 ramp），能走。底色越亮的地方越高（高度 0～4）。相鄰兩格高度差 1 可以走；差 2 以上是斷崖，過不去，也打不到對面的怪物。</p>
@@ -194,21 +194,21 @@
   </div>
 
   <!-- ?v= 只是為了讓瀏覽器丟掉換伺服器之前的舊快取 -->
-  <script src="js/config.js?v=27"></script>
-  <script src="js/rng.js?v=27"></script>
-  <script src="js/world.js?v=27"></script>
-  <script src="js/checker.js?v=27"></script>
-  <script src="js/bugs.js?v=27"></script>
-  <script src="js/steading.js?v=27"></script>
-  <script src="js/char.js?v=27"></script>
-  <script src="js/gear.js?v=27"></script>
-  <script src="js/combat.js?v=27"></script>
-  <script src="js/stability.js?v=27"></script>
-  <script src="js/events.js?v=27"></script>
-  <script src="js/ai.js?v=27"></script>
-  <script src="js/game.js?v=27"></script>
-  <script src="js/save.js?v=27"></script>
-  <script src="js/render.js?v=27"></script>
-  <script src="js/main.js?v=27"></script>
+  <script src="js/config.js?v=28"></script>
+  <script src="js/rng.js?v=28"></script>
+  <script src="js/world.js?v=28"></script>
+  <script src="js/checker.js?v=28"></script>
+  <script src="js/bugs.js?v=28"></script>
+  <script src="js/steading.js?v=28"></script>
+  <script src="js/char.js?v=28"></script>
+  <script src="js/gear.js?v=28"></script>
+  <script src="js/combat.js?v=28"></script>
+  <script src="js/stability.js?v=28"></script>
+  <script src="js/events.js?v=28"></script>
+  <script src="js/ai.js?v=28"></script>
+  <script src="js/game.js?v=28"></script>
+  <script src="js/save.js?v=28"></script>
+  <script src="js/render.js?v=28"></script>
+  <script src="js/main.js?v=28"></script>
 </body>
 </html>

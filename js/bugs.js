@@ -200,6 +200,7 @@
     }
     if (!at) return null;
     const npc = { id, name, role: 'villager', villageId: v.id, x: at[0], y: at[1], quest: null, home: { b: h.b, bed: h.bed, spot: h.spot }, mode: 'home' };
+    FE.npcRace(w, npc);
     w.npcs.push(npc);
     return npc;
   }
@@ -251,7 +252,7 @@
       case 'VALUE': {
         const c = w.chests.find((o) => o.id === m.data.chestId);
         if (!c) return '';
-        c.gold = Number.isFinite(c.gold) ? Math.abs(c.gold) : 20;
+        c.copper = Number.isFinite(c.copper) ? Math.abs(c.copper) : 20 * FE.CONFIG.SILVER;
         return '牠守著的寶箱恢復了原樣。';
       }
       case 'REFERENCE': {
@@ -264,8 +265,8 @@
           return `${back.name}從虛影裡走了出來，回到${n.quest.targetVillage}，${n.name}的委託接上了。`;
         }
         // 冒險者手上如果正拿著這個任務，那份也要跟著改，不然會送不出去
-        const c = game.player && game.player.carrying;
-        const mine = c && c.kind !== 'hunt' && c.giverId === n.id;
+        const c = game.player && game.player.jobs ? game.player.jobs.deliver : null;
+        const mine = !!c && c.giverId === n.id;
         const others = w.npcs.filter((o) => o.id !== n.id && !FE.Gear.isShopkeeper(o));
         if (others.length) {
           const t = FE.pick(game.rng, others);
@@ -280,7 +281,7 @@
         n.quest.done = true;
         if (mine) {
           game.bagTake('goods', 1, n.id); // 要送的東西也從背包拿掉
-          game.player.carrying = null;
+          game.player.jobs.deliver = null;
         }
         if (!(opts && opts.noExp)) {
           game.addExp(n.quest.exp);

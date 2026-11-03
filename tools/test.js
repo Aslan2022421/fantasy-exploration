@@ -69,10 +69,18 @@ function neutralChar(g) {
   p.size = 70000;
   p.equip = { main: FE.Gear.make('sword', 0, g.nextGearId++), off: null, body: null };
   p.block = null;
-  p.gold = 0;
+  p.copper = 0;
   p.bag = [];
   p.maxHp = p.hp = FE.Char.maxHp(p, 1);
 }
+// 第三十版：舊的場景檢查一次做幾百個動作，時間會過好幾天；那些檢查不是在測力竭，所以不讓冒險者累（awakeAt 一直跟著時鐘走）。
+// 力竭本身在 testEconomy30 測，機器人模擬照真的規則
+let NO_TIRE = false;
+const advance0 = FE.Game.prototype.advance;
+FE.Game.prototype.advance = function (t, interrupt) {
+  if (NO_TIRE && this.player) this.player.awakeAt = this.ticks;
+  return advance0.call(this, t, interrupt);
+};
 const start0 = FE.Game.prototype.start;
 FE.Game.prototype.start = function (opts) {
   start0.call(this, opts);
@@ -512,21 +520,24 @@ function botStep(game, rng, goal, lazy) {
     if (cls.bash && FE.Gear.shieldOf(p) && rng() < 0.25) return game.act('bash');
     return game.act(game.battle.cooldown === 0 && m && m.hp > 8 ? 'deep' : 'attack');
   }
-  if (!adj.length && p.hp < p.maxHp * 0.4) {
-    // 血量低：在聚落裡休息一次就回滿；不在聚落裡就先走回最近的聚落（對照組只在原地休息）
+  // 第三十版：累了（有力竭，或醒著快一整天）也回聚落長休（付生活開支）
+  const tired = !lazy && ((p.exhaust || 0) >= 1 || game.ticks - (p.awakeAt || 0) >= C.DAY_TICKS * 0.8);
+  if (!adj.length && (p.hp < p.maxHp * 0.4 || tired)) {
+    // 血量低：在聚落裡長休一次就回滿；不在聚落裡就先走回最近的聚落（對照組只在原地短休）
     if (lazy) { if (rng() < 0.8) return game.rest(); }
     else if (w.inVillage(p.x, p.y)) return game.rest();
     else {
       const near = w.villages.slice().sort((a, b) => Math.abs(a.cx - p.x) + Math.abs(a.cy - p.y) - (Math.abs(b.cx - p.x) + Math.abs(b.cy - p.y)))[0];
-      if (near) tgt = { x: near.cx, y: near.cy };
+      if (near) tgt = { x: near.cx, y: near.cy, home: true };
     }
   }
   if (tgt) {
+    // 回聚落休息：走到任何一格聚落就停，找路看得遠一點（聚落可能在好幾塊世界外）
     const prev = new Map([[key(p.x, p.y), null]]);
     const q = [[p.x, p.y]];
-    for (let h = 0; h < q.length && h < 6000; h++) {
+    for (let h = 0; h < q.length && h < (tgt.home ? 40000 : 6000); h++) {
       const [x, y] = q[h];
-      if (Math.abs(x - tgt.x) + Math.abs(y - tgt.y) === 1 && w.heightOk(x, y, tgt.x, tgt.y)) {
+      if (tgt.home ? h > 0 && w.inVillage(x, y) : Math.abs(x - tgt.x) + Math.abs(y - tgt.y) === 1 && w.heightOk(x, y, tgt.x, tgt.y)) {
         let k = key(x, y);
         let step = null;
         while (prev.get(k) !== null) { step = k; k = prev.get(k); }
@@ -593,7 +604,7 @@ function botShop(game, npc) {
   const cha = game.chaMod();
   // 背得動才買、才打造（法師背不了一整套）
   const fits = (type) => game.weight() + FE.GEAR[type].weight <= game.carryLimit();
-  const craftable = (type) => fits(type) && S.craft.includes(type) && FE.Gear.craftQuote(type, v, cha).ore <= game.bagCount('ore') && FE.Gear.craftQuote(type, v, cha).fee <= p.gold;
+  const craftable = (type) => fits(type) && S.craft.includes(type) && FE.Gear.craftQuote(type, v, cha).ore <= game.bagCount('ore') && FE.Gear.craftQuote(type, v, cha).fee <= p.copper;
   // 穿得了的防具（野蠻人不穿中甲重甲、力量不夠需求的不穿），好的排前面
   const armorTypes = Object.keys(FE.GEAR)
     .filter((t) => FE.GEAR[t].cat === 'armor' && t !== 'mrobe' && t !== 'robe' && FE.Char.canWear(p, { type: t }) && !(FE.GEAR[t].str > p.attr.str))
@@ -605,32 +616,32 @@ function botShop(game, npc) {
     if (!twoH && !p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && craftable('shield')) do_('craftItem:shield', 'craft');
   }
   if (p.equip.main && p.equip.main.q === 0 && craftable(p.equip.main.type) && game.bagCount('ore') >= 6) do_('craftItem:' + p.equip.main.type, 'craft');
-  if (game.bagCount('ore') && do_('sellOre', 'sellOre')) { /* 礦石全賣 */ }
+  if (game.bagCount('ore') && !p.jobs.ore && do_('sellOre', 'sellOre')) { /* 礦石全賣（手上有採礦委託時留著交件） */ }
   // 修：磨損到四成以下的先修（都一次修到完整）
   for (let round = 0; round < 4; round++) {
     const worn = game.allGear().find((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max * 0.4);
     if (!worn || !do_('repairItem:' + worn.id, 'repair')) break;
   }
   // 買：工具、盾牌、防具（比現有的好的才買，先挑好品質）、換更好品質的武器
-  for (const tool of ['pick', 'sickle']) if (!game.toolOf(tool) && price(tool, 0) <= p.gold && fits(tool)) do_(`buyItem:${tool}:0`, 'buy');
+  for (const tool of ['pick', 'sickle']) if (!game.toolOf(tool) && price(tool, 0) <= p.copper && fits(tool)) do_(`buyItem:${tool}:0`, 'buy');
   // 拿弓箭的：箭矢不到 40 支就買（先挑好品質），最多買 3 捆
   if (ammoOf && sells(ammoOf)) {
     for (let k = 0; k < 3 && game.bagCount(ammoOf) < 40; k++) {
-      const q = S.quals.slice().reverse().find((qq) => price(ammoOf, qq) <= p.gold);
+      const q = S.quals.slice().reverse().find((qq) => price(ammoOf, qq) <= p.copper);
       if (q === undefined || !do_(`buyItem:${ammoOf}:${q}`, 'buy')) break;
     }
   }
   const qs = S.quals.slice().reverse();
   if (!noArmor) {
     if (!twoH && !p.equip.off && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'shield') && sells('shield') && fits('shield')) {
-      const q = qs.find((qq) => price('shield', qq) <= p.gold);
+      const q = qs.find((qq) => price('shield', qq) <= p.copper);
       if (q !== undefined) do_(`buyItem:shield:${q}`, 'buy');
     }
     if (armorTypes.some(sells)) {
       let best = null;
       for (const type of armorTypes) {
         if (!sells(type) || !fits(type)) continue;
-        const q = qs.find((qq) => price(type, qq) <= p.gold);
+        const q = qs.find((qq) => price(type, qq) <= p.copper);
         if (q === undefined) continue;
         if (gearScore({ type, q }) > Math.max(rank('body'), ...p.bag.filter((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'armor').map((e) => gearScore(e.gear)))) { best = { type, q }; break; }
       }
@@ -639,7 +650,7 @@ function botShop(game, npc) {
   }
   if (p.equip.main && sells(p.equip.main.type) && p.equip.main.q < S.quals[S.quals.length - 1] && !p.bag.some((e) => e.id === 'gear' && FE.GEAR[e.gear.type].cat === 'weapon' && e.gear.q > p.equip.main.q)) {
     const q = S.quals[S.quals.length - 1];
-    if (price(p.equip.main.type, q) <= p.gold) do_(`buyItem:${p.equip.main.type}:${q}`, 'buy');
+    if (price(p.equip.main.type, q) <= p.copper) do_(`buyItem:${p.equip.main.type}:${q}`, 'buy');
   }
   // 賣：背包裡不比身上好的裝備（賣給收這一類的工匠）
   for (let round = 0; round < 6; round++) {
@@ -653,7 +664,7 @@ function botShop(game, npc) {
 }
 
 // 機器人在對話視窗裡的選擇：能交件、回報就交，能接委託就接；在工匠那裡照 botShop 買賣修打造；不然離開（走新的對話介面）
-const dlgStats = { opened: 0, accept: 0, report: 0, deliver: 0, craft: 0, repair: 0, buy: 0, sell: 0, sellOre: 0, leave: 0 };
+const dlgStats = { opened: 0, accept: 0, report: 0, deliver: 0, 'hand:herb': 0, 'hand:ore': 0, craft: 0, repair: 0, buy: 0, sell: 0, sellOre: 0, leave: 0 };
 function botTalk(game) {
   const npc = game.talkTarget(game.talking);
   if (!npc) { game.closeTalk(); return; }
@@ -670,7 +681,8 @@ function botTalk(game) {
   }
   const t = game.talkOptions(npc);
   const idx = (id) => t.options.findIndex((o) => o.id === id && !o.disabled);
-  const pick = ['report', 'deliver', 'accept'].find((id) => idx(id) >= 0) || 'leave';
+  // 第三十版：四種委託各接一個，能交的先交（採藥、採礦交背包裡的）
+  const pick = ['report', 'deliver', 'hand:herb', 'hand:ore', 'accept'].find((id) => idx(id) >= 0) || 'leave';
   if (pick === 'leave') dlgStats.leave++; else dlgStats[pick]++;
   game.choose(npc, t.options.findIndex((o) => o.id === pick));
   if (game.talking != null) fail('對話選完沒有關掉');
@@ -678,13 +690,16 @@ function botTalk(game) {
 
 // 模擬一個機器人玩家。opts：
 //   steps：動作數（單人模擬）；lazy：只走路不打怪；
-//   worldEvery：機器人每做幾個動作，世界（怪物、事件、侵蝕、士兵）才走 1 回合（四人等效是 4）；
+//   worldEvery：世界（怪物、士兵）比時鐘再慢幾倍（四人等效是 4：機器人做 4 個動作的時間，世界才走 1 回合）；
 //   minActions／untilChunks／maxActions：四人等效用，至少 minActions 個動作而且創出 untilChunks 塊才停，最多 maxActions；
 //   scale：暫時改 PLAYER_COMPUTE_SCALE（查「四人等效」的另一種讀法用）
 let stuckFixes = 0; // 機器人被村民夾住、等村民走開的次數
-const soldierCalls = { n: 0 };
+// 第三十版：士兵跟怪物照同一個時鐘，世界每走一回合（worldTurn）士兵就做一個動作（冒險者在那一回合倒下時不做）
+const soldierCalls = { n: 0, world: 0 };
 const soldierTurn0 = FE.AI.soldierTurn;
 FE.AI.soldierTurn = (g) => { soldierCalls.n++; return soldierTurn0(g); };
+const worldTurn0 = FE.AI.worldTurn;
+FE.AI.worldTurn = (g) => { soldierCalls.world++; return worldTurn0(g); };
 function simulate(seed, opts) {
   opts = opts || {};
   const lazy = !!opts.lazy;
@@ -694,6 +709,7 @@ function simulate(seed, opts) {
   // opts.cls：指定職業的模擬，起始裝備照 BOT_PICKS 挑；沒指定就是中性角色（對照組、只走路不打怪的那組）
   game.start(opts.cls ? { cls: opts.cls, picks: BOT_PICKS[opts.cls], body: BOT_BODY[opts.cls], skills: FE.Char.rollSkills(opts.cls, FE.Char.startMainSkill(opts.cls, BOT_PICKS[opts.cls]), FE.makeRng(seed + 77)) } : undefined);
   let overActs = 0; // 超過能背的重量（走一步 60 刻）的動作數
+  let maxJobs = 0;  // 同時手上最多幾個委託（第三十版）
   let maxLoad = 0;
   // 對照組（opts.cond）：不買也不穿防具與盾牌，只差身上有沒有一件重甲（重甲不會磨損，每個動作後補滿耐久）
   if (opts.cond) {
@@ -706,9 +722,10 @@ function simulate(seed, opts) {
   game.worldEvery = opts.worldEvery || 1;
   const rng = FE.makeRng(seed + 1);
   soldierCalls.n = 0;
+  soldierCalls.world = 0;
   let endCalls = 0;
   const end0 = game.endTurn.bind(game);
-  game.endTurn = (a, b) => { endCalls++; end0(a, b); };
+  game.endTurn = (a, b, c) => { endCalls++; return end0(a, b, c); };
   // 士兵打倒的怪物：冒險者不拿經驗值也不拿算力，也不掉寶箱
   const defeat0 = game.defeat.bind(game);
   game.defeat = (m, by) => {
@@ -733,18 +750,25 @@ function simulate(seed, opts) {
       if (target && target.kind === 'mon' && !game.monsters.some((m) => m.id === target.id)) target = null;
       if (target && target.kind === 'node' && !w.nodes.some((n) => n.id === target.id && game.nodeAt(n.x, n.y) === n)) target = null;
       if (!target || rng() < 0.01) {
-        const c = p.carrying;
-        // 採集：有礦鎬、礦石少於 4 顆（不超重），去挖最近的礦脈；有鐮刀、藥草少於 3 份，割附近的藥草
+        const J = p.jobs;
+        // 採集：有礦鎬、礦石少於 4 顆（有採礦委託就挖到夠交，不超重），去挖最近的礦脈；有鐮刀、藥草少於 3 份（有採藥委託就割到夠交），割附近的藥草
         const dist = (o) => Math.abs(o.x - p.x) + Math.abs(o.y - p.y);
         const near = (kind, r) => w.nodes.filter((n) => n.kind === kind && game.nodeAt(n.x, n.y) === n && dist(n) < r).sort((a, b) => dist(a) - dist(b))[0];
-        const ore = game.toolOf('pick') && game.bagCount('ore') < 4 && game.loadTier() === 0 ? near('ore', 120) : null;
-        const herb = !ore && game.toolOf('sickle') && game.bagCount('herb') < 3 ? near('herb', 16) : null;
-        // 去工匠那裡：裝備磨損到四成以下、有礦石可賣、缺工具、缺防具或盾牌而且錢夠
+        const oreWant = Math.max(4, J.ore ? J.ore.n : 0);
+        const herbWant = Math.max(3, J.herb ? J.herb.n : 0);
+        const ore = game.toolOf('pick') && game.bagCount('ore') < oreWant && game.loadTier() === 0 ? near('ore', 120) : null;
+        const herb = !ore && game.toolOf('sickle') && game.bagCount('herb') < herbWant ? near('herb', J.herb ? 60 : 16) : null;
+        // 去工匠那裡：裝備磨損到四成以下、有礦石可賣、缺工具、缺防具或盾牌而且錢夠（第三十版：錢用銅記帳，門檻照舊是 5、20、25 銀）
         const worn = FE.Gear.equipped(p).some((g) => g.dur < g.max * 0.4);
-        const bowLow = p.equip.main && FE.GEAR[p.equip.main.type].ammo && game.bagCount(FE.GEAR[p.equip.main.type].ammo) < 10 && p.gold >= 5;
-        const needShop = worn || bowLow || game.bagCount('ore') >= 3 || (p.gold >= 20 && (!game.toolOf('pick') || !game.toolOf('sickle'))) || (!game.botNoArmor && p.gold >= 25 && (!p.equip.body || (!p.equip.off && !FE.Gear.twoHanded(p, p.equip.main))));
+        const S_ = C.SILVER;
+        const bowLow = p.equip.main && FE.GEAR[p.equip.main.type].ammo && game.bagCount(FE.GEAR[p.equip.main.type].ammo) < 10 && p.copper >= 5 * S_;
+        const needShop = worn || bowLow || (game.bagCount('ore') >= 3 && !J.ore) || (p.copper >= 20 * S_ && (!game.toolOf('pick') || !game.toolOf('sickle'))) || (!game.botNoArmor && p.copper >= 25 * S_ && (!p.equip.body || (!p.equip.off && !FE.Gear.twoHanded(p, p.equip.main))));
         const shopkeeper = needShop && game.turn - (game.botShopAt === undefined ? -1e9 : game.botShopAt) > 120 ? w.npcs.filter((n) => FE.Gear.isShopkeeper(n) && dist(n) < 200).sort((a, b) => dist(a) - dist(b))[0] : null;
-        if (c && c.kind !== 'hunt' && w.npcById(c.targetId)) target = { kind: 'npc', id: c.targetId };
+        // 交件：送貨的收貨人、清完的清除委託、湊夠了的採藥採礦委託的委託人
+        const handTo = J.deliver && w.npcById(J.deliver.targetId) ? J.deliver.targetId
+          : J.hunt && game.huntRemaining(J.hunt.monsterIds) === 0 && w.npcById(J.hunt.giverId) ? J.hunt.giverId
+          : ['herb', 'ore'].map((k) => J[k] && game.bagCount(k) >= J[k].n && w.npcById(J[k].giverId) ? J[k].giverId : null).find(Boolean);
+        if (handTo) target = { kind: 'npc', id: handTo };
         else if (shopkeeper && rng() < 0.7) target = { kind: 'npc', id: shopkeeper.id };
         else if (ore || herb) target = { kind: 'node', id: (ore || herb).id };
         else if (rng() < 0.3) {
@@ -799,6 +823,10 @@ function simulate(seed, opts) {
     const L = FE.Stability.state(game);
     lv[L]++;
     if (game.loadTier() >= 1) overActs++;
+    maxJobs = Math.max(maxJobs, game.jobList().length);
+    if (game.jobList().some((j) => !FE.JOB_KINDS.includes(j.kind) || p.jobs[j.kind] !== j)) fail(`模擬 seed${seed} 第${i}步 手上的委託放錯格子`);
+    if (!(p.copper >= 0) || !Number.isInteger(p.copper)) fail(`模擬 seed${seed} 第${i}步 錢 ${p.copper} 不合法`);
+    if (!((p.exhaust || 0) >= 0 && p.exhaust < C.EXHAUST_MAX)) fail(`模擬 seed${seed} 第${i}步 動作結束時力竭 ${p.exhaust}`);
     maxLoad = Math.max(maxLoad, game.weight() / game.carryLimit());
     const wl = FE.Stability.worldLevel(game);
     const rec = byWL[wl] || (byWL[wl] = { n: 0, s: [0, 0, 0], chaosAt: null });
@@ -855,7 +883,8 @@ function simulate(seed, opts) {
   measure.on = false;
   measure.cond = null;
   verifyReach = verify0;
-  const syncCalls = soldierCalls.n; // 存檔讀回來的遊戲還會再玩幾步，先記下這個遊戲的士兵回合數
+  const syncCalls = soldierCalls.n; // 存檔讀回來的遊戲還會再玩幾步，先記下這個遊戲的士兵回合數與世界回合數
+  const worldCalls = soldierCalls.world;
   checkInteriors(game, `模擬 seed${seed}`);
   checkResidents(game, `模擬 seed${seed}`);
   // 存檔：存起來再讀回來，狀態一致，而且讀回來的遊戲還能玩
@@ -870,10 +899,12 @@ function simulate(seed, opts) {
     for (let i = 0; i < 30; i++) g2.guard('bot', () => { botStep(g2, rng, goal, true); if (g2.talking != null) botTalk(g2); });
     if (g2.reports.length !== e0) fail(`存檔 seed${seed} 讀回來玩出執行錯誤`);
   }
-  // 士兵跟冒險者同步：世界每走一回合，士兵就做一個動作；每位士兵每回合只做一件事
+  // 士兵跟怪物照同一個時鐘（第三十版）：世界每走一回合，士兵就做一個動作（冒險者在那一回合倒下時不做）；每位士兵每回合只做一件事；
+  // 世界回合數＝經過的刻÷10÷worldEvery（零頭與倒下時沒走完的回合不算）
   const st = FE.Stability.stat(game);
-  const ticks = Math.floor(endCalls / (opts.worldEvery || 1));
-  if (syncCalls !== ticks) fail(`模擬 seed${seed} 士兵回合 ${syncCalls} 次，應該是 ${ticks} 次（冒險者動作 ${endCalls}）`);
+  if (syncCalls > worldCalls || worldCalls - syncCalls > deaths) fail(`模擬 seed${seed} 士兵回合 ${syncCalls} 次，世界回合 ${worldCalls} 次（倒下 ${deaths} 次）`);
+  const clockTurns = game.ticks / C.TICKS_MOVE / (opts.worldEvery || 1);
+  if (worldCalls > clockTurns + 1 || worldCalls < clockTurns - deaths - 2) fail(`模擬 seed${seed} 世界回合 ${worldCalls} 次，時鐘 ${game.ticks} 刻應該約 ${clockTurns.toFixed(1)} 次`);
   if (st.soldierActs !== st.soldierSlots) fail(`模擬 seed${seed} 士兵動作 ${st.soldierActs} 次，應該是 ${st.soldierSlots} 次`);
   if (st.soldierAttacks > st.soldierActs) fail(`模擬 seed${seed} 士兵出手 ${st.soldierAttacks} 次，比動作還多`);
   C.PLAYER_COMPUTE_SCALE = scale0;
@@ -892,6 +923,11 @@ function simulate(seed, opts) {
     perWorldLevel: perWL,
     bugTotal: `min${pct(0)} p50 ${pct(0.5)} p90 ${pct(0.9)} max${pct(1)}`, recur: st.recur, sabotage: st.sabotage,
     soldiers: `出動 ${st.sorties} 次、出手 ${st.soldierAttacks}、清掉 ${st.soldierKills} 隻、陣亡 ${st.soldierDeaths}、補回 ${st.refills}`,
+    // 第三十版：時間與經濟
+    days: +(game.ticks / C.DAY_TICKS).toFixed(1), longRests: st.longRests, restPaid: st.restPaid, shortRests: st.shortRests,
+    econUp: st.econUp, econDown: st.econDown, exhaustMax: st.exhaustMax, jobs: Object.assign({}, st.jobs), jobsMax: maxJobs,
+    econEnd: game.world.villages.map((v) => `${v.name}${FE.PROSPERITY[v.steading.prosperity]}${Math.round(FE.Steading.econ(v))}`).join(' '),
+    money: game.player.copper,
     hp: `${game.player.maxHp}（Lv${game.level}）`,
     attr: FE.ATTRS.map((a) => `${a.name}${game.player.attr[a.key]}`).join(' '),
     skills: Object.keys(FE.SKILLS).map((k) => `${FE.SKILLS[k].name}${game.player.skills[k].lv}`).join(' '),
@@ -971,9 +1007,9 @@ function testDialogs() {
   // 錢夠就買，買完對話還開著、不花動作；Esc 回上一層，最上層再按才關掉
   bump(smith);
   const sv = g.world.villageById(smith.villageId);
-  ok(sv.kind === 'village' && g.talkOptions(smith).role === '鐵匠', `村莊的工匠是 ${g.talkOptions(smith).role}`);
+  ok(sv.kind === 'village' && g.talkOptions(smith).role.startsWith('鐵匠・') && ['人類', '矮人', '精靈'].some((r) => g.talkOptions(smith).role.endsWith(r)), `村莊的工匠是 ${g.talkOptions(smith).role}（第三十版起寫種族）`);
   ok(ids(smith) === 'buy/repair/craft/sellOre/sell/leave', `鐵匠的選項是 ${ids(smith)}`);
-  g.player.gold = 0;
+  g.player.copper = 0;
   pick(smith, 'buy');
   ok(g.talkPage === 'buy' && ids(smith) === 'cat:blade/cat:axe/cat:pole/cat:ranged/cat:armor/cat:tool/back', `買的分類是 ${ids(smith)}`);
   pick(smith, 'cat:blade');
@@ -987,15 +1023,15 @@ function testDialogs() {
   pick(smith, 'back');
   pick(smith, 'cat:blade');
   const price = FE.Gear.shopPrice('sword', 0, sv);
-  g.player.gold = price - 7;
+  g.player.copper = price - 7;
   const o = g.talkOptions(smith).options[opt(smith, 'buyItem:sword:0')];
-  ok(o.disabled && o.note === '還差 7 金幣', `錢不夠的說明：${o.note}`);
+  ok(o.disabled && o.note === '還差 7 銅', `錢不夠的說明：${o.note}`);
   const bag0 = g.player.bag.length;
-  ok(!pick(smith, 'buyItem:sword:0').close && g.talking === smith.id && g.player.bag.length === bag0 && g.player.gold === price - 7, '錢不夠時不該買到或關掉對話');
-  g.player.gold = price + 5;
+  ok(!pick(smith, 'buyItem:sword:0').close && g.talking === smith.id && g.player.bag.length === bag0 && g.player.copper === price - 7, '錢不夠時不該買到或關掉對話');
+  g.player.copper = price + 5;
   const turn0 = g.turn;
   ok(!pick(smith, 'buyItem:sword:0').close && g.talking === smith.id && g.turn === turn0, '買完對話該還開著、不花動作');
-  ok(g.player.gold === 5 && g.player.bag.some((e) => e.id === 'gear' && e.gear.type === 'sword' && e.gear.q === 0 && e.gear.dur === 200), `買到之後 金幣 ${g.player.gold}、背包 ${JSON.stringify(g.player.bag.map((e) => e.gear && e.gear.type))}`);
+  ok(g.player.copper === 5 && g.player.bag.some((e) => e.id === 'gear' && e.gear.type === 'sword' && e.gear.q === 0 && e.gear.dur === 200), `買到之後 金幣 ${g.player.copper}、背包 ${JSON.stringify(g.player.bag.map((e) => e.gear && e.gear.type))}`);
   ok(g.talkBack() === false && g.talkPage === 'buy' && g.talking === smith.id, 'Esc 沒有回上一層（分類）');
   ok(g.talkBack() === false && g.talkPage === 'main', 'Esc 沒有回最上層');
   ok(g.talkBack() === true && g.talking === null, '最上層按 Esc 沒有關掉對話');
@@ -1007,7 +1043,7 @@ function testDialogs() {
   b.quest = FE.makeQuest(g.world, g.rng, b, c);
   bump(b);
   ok(ids(b) === 'accept/decline', `委託的選項是 ${ids(b)}`);
-  ok(pick(b, 'decline').close && !b.quest.accepted && !g.player.carrying, '不接之後委託或手上的狀態不對');
+  ok(pick(b, 'decline').close && !b.quest.accepted && !g.player.jobs.deliver, '不接之後委託或手上的狀態不對');
   FE.Save.save(g);
   const back = FE.Save.load();
   const b2 = back && back.game && back.game.world.npcById(b.id);
@@ -1015,28 +1051,30 @@ function testDialogs() {
   bump(b);
   ok(ids(b) === 'accept/decline', '不接之後回來沒有再問一次');
   pick(b, 'accept');
-  ok(b.quest.accepted && g.player.carrying && g.player.carrying.targetId === c.id, '接下後手上沒有委託');
+  ok(b.quest.accepted && g.player.jobs.deliver && g.player.jobs.deliver.targetId === c.id, '接下後手上沒有委託');
   // 送貨的物品放進背包（委託資料照舊，手上不再記物品）
-  const goods = g.goodsFor(g.player.carrying);
-  ok(!!goods && goods.name === b.quest.item && goods.n === 1 && g.player.carrying.item === undefined, `接下送貨後背包裡沒有要送的東西（${JSON.stringify(g.player.bag)}）`);
+  const goods = g.goodsFor(g.player.jobs.deliver);
+  ok(!!goods && goods.name === b.quest.item && goods.n === 1 && g.player.jobs.deliver.item === undefined, `接下送貨後背包裡沒有要送的東西（${JSON.stringify(g.player.bag)}）`);
   bump(b);
   ok(ids(b) === 'leave', `接下後再找委託人：${ids(b)}`);
   g.closeTalk();
   const third = vs[3];
   if (third) {
+    // 第三十版：每種委託同時只能接一個；手上有送貨委託時，別人的送貨委託不能接
     third.quest = FE.makeQuest(g.world, g.rng, third, a);
     bump(third);
-    ok(ids(third) === 'leave', `手上有委託時別人的委託：${ids(third)}`);
+    ok(ids(third) === 'leave' && /已經有送貨委託/.test(g.talkOptions(third).text), `手上有送貨委託時別人的送貨委託：${ids(third)}「${g.talkOptions(third).text}」`);
     g.closeTalk();
   }
   c.quest = FE.makeQuest(g.world, g.rng, c, a); // 收貨人自己也有委託，貨照樣交得出去
-  const gold0 = g.player.gold;
+  const gold0 = g.player.copper;
   const exp0 = g.exp;
-  const car = g.player.carrying;
+  const car = g.player.jobs.deliver;
   bump(c);
   ok(ids(c) === 'deliver/leave', `收貨人的選項是 ${ids(c)}`);
+  const pay0 = g.questPay(car, car.villageId);
   pick(c, 'deliver');
-  ok(!g.player.carrying && b.quest.done && g.player.gold === gold0 + car.gold && g.exp === exp0 + car.exp, '交件後狀態不對');
+  ok(!g.player.jobs.deliver && b.quest.done && g.player.copper === gold0 + pay0 && g.exp === exp0 + car.exp, '交件後狀態不對');
   ok(!g.player.bag.some((e) => e.id === 'goods'), '交件後要送的東西還在背包裡');
   bump(c);
   ok(ids(c) === 'accept/decline', `交件後收貨人自己的委託：${ids(c)}`);
@@ -1045,21 +1083,22 @@ function testDialogs() {
   // 清除委託：接下後小怪物沒清完只有「離開」，清完才能回報領獎勵
   const mon = g.monsters[0];
   if (mon) {
-    a.quest = { kind: 'hunt', monsterIds: [mon.id], total: 1, village: '測試村', exp: 20, gold: 15, accepted: false, done: false };
+    a.quest = { kind: 'hunt', monsterIds: [mon.id], total: 1, village: '測試村', exp: 20, copper: 150, accepted: false, done: false };
     bump(a);
     ok(ids(a) === 'accept/decline', `清除委託的選項是 ${ids(a)}`);
     pick(a, 'accept');
-    ok(g.player.carrying && g.player.carrying.kind === 'hunt', '接下清除委託後手上沒有委託');
+    ok(g.player.jobs.hunt && g.player.jobs.hunt.kind === 'hunt', '接下清除委託後手上沒有委託');
     bump(a);
     ok(ids(a) === 'leave', `小怪物沒清完：${ids(a)}`);
     g.closeTalk();
     g.monsters = g.monsters.filter((m) => m !== mon);
-    const gold1 = g.player.gold;
+    const gold1 = g.player.copper;
     const exp1 = g.exp;
     bump(a);
     ok(ids(a) === 'report/leave', `小怪物清完：${ids(a)}`);
+    const pay1 = Math.round(150 * FE.Steading.questEcon(g.world.villageById(a.villageId)));
     pick(a, 'report');
-    ok(a.quest.done && !g.player.carrying && g.player.gold === gold1 + 15 && g.exp === exp1 + 20, '回報後狀態不對');
+    ok(a.quest.done && !g.player.jobs.hunt && g.player.copper === gold1 + pay1 && g.exp === exp1 + 20, `回報後狀態不對（錢 ${g.player.copper - gold1}，應該 ${pay1}：15 銀×經濟標籤倍率）`);
   }
   // 沒有開著的對話時，choose 不會拋例外
   g.talking = null;
@@ -1186,9 +1225,11 @@ function testSoldiers() {
   g.player.y = town.cy;
   g.player.hp = g.player.maxHp;
   const stat = FE.Stability.stat(g);
+  // 等一個動作（10 刻，世界與士兵走一回合）；第三十版起休息是 1 小時以上，改用「閃避」
+  const wait = () => { g.player.awakeAt = g.ticks; g.act('dodge'); };
 
   // 安穩：士兵在城鎮裡室外走動，不出城鎮
-  for (let i = 0; i < 80; i++) g.rest();
+  for (let i = 0; i < 80; i++) wait();
   ok(mine().every((s) => w.villageAt(s.x, s.y) === town && FE.Steading.roomAt(town, s.x, s.y) < 0), '安穩時士兵跑出城鎮或進了建築');
 
   // 失序：場上有一隻事件生的小怪物（m.small，血量 1）跟一隻創世時的怪物；士兵只打前一隻
@@ -1214,7 +1255,7 @@ function testSoldiers() {
   const chests0 = w.chests.length;
   let left = false;
   for (let i = 0; i < 300 && g.monsters.includes(prey); i++) {
-    g.rest();
+    wait();
     if (mine().some((s) => w.villageAt(s.x, s.y) !== town)) left = true;
     if (!mine().length) break;
   }
@@ -1231,7 +1272,7 @@ function testSoldiers() {
   g.soldiers = g.soldiers.filter((o) => o.villageId !== town.id); // 換一隊滿血、站在城鎮裡的士兵
   g.refillSoldiers();
   let rounds = 0;
-  for (; rounds < 300 && g.monsters.includes(fair) && mine().length; rounds++) g.rest();
+  for (; rounds < 300 && g.monsters.includes(fair) && mine().length; rounds++) wait();
   console.log(`士兵公平一戰：${mine().length ? '' : '全隊陣亡，'}${g.monsters.includes(fair) ? '沒打倒' : '打倒了'}（${rounds} 回合，士兵 ${quota} 位，小怪物血量 ${fair.maxHp}）`);
 
   // 陣亡的士兵：失序中不補，回到安穩才補回原本的人數；其他的走回城鎮
@@ -1248,7 +1289,7 @@ function testSoldiers() {
   g.monsters = [];
   FE.Stability.update(g, true);
   ok(g.worldState === 0 && mine().length === quota, `回到安穩後士兵 ${mine().length}/${quota}（狀態 ${g.worldState}）`);
-  for (let i = 0; i < 200; i++) g.rest();
+  for (let i = 0; i < 200; i++) wait();
   ok(mine().every((s) => w.villageAt(s.x, s.y) === town), '回到安穩後士兵沒有走回城鎮');
 
   // 對話：撞上士兵開對話視窗，一句閒話；選「離開」關掉
@@ -1263,7 +1304,7 @@ function testSoldiers() {
     g.guard('test', () => g.move(-side[0], -side[1]));
     ok(g.talking === s.id && g.turn === turn0 + 1, '撞上士兵沒有打開對話（算一個動作）');
     const t = g.talkOptions(g.talkTarget(g.talking));
-    ok(t.role === '士兵' && t.options.length === 1 && t.options[0].id === 'leave' && t.text.length > 0, `士兵的對話內容不對：${t.role}／${t.options.map((o) => o.id)}`);
+    ok(t.role === `士兵・${FE.PLAYER_RACES[s.race].name}` && t.options.length === 1 && t.options[0].id === 'leave' && t.text.length > 0, `士兵的對話內容不對：${t.role}／${t.options.map((o) => o.id)}`);
     g.choose(g.talkTarget(g.talking), 0);
     ok(g.talking === null, '離開沒有關掉士兵的對話');
   }
@@ -1306,21 +1347,22 @@ function testBackpack() {
   const toolIds = () => { g.talkPage = 'buy:tool'; return g.talkOptions(smith).options.map((o) => o.id); };
   const toolOpt = (id) => { g.talkPage = 'buy:tool'; return g.talkOptions(smith).options.find((o) => o.id === id); };
   const toolPick = (id) => { g.talkPage = 'buy:tool'; return g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === id)); };
-  p.gold = C.TOOL_PRICE - 1;
-  ok(toolOpt('buyItem:pick:0') && toolOpt('buyItem:pick:0').disabled && toolOpt('buyItem:pick:0').note.includes('還差 1 金幣') && toolOpt('buyItem:sickle:0').disabled, `錢不夠時買工具的選項：${JSON.stringify(toolOpt('buyItem:pick:0'))}`);
+  const TP = C.TOOL_PRICE * C.SILVER; // 工具 20 銀＝200 銅（第三十版起用銅記帳）
+  p.copper = TP - 1;
+  ok(toolOpt('buyItem:pick:0') && toolOpt('buyItem:pick:0').disabled && toolOpt('buyItem:pick:0').note.includes('還差 1 銅') && toolOpt('buyItem:sickle:0').disabled, `錢不夠時買工具的選項：${JSON.stringify(toolOpt('buyItem:pick:0'))}`);
   toolPick('buyItem:pick:0');
-  ok(!g.toolOf('pick') && p.gold === C.TOOL_PRICE - 1, '錢不夠還是買到了礦鎬');
-  p.gold = C.TOOL_PRICE * 2 + 5;
+  ok(!g.toolOf('pick') && p.copper === TP - 1, '錢不夠還是買到了礦鎬');
+  p.copper = TP * 2 + 5;
   toolPick('buyItem:pick:0');
-  ok(!!g.toolOf('pick') && g.toolOf('pick').dur === 50 && p.gold === C.TOOL_PRICE + 5 && toolIds().includes('buyItem:pick:0') && toolIds().includes('buyItem:sickle:0'), `買礦鎬之後 ${toolIds()}，金幣 ${p.gold}（買過的工具選項該還在）`);
+  ok(!!g.toolOf('pick') && g.toolOf('pick').dur === 50 && p.copper === TP + 5 && toolIds().includes('buyItem:pick:0') && toolIds().includes('buyItem:sickle:0'), `買礦鎬之後 ${toolIds()}，錢 ${p.copper}（買過的工具選項該還在）`);
   toolPick('buyItem:sickle:0');
-  ok(!!g.toolOf('sickle') && p.gold === 5 && toolIds().includes('buyItem:sickle:0'), `買鐮刀之後 ${toolIds()}，金幣 ${p.gold}`);
+  ok(!!g.toolOf('sickle') && p.copper === 5 && toolIds().includes('buyItem:sickle:0'), `買鐮刀之後 ${toolIds()}，錢 ${p.copper}`);
   // 工具可以重複買，每一把各自有耐久；採集用耐久最低的那一把，壞了換下一把
-  p.gold = 100;
+  p.copper = 1000;
   toolPick('buyItem:pick:0');
   g.talkPage = 'main';
   const picks = () => p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').map((e) => e.gear);
-  ok(picks().length === 2 && p.gold === 100 - C.TOOL_PRICE, `礦鎬該有 2 把（${picks().length}）`);
+  ok(picks().length === 2 && p.copper === 1000 - TP, `礦鎬該有 2 把（${picks().length}）`);
   picks()[0].dur = 30;
   ok(g.toolOf('pick') === picks()[0], '採集該先用耐久最低的那一把');
   picks()[0].dur = 1;
@@ -1453,7 +1495,7 @@ function testGear() {
     ok(Q.length === 7 && Q.map((q) => q.name).join('') === '普通做工好精良優秀卓越傑作傳說物' && Q.map((q) => q.sym).join('|') === '|-|+|*|≡|☼|', `品質的名字或符號 ${Q.map((q) => q.sym + q.name)}`);
     for (let i = 0; i <= 6; i++) {
       ok(Q[i].value === mult[i] && Q[i].hit === hit[i] && near(Q[i].pierce, pierce[i]) && near(Q[i].armor, armorMult[i]) && Q[i].clear === i, `品質 ${i} 的數值 ${JSON.stringify(Q[i])}`);
-      ok(G.shopPrice('sword', i, plain) === swordPrice[i], `長劍品質 ${i} 的價錢 ${G.shopPrice('sword', i, plain)}（應該 ${swordPrice[i]}）`);
+      ok(G.shopPrice('sword', i, plain) === swordPrice[i] * C.SILVER, `長劍品質 ${i} 的價錢 ${G.shopPrice('sword', i, plain)} 銅（應該 ${swordPrice[i]} 銀）`);
       for (const t of ['heavy', 'medium', 'light', 'robe']) {
         p.equip.body = G.make(t, i, g.nextGearId++);
         ok(G.physReduce(p) === phys[t][i], `${t} 品質 ${i} 的物理減傷 ${G.physReduce(p)}（應該 ${phys[t][i]}）`);
@@ -1464,8 +1506,10 @@ function testGear() {
       ok(G.hitBonus(p) === hit[i] && G.clearLevel(p) === i, `武器品質 ${i} 的命中加值或清除等級`);
     }
     // 價錢：原價×品質×經濟；荒蕪 1.6、有市場再一成；礦鎬鐮刀固定 20
-    ok(G.shopPrice('sword', 0, poorMarket) === Math.round(30 * 1.6 * 0.9) && G.shopPrice('heavy', 1, poorMarket) === Math.round(87 * 1.1 * 1.6 * 0.9), `荒蕪有市場的價錢 ${G.shopPrice('sword', 0, poorMarket)}`);
-    ok(G.shopPrice('pick', 0, poorMarket) === 20 && G.shopPrice('sickle', 0, plain) === 20, '礦鎬、鐮刀該固定 20 金幣');
+    // 第三十版：價錢的數字是銀，算出來是銅（乘 10 之後才四捨五入）
+    ok(G.shopPrice('sword', 0, poorMarket) === Math.round(300 * 1.6 * 0.9) && G.shopPrice('heavy', 1, poorMarket) === Math.round(870 * 1.1 * 1.6 * 0.9), `荒蕪有市場的價錢 ${G.shopPrice('sword', 0, poorMarket)}`);
+    ok(G.shopPrice('pick', 0, poorMarket) === 200 && G.shopPrice('sickle', 0, plain) === 200, '礦鎬、鐮刀該固定 20 銀（200 銅）');
+    ok(FE.money(0) === '0 銅' && FE.money(352) === '3 金 5 銀 2 銅' && FE.money(1005) === '10 金 5 銅' && FE.money(70) === '7 銀', `錢的寫法 ${FE.money(352)}／${FE.money(1005)}／${FE.money(70)}`);
     // 資料：武器、防具、盾牌、重量、價錢
     const W = FE.GEAR;
     // 第二十八版：武器的傷害骰、傷害種類、特質、精通、重量、價錢
@@ -1675,11 +1719,12 @@ function testGear() {
     const town = w.villages.find((v) => v.kind === 'town');
     ok(!!town, '14 塊內沒有城鎮');
     if (!town) return;
+    g.econ = () => {}; // 這一段只測價錢：在聚落花錢不改經濟值（經濟值的升降在 testEconomy30 測）
     const smith = w.npcs.find((n) => n.villageId === vil.id && n.role === 'smith');
     const wsmith = w.npcs.find((n) => n.villageId === town.id && n.role === 'smith');
     const armorer = w.npcs.find((n) => n.villageId === town.id && n.role === 'armorer');
     ok(!!smith && !!wsmith && !!armorer && !w.npcs.some((n) => n.villageId === vil.id && n.role === 'armorer'), '村莊該只有鐵匠，城鎮有武器匠和盔甲匠');
-    const role = (n) => { g.talking = n.id; g.talkPage = 'main'; return g.talkOptions(n).role; };
+    const role = (n) => { g.talking = n.id; g.talkPage = 'main'; return g.talkOptions(n).role.split('・')[0]; }; // 第三十版起身分後面寫種族
     ok(role(smith) === '鐵匠' && role(wsmith) === '武器匠' && role(armorer) === '盔甲匠', `工匠的身分 ${role(smith)}／${role(wsmith)}／${role(armorer)}`);
     const econ = (v) => FE.Steading.shopFactor(v);
     const open = (n) => { g.talking = n.id; g.talkPage = 'main'; };
@@ -1716,61 +1761,65 @@ function testGear() {
     ok(![...sSmith, ...sW, ...sA].some((id) => /:[3-6]$/.test(id) || /:[2]$/.test(id)), '商店只賣普通與做工好');
     // 買：價錢＝原價×品質×經濟，扣金幣、東西進背包、不花動作
     p.bag = [];
-    p.gold = 1000;
-    const buy = (n, t, q) => { const g0 = p.gold, t0 = g.turn; const r = shopDo(g, n, `buyItem:${t}:${q}`); return { r, spent: g0 - p.gold, turns: g.turn - t0 }; };
+    p.copper = 100000;
+    const buy = (n, t, q) => { const g0 = p.copper, t0 = g.turn; const r = shopDo(g, n, `buyItem:${t}:${q}`); return { r, spent: g0 - p.copper, turns: g.turn - t0 }; };
+    // 第三十版：錢用銅記帳（價錢數字是銀，乘 10）；在聚落花錢會讓經濟值上升，所以先記下買之前的價錢倍率
+    let eT = econ(town);
     let b = buy(wsmith, 'sword', 1);
-    ok(b.r && b.spent === Math.round(30 * 1.1 * econ(town)) && b.turns === 0 && p.bag.some((e) => e.id === 'gear' && e.gear.type === 'sword' && e.gear.q === 1), `武器匠買做工好長劍 花了 ${b.spent}，應該 ${Math.round(30 * 1.1 * econ(town))}`);
+    ok(b.r && b.spent === Math.round(300 * 1.1 * eT) && b.turns === 0 && p.bag.some((e) => e.id === 'gear' && e.gear.type === 'sword' && e.gear.q === 1), `武器匠買做工好長劍 花了 ${b.spent}，應該 ${Math.round(300 * 1.1 * eT)}`);
+    eT = econ(town);
     b = buy(armorer, 'shield', 1);
-    ok(b.r && b.spent === Math.round(32 * 1.1 * econ(town)), `盔甲匠買做工好盾牌 花了 ${b.spent}`);
+    ok(b.r && b.spent === Math.round(320 * 1.1 * eT), `盔甲匠買做工好盾牌 花了 ${b.spent}`);
+    const eV = econ(vil);
     b = buy(smith, 'ringmail', 0);
-    ok(b.r && b.spent === Math.round(55 * econ(vil)), `鐵匠買環甲 花了 ${b.spent}，應該 ${Math.round(55 * econ(vil))}`);
+    ok(b.r && b.spent === Math.round(550 * eV), `鐵匠買環甲 花了 ${b.spent}，應該 ${Math.round(550 * eV)}`);
     ok(!buy(smith, 'heavy', 0).r && !buy(smith, 'plate', 0).r, '村莊鐵匠不賣鎖子甲、全身板甲');
     ok(!buy(smith, 'sword', 1).r && !buy(wsmith, 'heavy', 0).r && !buy(armorer, 'sword', 0).r && !buy(wsmith, 'shield', 0).r, '店裡不賣的東西買到了（鐵匠做工好、武器匠賣防具、盔甲匠賣武器）');
     b = buy(smith, 'pick', 0);
-    ok(b.r && b.spent === 20 && buy(smith, 'pick', 0).r && p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').length === 2, `礦鎬 20 金幣、已有的還能再買（花了 ${b.spent}）`);
+    ok(b.r && b.spent === 200 && buy(smith, 'pick', 0).r && p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').length === 2, `礦鎬 20 銀、已有的還能再買（花了 ${b.spent}）`);
     // 錢不夠：選項寫還差多少
-    p.gold = Math.round(55 * econ(vil)) - 9;
+    p.copper = Math.round(550 * econ(vil)) - 9;
     open(smith);
     g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === 'buy'));
     g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === 'cat:armor'));
     const heavyOpt = g.talkOptions(smith).options.find((o) => o.id === 'buyItem:ringmail:0');
-    ok(heavyOpt.disabled && heavyOpt.note === '還差 9 金幣', `買環甲錢不夠的說明：${heavyOpt.note}`);
+    ok(heavyOpt.disabled && heavyOpt.note === '還差 9 銅', `買環甲錢不夠的說明：${heavyOpt.note}`);
 
-    // 賣礦石：一顆 5 金幣
+    // 賣礦石：一顆 5 銀
     p.bag = [];
     g.bagAdd('ore', 7);
-    p.gold = 0;
-    ok(shopDo(g, smith, 'sellOre') && p.gold === 35 && g.bagCount('ore') === 0, `賣 7 顆礦石 得到 ${p.gold}`);
+    p.copper = 0;
+    ok(shopDo(g, smith, 'sellOre') && p.copper === 350 && g.bagCount('ore') === 0, `賣 7 顆礦石 得到 ${p.copper} 銅`);
     // 賣裝備：半價×剩餘耐久比例；鐵匠收所有的，武器匠只收武器，盔甲匠只收防具與盾牌
     const gs = G.make('sword', 2, g.nextGearId++); gs.dur = 50;
     const ga = G.make('medium', 3, g.nextGearId++); ga.dur = 75;
     const gh = G.make('shield', 0, g.nextGearId++);
     for (const x of [gs, ga, gh]) g.bagAddGear(x);
-    ok(G.sellPrice(gs) === Math.round(30 * 1.2 * 0.5 * (50 / 200)) && G.sellPrice(ga) === Math.round(71 * 1.333 * 0.5 * 0.5) && G.sellPrice(gh) === Math.round(32 * 0.5), `賣回價 ${G.sellPrice(gs)}／${G.sellPrice(ga)}／${G.sellPrice(gh)}`);
+    ok(G.sellPrice(gs) === Math.round(300 * 1.2 * 0.5 * (50 / 200)) && G.sellPrice(ga) === Math.round(710 * 1.333 * 0.5 * 0.5) && G.sellPrice(gh) === Math.round(320 * 0.5), `賣回價 ${G.sellPrice(gs)}／${G.sellPrice(ga)}／${G.sellPrice(gh)}`);
     ok(!shopDo(g, wsmith, `sellItem:${ga.id}`) && !shopDo(g, wsmith, `sellItem:${gh.id}`) && !shopDo(g, armorer, `sellItem:${gs.id}`), '武器匠收了防具、盔甲匠收了武器');
-    p.gold = 0;
-    ok(shopDo(g, wsmith, `sellItem:${gs.id}`) && p.gold === G.sellPrice(gs) && !p.bag.some((e) => e.gear === gs), '武器匠沒有收武器');
-    p.gold = 0;
-    ok(shopDo(g, armorer, `sellItem:${ga.id}`) && shopDo(g, armorer, `sellItem:${gh.id}`) && p.gold === G.sellPrice(ga) + G.sellPrice(gh), '盔甲匠沒有收防具與盾牌');
+    p.copper = 0;
+    ok(shopDo(g, wsmith, `sellItem:${gs.id}`) && p.copper === G.sellPrice(gs) && !p.bag.some((e) => e.gear === gs), '武器匠沒有收武器');
+    p.copper = 0;
+    ok(shopDo(g, armorer, `sellItem:${ga.id}`) && shopDo(g, armorer, `sellItem:${gh.id}`) && p.copper === G.sellPrice(ga) + G.sellPrice(gh), '盔甲匠沒有收防具與盾牌');
     p.equip.main.dur = 200;
     open(smith);
     ok(!g.talkOptions(smith).options.some((o) => o.id === `sellItem:${p.equip.main.id}`), '穿在身上的不該能賣');
 
     // 修復：村莊鐵匠一次修回損失的一半、城鎮的武器匠與盔甲匠修到完整，各修自己那一類（盾牌歸盔甲匠）
-    const fee = (item, restore, v, tool) => Math.max(1, Math.round((restore / item.max) * G.value(item) * 1 * (tool ? 1 : econ(v))));
-    p.gold = 1000;
+    const fee = (item, restore, v, tool) => Math.max(1, Math.round((restore / item.max) * G.value(item) * C.SILVER * 1 * (tool ? 1 : econ(v))));
+    p.copper = 100000;
     p.bag = [];
     const sw1 = p.equip.main; sw1.dur = 100;
-    let g0 = p.gold;
-    ok(shopDo(g, smith, `repairItem:${sw1.id}`) && sw1.dur === 200 && g0 - p.gold === fee(sw1, 100, vil), `鐵匠修長劍到完整：耐久 ${sw1.dur}（應該 200）、花了 ${g0 - p.gold}（應該 ${fee(sw1, 100, vil)}）`);
+    let g0 = p.copper;
+    ok(shopDo(g, smith, `repairItem:${sw1.id}`) && sw1.dur === 200 && g0 - p.copper === fee(sw1, 100, vil), `鐵匠修長劍到完整：耐久 ${sw1.dur}（應該 200）、花了 ${g0 - p.copper}（應該 ${fee(sw1, 100, vil)}）`);
     p.equip.off = G.make('shield', 1, g.nextGearId++); p.equip.off.dur = 20;
     p.equip.body = G.make('heavy', 0, g.nextGearId++); p.equip.body.dur = 10;
     const tl = G.make('pick', 0, g.nextGearId++); tl.dur = 10; g.bagAddGear(tl);
-    g0 = p.gold;
-    ok(shopDo(g, smith, `repairItem:${p.equip.off.id}`) && p.equip.off.dur === 100 && g0 - p.gold === fee(p.equip.off, 80, vil), `鐵匠修盾牌到完整：耐久 ${p.equip.off.dur}（應該 100）`);
-    g0 = p.gold;
+    g0 = p.copper;
+    ok(shopDo(g, smith, `repairItem:${p.equip.off.id}`) && p.equip.off.dur === 100 && g0 - p.copper === fee(p.equip.off, 80, vil), `鐵匠修盾牌到完整：耐久 ${p.equip.off.dur}（應該 100）`);
+    g0 = p.copper;
     ok(shopDo(g, smith, `repairItem:${p.equip.body.id}`) && p.equip.body.dur === 150, `鐵匠修重甲到完整：耐久 ${p.equip.body.dur}`);
-    ok(shopDo(g, smith, `repairItem:${tl.id}`) && tl.dur === 50 && g0 - p.gold >= fee(tl, 40, vil, true), `鐵匠修礦鎬到完整：耐久 ${tl.dur}（應該 50）`);
+    ok(shopDo(g, smith, `repairItem:${tl.id}`) && tl.dur === 50 && g0 - p.copper >= fee(tl, 40, vil, true), `鐵匠修礦鎬到完整：耐久 ${tl.dur}（應該 50）`);
     // 接下來測城鎮的工匠，把耐久再磨掉
     sw1.dur = 100; p.equip.off.dur = 20; p.equip.body.dur = 10; tl.dur = 10;
     // 城鎮：武器匠（武器、工具）修到完整，看不到盾牌與防具；盔甲匠相反
@@ -1779,22 +1828,23 @@ function testGear() {
     const ar = optIds(armorer, 'repair');
     ok(wr.includes(`repairItem:${sw1.id}`) && wr.includes(`repairItem:${tl.id}`) && !wr.includes(`repairItem:${p.equip.off.id}`) && !wr.includes(`repairItem:${p.equip.body.id}`), `武器匠的修復選項 ${wr}`);
     ok(ar.includes(`repairItem:${p.equip.off.id}`) && ar.includes(`repairItem:${p.equip.body.id}`) && !ar.includes(`repairItem:${sw1.id}`) && !ar.includes(`repairItem:${tl.id}`), `盔甲匠的修復選項 ${ar}`);
-    g0 = p.gold;
-    ok(shopDo(g, wsmith, `repairItem:${sw1.id}`) && sw1.dur === 200 && g0 - p.gold === fee(sw1, 100, town), `武器匠修長劍到完整：耐久 ${sw1.dur}`);
+    g0 = p.copper;
+    ok(shopDo(g, wsmith, `repairItem:${sw1.id}`) && sw1.dur === 200 && g0 - p.copper === fee(sw1, 100, town), `武器匠修長劍到完整：耐久 ${sw1.dur}`);
     ok(!shopDo(g, wsmith, `repairItem:${p.equip.off.id}`), '武器匠修了盾牌');
-    g0 = p.gold;
+    g0 = p.copper;
     const sh0 = p.equip.off;
-    ok(shopDo(g, armorer, `repairItem:${sh0.id}`) && sh0.dur === 100 && g0 - p.gold === fee(sh0, 80, town), `盔甲匠修盾牌到完整：耐久 ${sh0.dur}`);
+    ok(shopDo(g, armorer, `repairItem:${sh0.id}`) && sh0.dur === 100 && g0 - p.copper === fee(sh0, 80, town), `盔甲匠修盾牌到完整：耐久 ${sh0.dur}`);
     ok(shopDo(g, armorer, `repairItem:${p.equip.body.id}`) && p.equip.body.dur === 150, `盔甲匠修重甲到完整：耐久 ${p.equip.body.dur}`);
-    // 費用至少 1：只差 1 點耐久
+    // 費用至少 1 銅：只差 1 點耐久（長劍原價 30 銀＝300 銅，修 1/200 是 1.5 銅×經濟倍率）
     sw1.dur = 199;
-    g0 = p.gold;
-    ok(shopDo(g, wsmith, `repairItem:${sw1.id}`) && g0 - p.gold === 1 && sw1.dur === 200, `只差 1 點耐久的修復費該是 1，量到 ${g0 - p.gold}`);
+    g0 = p.copper;
+    const fee1 = fee(sw1, 1, town);
+    ok(shopDo(g, wsmith, `repairItem:${sw1.id}`) && g0 - p.copper === fee1 && fee1 >= 1 && sw1.dur === 200, `只差 1 點耐久的修復費該是 ${fee1} 銅，量到 ${g0 - p.copper}`);
     // 錢不夠：寫還差多少
     sw1.dur = 100;
-    p.gold = 2;
+    p.copper = 2;
     const ro = (open(wsmith), g.talkPage = 'repair', g.talkOptions(wsmith).options.find((o) => o.id === `repairItem:${sw1.id}`));
-    ok(ro.disabled && /^耐久 100 \/ 200，還差 \d+ 金幣$/.test(ro.note), `修復錢不夠的說明：${ro.note}`);
+    ok(ro.disabled && /^耐久 100 \/ 200，還差 (\d+ 金 )?(\d+ 銀 )?\d+ 銅$|^耐久 100 \/ 200，還差 (\d+ 金 ?)?(\d+ 銀)?$/.test(ro.note), `修復錢不夠的說明：${ro.note}`);
     g.talkPage = 'main';
 
     // 打造：村莊鐵匠什麼都能打（衣袍除外），城鎮武器匠只打武器、盔甲匠只打防具與盾牌
@@ -1812,15 +1862,15 @@ function testGear() {
     const need = { sword: 3, spear: 3, shortspear: 3, dagger: 3, heavy: 5, medium: 4, light: 2, shield: 2, shortsword: 3, waraxe: 3, club: 3, warhammer: 3, greataxe: 5, greatsword: 5, padded: 2, studded: 3, hide: 3, chainshirt: 4, breastplate: 5, halfplate: 5, ringmail: 5, splint: 6, plate: 7 };
     for (const [t, n] of Object.entries(need)) {
       const cq = G.craftQuote(t, vil);
-      ok(cq.ore === n && cq.fee === Math.round(FE.GEAR[t].price * 0.5 * econ(vil)), `${t} 打造要 ${cq.ore} 顆礦石＋${cq.fee}（應該 ${n} 顆＋${Math.round(FE.GEAR[t].price * 0.5 * econ(vil))}）`);
+      ok(cq.ore === n && cq.fee === Math.round(FE.GEAR[t].price * C.SILVER * 0.5 * econ(vil)), `${t} 打造要 ${cq.ore} 顆礦石＋${cq.fee}（應該 ${n} 顆＋${Math.round(FE.GEAR[t].price * C.SILVER * 0.5 * econ(vil))}）`);
     }
     // 礦石或金幣不夠：寫還差多少，不能打
     p.bag = [];
     g.bagAdd('ore', 4);
-    p.gold = G.craftQuote('heavy', town).fee - 2;
+    p.copper = G.craftQuote('heavy', town).fee - 2;
     open(armorer); g.talkPage = 'craft:armorH';
     const co = g.talkOptions(armorer).options.find((o) => o.id === 'craftItem:heavy');
-    ok(co.disabled && co.note === '還差 2 金幣、1 顆礦石', `打造鎖子甲錢和礦石都不夠的說明：${co.note}`);
+    ok(co.disabled && co.note === '還差 2 銅、1 顆礦石', `打造鎖子甲錢和礦石都不夠的說明：${co.note}`);
     ok(!shopDo(g, armorer, 'craftItem:heavy') && g.bagCount('ore') === 4, '不夠還是打造了');
     // 打造的品質範圍：村莊普通～精良（每高一級機率減半），城鎮做工好～優秀
     const crafted = (n, v, type, runs) => {
@@ -1828,12 +1878,12 @@ function testGear() {
       for (let i = 0; i < runs; i++) {
         p.bag = [];
         g.bagAdd('ore', need[type]);
-        p.gold = 100000;
-        const gold0 = p.gold;
+        p.copper = 100000;
+        const gold0 = p.copper;
         if (!shopDo(g, n, `craftItem:${type}`)) { fail('裝備 打造沒成功'); return hist; }
         const e = p.bag.find((x) => x.id === 'gear');
         hist[e.gear.q] = (hist[e.gear.q] || 0) + 1;
-        if (i === 0) ok(g.bagCount('ore') === 0 && gold0 - p.gold === G.craftQuote(type, v).fee && e.gear.type === type && e.gear.dur === e.gear.max, `打造後礦石 ${g.bagCount('ore')}、工錢 ${gold0 - p.gold}`);
+        if (i === 0) ok(g.bagCount('ore') === 0 && gold0 - p.copper === G.craftQuote(type, v).fee && e.gear.type === type && e.gear.dur === e.gear.max, `打造後礦石 ${g.bagCount('ore')}、工錢 ${gold0 - p.copper}`);
       }
       return hist;
     };
@@ -1893,8 +1943,8 @@ function testGear() {
     g.move(side[0], side[1]);
     ok(g.ticks - t0 === 60 && (p.x !== x0 || p.y !== y0), `超過能背走一步花 ${g.ticks - t0} 刻（應該 60）`);
     const t1 = g.ticks;
-    g.rest();
-    ok(g.ticks - t1 === 10, `超過能背休息還是 ${g.ticks - t1} 刻（應該 10）`);
+    g.act('dodge'); // 第三十版起休息是 1 小時或 8 小時，改用「閃避」當作一般的動作
+    ok(g.ticks - t1 === 10, `超過能背其他動作還是 ${g.ticks - t1} 刻（應該 10）`);
     p.equip.main = G.make('sword', 3, g.nextGearId++);
     ok(G.hitMod(p) === 3, `超重第一段、優秀劍的出手加減 ${G.hitMod(p)}（應該 +3，沒有減值）`);
     p.equip.main = G.make('sword', 0, g.nextGearId++);
@@ -1943,7 +1993,7 @@ function testGear() {
       const w0 = FE.AI.worldTurn;
       let turns = 0;
       FE.AI.worldTurn = (gg) => { turns++; return w0(gg); };
-      for (let i = 0; i < actions; i++) g.rest();
+      for (let i = 0; i < actions; i++) g.act('dodge'); // 一般的動作（第三十版起休息要 1 小時以上）
       FE.AI.worldTurn = w0;
       return { turns, ticks: g.ticks };
     };
@@ -2063,7 +2113,7 @@ function testGear() {
     for (let i = 0; i < chestRuns; i++) {
       p.bag = [];
       p.hp = p.maxHp;
-      g.world.chests.push({ id: 9000 + i, x: 0, y: 0, gold: 5 });
+      g.world.chests.push({ id: 9000 + i, x: 0, y: 0, copper: 50 });
       g.openChest(g.world.chests[g.world.chests.length - 1]);
       const l = bagGear();
       if (l.length) { chestGot++; ch[l[0].q] = (ch[l[0].q] || 0) + 1; }
@@ -2234,14 +2284,15 @@ function testGear() {
       if (v < 0) neg++;
       max = Math.max(max, v);
     }
-    ok(max <= 25 && max >= 20 && bad > 800 && bad < 2400 && neg > 2000, `創世寶箱金幣：最大 ${max}（減半後應該 ≤25）、NaN ${bad}、負數 ${neg}`);
+    // 第三十版：寶箱的錢存成銅（數字照舊是銀，乘 10）
+    ok(max <= 250 && max >= 200 && max % 10 === 0 && bad > 800 && bad < 2400 && neg > 2000, `創世寶箱的錢：最大 ${max} 銅（減半後應該 ≤25 銀）、NaN ${bad}、負數 ${neg}`);
     const g = newGame(22);
     const drop = (m, n) => {
       const out = [];
       for (let i = 0; i < n; i++) {
         g.world.chests = [];
         g.dropChest(m);
-        if (g.world.chests.length) out.push(g.world.chests[0].gold);
+        if (g.world.chests.length) out.push(g.world.chests[0].copper / C.SILVER);
       }
       return out;
     };
@@ -2254,6 +2305,22 @@ function testGear() {
     ok(Math.abs(ds.length / 600 - C.DROP_SMALL_CHANCE) < 0.07 && C.DROP_SMALL_CHANCE === 0.2, `小怪物掉寶箱的比例 ${(ds.length / 600).toFixed(2)}（應該約 0.2）`);
     ok(dm.length > 0 && Math.min(...dm) >= 14 && Math.max(...dm) <= 16, `中型怪物的寶箱金幣 ${Math.min(...dm)}～${Math.max(...dm)}（原本 27～32，減半後 14～16）`);
     ok(ds.length > 0 && Math.min(...ds) >= 3 && Math.max(...ds) <= 8, `小怪物的寶箱金幣 ${Math.min(...ds)}～${Math.max(...ds)}（原本 5～15，減半後 3～8）`);
+    // 第三十版：掉落拆成三種幣、總值不變；小怪物多銅與銀（不出金），中型怪物與寶箱多銀、偶爾有金
+    const parse = (t) => { let s = 0; for (const [, n, u] of t.matchAll(/(\d+) (金|銀|銅)/g)) s += Number(n) * (u === '金' ? 100 : u === '銀' ? 10 : 1); return s; };
+    let goldSeen = 0, smallGold = 0, smallCopper = 0, coinOk = true;
+    for (let i = 0; i < 2000; i++) {
+      const v = 30 + (i % 300);
+      const big = g.coins(v * 10, false);
+      const sm = g.coins(v, true);
+      if (parse(big) !== v * 10 || parse(sm) !== v) coinOk = false;
+      if (/金/.test(big)) goldSeen++;
+      if (/金/.test(sm)) smallGold++;
+      const cu = /(\d+) 銅/.exec(sm);
+      if (cu && Number(cu[1]) >= 10) smallCopper++;
+    }
+    ok(coinOk, '拆成三種幣之後總值變了');
+    ok(goldSeen > 300 && goldSeen < 900 && smallGold === 0 && smallCopper > 1500, `中型怪物與寶箱出金 ${goldSeen}/2000 次（約三成）、小怪物出金 ${smallGold} 次、小怪物銅幣 10 枚以上 ${smallCopper}/2000 次`);
+    ok(g.coins(0, false) === '裡面沒有錢', `空的寶箱寫 ${g.coins(0, false)}`);
   }
 
   // 怪物一定打得到：被抬到四面斷崖的台子上，回合結束時腳下的高度改成跟旁邊一樣；本來就接得上的不動
@@ -2363,7 +2430,7 @@ function testCharacter() {
       const two = Ch.grip(p, p.equip.main) === 'two';
       ok(two === (weapons[0] === 'spear' || weapons[0] === 'bow'), `${cls} ${flat} 的 ${weapons[0]} 拿法 ${Ch.grip(p, p.equip.main)}`);
       ok((shields.length ? (two ? !p.equip.off && p.bag.some((e) => e.gear && e.gear.type === 'shield') : p.equip.off && p.equip.off.type === 'shield' && p.equip.off.q === 0) : !p.equip.off), `${cls} ${flat} 副手該是 ${two ? '空著（盾牌在背包）' : shields}`);
-      ok(g.bagCount('herb') === (ids.includes('herb') ? 2 : 0) && p.gold === (ids.includes('gold') ? 20 : 0) && p.bag.every((e) => e.id === 'herb' || (e.id === 'arrow' && weapons[0] === 'bow') || (e.gear && e.gear.type === 'shield' && two)), `${cls} ${flat} 的藥草 ${g.bagCount('herb')}、金幣 ${p.gold}、背包 ${p.bag.map((e) => e.name)}`);
+      ok(g.bagCount('herb') === (ids.includes('herb') ? 2 : 0) && p.copper === (ids.includes('gold') ? 200 : 0) && p.bag.every((e) => e.id === 'herb' || (e.id === 'arrow' && weapons[0] === 'bow') || (e.gear && e.gear.type === 'shield' && two)), `${cls} ${flat} 的藥草 ${g.bagCount('herb')}、金幣 ${p.copper}、背包 ${p.bag.map((e) => e.name)}`);
       ok(g.bagCount('arrow') === (weapons[0] === 'bow' ? 20 : 0), `${cls} ${flat} 的箭矢 ${g.bagCount('arrow')}（弓箭附一捆 20 支）`);
     }
   }
@@ -2467,7 +2534,7 @@ function testCharacter() {
     // 舊版本的存檔讀不了
     FE.store.save('fe.save', { version: C.SAVE_VERSION - 1, data: {} });
     const old = FE.Save.load();
-    ok(C.SAVE_VERSION === 18 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
+    ok(C.SAVE_VERSION === 19 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
   }
 
   // 6. 力量：近戰傷害加修正值（可為負，最少 1）；長劍 1d8（副手空著 1d10）；短刀靈巧取力量與敏捷較高者，不再減半；重擊傷害骰擲兩次
@@ -2608,9 +2675,17 @@ function testCharacter() {
       const at = outside(g);
       p.x = at.x;
       p.y = at.y;
-      p.hp = 1;
-      g.rest();
-      ok(p.hp === 1 + heal, `${cls} 體質 ${con} 休息該回 ${heal}，量到 ${p.hp - 1}`);
+      // 第三十版：野外短休回 1d10＋體質修正值（最少 1）；跑 40 次看範圍
+      g.monsters = [];
+      const mod = heal - 1;
+      const got = [];
+      for (let k = 0; k < 60 && got.length < 40; k++) {
+        p.hp = 1;
+        g.monsters = [];
+        g.rest();
+        if (/歇了一個小時/.test(g.log[0].text)) got.push(p.hp - 1); // 事件生出的怪物貼上來打斷的不算
+      }
+      ok(Math.min(...got) >= Math.max(1, 1 + mod) && Math.min(...got) <= Math.max(1, 3 + mod) && Math.max(...got) <= 10 + mod && Math.max(...got) >= 8 + mod, `${cls} 體質 ${con} 短休該回 1d10${mod >= 0 ? '+' : ''}${mod}（最少 1），量到 ${Math.min(...got)}～${Math.max(...got)}`);
     }
     const g = mk(35, 'mage');
     g.player.hp = 1;
@@ -2622,16 +2697,17 @@ function testCharacter() {
   {
     const plain = { kind: 'village', steading: { prosperity: 2, tags: [] } };
     const poor = { kind: 'village', steading: { prosperity: 0, tags: [] } }; // 荒蕪 ×1.6
-    ok(G.shopPrice('sword', 0, plain, 0) === 30 && G.shopPrice('sword', 0, plain) === 30, '魅力 0 價錢不變');
-    ok(G.shopPrice('sword', 0, plain, 3) === Math.round(30 * 0.85) && G.shopPrice('sword', 0, plain, -1) === Math.round(30 * 1.05) && G.shopPrice('sword', 0, plain, 2) === 27, `買價：魅力 +3 ${G.shopPrice('sword', 0, plain, 3)}、-1 ${G.shopPrice('sword', 0, plain, -1)}`);
-    ok(G.shopPrice('heavy', 1, poor, 3) === Math.round(87 * 1.1 * 1.6 * 0.85), '魅力疊在聚落經濟倍率上');
-    ok(G.shopPrice('pick', 0, plain, 3) === Math.round(20 * 0.85) && G.shopPrice('pick', 0, plain, 0) === 20, '礦鎬、鐮刀也看魅力，不看經濟');
+    // 第三十版：錢用銅記帳，下面的數字是銅（原本的銀 ×10，乘完才四捨五入）
+    ok(G.shopPrice('sword', 0, plain, 0) === 300 && G.shopPrice('sword', 0, plain) === 300, '魅力 0 價錢不變');
+    ok(G.shopPrice('sword', 0, plain, 3) === Math.round(300 * 0.85) && G.shopPrice('sword', 0, plain, -1) === Math.round(300 * 1.05) && G.shopPrice('sword', 0, plain, 2) === 270, `買價：魅力 +3 ${G.shopPrice('sword', 0, plain, 3)}、-1 ${G.shopPrice('sword', 0, plain, -1)}`);
+    ok(G.shopPrice('heavy', 1, poor, 3) === Math.round(870 * 1.1 * 1.6 * 0.85), '魅力疊在聚落經濟倍率上');
+    ok(G.shopPrice('pick', 0, plain, 3) === Math.round(200 * 0.85) && G.shopPrice('pick', 0, plain, 0) === 200, '礦鎬、鐮刀也看魅力，不看經濟');
     const sw = G.make('sword', 0, 1);
-    ok(G.sellPrice(sw, 0) === 15 && G.sellPrice(sw, 3) === Math.round(15 * 1.15) && G.sellPrice(sw, -1) === Math.round(15 * 0.95), `賣價：${G.sellPrice(sw, 3)}`);
-    ok(G.orePrice(3, 0) === 15 && G.orePrice(3, 3) === Math.round(15 * 1.15) && G.orePrice(3) === 15, '礦石賣價');
+    ok(G.sellPrice(sw, 0) === 150 && G.sellPrice(sw, 3) === Math.round(150 * 1.15) && G.sellPrice(sw, -1) === Math.round(150 * 0.95), `賣價：${G.sellPrice(sw, 3)}`);
+    ok(G.orePrice(3, 0) === 150 && G.orePrice(3, 3) === Math.round(150 * 1.15) && G.orePrice(3) === 150, '礦石賣價');
     sw.dur = 100;
-    ok(G.repairQuote(sw, plain, 0).cost === 15 && G.repairQuote(sw, plain, 3).cost === Math.round(15 * 0.85) && G.repairQuote(sw, plain, 3).restore === 100, `修復費：${G.repairQuote(sw, plain, 3).cost}`);
-    ok(G.craftQuote('sword', plain, 0).fee === 15 && G.craftQuote('sword', plain, 3).fee === Math.round(15 * 0.85) && G.craftQuote('sword', plain, 3).ore === 3, `打造工錢：${G.craftQuote('sword', plain, 3).fee}`);
+    ok(G.repairQuote(sw, plain, 0).cost === 150 && G.repairQuote(sw, plain, 3).cost === Math.round(150 * 0.85) && G.repairQuote(sw, plain, 3).restore === 100, `修復費：${G.repairQuote(sw, plain, 3).cost}`);
+    ok(G.craftQuote('sword', plain, 0).fee === 150 && G.craftQuote('sword', plain, 3).fee === Math.round(150 * 0.85) && G.craftQuote('sword', plain, 3).ore === 3, `打造工錢：${G.craftQuote('sword', plain, 3).fee}`);
     // 真的在工匠那裡買賣修造
     for (const [cls, picks, cha] of [['priest', ['shield', 'sword', 'gold'], 3], ['warrior', ['sword', 'herb', 'gold'], -1]]) {
       const g = mk(36, cls, picks);
@@ -2639,30 +2715,33 @@ function testCharacter() {
       ok(g.chaMod() === cha, `${cls} 的魅力修正值 ${g.chaMod()}`);
       const smith = g.world.npcs.find((n) => FE.Gear.isShopkeeper(n));
       const v = g.world.villageById(smith.villageId);
-      p.gold = 1000;
-      ok(shopDo(g, smith, 'buyItem:sword:0') && p.gold === 1000 - G.shopPrice('sword', 0, v, cha), `${cls} 買劍花了 ${1000 - p.gold}（應該 ${G.shopPrice('sword', 0, v, cha)}）`);
+      p.copper = 1000;
+      ok(shopDo(g, smith, 'buyItem:sword:0') && p.copper === 1000 - G.shopPrice('sword', 0, v, cha), `${cls} 買劍花了 ${1000 - p.copper}（應該 ${G.shopPrice('sword', 0, v, cha)}）`);
       const spare = p.bag.find((e) => e.id === 'gear' && e.gear.type === 'sword').gear;
-      p.gold = 0;
-      ok(shopDo(g, smith, 'sellItem:' + spare.id) && p.gold === G.sellPrice(spare, cha), `${cls} 賣劍得到 ${p.gold}（應該 ${G.sellPrice(spare, cha)}）`);
+      p.copper = 0;
+      ok(shopDo(g, smith, 'sellItem:' + spare.id) && p.copper === G.sellPrice(spare, cha), `${cls} 賣劍得到 ${p.copper}（應該 ${G.sellPrice(spare, cha)}）`);
       g.bagAdd('ore', 3);
-      p.gold = 0;
-      ok(shopDo(g, smith, 'sellOre') && p.gold === G.orePrice(3, cha), `${cls} 賣 3 顆礦石得到 ${p.gold}（應該 ${G.orePrice(3, cha)}）`);
+      p.copper = 0;
+      ok(shopDo(g, smith, 'sellOre') && p.copper === G.orePrice(3, cha), `${cls} 賣 3 顆礦石得到 ${p.copper}（應該 ${G.orePrice(3, cha)}）`);
       p.equip.main.dur = 100;
-      p.gold = 1000;
+      p.copper = 1000;
       const q = G.repairQuote(p.equip.main, v, cha);
-      ok(shopDo(g, smith, 'repairItem:' + p.equip.main.id) && p.gold === 1000 - q.cost, `${cls} 修劍花了 ${1000 - p.gold}（應該 ${q.cost}）`);
+      ok(shopDo(g, smith, 'repairItem:' + p.equip.main.id) && p.copper === 1000 - q.cost, `${cls} 修劍花了 ${1000 - p.copper}（應該 ${q.cost}）`);
       g.bagAdd('ore', 3);
-      p.gold = 1000;
-      ok(shopDo(g, smith, 'craftItem:sword') && p.gold === 1000 - G.craftQuote('sword', v, cha).fee && g.bagCount('ore') === 0, `${cls} 打造花了 ${1000 - p.gold}（應該 ${G.craftQuote('sword', v, cha).fee}）`);
-      // 委託的金幣獎勵
+      p.copper = 1000;
+      ok(shopDo(g, smith, 'craftItem:sword') && p.copper === 1000 - G.craftQuote('sword', v, cha).fee && g.bagCount('ore') === 0, `${cls} 打造花了 ${1000 - p.copper}（應該 ${G.craftQuote('sword', v, cha).fee}）`);
+      // 委託的金錢獎勵（第三十版：再乘委託人聚落的經濟標籤倍率）
       const npc = g.world.npcs.find((n) => !FE.Gear.isShopkeeper(n));
-      p.gold = 0;
-      p.carrying = { kind: 'hunt', giverId: npc.id, monsterIds: [], total: 1, village: '某村', exp: 1, gold: 10, compute: 0 };
+      const nv = g.world.villageById(npc.villageId);
+      p.copper = 0;
+      p.lodging = null;
+      p.jobs.hunt = { kind: 'hunt', giverId: npc.id, villageId: npc.villageId, monsterIds: [], total: 1, village: '某村', exp: 1, copper: 100, compute: 0 };
+      const want = Math.round(100 * FE.Steading.questEcon(nv) * (1 + 0.05 * cha));
       const t = g.talkOptions(npc);
       const idx = t.options.findIndex((o) => o.id === 'report');
-      ok(idx >= 0 && t.options[idx].note.includes(`金幣 +${g.questGold(10)}`), `${cls} 回報選項的獎勵寫 ${idx >= 0 && t.options[idx].note}`);
+      ok(idx >= 0 && t.options[idx].note.includes(FE.money(want)), `${cls} 回報選項的獎勵寫 ${idx >= 0 && t.options[idx].note}（應該 ${FE.money(want)}）`);
       g.choose(npc, idx);
-      ok(p.gold === Math.round(10 * (1 + 0.05 * cha)) && g.questGold(10) === p.gold, `${cls} 領到金幣 ${p.gold}（應該 ${Math.round(10 * (1 + 0.05 * cha))}）`);
+      ok(p.copper === want, `${cls} 領到 ${p.copper} 銅（應該 ${want}）`);
     }
     // 送貨委託交件也加成
     {
@@ -2671,14 +2750,16 @@ function testCharacter() {
       const npcs = g.world.npcs.filter((n) => !FE.Gear.isShopkeeper(n));
       const giver = npcs[0];
       const target = npcs[1] || npcs[0];
-      p.carrying = { giverId: giver.id, targetId: target.id, targetName: target.name, targetVillage: '某村', steps: 10, exp: 1, gold: 20, compute: 0 };
+      p.jobs.deliver = { kind: 'deliver', giverId: giver.id, villageId: giver.villageId, targetId: target.id, targetName: target.name, targetVillage: '某村', steps: 10, exp: 1, copper: 200, compute: 0 };
+      p.lodging = null;
       g.bagAdd('goods', 1, { name: '信', giverId: giver.id });
       const t = g.talkOptions(target);
       const idx = t.options.findIndex((o) => o.id === 'deliver');
-      p.gold = 0;
+      p.copper = 0;
       ok(idx >= 0, '收貨人該有交件的選項');
+      const want = Math.round(200 * FE.Steading.questEcon(g.world.villageById(giver.villageId)) * 1.15);
       g.choose(target, idx);
-      ok(p.gold === 23, `魅力 +3 的送貨獎勵 20 金幣該變 23，量到 ${p.gold}`);
+      ok(p.copper === want, `魅力 +3 的送貨獎勵 20 銀（乘經濟標籤）該是 ${want} 銅，量到 ${p.copper}`);
     }
     // 智力管法師的範圍魔攻（命中、傷害、範圍），感知管射程與暴擊；近戰的命中與傷害不受影響
     const g = mk(38, 'mage');
@@ -3780,9 +3861,9 @@ function testCombat28() {
     const smith = g.world.npcs.find((n) => n.role === 'smith');
     const v = g.world.villageById(smith.villageId);
     const p = g.player;
-    p.gold = 100;
+    p.copper = 1000;
     const pr = G.shopPrice('arrow', 0, v, g.chaMod());
-    ok(pr === Math.round(5 * FE.Steading.shopFactor(v) * G.buyFactor(g.chaMod())) && shopDo(g, smith, 'buyItem:arrow:0') && g.bagCount('arrow') === 40 && p.gold === 100 - pr, `買一捆箭：${pr} 金幣，箭 ${g.bagCount('arrow')}`);
+    ok(pr === Math.round(50 * FE.Steading.shopFactor(v) * G.buyFactor(g.chaMod())) && shopDo(g, smith, 'buyItem:arrow:0') && g.bagCount('arrow') === 40 && p.copper === 1000 - pr, `買一捆箭：${pr} 銅，箭 ${g.bagCount('arrow')}`);
     ok(g.log.some((l) => l.text.includes('一捆 20 支的箭矢')), '買箭的訊息');
   }
 
@@ -3811,7 +3892,7 @@ function testCombat28() {
         const have = [p.equip.main, p.equip.off, p.equip.body].concat(p.bag.map((e) => e.gear)).filter(Boolean).map((x) => x.type);
         const want = c.fixed.concat(picks).map((id) => FE.START_OPTS[id].gear).filter(Boolean);
         ok(p.equip.body && p.equip.body.type === s.body && want.every((t) => have.includes(t)) && have.length === want.length, `${cls} ${picks} 的起始裝備 ${have}（應該 ${want}）`);
-        ok(g.bagCount('herb') === (picks.includes('herb') ? 2 : 0) && p.gold === (picks.includes('gold') ? 20 : 0), `${cls} ${picks} 的藥草與金幣`);
+        ok(g.bagCount('herb') === (picks.includes('herb') ? 2 : 0) && p.copper === (picks.includes('gold') ? 200 : 0), `${cls} ${picks} 的藥草與 20 銀`);
       }
     }
 
@@ -4641,10 +4722,10 @@ function testGrowth29() {
     const wsmith = w.npcs.find((n) => n.villageId === town.id && n.role === 'smith');
     const smith = w.npcs.find((n) => n.role === 'smith' && w.villageById(n.villageId).kind === 'village');
     const p = g.player;
-    p.gold = 1000;
+    p.copper = 1000;
     const pr = G.shopPrice('bolt', 0, town, g.chaMod());
-    ok(pr === Math.round(5 * FE.Steading.shopFactor(town) * G.buyFactor(g.chaMod())), `弩矢一捆的價錢 ${pr}`);
-    ok(shopDo(g, wsmith, 'buyItem:bolt:0') && g.bagCount('bolt') === 20 && p.gold === 1000 - pr && g.log.some((l) => /一捆 20 支的弩矢/.test(l.text)), '武器匠賣弩矢，買了疊進背包');
+    ok(pr === Math.round(50 * FE.Steading.shopFactor(town) * G.buyFactor(g.chaMod())), `弩矢一捆的價錢 ${pr} 銅`);
+    ok(shopDo(g, wsmith, 'buyItem:bolt:0') && g.bagCount('bolt') === 20 && p.copper === 1000 - pr && g.log.some((l) => /一捆 20 支的弩矢/.test(l.text)), '武器匠賣弩矢，買了疊進背包');
     ok(shopDo(g, wsmith, 'buyItem:bolt:1') && p.bag.filter((e) => e.id === 'bolt').length === 2 && g.bagCount('bolt') === 40, '做工好的弩矢另外疊放');
     ok(!shopDo(g, smith, 'buyItem:bolt:0') && !shopDo(g, smith, 'buyItem:crossbow:0') && shopDo(g, wsmith, 'buyItem:crossbow:0'), '村莊鐵匠不賣弩矢和輕弩，城鎮武器匠賣');
     ok(!shopDo(g, wsmith, 'craftItem:crossbow') && !shopDo(g, wsmith, 'craftItem:whip') && shopDo(g, smith, 'buyItem:waraxe:0') === true, '輕弩、鞭子不能打造；村莊鐵匠賣戰斧');
@@ -4883,6 +4964,414 @@ function testGrowth29() {
   FE.Combat.hook = hook0;
 }
 UNITS.growth29 = () => { try { testGrowth29(); } catch (e) { fail('角色與成長測試拋出例外：' + e.stack); } };
+
+// ---- 第三十版：時間與經濟（時鐘、休息、生活開支、經濟值、貨幣、採藥採礦委託、四種委託、世界裡的人的種族、力竭）----
+let econChecks = 0;
+const corruptCal = {}; // 侵蝕校準：CORRUPT_CHANCE → { nights, monsters, corrupt }
+function testEconomy30() {
+  const ok = (cond, msg) => { econChecks++; if (!cond) fail('時間與經濟 ' + msg); };
+  // 新遊戲：清掉怪物、不再創世；冒險者放在出生的村莊中央的路上
+  const newGame = (seed, cls) => {
+    const g = new FE.Game(seed);
+    g.start(cls ? { cls, picks: BOT_PICKS[cls], body: BOT_BODY[cls] } : undefined);
+    g.checkCreate = () => {};
+    g.monsters = [];
+    g.wakeSpot();
+    return g;
+  };
+  const fieldSpot = (g) => {
+    const w = g.world;
+    const p = g.player;
+    let best = null;
+    for (const ch of w.chunks) for (let y = ch.y0; y < ch.y1; y++) for (let x = ch.x0; x < ch.x1; x++) {
+      if (!w.passable(x, y) || w.villageAt(x, y) || w.inBuffer(x, y) || w.npcAt(x, y) || w.chestAt(x, y) || g.nodeAt(x, y)) continue;
+      const d = Math.abs(x - p.x) + Math.abs(y - p.y);
+      if (!best || d < best.d) best = { x, y, d };
+    }
+    return best;
+  };
+  const counter = (obj, key) => { let n = 0; const f0 = obj[key]; obj[key] = function () { n++; return f0.apply(this, arguments); }; return { get n() { return n; }, restore() { obj[key] = f0; } }; };
+
+  // 1. 時鐘：一刻 36 秒、一小時 100 刻、一天 2,400 刻；狀態列寫「第 3 天 14 時」
+  ok(C.HOUR_TICKS === 100 && C.DAY_TICKS === 2400 && C.HOUR_TICKS * 36 === 3600, '時鐘的數字');
+  ok(FE.clockText(0) === '第 1 天 0 時' && FE.clockText(2 * 2400 + 1400) === '第 3 天 14 時' && FE.clockText(2399) === '第 1 天 23 時', `時間的寫法 ${FE.clockText(2 * 2400 + 1400)}`);
+
+  // 2. 怪物、士兵、事件照同一個時鐘：每 10 刻世界一回合（怪物、士兵各動一次），每 100 刻演算一次事件
+  {
+    const g = newGame(301);
+    const ev = counter(FE.Events, 'tick');
+    const wt = counter(FE.AI, 'worldTurn');
+    const stt = counter(FE.AI, 'soldierTurn');
+    const t0 = g.ticks;
+    for (let i = 0; i < 37; i++) g.endTurn(false, 10, { exact: true });
+    ok(g.ticks - t0 === 370 && wt.n === 37 && stt.n === 37, `370 刻：世界 ${wt.n} 回合、士兵 ${stt.n} 次（應該各 37）`);
+    ok(ev.n === Math.floor(g.ticks / 100) - Math.floor(t0 / 100), `370 刻演算事件 ${ev.n} 次（應該每 100 刻一次）`);
+    // 一個動作 25 刻（例如重甲走一步）：刻數累積，湊滿 10 刻就多動一次
+    const w0 = wt.n;
+    for (let i = 0; i < 4; i++) g.endTurn(false, 25, { exact: true });
+    ok(wt.n - w0 === 10, `4 個 25 刻的動作，世界該走 10 回合，走了 ${wt.n - w0}`);
+    ev.restore(); wt.restore(); stt.restore();
+  }
+
+  // 3. 野外短休：1 小時（100 刻，世界跑 10 回合），回 1d10＋體質修正值，不花錢；旁邊有怪物不能休息；途中怪物貼上來就被打斷
+  {
+    const g = newGame(302);
+    const p = g.player;
+    const at = fieldSpot(g);
+    Object.assign(p, { x: at.x, y: at.y, hp: 1, copper: 500 });
+    const wt = counter(FE.AI, 'worldTurn');
+    const t0 = g.ticks;
+    g.rest();
+    ok(g.ticks - t0 === 100 && wt.n === 10 && p.copper === 500 && p.hp > 1 && p.hp <= 1 + 10, `短休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、錢 ${p.copper}、生命 ${p.hp}`);
+    wt.restore();
+    // 旁邊有怪物：不能休息、不花時間
+    const side = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy));
+    const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + side[0], y: p.y + side[1], cells: [], scope: 2, data: {} });
+    m.x = p.x + side[0]; m.y = p.y + side[1];
+    const t1 = g.ticks;
+    g.rest();
+    ok(g.ticks === t1 && g.log[0].text.includes('旁邊有怪物'), '旁邊有怪物還能休息');
+    // 會追人的怪物在 4 步外：休息途中追上來，休息被打斷，沒回生命
+    g.monsters = [];
+    const far = fieldSpot(g);
+    let spot = null;
+    for (let dy = -6; dy <= 6 && !spot; dy++) for (let dx = -6; dx <= 6 && !spot; dx++) {
+      const x = p.x + dx, y = p.y + dy;
+      if (Math.abs(dx) + Math.abs(dy) === 4 && g.world.passable(x, y) && !g.world.inBuffer(x, y) && FE.AI.canSee(g.world, { x, y }, p)) spot = { x, y };
+    }
+    if (spot && far) {
+      const c = g.spawnMonster({ type: 'TERRAIN', x: spot.x, y: spot.y, cells: [], scope: 2, data: {} });
+      Object.assign(c, { x: spot.x, y: spot.y, small: true });
+      p.hp = 5;
+      const t2 = g.ticks;
+      g.rest();
+      ok(g.ticks - t2 < 100 && /休息被怪物打斷/.test(g.log.map((l) => l.text).join('|')), `怪物追上來，短休該被打斷（花了 ${g.ticks - t2} 刻）`);
+    }
+  }
+
+  // 4. 村莊長休：8 小時（800 刻，世界跑 80 回合），生命回滿，照經濟標籤付生活開支，得到生活水準的效果
+  {
+    const g = newGame(303);
+    const p = g.player;
+    const v = g.world.villageAt(p.x, p.y);
+    ok(!!v, '醒來的地方不在聚落裡');
+    const tiers = [];
+    for (let tier = 0; tier <= 4; tier++) {
+      v.steading.prosperity = tier;
+      v.econ = tier * C.ECON_STEP + C.ECON_STEP / 2;
+      p.copper = 1000;
+      p.hp = 1;
+      p.equip.main.dur = 100;
+      const wt = counter(FE.AI, 'worldTurn');
+      const t0 = g.ticks;
+      g.rest();
+      wt.restore();
+      const paid = 1000 - p.copper;
+      tiers.push(paid);
+      const rep = Math.round(200 * C.LIVING_REPAIR[tier]);
+      ok(g.ticks - t0 === 800 && wt.n === 80 && p.hp === p.maxHp, `長休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、生命 ${p.hp}/${p.maxHp}`);
+      ok(paid === C.LIVING_COST[tier] * 10 && p.equip.main.dur === 100 + rep, `${FE.PROSPERITY[tier]}：付了 ${paid} 銅（應該 ${C.LIVING_COST[tier]} 銀）、長劍耐久 ${p.equip.main.dur}（應該 ${100 + rep}）`);
+      ok(tier < 2 ? !p.lodging : p.lodging && p.lodging.villageId === v.id && p.lodging.bonus === C.LIVING_QUEST[tier], `${FE.PROSPERITY[tier]} 的委託獎勵加成 ${JSON.stringify(p.lodging)}`);
+    }
+    ok(tiers.join() === '30,60,150,300,300', `生活開支（銅）${tiers}`);
+    // 錢不夠：住最便宜的那一級（荒蕪的效果），付得出多少付多少（最多 3 銀）
+    v.steading.prosperity = 2; v.econ = 50;
+    for (const [have, pay] of [[100, 30], [12, 12], [0, 0]]) {
+      p.copper = have;
+      p.hp = 1;
+      p.equip.main.dur = 100;
+      g.rest();
+      ok(have - p.copper === pay && p.equip.main.dur === 100 && !p.lodging && p.hp === p.maxHp, `普通的聚落錢只有 ${have} 銅：付了 ${have - p.copper}（應該 ${pay}），耐久 ${p.equip.main.dur}、加成 ${JSON.stringify(p.lodging)}`);
+    }
+    // 住宿加成：普通 +5% 只加在這個聚落的委託上
+    p.copper = 1000;
+    g.rest();
+    const q = { copper: 200 };
+    const base = Math.round(200 * FE.Steading.questEcon(v));
+    ok(g.questPay(q, v.id) === Math.round(200 * FE.Steading.questEcon(v) * 1.05) && g.questPay(q, -1) === 200, `住宿加成：這裡 ${g.questPay(q, v.id)}（不加是 ${base}）、別處 ${g.questPay(q, -1)}`);
+  }
+
+  // 5. 倒下在聚落醒來也算一次長休（世界跑 80 回合），不收錢
+  {
+    const g = newGame(304);
+    const p = g.player;
+    const at = fieldSpot(g);
+    Object.assign(p, { x: at.x, y: at.y, copper: 777, exhaust: 2 });
+    const m = g.spawnMonster({ type: 'TERRAIN', x: at.x + 30, y: at.y, cells: [], scope: 2, data: {} });
+    const wt = counter(FE.AI, 'worldTurn');
+    const t0 = g.ticks;
+    g.die(m);
+    g.endTurn(false);
+    wt.restore();
+    ok(g.world.villageAt(p.x, p.y) && p.hp === p.maxHp && p.copper === 777 && p.exhaust === 1 && g.ticks - t0 >= 800 && wt.n >= 80, `倒下醒來：在聚落 ${!!g.world.villageAt(p.x, p.y)}、生命 ${p.hp}/${p.maxHp}、錢 ${p.copper}、力竭 ${p.exhaust}、過了 ${g.ticks - t0} 刻、世界 ${wt.n} 回合`);
+  }
+
+  // 6. 經濟值：初始在標籤那一段的中間；在這裡花錢每 10 銀 +1、完成委託 +3、24 步內每隻怪物每天 −1；標籤改變時出訊息，物價跟著標籤
+  {
+    const g = newGame(305);
+    const p = g.player;
+    const v = g.world.villageAt(p.x, p.y);
+    const tier0 = v.steading.prosperity;
+    ok(FE.Steading.econ(v) === tier0 * 20 + 10, `初始經濟值 ${FE.Steading.econ(v)}（標籤 ${FE.PROSPERITY[tier0]}）`);
+    const f0 = FE.Steading.shopFactor(v);
+    const r0 = g.compute;
+    g.spend(v, 1000); // 100 銀：經濟值 +10，修補力 +100÷20＝5 點單人份量（×4×0.5）
+    ok(Math.abs(FE.Steading.econ(v) - (tier0 * 20 + 20)) < 1e-9 && v.steading.prosperity === Math.min(4, tier0 + 1), `花 100 銀之後經濟值 ${FE.Steading.econ(v)}、標籤 ${FE.PROSPERITY[v.steading.prosperity]}`);
+    ok(/日子好過了些/.test(g.log[0].text) && FE.Steading.shopFactor(v) < f0, `標籤升級的訊息「${g.log[0].text}」、價錢倍率 ${f0} → ${FE.Steading.shopFactor(v)}`);
+    ok(Math.abs(g.compute - Math.min(C.COMPUTE_CAP, r0 + 5 * C.PLAYER_COMPUTE_SCALE * (1 - C.CREATION_SHARE) * FE.Stability.mult(g, 'COMPUTE'))) < 1e-9, `花 100 銀換的修補力 ${g.compute - r0}`);
+    const c0 = g.creation;
+    g.spend(v, 400);
+    ok(g.creation === c0, '花錢不該進創世力');
+    // 委託 +3
+    const e1 = FE.Steading.econ(v);
+    const npc = g.world.npcs.find((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n));
+    p.jobs.herb = { kind: 'herb', giverId: npc.id, villageId: v.id, n: 1, exp: 1, copper: 10, compute: 0 };
+    g.finishJob(npc, p.jobs.herb, '委託完成');
+    ok(Math.abs(FE.Steading.econ(v) - Math.min(100, e1 + 3)) < 1e-9 && g.player.jobs.herb === null, `完成委託後經濟值 ${FE.Steading.econ(v)}（原本 ${e1}）`);
+    // 每天：24 步內每有 1 隻怪物 −1
+    v.econ = 50; v.steading.prosperity = 2;
+    const box = (x, y) => Math.max(v.x0 - x, 0, x - v.x1) + Math.max(v.y0 - y, 0, y - v.y1);
+    const spots = [];
+    for (let y = v.y0 - 30; y <= v.y1 + 30 && spots.length < 25; y++) for (let x = v.x0 - 30; x <= v.x1 + 30 && spots.length < 25; x++) {
+      if (g.world.passable(x, y) && !g.world.inBuffer(x, y) && box(x, y) <= 20 && box(x, y) >= 10) spots.push([x, y]);
+    }
+    g.monsters = [];
+    for (const [x, y] of spots.slice(0, 12)) { const m = g.spawnMonster({ type: 'TERRAIN', x, y, cells: [], scope: 2, data: {} }); Object.assign(m, { x, y }); }
+    const near = g.monsters.filter((m) => box(m.x, m.y) <= C.HUNT_RADIUS).length;
+    const others = g.world.villages.filter((o) => o !== v).map((o) => FE.Steading.econ(o));
+    g.econDay();
+    ok(near >= 10 && FE.Steading.econ(v) === 50 - near && v.steading.prosperity === Math.floor((50 - near) / 20), `一天後經濟值 ${FE.Steading.econ(v)}（附近 ${near} 隻怪物）、標籤 ${FE.PROSPERITY[v.steading.prosperity]}`);
+    ok(near < 10 || g.log.some((l) => /日子難過了起來/.test(l.text)), '經濟標籤降級沒出訊息');
+    // 時間跨過一天才扣：放著過 2,400 刻扣一次
+    v.econ = 50; v.steading.prosperity = 2;
+    g.ticks = C.DAY_TICKS * 5 - 5;
+    p.awakeAt = g.ticks;
+    g.monsters = g.monsters.filter((m) => box(m.x, m.y) <= C.HUNT_RADIUS).slice(0, 3);
+    for (const m of g.monsters) { m.prone = true; m.small = false; } // 怪物不動
+    const nOld = g.monsters.length;
+    g.worldEvery = 1e9; // 世界不走（怪物不移動），只看日子
+    g.endTurn(false, 10, { exact: true });
+    ok(FE.Steading.econ(v) === 50 - nOld * C.ECON_MONSTER, `跨過一天扣 ${50 - FE.Steading.econ(v)}（應該 ${nOld}）`);
+    g.endTurn(false, 10, { exact: true });
+    ok(FE.Steading.econ(v) === 50 - nOld * C.ECON_MONSTER, '同一天不該再扣');
+    g.worldEvery = 1;
+    // 上下限 0～100
+    v.econ = 1; FE.Steading.addEcon(v, -50); ok(v.econ === 0 && v.steading.prosperity === 0, `經濟值下限 ${v.econ}`);
+    v.econ = 99; FE.Steading.addEcon(v, 50); ok(v.econ === 100 && v.steading.prosperity === 4, `經濟值上限 ${v.econ}、標籤 ${FE.PROSPERITY[v.steading.prosperity]}`);
+    // 委託的金錢照委託人聚落的經濟標籤：荒蕪 ×0.8、貧窮 ×0.9、普通 ×1、繁盛與富裕 ×1.2
+    p.lodging = null;
+    const pays = [0, 1, 2, 3, 4].map((t) => { v.steading.prosperity = t; return g.questPay({ copper: 100 }, v.id); });
+    ok(pays.join() === '80,90,100,120,120', `委託金錢的經濟倍率 ${pays}`);
+    // 在工匠那裡花錢也算進這個聚落的經濟值
+    v.econ = 50; v.steading.prosperity = 2;
+    const smith = g.world.npcs.find((n) => n.villageId === v.id && n.role === 'smith');
+    p.copper = 10000;
+    const pr = FE.Gear.shopPrice('sword', 0, v, g.chaMod());
+    ok(shopDo(g, smith, 'buyItem:sword:0') && Math.abs(FE.Steading.econ(v) - (50 + pr / 100)) < 1e-9, `買長劍（${pr} 銅）後經濟值 ${FE.Steading.econ(v)}`);
+  }
+
+  // 7. 貨幣：內部用銅記帳，寫成「3 金 5 銀 2 銅」（零的省略）；硬幣沒有重量
+  {
+    const g = newGame(306);
+    const w0 = g.weight();
+    g.player.copper = 123456;
+    ok(g.weight() === w0 && FE.money(123456) === '1234 金 5 銀 6 銅' && FE.money(5) === '5 銅' && FE.money(100) === '1 金', `錢的寫法與重量 ${FE.money(123456)}`);
+  }
+
+  // 8. 採藥、採礦委託：帶 5～10 份藥草、3～6 顆礦石交給委託人（背包裡的，舊的也能交）；獎勵＝基本＋材料本身的價錢；算力一半創世、一半修補
+  {
+    const g = newGame(307);
+    const p = g.player;
+    const v = g.world.villageAt(p.x, p.y);
+    v.econ = 50; v.steading.prosperity = 2;
+    const ns = g.world.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n));
+    const seen = { herb: [], ore: [] };
+    for (let i = 0; i < 200; i++) {
+      const kind = i % 2 ? 'herb' : 'ore';
+      FE.Events.gatherQuest(g, ns[0], kind);
+      const q = ns[0].quest;
+      const G = C.GATHER_QUEST[kind];
+      const f = FE.Steading.rewardFactor(v);
+      seen[kind].push(q.n);
+      if (q.kind !== kind || q.copper !== Math.round((10 + G.value * q.n) * f * 10) || q.compute !== G.compute + G.computePer * q.n || q.exp !== Math.round((15 + q.n) * f)) ok(false, `${kind} 委託的數字 ${JSON.stringify(q)}`);
+    }
+    ok(Math.min(...seen.herb) === 5 && Math.max(...seen.herb) === 10 && Math.min(...seen.ore) === 3 && Math.max(...seen.ore) === 6, `採藥 ${Math.min(...seen.herb)}～${Math.max(...seen.herb)} 份、採礦 ${Math.min(...seen.ore)}～${Math.max(...seen.ore)} 顆`);
+    // 接下、湊不夠不能交、湊夠了交出去（舊的也算），拿到錢與算力
+    const giver = ns[0];
+    giver.quest = { kind: 'herb', n: 6, village: v.name, exp: 21, copper: 220, compute: 6, accepted: false, done: false };
+    g.talking = giver.id;
+    const ids = () => g.talkOptions(giver).options.map((o) => o.id).join('/');
+    ok(ids() === 'accept/decline' && /6 份藥草/.test(g.talkOptions(giver).text), `採藥委託的選項 ${ids()}「${g.talkOptions(giver).text}」`);
+    g.choose(giver, 0);
+    ok(p.jobs.herb && p.jobs.herb.n === 6 && giver.quest.accepted, '接下採藥委託後手上沒有');
+    g.bagAdd('herb', 4);
+    g.talking = giver.id;
+    ok(ids() === 'leave' && /還差 2 份藥草/.test(g.talkOptions(giver).text), `藥草不夠：${ids()}「${g.talkOptions(giver).text}」`);
+    g.bagAdd('herb', 3);
+    const cr0 = g.creation, cu0 = p.copper, e0 = g.exp;
+    p.lodging = null;
+    const want = g.questPay(p.jobs.herb, v.id);
+    g.talking = giver.id;
+    ok(ids() === 'hand:herb/leave', `藥草湊夠了：${ids()}`);
+    g.choose(giver, 0);
+    ok(!p.jobs.herb && giver.quest.done && g.bagCount('herb') === 1 && p.copper - cu0 === want && want === 220 && g.exp - e0 === 21, `交藥草：剩 ${g.bagCount('herb')} 份、錢 +${p.copper - cu0}（應該 ${want}）、經驗值 +${g.exp - e0}`);
+    ok(Math.abs(g.creation - cr0 - 6 * C.PLAYER_COMPUTE_SCALE * C.CREATION_SHARE) < 1e-9, `採藥委託的創世力 ${g.creation - cr0}`);
+    // 採礦一樣
+    giver.quest = { kind: 'ore', n: 3, village: v.name, exp: 18, copper: 250, compute: 6, accepted: false, done: false };
+    g.talking = giver.id; g.choose(giver, 0);
+    g.bagAdd('ore', 3);
+    g.talking = giver.id;
+    ok(ids() === 'hand:ore/leave', `礦石湊夠了：${ids()}`);
+    g.choose(giver, 0);
+    ok(!p.jobs.ore && g.bagCount('ore') === 0, '交礦石之後還有');
+    // 不算進創世門檻：事件生的委託在創世時不存在，createChunk 只算新區塊裡已有的任務；檢查器不把它們當成懸空指標
+    giver.quest = { kind: 'ore', n: 3, village: v.name, exp: 18, copper: 250, compute: 6, accepted: false, done: false };
+    ok(FE.Checker.checkNpc(g.world, giver) === null, '採礦委託被檢查器當成懸空指標');
+  }
+
+  // 9. 委託分四種，每種同時只能接一個（最多同時四個）
+  {
+    const g = newGame(308);
+    const p = g.player;
+    const v = g.world.villageAt(p.x, p.y);
+    const ns = g.world.npcs.filter((n) => !FE.Gear.isShopkeeper(n));
+    ok(ns.length >= 2, '村民不夠');
+    if (ns.length >= 2) {
+      const [a, b] = ns;
+      const accept = (n, q) => { n.quest = q; g.talking = n.id; const i = g.talkOptions(n).options.findIndex((o) => o.id === 'accept'); if (i >= 0) g.choose(n, i); g.closeTalk(); return i >= 0; };
+      ok(accept(a, { kind: 'herb', n: 5, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '接不了採藥委託');
+      ok(!accept(b, { kind: 'herb', n: 5, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '已經有採藥委託還能再接一個');
+      ok(accept(b, { kind: 'ore', n: 3, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '有採藥委託時接不了採礦委託');
+      const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + 40, y: p.y, cells: [], scope: 2, data: {} });
+      const c = ns[2] || a;
+      c.quest = null;
+      ok(accept(c, { kind: 'hunt', monsterIds: [m ? m.id : -1], total: 1, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '有採藥採礦委託時接不了清除委託');
+      const d = ns[3] || b;
+      d.quest = null;
+      ok(accept(d, FE.makeQuest(g.world, g.rng, d, a)), '有三種委託時接不了送貨委託');
+      ok(g.jobList().length === 4 && g.jobList().map((j) => j.kind).join() === 'hunt,deliver,herb,ore', `手上的委託 ${g.jobList().map((j) => j.kind)}`);
+      FE.Save.save(g);
+      const back = FE.Save.load();
+      ok(back && back.game && back.game.jobList().length === 4, '四個委託存檔讀不回來');
+    }
+  }
+
+  // 10. 世界裡的人的種族：人類 70%、矮人 15%、精靈 15%；寫在對話視窗
+  {
+    const cnt = { human: 0, dwarf: 0, elf: 0 };
+    let n = 0;
+    for (let s = 0; s < 30; s++) {
+      const g = new FE.Game(4000 + s);
+      g.start();
+      for (let k = 0; k < 3; k++) g.createChunk(false);
+      for (const o of g.world.npcs.concat(g.soldiers)) { cnt[o.race]++; n++; }
+    }
+    ok(n > 200 && Object.values(cnt).reduce((a, b) => a + b, 0) === n, `每個人都該有種族（${n} 人：${JSON.stringify(cnt)}）`);
+    ok(Math.abs(cnt.human / n - 0.7) < 0.07 && Math.abs(cnt.dwarf / n - 0.15) < 0.05 && Math.abs(cnt.elf / n - 0.15) < 0.05, `種族比例 人類 ${(cnt.human / n).toFixed(2)}、矮人 ${(cnt.dwarf / n).toFixed(2)}、精靈 ${(cnt.elf / n).toFixed(2)}`);
+    const g = newGame(309);
+    const n0 = g.world.npcs[0];
+    ok(g.talkOptions(n0).role.endsWith(FE.PLAYER_RACES[n0.race].name), `對話視窗的身分 ${g.talkOptions(n0).role}`);
+  }
+
+  // 11. 力竭：連續一整天沒有長休 +1 級；長休 −1 級；出手的 d20 −2×級數，走一步多 1 刻×級數；6 級倒下，醒來降到 5 級再照長休 −1
+  {
+    const g = newGame(310);
+    const p = g.player;
+    const at = fieldSpot(g);
+    Object.assign(p, { x: at.x, y: at.y });
+    p.awakeAt = g.ticks - (C.DAY_TICKS - 5);
+    g.endTurn(false, 10, { exact: true });
+    ok(p.exhaust === 1 && /一整天沒好好睡/.test(g.log.map((l) => l.text).join('|')), `一整天沒長休：力竭 ${p.exhaust}`);
+    // 走一步多花的刻
+    const free = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy) && !g.isHardGround(p.x + dx, p.y + dy));
+    const step = (lv) => { p.exhaust = lv; p.awakeAt = g.ticks; const t0 = g.ticks; g.move(free[0], free[1]); g.move(-free[0], -free[1]); return (g.ticks - t0) / 2; };
+    const s0 = step(0), s3 = step(3);
+    ok(s3 - s0 === 3, `力竭 3 走一步多 ${s3 - s0} 刻（應該 3）`);
+    p.exhaust = 0;
+    // 長休 −1
+    g.wakeSpot();
+    p.exhaust = 3; p.copper = 1000;
+    g.rest();
+    ok(p.exhaust === 2 && p.awakeAt === g.ticks, `長休後力竭 ${p.exhaust}（應該 2）`);
+    // 6 級倒下：在聚落醒來，5 級再照長休 −1 → 4 級，不收錢
+    const at2 = fieldSpot(g);
+    Object.assign(p, { x: at2.x, y: at2.y, exhaust: 5, copper: 321 });
+    p.awakeAt = g.ticks - (C.DAY_TICKS - 5);
+    const t0 = g.ticks;
+    g.endTurn(false, 10, { exact: true });
+    ok(p.exhaust === 4 && g.world.villageAt(p.x, p.y) && p.hp === p.maxHp && p.copper === 321 && g.ticks - t0 >= 800 && /累得倒了下去/.test(g.log.map((l) => l.text).join('|')), `力竭 6 級：醒來力竭 ${p.exhaust}、在聚落 ${!!g.world.villageAt(p.x, p.y)}、錢 ${p.copper}、過了 ${g.ticks - t0} 刻`);
+  }
+  // 力竭時出手的 d20：每級 −2
+  {
+    const g = newGame(311);
+    const p = g.player;
+    const at = fieldSpot(g);
+    Object.assign(p, { x: at.x, y: at.y });
+    const free = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && g.world.cell(p.x + dx, p.y + dy).h === g.world.cell(p.x, p.y).h && !g.world.npcAt(p.x + dx, p.y + dy));
+    if (free) {
+      const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + free[0], y: p.y + free[1], cells: [], scope: 2, data: {} });
+      Object.assign(m, { x: p.x + free[0], y: p.y + free[1], hp: 999, maxHp: 999 });
+      const d20 = FE.rollD20;
+      const mods = {};
+      for (const lv of [0, 1, 3]) {
+        p.exhaust = lv;
+        FE.rollD20 = function (r, mod) { if (mods[lv] === undefined) mods[lv] = mod; return d20.apply(this, arguments); };
+        FE.Combat.resolveAttack(g, p, m, 'attack', {});
+        FE.rollD20 = d20;
+      }
+      ok(mods[1] - mods[0] === -2 && mods[3] - mods[0] === -6, `力竭的出手 d20：0 級 ${mods[0]}、1 級 ${mods[1]}、3 級 ${mods[3]}`);
+    }
+  }
+
+  // 12. 侵蝕校準：長休一晚（80 回合），聚落附近（冒險者 20 步內、圈外）的怪物每隻侵蝕幾次。舊的 0.012 與現在的數字各量一次
+  {
+    const chances = [0.012, C.CORRUPT_CHANCE];
+    const c0 = C.CORRUPT_CHANCE;
+    for (const ch of chances) {
+      C.CORRUPT_CHANCE = ch;
+      const r = corruptCal[ch] || (corruptCal[ch] = { nights: 0, monsters: 0, corrupt: 0, tiles: 0 });
+      for (let s = 0; s < 40; s++) {
+        const g = new FE.Game(6100 + s);
+        g.start();
+        g.checkCreate = () => {};
+        g.wakeSpot();
+        g.worldState = 0;
+        const p = g.player;
+        // 放 4 隻怪物在冒險者 20 步內（侵蝕的範圍）、聚落周圍的圈外（不追人，只徘徊）
+        g.monsters = [];
+        const spots = [];
+        for (let dy = -20; dy <= 20; dy++) for (let dx = -20; dx <= 20; dx++) {
+          const x = p.x + dx, y = p.y + dy;
+          if (Math.abs(dx) + Math.abs(dy) <= C.CORRUPT_RANGE - 2 && g.world.passable(x, y) && !g.world.inBuffer(x, y) && !g.world.villageAt(x, y)) spots.push([x, y]);
+        }
+        const rr = FE.makeRng(s + 9);
+        for (let k = 0; k < 4 && spots.length; k++) {
+          const [x, y] = spots.splice(Math.floor(rr() * spots.length), 1)[0];
+          const m = g.spawnMonster({ type: 'TERRAIN', x, y, cells: [], scope: 2, data: {} });
+          if (m) Object.assign(m, { x, y, home: { x, y } });
+        }
+        if (!g.monsters.length) continue;
+        const st = FE.Stability.stat(g);
+        st.corrupt = 0;
+        const evTick = FE.Events.tick;
+        FE.Events.tick = () => {}; // 只量侵蝕，不讓檢查器把扭曲的地面變成新的怪物
+        const before = g.world.chunks.reduce((n, chk) => n + chk.cells.flat().filter((c) => c.biome === 'tundra' || c.biome === 'desert').length, 0);
+        p.copper = 1000;
+        g.rest();
+        const after = g.world.chunks.reduce((n, chk) => n + chk.cells.flat().filter((c) => c.biome === 'tundra' || c.biome === 'desert').length, 0);
+        FE.Events.tick = evTick;
+        r.nights++;
+        r.monsters += g.monsters.length;
+        r.corrupt += st.corrupt;
+        r.tiles += after - before;
+      }
+    }
+    C.CORRUPT_CHANCE = c0;
+    const per = (ch) => corruptCal[ch].corrupt / Math.max(1, corruptCal[ch].monsters);
+    ok(per(C.CORRUPT_CHANCE) >= 1 && per(C.CORRUPT_CHANCE) <= 2, `長休一晚每隻附近怪物侵蝕 ${per(C.CORRUPT_CHANCE).toFixed(2)} 次（應該 1～2）`);
+  }
+}
+UNITS.economy30 = () => { try { testEconomy30(); } catch (e) { fail('時間與經濟測試拋出例外：' + e.stack); } };
 const simResults = []; // 這個行程跑過的模擬結果
 const arenaData = {};  // 競技場量測（每個職業一項工作）
 let growthChecks = 0;
@@ -4898,7 +5387,7 @@ function runJob(id) {
   else if (kind === 'sim4') {
     simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 2000 : 3000, untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
-  else if (kind === 'unit') { useClasses('legacy'); UNITS[a](); }
+  else if (kind === 'unit') { useClasses('legacy'); NO_TIRE = a !== 'economy30'; UNITS[a](); NO_TIRE = false; }
   else if (kind === 'arena') runArena(a);
   else throw new Error('不認得的工作 ' + id);
 }
@@ -4908,7 +5397,8 @@ function collectState() {
     problems, pcount: problems.count || 0,
     stats, geo, reachCheck, bufferViolations, cutOff, stuckFixes, dlgStats, combat,
     measure: { armorCmp: measure.armorCmp },
-    checks: { dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks },
+    checks: { dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks, econ: econChecks },
+    corruptCal,
     botDrops,
     sims: simResults, arena: arenaData,
   };
@@ -4938,7 +5428,8 @@ function mergeState(part) {
   cutOff.push(...part.cutOff);
   const c = part.checks;
   dlgChecks += c.dlg; creationChecks += c.creation; wlChecks += c.wl; soldierChecks += c.soldier; bagChecks += c.bag;
-  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth;
+  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth; econChecks += c.econ;
+  mergeDeep(corruptCal, part.corruptCal);
   simResults.push(...part.sims);
   mergeDeep(arenaData, part.arena);
 }
@@ -4946,7 +5437,7 @@ function mergeState(part) {
 function buildJobs() {
   const jobs = [];
   const add = (id, w) => jobs.push({ id, w });
-  const units = ['gear', 'character', 'combat28', 'growth29', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
+  const units = ['gear', 'character', 'combat28', 'growth29', 'economy30', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
   if (MODE === 'arena') {
     for (const cls of BOT_CLASSES) add('arena:' + cls, 30);
     return jobs;
@@ -4977,6 +5468,7 @@ if (JOB) {
   else {
     // 直接叫起來（不經主行程）：只印這一項的耗時、模擬結果和問題，調數字、查單項用
     for (const s of simResults) console.log(JSON.stringify(s));
+    if (Object.keys(corruptCal).length) console.log('侵蝕校準', JSON.stringify(corruptCal));
     console.log(`耗時 ${((Date.now() - t0) / 1000).toFixed(1)} 秒｜問題 ${problems.count || 0} 件`);
     for (const p of problems) console.log('  ', p);
   }
@@ -5089,7 +5581,19 @@ console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${b
   const line = (c, name) => (cmp[c] ? `${name} 每下 ${(cmp[c].dmg / cmp[c].n).toFixed(2)} 點傷害（怪物出手 ${cmp[c].n} 次、打中 ${cmp[c].hit} 次、命中時平均 ${(cmp[c].dmg / Math.max(1, cmp[c].hit)).toFixed(2)}）` : `${name} -`);
   console.log(`防具對照（${SEEDS.length} 個種子各 ${SIM_CMP_STEPS} 個動作，單人）：${line('none', '沒有防具')}｜${line('heavy', '穿重甲')}${cmp.none && cmp.heavy ? `｜重甲是沒防具的 ${((cmp.heavy.dmg / cmp.heavy.n) / (cmp.none.dmg / cmp.none.n) * 100).toFixed(0)}%` : ''}`);
 }
-console.log(`對話：邏輯檢查 ${dlgChecks} 項｜機器人開了 ${dlgStats.opened} 次對話（接委託 ${dlgStats.accept}、交件 ${dlgStats.deliver}、回報 ${dlgStats.report}；工匠那裡買 ${dlgStats.buy}、修 ${dlgStats.repair}、打造 ${dlgStats.craft}、賣礦石 ${dlgStats.sellOre}、賣裝備 ${dlgStats.sell}；離開 ${dlgStats.leave}）`);
+// 第三十版：時間與經濟
+{
+  console.log(`時間與經濟（第三十版）的場景檢查 ${econChecks} 項`);
+  const cal = Object.keys(corruptCal).sort((a, b) => a - b).map((k) => { const r = corruptCal[k]; return `每回合 ${k}：${r.nights} 晚、附近怪物 ${r.monsters} 隻、侵蝕 ${r.corrupt} 次（每隻 ${(r.corrupt / Math.max(1, r.monsters)).toFixed(2)} 次、每晚多出 ${(r.tiles / Math.max(1, r.nights)).toFixed(1)} 格扭曲地面）`; });
+  if (cal.length) console.log(`  侵蝕校準（長休一晚 80 回合）：${cal.join('｜')}`);
+  const all = sim.concat(sim4);
+  if (all.length) {
+    for (const s of all) console.log(`  ${FE.CLASSES[s.cls] ? FE.CLASSES[s.cls].name : s.cls} seed${s.seed} ${s.worldEvery > 1 ? '四人等效' : '單人'}（${s.actions} 動作、${s.days} 天）：長休 ${s.longRests} 次、平均每次付 ${FE.money(s.longRests ? s.restPaid / s.longRests : 0)}、短休 ${s.shortRests}｜經濟標籤 升 ${s.econUp}、降 ${s.econDown}（結束時 ${s.econEnd}）｜力竭最高 ${s.exhaustMax} 級｜完成委託 清除 ${s.jobs.hunt}、送貨 ${s.jobs.deliver}、採藥 ${s.jobs.herb}、採礦 ${s.jobs.ore}，同時最多 ${s.jobsMax} 個｜身上 ${FE.money(s.money)}`);
+    const sum = (k) => all.reduce((a, s) => a + s[k], 0);
+    console.log(`  合計：長休 ${sum('longRests')} 次、平均每次付 ${FE.money(sum('longRests') ? sum('restPaid') / sum('longRests') : 0)}｜經濟標籤 升 ${sum('econUp')} 次、降 ${sum('econDown')} 次｜力竭最高 ${Math.max(...all.map((s) => s.exhaustMax))} 級`);
+  }
+}
+console.log(`對話：邏輯檢查 ${dlgChecks} 項｜機器人開了 ${dlgStats.opened} 次對話（接委託 ${dlgStats.accept}、交件 ${dlgStats.deliver}、交藥草 ${dlgStats['hand:herb']}、交礦石 ${dlgStats['hand:ore']}、回報 ${dlgStats.report}；工匠那裡買 ${dlgStats.buy}、修 ${dlgStats.repair}、打造 ${dlgStats.craft}、賣礦石 ${dlgStats.sellOre}、賣裝備 ${dlgStats.sell}；離開 ${dlgStats.leave}）`);
 console.log(`聚落周圍的怪物（任何時刻、含生成點）：違規 ${bufferViolations} 次｜機器人被村民夾在屋裡、等村民走開 ${stuckFixes} 次`);
 const pct = (n, d) => (d ? (100 * n / d).toFixed(1) + '%' : '-');
 const dist = (t) => { const n = Object.values(t).reduce((a, b) => a + b, 0); return ['crit', 'hit', 'hard', 'miss', 'fumble'].map((k) => `${k} ${pct(t[k] || 0, n)}`).join('、') + `（共 ${n}）`; };

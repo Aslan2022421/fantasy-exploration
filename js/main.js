@@ -37,7 +37,7 @@
     }
     playlog.push({
       t: game.turn, k: game.ticks || 0, a: label, x: p.x, y: p.y, hp: p.hp, mhp: p.maxHp, lv: game.level, exp: game.exp,
-      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.attackText(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: p.gold, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
+      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.attackText(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: p.copper, ex: p.exhaust, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
       m: msgs.reverse(),
     });
     if (playlog.length > PLAYLOG_MAX) playlog = playlog.slice(-PLAYLOG_MAX);

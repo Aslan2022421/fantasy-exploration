@@ -118,6 +118,7 @@
       if (w.landmarkAt(x, y) || w.landmarkAt(x + dx, y + dy) || w.inBuffer(x, y) || w.inBuffer(x + dx, y + dy)) continue;
       w.setCell(x, y, '.', 'tundra');
       w.setCell(x + dx, y + dy, ':', 'desert');
+      FE.Stability.stat(game).corrupt++;
       if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}侵蝕了周遭的地面。`, 'bug');
       return;
     }
@@ -325,7 +326,7 @@
   }
 
   // ---- 士兵 ----
-  // 冒險者每做一個動作，士兵做一個動作（移動、出手或站著不動）；失序時怪物動兩次，士兵仍只動一次。
+  // 士兵跟怪物照同一個時鐘（第三十版）：每 10 刻做一個動作（移動、出手或站著不動）；失序時冒險者的動作花兩倍的刻，士兵跟怪物一樣多動一次。
   // 安穩、動盪：在自己的城鎮裡室外走動（跟村民一樣，不進建築）；在城外就走回城鎮。
   // 失序：出城，追打該塊世界裡事件與侵蝕生的小怪物（m.small）；創世時的怪物一律不碰，免得冒險者解不出下一塊。
   // 打不到（沒有目標或走不到）就在城鎮附近巡邏。士兵可以走進聚落周圍的圈，怪物不行。

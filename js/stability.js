@@ -19,7 +19,11 @@
   // 測試與開發者統計用，不進存檔
   const stat = (game) =>
     game._stab ||
-    (game._stab = { recur: 0, sabotage: 0, soldierActs: 0, soldierSlots: 0, soldierAttacks: 0, soldierKills: 0, soldierDeaths: 0, sorties: 0, refills: 0 });
+    (game._stab = {
+      recur: 0, sabotage: 0, soldierActs: 0, soldierSlots: 0, soldierAttacks: 0, soldierKills: 0, soldierDeaths: 0, sorties: 0, refills: 0,
+      // 第三十版：侵蝕次數、長休次數與付的錢（銅）、短休次數、經濟標籤升降次數、力竭最高到幾級
+      corrupt: 0, longRests: 0, restPaid: 0, shortRests: 0, econUp: 0, econDown: 0, exhaustMax: 0, jobs: { hunt: 0, deliver: 0, herb: 0, ore: 0 },
+    });
   const state = (game) => game.worldState || 0;
   const worldLevel = (game) => FE.worldLevelFor(game.world.chunks.length);
   const mult = (game, key) => C['STATE_' + key][state(game)];
@@ -142,18 +146,18 @@
     const list = w.chests.filter((c) => !FE.Checker.checkChest(c));
     if (!list.length) return false;
     const c = FE.pick(game.rng, list);
-    const old = c.gold;
-    c.gold = -FE.randInt(game.rng, 6, 30);
+    const old = c.copper;
+    c.copper = -FE.randInt(game.rng, 6, 30) * C.SILVER;
     const d = FE.Checker.checkChest(c);
     d.scope = Math.min(d.scope, maxScope(game));
     const m = game.spawnMonster(d, canReach);
     if (!m) {
-      c.gold = old;
+      c.copper = old;
       return false;
     }
     m.small = true;
     stat(game).sabotage++;
-    game.say('某個寶箱裡的金幣忽然算不清了，一隻' + m.name + '冒了出來。', 'bug');
+    game.say('某個寶箱裡的錢幣忽然算不清了，一隻' + m.name + '冒了出來。', 'bug');
     return true;
   }
 

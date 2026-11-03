@@ -401,16 +401,16 @@
     return bugs;
   }
 
-  // 數值暴走：寶箱金幣是負數或 NaN
+  // 數值暴走：寶箱的錢（銅）是負數或 NaN；影響範圍照算壞了幾銀算（每 4 銀 1 格）
   function checkChest(c) {
-    if (Number.isFinite(c.gold) && c.gold >= 0) return null;
-    const scope = Number.isFinite(c.gold) ? Math.min(10, Math.max(1, Math.ceil(-c.gold / 4))) : 8;
-    return { type: 'VALUE', x: c.x, y: c.y, cells: [[c.x, c.y]], scope, data: { chestId: c.id, value: c.gold } };
+    if (Number.isFinite(c.copper) && c.copper >= 0) return null;
+    const scope = Number.isFinite(c.copper) ? Math.min(10, Math.max(1, Math.ceil(-c.copper / FE.CONFIG.SILVER / 4))) : 8;
+    return { type: 'VALUE', x: c.x, y: c.y, cells: [[c.x, c.y]], scope, data: { chestId: c.id, value: c.copper } };
   }
 
-  // 懸空指標：任務指向不存在的村民
+  // 懸空指標：送貨任務指向不存在的村民（清除、採藥、採礦委託沒有收貨人，不檢查）
   function checkNpc(world, n) {
-    if (!n.quest || n.quest.done || n.quest.kind === 'hunt' || world.npcById(n.quest.targetId)) return null;
+    if (!n.quest || n.quest.done || ['hunt', 'herb', 'ore'].includes(n.quest.kind) || world.npcById(n.quest.targetId)) return null;
     return {
       type: 'REFERENCE',
       x: n.x,

@@ -585,6 +585,7 @@
     const reward = FE.questReward(world, giver, target);
     const tv = target ? world.villageById(target.villageId) : world.villageById(giver.villageId);
     return {
+      kind: 'deliver',
       targetId: target ? target.id : world.nextId++,
       targetName: target ? target.name : ghostName,
       targetVillage: tv ? tv.name : '附近',
@@ -592,7 +593,7 @@
       line: FE.pick(rng, FE.QUEST_LINES),
       steps: reward.steps,
       exp: reward.exp,
-      gold: reward.gold,
+      copper: reward.gold * C.SILVER, // 單位是銅；領的時候再乘經濟標籤與魅力
       compute: reward.compute,
       accepted: false,
       done: false,
@@ -659,13 +660,31 @@
       const alive = world.npcById(t.id);
       if (alive) npc.quest = FE.makeQuest(world, rng, npc, alive);
     }
+    for (const o of world.npcs) if (o.villageId === v.id) FE.npcRace(world, o);
   }
 
-  // 粗糙的掉落公式：約四分之一會算出負數，少數會除以零變成 NaN。所有寶箱的金幣減半（CHEST_GOLD_MUL），算壞的公式套在減半後的數字上
+  // 世界裡的人（村民、工匠、士兵）的種族（第三十版）：人類 70%、矮人 15%、精靈 15%。
+  // 用世界種子和這個人的 id 擲（不動生成用的亂數，世界的樣子不變），擲過就記在 n.race；暫時不影響行為
+  FE.npcRace = function (world, n) {
+    if (n.race) return n.race;
+    let r = hash(world.seed ^ 0x5bd1e995, n.id, 7331);
+    n.race = C.NPC_RACES[C.NPC_RACES.length - 1][0];
+    for (const [race, p] of C.NPC_RACES) {
+      if (r < p) {
+        n.race = race;
+        break;
+      }
+      r -= p;
+    }
+    return n.race;
+  };
+
+  // 粗糙的掉落公式：約四分之一會算出負數，少數會除以零變成 NaN。所有寶箱的金幣減半（CHEST_GOLD_MUL），算壞的公式套在減半後的數字上。
+  // 算出來的是銀，換成銅（第三十版）；算壞的 NaN 乘完還是 NaN
   FE.roughGold = function (rng) {
     let gold = Math.floor((25 + (rng() - 0.62) * 70) * C.CHEST_GOLD_MUL);
     if (rng() < 0.08) gold = Math.floor((gold / 0) * 0);
-    return gold;
+    return gold * C.SILVER;
   };
 
   // 創世時固定放幾個寶箱，拿了就沒有，不會重生
@@ -689,7 +708,7 @@
     const n = Math.min(spots.length, FE.randInt(rng, C.CHESTS[0], C.CHESTS[1]));
     for (let i = 0; i < n; i++) {
       const [x, y] = spots.splice(Math.floor(rng() * spots.length), 1)[0];
-      world.chests.push({ id: world.nextId++, x, y, gold: FE.roughGold(rng) });
+      world.chests.push({ id: world.nextId++, x, y, copper: FE.roughGold(rng) });
     }
   }
 

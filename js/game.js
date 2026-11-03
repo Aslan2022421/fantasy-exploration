@@ -16,7 +16,8 @@
       this.nextMonsterId = 1;
       this.log = [];
       this.turn = 0;
-      this.ticks = 0;        // 經過的時間（刻）
+      this.ticks = 0;        // 經過的時間（刻）；一刻 36 秒、一小時 100 刻、一天 2,400 刻（第三十版），怪物、士兵、事件都照這個時鐘
+      this.sleeping = false; // 長休中（世界照跑，但不累積力竭；不進存檔）
       this.exp = 0;          // 累計經驗值，只增不減；只管冒險者的等級
       this.level = 1;
       this.creation = 0;     // 創世力（不顯示）：累計的算力裡進創世的那一份
@@ -26,9 +27,8 @@
       this.aim = null;       // 按 F 瞄準時：{ mode, ids 看得到的怪物（近的在前）, i 目前選的 }（不進存檔）
       this.worldState = 0;   // 世界狀態：0 安穩、1 動盪、2 失序（stability.js）；世界等級另外算，見 FE.Stability.worldLevel
       this.soldiers = [];    // 城鎮的士兵（role 'soldier'），不在 world.npcs 裡
-      this.worldEvery = 1;   // 冒險者每做幾個動作，世界（怪物、士兵）才走一回合；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
+      this.worldEvery = 1;   // 世界（怪物、士兵）每 10 刻走一回合，這個數字讓它再慢幾倍；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
       this.worldClock = 0;
-      this.soldierClock = 0;
       this.fixed = [];       // 修好的地形錯位與斷崖，動盪時可能復發
       this.fell = false;     // 這一個動作裡冒險者倒下了
       this.talking = null;   // 對話視窗開著時，對方的 id（不進存檔）
@@ -192,6 +192,7 @@
         { id: w.nextId++, name: FE.pickName(w, this.rng), role: 'soldier', villageId: v.id, x, y, wl: FE.Stability.worldLevel(this), in: true },
         FE.soldierStats(FE.Stability.worldLevel(this))
       );
+      FE.npcRace(w, s); // 士兵也擲種族（人類 70%、矮人 15%、精靈 15%）
       this.soldiers.push(s);
       return s;
     }
@@ -317,14 +318,46 @@
       return FE.Char.pushLimit(this.player);
     }
 
-    // 魅力修正值（價錢、金幣獎勵用）
+    // 魅力修正值（價錢、委託金錢獎勵用）
     chaMod() {
       return FE.Char.attrMod(this.player, 'cha');
     }
 
-    // 委託與任務的金幣獎勵：魅力每點修正值 +5%，四捨五入
-    questGold(gold) {
-      return Math.max(0, Math.round(gold * (1 + C.CHA_PRICE * this.chaMod())));
+    // 委託與任務的金錢獎勵（銅）：基本數字×委託人聚落的經濟標籤倍率（荒蕪 ×0.8、貧窮 ×0.9、普通 ×1、繁盛與富裕 ×1.2）
+    // ×魅力（每點修正值 +5%）×生活水準的加成（上一次在這個聚落長休，普通 +5%、繁盛 +10%），最後才四捨五入。
+    // q 是委託（npc.quest 或手上的 jobs），villageId 是委託人的聚落
+    questPay(q, villageId) {
+      const p = this.player;
+      const v = this.world.villageById(villageId);
+      const lodge = p.lodging && p.lodging.villageId === villageId ? p.lodging.bonus : 0;
+      return Math.max(0, Math.round((q.copper || 0) * FE.Steading.questEcon(v) * (1 + C.CHA_PRICE * this.chaMod()) * (1 + lodge)));
+    }
+
+    // ---- 錢與聚落經濟（第三十版）----
+    // 在聚落花錢（買、修、打造、長休）：經濟值每 10 銀 +1，花掉的錢每 20 銀換 1 點修補力（單人份量，只進修補力、不進創世力）
+    spend(v, copper) {
+      if (!(copper > 0)) return;
+      this.econ(v, copper / (C.ECON_PER_SPEND * C.SILVER));
+      this.earn(copper / (C.SPEND_REPAIR * C.SILVER), { repairOnly: true });
+    }
+
+    // 聚落的經濟值加減；經濟標籤變了出一行訊息
+    econ(v, d) {
+      const ch = FE.Steading.addEcon(v, d);
+      if (!ch) return;
+      const up = ch.to > ch.from;
+      FE.Stability.stat(this)[up ? 'econUp' : 'econDown']++;
+      this.say(`${v.name}的日子${up ? '好過了些' : '難過了起來'}（經濟：${FE.PROSPERITY[ch.from]} → ${FE.PROSPERITY[ch.to]}）。`, 'world');
+    }
+
+    // 每過一天：聚落 24 步內每有 1 隻怪物，經濟值 −1
+    econDay() {
+      for (const v of this.world.villages) {
+        const box = (m) => Math.max(v.x0 - m.x, 0, m.x - v.x1) + Math.max(v.y0 - m.y, 0, m.y - v.y1);
+        const n = this.monsters.filter((m) => box(m) <= C.HUNT_RADIUS).length;
+        FE.Steading.econ(v);
+        if (n) this.econ(v, -n * C.ECON_MONSTER);
+      }
     }
 
     // 主手武器現在的傷害寫法（狀態列用），例如「1d8+3 揮砍」
@@ -341,9 +374,15 @@
       return true;
     }
 
-    // 手上這份送貨委託的物品（在背包裡）
+    // 手上這份送貨委託（jobs.deliver）的物品（在背包裡）
     goodsFor(c) {
-      return c && c.kind !== 'hunt' ? this.bagEntry('goods', c.giverId) : null;
+      return c && c.kind === 'deliver' ? this.bagEntry('goods', c.giverId) : null;
+    }
+
+    // 手上的委託（第三十版：清除、送貨、採藥、採礦每種最多一個）：照右側欄的順序列出來
+    jobList() {
+      const j = this.player.jobs || {};
+      return FE.JOB_KINDS.map((k) => j[k]).filter(Boolean);
     }
 
     // 背包視窗列的東西：{ id, name, n, use, gear, info }，按數字選第幾樣（藥草是吃，裝備是穿上或拿起，工具放著就能用）
@@ -649,8 +688,8 @@
           this.say(`你轉頭盯上了${m.name}（按 1 攻擊、2 重擊、3 撤退）。`, 'sys');
           FE.Combat.resolveAttack(this, old, p, 'attack', { noCounter: true, cling: true, clingWord: '轉向別的怪物' });
           if (this.fell) {
-            this.fell = false; // 倒下了，已經回到醒來的地方
-            this.turn++;
+            this.turn++; // 倒下了，已經回到醒來的地方；醒來也算一次長休（afterTurn）
+            this.afterTurn();
             return;
           }
           this.endTurn(false);
@@ -695,8 +734,8 @@
           FE.Combat.resolveAttack(this, o, p, 'attack', { noCounter: true, opportunity: true });
         }
         if (this.fell) {
-          this.fell = false; // 倒下了，已經回到醒來的地方
-          this.turn++;
+          this.turn++; // 倒下了，已經回到醒來的地方；醒來也算一次長休（afterTurn）
+          this.afterTurn();
           return;
         }
       }
@@ -712,27 +751,29 @@
         else this.openChest(chest);
       }
       // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻；被扭曲過的地面一步 30 刻（取較大的）
-      // 力量不到身上防具的需求：一步 15 刻（跟超重、被扭曲的地面取最大的）
+      // 力量不到身上防具的需求：一步 15 刻（跟超重、被扭曲的地面取最大的）；力竭每級再多 1 刻（第三十版）
       const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
+      const tired = C.EXHAUST_MOVE * (p.exhaust || 0);
       if (this.isHardGround(nx, ny)) {
-        const t = Math.max(C.TICKS_HARD, base);
+        const t = Math.max(C.TICKS_HARD, base) + tired;
         this.say(`這裡的地面被異常扭曲過，很難走，這一步花了 ${t} 刻。`, 'sys');
         this.endTurn(true, t);
       } else {
-        this.endTurn(true, base);
+        this.endTurn(true, base + tired);
       }
     }
 
     // 冒險者做完一個動作：每個動作都附帶一點虛擬的修補力；移動才累積步數與算力。
-    // 時間用「刻」算（參考矮人要塞）：動作花幾刻，怪物每 10 刻行動一次；失序時每個動作的刻加倍，怪物多動一次。
-    // 士兵跟冒險者同步：冒險者每做一個動作，士兵做一個動作（失序時怪物動兩次，士兵仍只動一次）
-    endTurn(moved, ticks) {
+    // 時間用「刻」算（參考矮人要塞）：動作花幾刻，失序時每個動作的刻加倍。花掉的刻交給 advance 讓世界照時鐘跑。
+    // opts.exact：刻數照給的（休息用：不加防具多花的刻、失序不加倍）；opts.sleep：長休中（不累積力竭）；
+    // opts.interrupt()：每 10 刻問一次，回傳 true 就停（野外短休被怪物打斷）。回傳實際花了幾刻
+    endTurn(moved, ticks, opts) {
+      opts = opts || {};
       const p = this.player;
       const chaos = FE.Stability.state(this) === 2 ? C.CHAOS_TIME : 1;
       // 身上防具讓每個動作多花幾刻（見 gear.js 的 extraTicks）；超重只讓走路變慢（見 move）
-      const t = ((ticks || C.TICKS_MOVE) + FE.Gear.extraTicks(p)) * chaos;
+      const t = opts.exact ? ticks : ((ticks || C.TICKS_MOVE) + FE.Gear.extraTicks(p)) * chaos;
       this.turn++;
-      this.ticks = (this.ticks || 0) + t;
       FE.Combat.regenBlock(this, p);
       this.addRepair(C.VIRTUAL_REPAIR);
       // 冒險者脫離戰鬥（被射過的怪物離冒險者超過視野，撤退、倒下醒來都算）：自動撿回射向牠的箭的一半
@@ -740,28 +781,91 @@
       if (moved !== false) {
         p.steps++;
         this.earn(C.COMPUTE_PER_MOVE);
-        if (p.steps % C.EVENT_EVERY === 0) FE.Events.tick(this);
         if (p.steps % C.NPC_MOVE_EVERY === 0) FE.AI.npcTurn(this);
       }
-      // 平常 worldEvery 是 1：每個動作世界走一回合。測試的「四人等效」模擬用 4：每 4 個動作世界才走 1 回合
-      this.soldierClock += 1 / this.worldEvery;
-      if (this.soldierClock >= 1) {
-        this.soldierClock -= 1;
-        FE.AI.soldierTurn(this);
+      this.sleeping = !!opts.sleep;
+      const spent = this.advance(t, opts.interrupt);
+      this.sleeping = false;
+      this.afterTurn();
+      return spent;
+    }
+
+    // 時間往前走 t 刻（第三十版的時鐘，一次走 10 刻）：怪物與士兵每 10 刻各動一次（刻數累積起來，湊滿 10 刻就多動一次，
+    // 防具多花的刻真的讓世界多動）；每過 100 刻演算一次事件；每過一天（2,400 刻）聚落的經濟值照附近的怪物扣；
+    // 連續一整天沒有長休，力竭 +1。平常 worldEvery 是 1；測試的「四人等效」模擬用 4，世界慢四倍。
+    // interrupt() 回傳 true、或冒險者倒下了就停，回傳實際走了幾刻
+    advance(t, interrupt) {
+      const p = this.player;
+      let done = 0;
+      while (done < t) {
+        const step = Math.min(C.TICKS_MOVE, t - done);
+        const before = this.ticks || 0;
+        this.ticks = before + step;
+        done += step;
+        this.tickAcc = (this.tickAcc || 0) + step;
+        const turns = Math.floor(this.tickAcc / C.TICKS_MOVE);
+        this.tickAcc -= turns * C.TICKS_MOVE;
+        this.worldClock += turns / this.worldEvery;
+        while (this.worldClock >= 1 && !this.fell) {
+          this.worldClock -= 1;
+          FE.AI.worldTurn(this);
+          if (!this.fell) FE.AI.soldierTurn(this);
+        }
+        if (this.fell) {
+          this.worldClock -= Math.floor(this.worldClock); // 冒險者倒下了，沒走完的回合不補
+          return done;
+        }
+        for (let k = Math.floor(before / C.EVENT_TICKS) + 1; k * C.EVENT_TICKS <= this.ticks; k++) FE.Events.tick(this);
+        for (let k = Math.floor(before / C.DAY_TICKS) + 1; k * C.DAY_TICKS <= this.ticks; k++) this.econDay();
+        // 力竭：連續一整天（2,400 刻）沒有長休 +1 級（最多 6 級；長休中不算）
+        while (!this.sleeping && p.exhaust < C.EXHAUST_MAX && this.ticks - (p.awakeAt || 0) >= C.DAY_TICKS) {
+          p.awakeAt = (p.awakeAt || 0) + C.DAY_TICKS;
+          p.exhaust++;
+          FE.Stability.stat(this).exhaustMax = Math.max(FE.Stability.stat(this).exhaustMax, p.exhaust);
+          this.say(p.exhaust >= C.EXHAUST_MAX ? '你撐不住了，眼前一黑。' : `你已經一整天沒好好睡過，越來越累了（力竭 ${p.exhaust}）。`, 'bad');
+        }
+        if (interrupt && interrupt()) return done;
       }
-      // 怪物每 10 刻行動一次：刻數累積起來，湊滿 10 刻就多動一次（防具多花的刻真的讓怪物多動，不被四捨五入吃掉）
-      this.tickAcc = (this.tickAcc || 0) + t;
-      const turns = Math.floor(this.tickAcc / C.TICKS_MOVE);
-      this.tickAcc -= turns * C.TICKS_MOVE;
-      this.worldClock += turns / this.worldEvery;
-      while (this.worldClock >= 1 && !this.fell) {
-        this.worldClock -= 1;
-        FE.AI.worldTurn(this);
-      }
-      if (this.fell) this.worldClock -= Math.floor(this.worldClock); // 冒險者倒下了，沒走完的回合不補
+      return done;
+    }
+
+    // 一個動作的收尾：倒下的醒來也算一次長休（世界跑 80 回合、不收錢）；力竭到 6 級也倒下，在最近的聚落醒來，
+    // 降到 5 級再照長休 −1。最後量一次世界狀態
+    afterTurn() {
+      const p = this.player;
+      const fell = this.fell;
       this.fell = false;
       this.unstrand();
+      const collapsed = p.exhaust >= C.EXHAUST_MAX;
+      if (collapsed) {
+        if (!fell) {
+          this.battle.targetId = null;
+          this.say(`你累得倒了下去，在${this.wakeSpot()}醒來。`, 'bad');
+        }
+        p.exhaust = C.EXHAUST_MAX - 1;
+      }
+      if (fell || collapsed) this.sleepFree();
       FE.Stability.update(this);
+    }
+
+    // 不收錢的長休（倒下、力竭倒下後醒來）：世界同步跑 80 回合，生命回滿、力竭 −1，沒有生活水準的效果
+    sleepFree() {
+      this.sleeping = true;
+      this.advance(C.LONG_REST_TICKS);
+      this.sleeping = false;
+      this.fell = false;
+      this.unstrand();
+      this.rested();
+      this.say('你睡了一覺，生命回滿。', 'good');
+    }
+
+    // 長休完：生命回滿、力竭 −1，從現在起重新算「連續多久沒有長休」
+    rested() {
+      const p = this.player;
+      p.hp = p.maxHp;
+      p.exhaust = Math.max(0, (p.exhaust || 0) - 1);
+      p.awakeAt = this.ticks;
+      FE.Stability.stat(this).longRests++;
     }
 
     // 怪物一定打得到：地形重算、斷崖復發這類改高度的事，可能把怪物困在四面斷崖的台子或坑裡。
@@ -1099,7 +1203,9 @@
       return this.monsters.some((m) => hit(m) || (m.members && m.members.some(hit)));
     }
 
-    // 休息：回 1 點生命，在村莊裡休息就回滿；只把修補力存起來（不進創世力），事件照移動步數演算。旁邊有怪物時不能休息
+    // 休息（第三十版）。旁邊有怪物時不能休息；休息一次只把修補力存起來（不進創世力）。
+    // 野外短休：1 小時（100 刻，世界同步跑 10 回合），回 1d10＋體質修正值（最少 1），不花錢；途中有怪物貼上來就被打斷，沒回生命。
+    // 聚落裡長休：8 小時（800 刻，世界同步跑 80 回合），生命回滿、力竭 −1，付生活開支（見 payLiving）
     rest() {
       if (this.adjacentMonsters().length) {
         this.say('旁邊有怪物，沒辦法休息。', 'sys');
@@ -1108,31 +1214,89 @@
       this.beginAction();
       const p = this.player;
       const v = this.world.villageAt(p.x, p.y);
-      if (v) {
-        p.hp = p.maxHp;
-        this.say(`你在${v.name}好好休息了一晚，生命回滿。`, 'good');
-      } else {
-        // 回復量＝基本 1 點加體質修正值，最少 1
-        const heal = Math.max(1, C.REST_HEAL + FE.Char.attrMod(p, 'con'));
-        p.hp = Math.min(p.maxHp, p.hp + heal);
-        this.say(`你休息了一下，生命回復 ${heal}。`, 'sys');
-      }
       this.earn(C.REST_COMPUTE, { repairOnly: true });
-      this.endTurn(false);
+      if (v) {
+        const paid = this.payLiving(v);
+        this.endTurn(false, C.LONG_REST_TICKS, { exact: true, sleep: true });
+        this.rested();
+        this.say(`你在${v.name}睡了一晚（${paid}），生命回滿。${p.exhaust ? `還有點累（力竭 ${p.exhaust}）。` : ''}`, 'good');
+        return;
+      }
+      FE.Stability.stat(this).shortRests++;
+      const spent = this.endTurn(false, C.SHORT_REST_TICKS, { exact: true, interrupt: () => this.adjacentMonsters().length > 0 });
+      if (spent < C.SHORT_REST_TICKS || this.adjacentMonsters().length) {
+        this.say(`休息被怪物打斷了（歇了 ${spent} 刻）。`, 'bad');
+        return;
+      }
+      const heal = Math.max(1, FE.rollDice(this.rng, C.SHORT_REST_DIE, 1) + FE.Char.attrMod(p, 'con'));
+      const got = Math.min(heal, p.maxHp - p.hp);
+      p.hp += got;
+      this.say(`你歇了一個小時，生命回復 ${got}。`, 'sys');
     }
 
+    // 長休付生活開支：生活水準照聚落的經濟標籤（玩家不選）：荒蕪 3 銀，沒有加成；貧窮 6 銀，身上裝備的耐久回 3%；
+    // 普通 15 銀，耐久回 5%、這個聚落的委託獎勵 +5%；繁盛（與富裕）30 銀，耐久回 10%、委託獎勵 +10%。
+    // 錢不夠就住最便宜的那一級（荒蕪的效果），付得出多少付多少（最多 3 銀）。回傳一句付了什麼
+    payLiving(v) {
+      const p = this.player;
+      const tier = v.steading ? v.steading.prosperity : 0;
+      const cost = C.LIVING_COST[tier] * C.SILVER;
+      let lv = tier;
+      let paid = cost;
+      if (p.copper < cost) {
+        lv = 0;
+        paid = Math.min(p.copper, C.LIVING_COST[0] * C.SILVER);
+      }
+      p.copper -= paid;
+      const st = FE.Stability.stat(this);
+      st.restPaid += paid;
+      // 身上的裝備耐久回幾成（四捨五入，至少 1 點）
+      const rate = C.LIVING_REPAIR[lv];
+      let fixed = 0;
+      if (rate > 0) {
+        for (const g of FE.Gear.equipped(p)) {
+          if (g.dur >= g.max) continue;
+          g.dur = Math.min(g.max, g.dur + Math.max(1, Math.round(g.max * rate)));
+          FE.Gear.repaired(g);
+          fixed++;
+        }
+      }
+      const bonus = C.LIVING_QUEST[lv];
+      p.lodging = bonus > 0 ? { villageId: v.id, bonus } : null;
+      this.spend(v, paid);
+      const level = FE.PROSPERITY[lv];
+      const head = lv < tier ? `錢不夠，只住得起最便宜的，付了 ${FE.money(paid)}` : `${level}的生活，付了 ${FE.money(paid)}`;
+      return head + (fixed ? '，身上的裝備也順手整理了一下' : '') + (bonus > 0 ? `，這裡的委託獎勵 +${Math.round(bonus * 100)}%` : '');
+    }
+
+    // 開寶箱：錢拆成三種幣（總值不變，見 coins），硬幣沒有重量
     openChest(chest) {
       const p = this.player;
-      const gold = Math.max(0, chest.gold | 0);
-      p.gold += gold;
+      const copper = Math.max(0, chest.copper | 0);
+      p.copper += copper;
       this.world.chests = this.world.chests.filter((c) => c !== chest);
-      this.say(`打開寶箱：金幣 +${gold}。`, 'good');
+      this.say(`打開寶箱：${this.coins(copper, chest.small)}。`, 'good');
       // 25% 機率多開出一件裝備（品質普通～傑作，每高一級機率減半），放進背包
       if (this.rng() < C.CHEST_GEAR) {
         const g = FE.Gear.randomDrop(this, 0, 5);
         this.bagAddGear(g);
         this.say(`寶箱裡還有${FE.Gear.lootName(g)}，你收進了背包。`, 'good');
       }
+    }
+
+    // 掉落的錢拆成三種幣（總值不變，第三十版）：小怪物的多銅與銀（銀佔四到七成），中型怪物與寶箱的多銀（九成）、偶爾有金
+    // （夠 1 金時三成機率，金佔三成左右）。回傳「1 金 12 銀 7 銅」這樣的寫法（幣數照實寫，不換算；零的省略）
+    coins(copper, small) {
+      let g = 0;
+      let s;
+      if (small) s = Math.floor((copper * (0.4 + 0.3 * this.rng())) / C.SILVER);
+      else {
+        if (copper >= C.GOLD && this.rng() < 0.3) g = Math.max(1, Math.floor((copper * 0.3) / C.GOLD));
+        s = Math.floor(((copper - g * C.GOLD) * 0.9) / C.SILVER);
+      }
+      const c = copper - g * C.GOLD - s * C.SILVER;
+      const parts = [g ? `${g} 金` : '', s ? `${s} 銀` : '', c ? `${c} 銅` : ''].filter(Boolean);
+      return parts.length ? parts.join(' ') : '裡面沒有錢';
     }
 
     // 清除委託指定的小怪物還剩幾隻；合體了的話，合體怪物還在就算還在
@@ -1154,17 +1318,19 @@
     }
 
     // 對話的內容：{ name, role, village, text, options: [{ id, label, note, disabled }] }
+    // 第三十版：委託分清除、送貨、採藥、採礦四種，每種同時只能接一個。同一個人身上可能同時有好幾件事
+    // （他是你送貨的收貨人、你接了他的採藥委託、他自己又有新的委託），選項一起列出來：先交件與回報，再接委託
     talkOptions(npc) {
       const p = this.player;
       const q = npc.quest;
-      const c = p.carrying;
+      const jobs = p.jobs;
       const v = this.world.villageById(npc.villageId);
       const leave = { id: 'leave', label: '離開' };
-      const goods = this.goodsFor(c);
       const shop = FE.Gear.shopOf(npc, v);
+      const race = FE.PLAYER_RACES[FE.npcRace(this.world, npc)].name;
       const out = (text, options) => ({
         name: npc.name,
-        role: shop ? FE.Gear.SHOPS[shop].title : npc.role === 'soldier' ? '士兵' : '村民',
+        role: `${shop ? FE.Gear.SHOPS[shop].title : npc.role === 'soldier' ? '士兵' : '村民'}・${race}`,
         village: v ? v.name : '',
         text,
         options,
@@ -1173,34 +1339,77 @@
       if (npc.role === 'soldier') return out(FE.SOLDIER_LINES[(npc.id + this.turn) % FE.SOLDIER_LINES.length], [leave]);
       // 工匠：買、修、打造、賣礦石、賣裝備（分層，見 shopTalk）
       if (shop) return out(...this.shopTalk(npc, v, shop));
-      if (c && c.kind === 'hunt' && c.giverId === npc.id) {
-        const left = this.huntRemaining(c.monsterIds);
-        if (left > 0) return out(`附近還有 ${left} 隻小怪物，拜託了。`, [leave]);
-        return out('村子外面安靜多了，謝謝你。', [{ id: 'report', label: '回報，領取獎勵', note: `經驗值 +${c.exp}、金幣 +${this.questGold(c.gold)}` }, leave]);
+      const reward = (o, vid) => `經驗值 +${o.exp}、${FE.money(this.questPay(o, vid))}`;
+      const texts = [];
+      const opts = [];
+      // 清除委託：清完回來找委託人回報
+      const h = jobs.hunt;
+      if (h && h.giverId === npc.id) {
+        const left = this.huntRemaining(h.monsterIds);
+        if (left > 0) texts.push(`附近還有 ${left} 隻小怪物，拜託了。`);
+        else {
+          texts.push('村子外面安靜多了，謝謝你。');
+          opts.push({ id: 'report', label: '回報，領取獎勵', note: reward(h, h.villageId) });
+        }
       }
-      // 先處理交件，再處理接委託：收貨人身上自己也有委託時，貨照樣交得出去
-      if (c && c.kind !== 'hunt' && c.targetId === npc.id && goods) {
-        return out(`你是把${goods.name}送來的人吧？`, [{ id: 'deliver', label: '交給他', note: `經驗值 +${c.exp}、金幣 +${this.questGold(c.gold)}` }, leave]);
+      // 送貨：收貨人身上自己也有委託時，貨照樣交得出去
+      const d = jobs.deliver;
+      const goods = this.goodsFor(d);
+      if (d && d.targetId === npc.id && goods) {
+        texts.push(`你是把${goods.name}送來的人吧？`);
+        opts.push({ id: 'deliver', label: '交給他', note: reward(d, d.villageId) });
       }
-      if (q && q.kind === 'hunt' && !q.accepted && !q.done) {
-        if (c) return out('你手上已經有委託了，辦完再來找我。', [leave]);
-        return out(`${q.village}附近冒出了 ${q.total} 隻小怪物，可以幫忙清掉嗎？清完回來找我。`, [
-          { id: 'accept', label: '接下', note: `經驗值 +${q.exp}、金幣 +${this.questGold(q.gold)}` },
-          { id: 'decline', label: '不接' },
-        ]);
+      // 採藥、採礦：背包裡的夠了就交（舊的也能交）
+      for (const kind of ['herb', 'ore']) {
+        const j = jobs[kind];
+        if (!j || j.giverId !== npc.id) continue;
+        const unit = kind === 'herb' ? '份藥草' : '顆礦石';
+        const have = this.bagCount(kind);
+        if (have >= j.n) {
+          texts.push(`${j.n} ${unit}帶來了嗎？`);
+          opts.push({ id: 'hand:' + kind, label: `交出 ${j.n} ${unit}`, note: reward(j, j.villageId) });
+        } else texts.push(`還差 ${j.n - have} ${unit}，拜託了。`);
       }
-      if (q && q.kind === 'hunt' && q.accepted && !q.done) return out('村子附近的小怪物還在。', [leave]);
-      if (q && !q.accepted && !q.done) {
-        if (c) return out('你手上已經有東西要送了，送完再來找我。', [leave]);
-        const line = FE.fill(q.line, { giver: npc.name, target: q.targetName, village: q.targetVillage, item: q.item }).replace(/^[^：]*：/, '');
-        return out(line, [
-          { id: 'accept', label: '接下', note: `經驗值 +${q.exp}、金幣 +${this.questGold(q.gold)}` },
-          { id: 'decline', label: '不接' },
-        ]);
+      // 他自己的委託
+      if (q && !q.done) {
+        const kind = q.kind || 'deliver';
+        const mine = jobs[kind] && jobs[kind].giverId === npc.id;
+        if (!q.accepted) {
+          if (jobs[kind]) texts.push(`你手上已經有${FE.JOB_NAMES[kind]}委託了，辦完再來找我。`);
+          else {
+            texts.push(this.questLine(npc, q));
+            opts.push({ id: 'accept', label: '接下', note: reward(q, npc.villageId) }, { id: 'decline', label: '不接' });
+          }
+        } else if (!mine && !texts.length) texts.push('委託已經有人在辦了。');
+        else if (kind === 'deliver' && mine && !texts.length) texts.push(`${q.targetVillage}的${q.targetName}還在等${q.item}。`);
       }
-      if (q && q.accepted && !q.done) return out(`${q.targetVillage}的${q.targetName}還在等${q.item}。`, [leave]);
-      // 閒話：用村民的 id 和回合數挑，對話開著時不會變
-      return out(FE.IDLE_LINES[(npc.id + this.turn) % FE.IDLE_LINES.length], [leave]);
+      // 沒事就是閒話：用村民的 id 和回合數挑，對話開著時不會變
+      if (!texts.length) texts.push(FE.IDLE_LINES[(npc.id + this.turn) % FE.IDLE_LINES.length]);
+      if (!opts.some((o) => o.id === 'decline')) opts.push(leave);
+      return out(texts.join(''), opts);
+    }
+
+    // 委託人開口請託的那句話
+    questLine(npc, q) {
+      const kind = q.kind || 'deliver';
+      if (kind === 'hunt') return `${q.village}附近冒出了 ${q.total} 隻小怪物，可以幫忙清掉嗎？清完回來找我。`;
+      if (kind === 'herb') return `我需要 ${q.n} 份藥草，可以幫我採來嗎？舊的也行。`;
+      if (kind === 'ore') return `我需要 ${q.n} 顆礦石，可以幫我挖來嗎？`;
+      return FE.fill(q.line, { giver: npc.name, target: q.targetName, village: q.targetVillage, item: q.item }).replace(/^[^：]*：/, '');
+    }
+
+    // 完成一件委託：拿錢與經驗值、算力（一半創世力、一半修補力），委託人的聚落經濟值 +3
+    finishJob(npc, c, head) {
+      const p = this.player;
+      const pay = this.questPay(c, c.villageId);
+      this.say(`${head}：經驗值 +${c.exp}、${FE.money(pay)}。`, 'good');
+      p.copper += pay;
+      p.jobs[c.kind] = null;
+      FE.Stability.stat(this).jobs[c.kind]++;
+      this.addExp(c.exp);
+      this.earn(c.compute); // 完成委託的算力
+      const v = this.world.villageById(c.villageId);
+      if (v) this.econ(v, C.ECON_QUEST);
     }
 
     // 選第 i 個選項；回傳 { close } 說明對話要不要關。不接的委託留在村民身上，之後回來還接得到
@@ -1210,7 +1419,7 @@
       if (!o) return { close: false };
       const p = this.player;
       const q = npc.quest;
-      const c = p.carrying;
+      const jobs = p.jobs;
       let close = true;
       if (FE.Gear.shopOf(npc, this.world.villageById(npc.villageId))) {
         const r = this.shopChoose(npc, o);
@@ -1218,47 +1427,39 @@
         return r;
       }
       if (o.id === 'report') {
-        if (q) q.done = true;
+        const c = jobs.hunt;
+        if (q && q.kind === 'hunt') q.done = true;
         this.say(`${npc.name}：村子外面安靜多了，謝謝你。`, 'npc');
-        const gold = this.questGold(c.gold); // 魅力每點修正值，金幣獎勵 +5%
-        this.say(`委託完成：經驗值 +${c.exp}、金幣 +${gold}。`, 'good');
-        p.gold += gold;
-        p.carrying = null;
-        this.addExp(c.exp);
-        this.earn(c.compute); // 完成委託的算力
+        this.finishJob(npc, c, '委託完成');
       } else if (o.id === 'deliver') {
+        const c = jobs.deliver;
         const giver = this.world.npcById(c.giverId);
-        if (giver && giver.quest) giver.quest.done = true;
-        const { exp, compute } = c;
-        const gold = this.questGold(c.gold);
+        if (giver && giver.quest && (giver.quest.kind || 'deliver') === 'deliver') giver.quest.done = true;
         const item = this.goodsFor(c).name;
         this.bagTake('goods', 1, c.giverId); // 從背包拿出來交給他
         this.say(`${npc.name}：謝謝你把${item}送來。`, 'npc');
-        this.say(`任務完成：經驗值 +${exp}、金幣 +${gold}。`, 'good');
-        p.gold += gold;
-        p.carrying = null;
-        this.addExp(exp);
-        this.earn(compute);
+        this.finishJob(npc, c, '任務完成');
+      } else if (o.id.startsWith('hand:')) {
+        const kind = o.id.slice(5);
+        const c = jobs[kind];
+        if (q && q.kind === kind) q.done = true;
+        this.bagTake(kind, c.n); // 交的是背包裡的（舊的也算）
+        this.say(`${npc.name}：${kind === 'herb' ? '藥草' : '礦石'}收到了，謝謝你。`, 'npc');
+        this.finishJob(npc, c, '委託完成');
       } else if (o.id === 'accept') {
+        const kind = q.kind || 'deliver';
         q.accepted = true;
-        if (q.kind === 'hunt') {
-          p.carrying = { kind: 'hunt', giverId: npc.id, monsterIds: q.monsterIds, total: q.total, village: q.village, exp: q.exp, gold: q.gold, compute: q.compute };
-          this.say(`${npc.name}：${q.village}附近冒出了 ${q.total} 隻小怪物，可以幫忙清掉嗎？清完回來找我。`, 'npc');
-        } else {
-          // 委託資料照舊記在手上，要送的東西放進背包
-          p.carrying = {
-            giverId: npc.id,
-            targetId: q.targetId,
-            targetName: q.targetName,
-            targetVillage: q.targetVillage,
-            steps: q.steps,
-            exp: q.exp,
-            gold: q.gold,
-            compute: q.compute,
-          };
+        const base = { kind, giverId: npc.id, villageId: npc.villageId, exp: q.exp, copper: q.copper, compute: q.compute };
+        if (kind === 'hunt') {
+          jobs.hunt = Object.assign(base, { monsterIds: q.monsterIds, total: q.total, village: q.village });
+        } else if (kind === 'deliver') {
+          // 委託資料記在手上，要送的東西放進背包
+          jobs.deliver = Object.assign(base, { targetId: q.targetId, targetName: q.targetName, targetVillage: q.targetVillage, steps: q.steps });
           this.bagAdd('goods', 1, { name: q.item, giverId: npc.id });
-          this.say(FE.fill(q.line, { giver: npc.name, target: q.targetName, village: q.targetVillage, item: q.item }), 'npc');
+        } else {
+          jobs[kind] = Object.assign(base, { n: q.n, village: q.village });
         }
+        this.say(`${npc.name}：${this.questLine(npc, q)}`, 'npc');
       } else if (o.id === 'decline') {
         this.say(`${npc.name}：好，需要的時候再來找我。`, 'npc');
       }
@@ -1287,7 +1488,8 @@
     // ---- 工匠的對話 ----
     // 鐵匠（村莊）什麼都賣、修、打造；城鎮分成武器匠（武器、礦鎬、鐮刀）和盔甲匠（防具與盾牌），各修自己那一類。
     // 價錢：販售價＝原價×品質價值倍率×聚落經濟倍率；修復費＝修回的比例×原價×0.5×經濟倍率（至少 1）；
-    // 賣回＝半價×剩餘耐久比例；礦石一顆 5 金幣；打造要礦石加原價一半的工錢，品質在聚落的範圍內隨機（每高一級機率減半）
+    // 賣回＝半價×剩餘耐久比例；礦石一顆 5 銀；打造要礦石加原價一半的工錢，品質在聚落的範圍內隨機（每高一級機率減半）。
+    // 錢一律用銅記帳（第三十版），畫面寫成「1 金 2 銀 3 銅」；在這裡買、修、打造花的錢算進這個聚落的經濟值（spend）
 
     // 上一層：「買」只有一類東西時，那一類就是第一層，返回直接回最上層
     parentPage(S, page) {
@@ -1309,8 +1511,8 @@
     }
 
     // 錢或礦石不夠時，選項的說明寫還差多少
-    shortText(gold, ore) {
-      const s = [gold > 0 ? `${gold} 金幣` : '', ore > 0 ? `${ore} 顆礦石` : ''].filter(Boolean).join('、');
+    shortText(copper, ore) {
+      const s = [copper > 0 ? FE.money(copper) : '', ore > 0 ? `${ore} 顆礦石` : ''].filter(Boolean).join('、');
       return s ? `還差 ${s}` : '';
     }
 
@@ -1319,7 +1521,7 @@
       const p = this.player;
       const S = FE.Gear.SHOPS[shopKey];
       const back = { id: 'back', label: '返回' };
-      const have = `你身上有 ${p.gold} 金幣、${this.bagCount('ore')} 顆礦石。`;
+      const have = `你身上有 ${FE.money(p.copper)}、${this.bagCount('ore')} 顆礦石。`;
       const MAX = 8; // 一層最多列幾項（加上「返回」不超過 9，才按得到）
       let page = this.talkPage || 'main';
       if (page === 'buy' && Object.keys(S.buy).length === 1) page = 'buy:' + Object.keys(S.buy)[0];
@@ -1342,7 +1544,7 @@
             { id: 'buy', label: '買' },
             { id: 'repair', label: '修', note: repairs ? `${repairs} 件要修` : '沒有要修的' },
             { id: 'craft', label: '打造', note: '用礦石' },
-            { id: 'sellOre', label: '賣礦石', note: ore ? `${ore} 顆，+${FE.Gear.orePrice(ore, cha)} 金幣` : '沒有礦石', disabled: !ore },
+            { id: 'sellOre', label: '賣礦石', note: ore ? `${ore} 顆，+${FE.money(FE.Gear.orePrice(ore, cha))}` : '沒有礦石', disabled: !ore },
             { id: 'sell', label: '賣裝備', note: sellable ? `${sellable} 件` : '沒有可賣的', disabled: !sellable },
             { id: 'leave', label: '離開' },
           ],
@@ -1368,11 +1570,11 @@
         const opts = [];
         for (const e of all) {
           const pr = price(e); // 工具可以重複買，各自有耐久
-          const short = pr - p.gold;
+          const short = pr - p.copper;
           opts.push({
             id: `buyItem:${e.type}:${e.q}`,
             label: `${gname(e)}（${FE.Gear.statText(e)}）`,
-            note: short > 0 ? this.shortText(short, 0) : `${pr} 金幣`,
+            note: short > 0 ? this.shortText(short, 0) : FE.money(pr),
             disabled: short > 0,
           });
         }
@@ -1384,12 +1586,12 @@
         const list = this.allGear().filter((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max).slice(0, MAX);
         const opts = list.map((g) => {
           const qt = FE.Gear.repairQuote(g, v, cha);
-          const short = qt.cost - p.gold;
+          const short = qt.cost - p.copper;
           const worn = p.equip.main === g || p.equip.off === g || p.equip.body === g ? '（穿著）' : '';
           return {
             id: `repairItem:${g.id}`,
             label: `修${FE.Gear.name(g)}${worn}`,
-            note: short > 0 ? `${FE.Gear.durText(g)}，${this.shortText(short, 0)}` : `${FE.Gear.durText(g)}，修回 ${qt.restore} 點，${qt.cost} 金幣`,
+            note: short > 0 ? `${FE.Gear.durText(g)}，${this.shortText(short, 0)}` : `${FE.Gear.durText(g)}，修回 ${qt.restore} 點，${FE.money(qt.cost)}`,
             disabled: short > 0,
           };
         });
@@ -1409,7 +1611,7 @@
         const opts = cats[cat].map((type) => {
           const qt = FE.Gear.craftQuote(type, v, cha);
           const lackOre = qt.ore - this.bagCount('ore');
-          const lackGold = qt.fee - p.gold;
+          const lackGold = qt.fee - p.copper;
           const lack = this.shortText(lackGold, lackOre);
           const lo = FE.QUALITIES[qt.range[0]];
           const hi = FE.QUALITIES[qt.range[1]];
@@ -1417,7 +1619,7 @@
           return {
             id: `craftItem:${type}`,
             label: `打造${FE.GEAR[type].name}（${FE.Gear.statText({ type, q: 0 })}）`,
-            note: lack || `${qt.ore} 顆礦石、${qt.fee} 金幣，品質${ql(lo)}～${ql(hi)}`,
+            note: lack || `${qt.ore} 顆礦石、${FE.money(qt.fee)}，品質${ql(lo)}～${ql(hi)}`,
             disabled: !!lack,
           };
         });
@@ -1430,7 +1632,7 @@
         const opts = list.map((e) => ({
           id: `sellItem:${e.gear.id}`,
           label: `賣${FE.Gear.name(e.gear)}`,
-          note: `${FE.Gear.durText(e.gear)}，+${FE.Gear.sellPrice(e.gear, cha)} 金幣`,
+          note: `${FE.Gear.durText(e.gear)}，+${FE.money(FE.Gear.sellPrice(e.gear, cha))}`,
         }));
         opts.push(back);
         return [`背包裡的東西我照原價的一半、再看磨損收。穿在身上的要先換下來。${have}`, opts];
@@ -1480,41 +1682,44 @@
         const n = this.bagCount('ore');
         const gain = FE.Gear.orePrice(n, cha);
         this.bagTake('ore', n);
-        p.gold += gain;
-        this.say(`${npc.name}收下 ${n} 顆礦石，給了你 ${gain} 金幣。`, 'good');
+        p.copper += gain;
+        this.say(`${npc.name}收下 ${n} 顆礦石，給了你 ${FE.money(gain)}。`, 'good');
       } else if (kind === 'buyItem') {
         const type = a;
         const q = Number(b);
         const pr = FE.Gear.shopPrice(type, q, v, cha);
-        if (p.gold < pr) return stay;
-        p.gold -= pr;
+        if (p.copper < pr) return stay;
+        p.copper -= pr;
         const g = FE.Gear.make(type, q, this.nextGearId++);
         this.bagAddGear(g);
-        this.say(`${npc.name}賣給你${FE.Gear.lootName(g).replace(/^一件/, '')}，花了 ${pr} 金幣。${type === 'pick' ? '礦坑裡的礦脈挖得動了。' : type === 'sickle' ? '森林裡的藥草割得下來了。' : ''}`, 'good');
+        this.say(`${npc.name}賣給你${FE.Gear.lootName(g).replace(/^一件/, '')}，花了 ${FE.money(pr)}。${type === 'pick' ? '礦坑裡的礦脈挖得動了。' : type === 'sickle' ? '森林裡的藥草割得下來了。' : ''}`, 'good');
+        this.spend(v, pr);
       } else if (kind === 'repairItem') {
         const g = this.allGear().find((x) => x.id === Number(a));
         if (!g || !S.repair.includes(FE.GEAR[g.type].cat) || g.dur >= g.max) return stay;
         const qt = FE.Gear.repairQuote(g, v, cha);
-        if (p.gold < qt.cost) return stay;
-        p.gold -= qt.cost;
+        if (p.copper < qt.cost) return stay;
+        p.copper -= qt.cost;
         g.dur += qt.restore;
         FE.Gear.repaired(g);
-        this.say(`${npc.name}修好了你的${FE.Gear.name(g)}（${FE.Gear.durText(g)}），花了 ${qt.cost} 金幣。`, 'good');
+        this.say(`${npc.name}修好了你的${FE.Gear.name(g)}（${FE.Gear.durText(g)}），花了 ${FE.money(qt.cost)}。`, 'good');
+        this.spend(v, qt.cost);
       } else if (kind === 'craftItem') {
         const qt = FE.Gear.craftQuote(a, v, cha);
-        if (!S.craft.includes(a) || p.gold < qt.fee || this.bagCount('ore') < qt.ore) return stay;
+        if (!S.craft.includes(a) || p.copper < qt.fee || this.bagCount('ore') < qt.ore) return stay;
         this.bagTake('ore', qt.ore);
-        p.gold -= qt.fee;
+        p.copper -= qt.fee;
         const g = FE.Gear.make(a, FE.Gear.rollQuality(this.rng, qt.range[0], qt.range[1]), this.nextGearId++);
         this.bagAddGear(g);
-        this.say(`${npc.name}用 ${qt.ore} 顆礦石打造了${FE.Gear.name(g)}，工錢 ${qt.fee} 金幣，放進了你的背包。`, 'good');
+        this.say(`${npc.name}用 ${qt.ore} 顆礦石打造了${FE.Gear.name(g)}，工錢 ${FE.money(qt.fee)}，放進了你的背包。`, 'good');
+        this.spend(v, qt.fee);
       } else if (kind === 'sellItem') {
         const e = p.bag.find((x) => x.id === 'gear' && x.gear.id === Number(a));
         if (!e || !S.sell.includes(FE.GEAR[e.gear.type].cat)) return stay;
         const gain = FE.Gear.sellPrice(e.gear, cha);
         p.bag = p.bag.filter((x) => x !== e);
-        p.gold += gain;
-        this.say(`${npc.name}收下了你的${FE.Gear.name(e.gear)}，給了你 ${gain} 金幣。`, 'good');
+        p.copper += gain;
+        this.say(`${npc.name}收下了你的${FE.Gear.name(e.gear)}，給了你 ${FE.money(gain)}。`, 'good');
       }
       return stay;
     }
@@ -1625,12 +1830,19 @@
       else this.strike(kind, m);
     }
 
-    // 倒下後在離倒下的地方最近的聚落（村莊或城鎮，不看神聖與否）醒來，沒有聚落才回出生點
+    // 倒下後在離倒下的地方最近的聚落（村莊或城鎮，不看神聖與否）醒來，沒有聚落才回出生點。
+    // 醒來也算一次長休（世界跑 80 回合、不收錢），在這個動作收尾時做（afterTurn）
     die(m) {
-      const p = this.player;
-      const w = this.world;
       this.fell = true;
       this.battle.targetId = null;
+      const where = this.wakeSpot();
+      this.say(`你倒下了，在${where}重新醒來。${m.name}的血量還剩 ${m.hp} / ${m.maxHp}，不會回復。`, 'bad');
+    }
+
+    // 把冒險者放到離他最近的聚落（中央附近的路上）醒來，生命回滿；回傳地名
+    wakeSpot() {
+      const p = this.player;
+      const w = this.world;
       let at = w.spawn;
       let where = '出生點';
       const holy = w.villages
@@ -1654,7 +1866,7 @@
       p.x = at.x;
       p.y = at.y;
       p.hp = p.maxHp;
-      this.say(`你倒下了，在${where}重新醒來。${m.name}的血量還剩 ${m.hp} / ${m.maxHp}，不會回復。`, 'bad');
+      return where;
     }
 
     // 走到地貌旁邊（一格內）第一次看到時，說明那是什麼
@@ -1688,8 +1900,8 @@
       this.dropGear(m);
       this.addExp(m.exp);
       this.earn(m.compute);
-      const c = this.player.carrying;
-      if (c && c.kind === 'hunt') {
+      const c = this.player.jobs.hunt;
+      if (c) {
         const ids = [m.id].concat(m.members ? m.members.map((o) => o.id) : []);
         if (ids.some((id) => c.monsterIds.includes(id))) {
           const left = this.huntRemaining(c.monsterIds);
@@ -1721,7 +1933,7 @@
       this.say(`${m.name}身上掉出${FE.Gear.lootName(g)}，你收進了背包。`, 'good');
     }
 
-    // 掉寶箱：會追人的怪物（m.small）20% 機率掉、金幣少；其他怪物 50% 機率掉，影響範圍越大金幣越多。
+    // 掉寶箱：會追人的怪物（m.small）20% 機率掉、錢少；其他怪物 50% 機率掉，影響範圍越大錢越多。
     // 多掉一件裝備（dropGear）是另外獨立判定的，不跟寶箱綁在一起
     dropChest(m) {
       let gold;
@@ -1732,12 +1944,12 @@
         if (this.rng() >= C.DROP_BIG_CHANCE) return; // 中型以上怪物 50% 機率掉寶箱（原本必掉）
         gold = C.DROP_GOLD_BASE + m.scope * C.DROP_GOLD_PER_SCOPE + FE.randInt(this.rng, 0, 5);
       }
-      gold = Math.round(gold * C.CHEST_GOLD_MUL); // 所有寶箱的金幣減半
+      gold = Math.round(gold * C.CHEST_GOLD_MUL); // 所有寶箱的錢減半（單位是銀，存成銅）
       const w = this.world;
       let at = { x: m.x, y: m.y };
       if (w.chestAt(at.x, at.y) || w.inVillage(at.x, at.y) || !w.passable(at.x, at.y)) at = this.findFreeNear(m.x, m.y);
       if (!at) return;
-      w.chests.push({ id: w.nextId++, x: at.x, y: at.y, gold });
+      w.chests.push(Object.assign({ id: w.nextId++, x: at.x, y: at.y, copper: gold * C.SILVER }, m.small ? { small: true } : {}));
       this.say(`${m.name}掉下了一個寶箱。`, 'good');
     }
 

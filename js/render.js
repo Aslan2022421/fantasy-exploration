@@ -127,7 +127,7 @@
     }
     // 清除委託指定的小怪物（合體後就標合體怪物）
     const hunted = new Set();
-    const hc = p.carrying && p.carrying.kind === 'hunt' ? p.carrying.monsterIds : [];
+    const hc = p.jobs.hunt ? p.jobs.hunt.monsterIds : [];
     for (const m of game.monsters) {
       if (hc.includes(m.id) || (m.members && m.members.some((o) => hc.includes(o.id)))) hunted.add(m);
     }
@@ -201,11 +201,8 @@
           if (n.role === 'smith') fg = P['map-smith'];
           else if (n.role === 'armorer') fg = P['map-armorer'];
           else {
-            const cr = p.carrying;
-            const carrying =
-              cr && (cr.kind === 'hunt' ? cr.giverId === n.id && game.huntRemaining(cr.monsterIds) === 0 : cr.targetId === n.id);
             fg = P['map-npc'];
-            if (carrying) bg = P['map-recipient'];
+            if (handIn(n)) bg = P['map-recipient'];
             else if (n.quest && !n.quest.accepted && !n.quest.done) bg = P['map-quest'];
           }
         }
@@ -319,10 +316,9 @@
       ctx.fillRect((x - x0) * S - (s - S) / 2, (y - y0) * S - (s - S) / 2, s, s);
     };
     const big = S === 1 ? 3 : 5;
-    const c = p.carrying;
     for (const ch of W.chests) dot(ch.x, ch.y, P['map-chest']);
     for (const n of W.npcs) {
-      const target = c && (c.kind === 'hunt' ? c.giverId === n.id && game.huntRemaining(c.monsterIds) === 0 : c.targetId === n.id);
+      const target = handIn(n);
       dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : P['map-npc'], target ? big : S);
     }
     // 地形重算的地方：亮紫色的點，100 刻後消失
@@ -360,12 +356,12 @@
   function drawStatus() {
     const p = game.player;
     const W = game.world;
-    // 名字與職業、時間（刻）、世界狀態、金幣，後面是戰鬥數字：攻擊力、物理／魔法減傷、閃避 %、格擋機率
+    // 名字與職業、時間（第幾天幾時）、世界狀態、錢（金銀銅），後面是戰鬥數字：攻擊力、物理／魔法減傷、閃避 %、格擋機率
     $('stName').innerHTML = `<b>${esc(p.name)}</b>（${esc(FE.Char.cls(p).name)}）`;
-    $('stTime').textContent = `${game.ticks || 0} 刻`;
+    $('stTime').textContent = FE.clockText(game.ticks);
     const lvl = FE.Stability.state(game);
     $('stWorld').innerHTML = `世界 <b class="ws-${lvl}">${FE.Stability.names[lvl]}</b>`;
-    $('stGold').textContent = `金幣 ${p.gold}`;
+    $('stGold').textContent = FE.money(p.copper);
     const d = FE.Gear.playerDefense(p);
     $('stAtk').textContent = `傷害 ${game.attackText()}`;
     $('stPhys').textContent = `物理減傷 ${FE.Gear.physReduce(p)}`;
@@ -403,6 +399,8 @@
     const fx = vex.map((m) => `侵擾：下一次打${m.name}有優勢`);
     if (game.battle.disengage) fx.push('撤離：下一步走開不會被趁機攻擊');
     if (game.battle.dodge) fx.push('閃避：打你的攻擊都有劣勢');
+    const ex = game.player.exhaust || 0;
+    if (ex) fx.push(`力竭 ${ex}：出手 −${C.EXHAUST_D20 * ex}，走一步多 ${C.EXHAUST_MOVE * ex} 刻`);
     $('fxText').textContent = fx.length ? fx.join('　') : '無';
   }
 
@@ -465,8 +463,8 @@
       const s = v.steading;
       el.innerHTML = `
         <div class="t-head"><b style="color:var(--accent)">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）</b><span class="dim">安全區</span></div>
-        <p>經濟 ${FE.PROSPERITY[s.prosperity]}　人口 ${FE.POPULATION[s.population]}</p>
-        <p class="t-extra dim">裝備售價是原價的 ${FE.Steading.shopFactor(v).toFixed(2)} 倍。按 I 看聚落資訊，撞上村民或工匠可以對話、買賣、修理。</p>`;
+        <p>經濟 ${FE.PROSPERITY[s.prosperity]}　人口 ${FE.POPULATION[s.population]}　住一晚 ${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}</p>
+        <p class="t-extra dim">裝備售價是原價的 ${FE.Steading.shopFactor(v).toFixed(2)} 倍。按 R 在這裡住一晚（8 小時）。按 I 看聚落資訊，撞上村民或工匠可以對話、買賣、修理。</p>`;
       return;
     }
     const c = W.cell(p.x, p.y);
@@ -478,19 +476,35 @@
       ${game.targetMonster() ? '' : '<p class="t-extra dim">旁邊沒有怪物。撞上怪物只會把牠設成目標，按 1 攻擊、2 重擊；拿弓箭、短刀、短矛（法師拿法杖）按 F 遠程出手。</p>'}`;
   }
 
+  // 這個村民現在可以交件或回報（地圖上綠底、小地圖上大綠點）：清完了的清除委託的委託人、送貨的收貨人、採藥採礦湊夠了的委託人
+  function handIn(n) {
+    const j = game.player.jobs;
+    if (j.hunt && j.hunt.giverId === n.id && game.huntRemaining(j.hunt.monsterIds) === 0) return true;
+    if (j.deliver && j.deliver.targetId === n.id) return true;
+    return ['herb', 'ore'].some((k) => j[k] && j[k].giverId === n.id && game.bagCount(k) >= j[k].n);
+  }
+
+  // 右側欄最上面：手上的委託，清除、送貨、採藥、採礦每種一行（第三十版）
   function drawQuest() {
-    const c = game.player.carrying;
-    let text = '任務：目前沒有。去找頭上帶紫底 & 的村民。';
-    if (c && c.kind === 'hunt') {
-      const left = game.huntRemaining(c.monsterIds);
-      text = left
-        ? `任務：清掉${c.village}附近的小怪物，還剩 ${left} / ${c.total} 隻（紫框）。獎勵 經驗值 ${c.exp}、金幣 ${game.questGold(c.gold)}`
-        : `任務：小怪物都清掉了，回${c.village}找委託人（綠底的 &）領獎勵`;
-    } else if (c) {
-      const g = game.goodsFor(c);
-      text = `任務：把${g ? g.name : '東西'}送到${c.targetVillage}的${c.targetName}${c.steps ? `（約 ${c.steps} 步）` : ''}，收貨人是綠底的 &。獎勵 經驗值 ${c.exp}、金幣 ${game.questGold(c.gold)}`;
-    }
-    $('questText').textContent = text;
+    const j = game.player.jobs;
+    const pay = (c) => `獎勵 經驗值 ${c.exp}、${FE.money(game.questPay(c, c.villageId))}`;
+    const line = (k) => {
+      const c = j[k];
+      const head = `${FE.JOB_NAMES[k]}：`;
+      if (!c) return `${head}<span class="dim">沒有</span>`;
+      if (k === 'hunt') {
+        const left = game.huntRemaining(c.monsterIds);
+        return head + esc(left ? `清掉${c.village}附近的小怪物，還剩 ${left} / ${c.total} 隻（紫框）。${pay(c)}` : `小怪物都清掉了，回${c.village}找委託人（綠底的 &）領獎勵`);
+      }
+      if (k === 'deliver') {
+        const g = game.goodsFor(c);
+        return head + esc(`把${g ? g.name : '東西'}送到${c.targetVillage}的${c.targetName}${c.steps ? `（約 ${c.steps} 步）` : ''}，收貨人是綠底的 &。${pay(c)}`);
+      }
+      const unit = k === 'herb' ? '份藥草' : '顆礦石';
+      const have = game.bagCount(k);
+      return head + esc(have >= c.n ? `${c.n} ${unit}湊齊了，拿回${c.village}給委託人（綠底的 &）。${pay(c)}` : `帶 ${c.n} ${unit}回${c.village}（背包裡有 ${have}）。${pay(c)}`);
+    };
+    $('questText').innerHTML = FE.JOB_KINDS.map((k) => `<div>${line(k)}</div>`).join('');
   }
 
   // 右側欄的訊息紀錄：由上到下，最新的在最下面（放不下的從最上面切掉）
@@ -559,6 +573,13 @@
     el.parentNode.scrollTop = el.parentNode.scrollHeight;
   }
 
+  // 聚落裡的人（村民、工匠、士兵）與種族，例如「艾德（鐵匠，矮人）、蜜拉（人類）⋯⋯」
+  function residents(v) {
+    const role = (n) => (n.role === 'smith' ? (v.kind === 'town' ? '武器匠，' : '鐵匠，') : n.role === 'armorer' ? '盔甲匠，' : n.role === 'soldier' ? '士兵，' : '');
+    const list = game.world.npcs.filter((n) => n.villageId === v.id).concat(game.soldiers.filter((s) => s.villageId === v.id));
+    return list.map((n) => `${n.name}（${role(n)}${FE.PLAYER_RACES[FE.npcRace(game.world, n)].name}）`).join('、') || '沒有人';
+  }
+
   // 聚落資訊：所在的聚落，不在聚落裡就是離冒險者最近的那一座
   function drawSteading() {
     const el = $('steading');
@@ -583,7 +604,9 @@
     el.innerHTML = `
       <h3 style="margin-top:0">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）${inside ? '' : `<span class="dim">　你不在這裡，這是離你最近的聚落，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
       <div class="row"><span>經濟</span><span>${FE.PROSPERITY[s.prosperity]}（裝備售價 ×${FE.Steading.shopFactor(v).toFixed(2)}）</span></div>
+      <div class="row"><span>住一晚</span><span>${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}（${FE.PROSPERITY[s.prosperity]}的生活${C.LIVING_REPAIR[s.prosperity] ? `，身上裝備的耐久回 ${Math.round(C.LIVING_REPAIR[s.prosperity] * 100)}%` : ''}${C.LIVING_QUEST[s.prosperity] ? `，這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[s.prosperity] * 100)}%` : ''}）</span></div>
       <div class="row"><span>人口</span><span>${FE.POPULATION[s.population]}</span></div>
+      <div class="row"><span>居民</span><span>${esc(residents(v))}</span></div>
       <div class="row"><span>由來</span><span>${esc(s.option)}；${esc(s.problem)}</span></div>
       <ul class="tags">${tags}</ul>
       <div class="row"><span>附近的地貌</span><span>${esc(lmText)}</span></div>`;
@@ -671,14 +694,16 @@
       return `<tr><td>${FE.SKILLS[id].name}</td><td><b>${s.lv}</b> <span class="dim">${esc(FE.skillLevelName(s.lv))}</span></td><td>${Math.floor(s.n)} / ${Ch.skillNeed(s.lv)}</td><td class="dim">${esc(effect(id, s.lv))}</td></tr>`;
     }).join('');
     const d = FE.Gear.playerDefense(p);
-    const heal = Math.max(1, C.REST_HEAL + Ch.attrMod(p, 'con'));
+    const con = Ch.attrMod(p, 'con');
+    const heal = `1d10${con > 0 ? '+' + con : con < 0 ? con : ''}`; // 野外短休（第三十版）
+    const tired = p.exhaust ? `　<b class="over">力竭 ${p.exhaust}</b>` : '';
     const R = FE.PLAYER_RACES[p.race] || FE.PLAYER_RACES.human;
     const body = `${R.name}　身高${FE.HEIGHTS[(p.height || 4) - 1]}、體格${FE.BUILDS[(p.build || 4) - 1]}　體型 ${Ch.sizeOf(p).toLocaleString('en-US')}`;
     $('charInfo').innerHTML = `
       <p><b>${esc(p.name)}</b>　${esc(c.name)}　Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}${p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加</b>` : ''}</p>
       <p>${esc(body)}${p.skillPack ? `　起始技能組合：${esc(p.skillPack)}` : ''}</p>
       <p>主手 ${p.equip.main ? esc(FE.Gear.name(p.equip.main)) : '空著'}　副手 ${p.equip.off ? esc(FE.Gear.name(p.equip.off)) : '空著'}${p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''}　身上 ${p.equip.body ? esc(FE.Gear.name(p.equip.body)) : '空著'}</p>
-      <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Ch.moveTicks(p)} 刻　休息一次回復 ${heal}</p>
+      <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Ch.moveTicks(p) + C.EXHAUST_MOVE * (p.exhaust || 0)} 刻　野外歇一小時回 ${heal}（最少 1）${tired}</p>
       <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
       <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th></tr>${attrRows}</table>
       <h3>技能（用了就累積經驗，升到第 N 級要 ${C.SKILL_NEED_BASE}＋${C.SKILL_NEED_STEP}N 點，沒有上限；經驗倍率 ×${Ch.expFactor(p).toFixed(1)}）</h3>

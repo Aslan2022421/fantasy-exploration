@@ -165,6 +165,30 @@
   // 需求（冒險者）：這裡的委託獎勵多五成
   const rewardFactor = (v) => (has(v, '需求', '冒險者') ? 1.5 : 1);
 
+  // ---- 經濟值（第三十版）----
+  // 每個聚落有看不見的經濟值（0～ECON_MAX），每 ECON_STEP 一段對應一個經濟標籤（荒蕪、貧窮、普通、繁盛、富裕）；
+  // 初始值落在原本標籤那一段的中間（第一次用到時才補上，存在 v.econ）。標籤（steading.prosperity）跟著經濟值走，物價也就跟著變
+  function econ(v) {
+    if (!v || !v.steading) return 0;
+    if (!Number.isFinite(v.econ)) v.econ = v.steading.prosperity * C.ECON_STEP + C.ECON_STEP / 2;
+    return v.econ;
+  }
+  const econTier = (x) => Math.max(0, Math.min(FE.PROSPERITY.length - 1, Math.floor(x / C.ECON_STEP)));
+
+  // 經濟值加減 d（上下限 0～ECON_MAX）；標籤變了回傳 { from, to }（標籤的索引），沒變回傳 null
+  function addEcon(v, d) {
+    if (!v || !v.steading || !d) return null;
+    const from = v.steading.prosperity;
+    v.econ = Math.max(0, Math.min(C.ECON_MAX, econ(v) + d));
+    const to = econTier(Math.min(v.econ, C.ECON_MAX - 1e-9));
+    if (to === from) return null;
+    v.steading.prosperity = to;
+    return { from, to };
+  }
+
+  // 委託的金錢照委託人聚落的經濟標籤乘倍率（荒蕪 ×0.8、貧窮 ×0.9、普通 ×1、繁盛與富裕 ×1.2）
+  const questEcon = (v) => (v && v.steading ? C.QUEST_ECON[v.steading.prosperity] : 1);
+
   const isHoly = (v) => has(v, '神聖') || has(v, '力量', '神聖');
 
   // 有關係的聚落（委託優先送到這些地方）
@@ -977,7 +1001,7 @@
   }
 
   FE.Steading = {
-    roll, layout, has, villagerCount, shopFactor, rewardFactor, isHoly, related, describe, tagText, placeLandmark,
+    roll, layout, has, villagerCount, shopFactor, rewardFactor, econ, econTier, addEcon, questEcon, isHoly, related, describe, tagText, placeLandmark,
     roomAt, canWalk, freeHome, siteScore, exitViable,
   };
 })();

@@ -30,33 +30,34 @@
   const buyFactor = (cha) => Math.max(0.1, 1 - C.CHA_PRICE * (cha || 0));
   const sellFactor = (cha) => Math.max(0.1, 1 + C.CHA_PRICE * (cha || 0));
 
-  // 販售價：普通原價×品質價值倍率×聚落經濟倍率（有市場再便宜一成，見 Steading.shopFactor）×魅力，四捨五入；礦鎬、鐮刀固定 20 金幣、不看經濟
+  // 第三十版：價錢的數字（GEAR 的 price、TOOL_PRICE、ORE_PRICE）單位是銀，這裡算出來的一律是銅（乘 SILVER 之後才四捨五入）
+  // 販售價：普通原價×品質價值倍率×聚落經濟倍率（有市場再便宜一成，見 Steading.shopFactor）×魅力，四捨五入；礦鎬、鐮刀固定 20 銀、不看經濟
   function shopPrice(type, q, v, cha) {
-    if (G[type].cat === 'tool') return Math.round(C.TOOL_PRICE * buyFactor(cha));
-    return Math.round(G[type].price * Q[q].value * FE.Steading.shopFactor(v) * buyFactor(cha));
+    if (G[type].cat === 'tool') return Math.round(C.TOOL_PRICE * C.SILVER * buyFactor(cha));
+    return Math.round(G[type].price * C.SILVER * Q[q].value * FE.Steading.shopFactor(v) * buyFactor(cha));
   }
 
-  // 賣回：原價（含品質）的半價×剩餘耐久比例×魅力
-  const sellPrice = (g, cha) => Math.max(1, Math.round(value(g) * C.SELL_RATE * (g.dur / g.max) * sellFactor(cha)));
-  // 礦石賣給工匠：一顆 5 金幣×魅力
-  const orePrice = (n, cha) => Math.round(n * C.ORE_PRICE * sellFactor(cha));
+  // 賣回：原價（含品質）的半價×剩餘耐久比例×魅力（至少 1 銅）
+  const sellPrice = (g, cha) => Math.max(1, Math.round(value(g) * C.SILVER * C.SELL_RATE * (g.dur / g.max) * sellFactor(cha)));
+  // 礦石賣給工匠：一顆 5 銀×魅力
+  const orePrice = (n, cha) => Math.round(n * C.ORE_PRICE * C.SILVER * sellFactor(cha));
 
-  // 修復：鐵匠、武器匠、盔甲匠都修到完整（REPAIR_ALL 設成 false 就只修回損失的一半）。回傳 { restore: 修回幾點耐久, cost: 費用 }；耐久已滿 restore 是 0。
-  // 費用＝修回的比例×原價×0.5×經濟倍率（至少 1）；工具不看經濟
+  // 修復：鐵匠、武器匠、盔甲匠都修到完整（REPAIR_ALL 設成 false 就只修回損失的一半）。回傳 { restore: 修回幾點耐久, cost: 費用（銅） }；耐久已滿 restore 是 0。
+  // 費用＝修回的比例×原價×經濟倍率×魅力（至少 1 銅）；工具不看經濟
   function repairQuote(g, v, cha) {
     const missing = g.max - g.dur;
     if (missing <= 0) return { restore: 0, cost: 0 };
     const all = v && v.kind === 'town' ? C.REPAIR_ALL.town : C.REPAIR_ALL.village;
     const restore = all ? missing : Math.ceil(missing / 2);
     const econ = def(g).cat === 'tool' ? 1 : FE.Steading.shopFactor(v);
-    return { restore, cost: Math.max(1, Math.round((restore / g.max) * value(g) * C.REPAIR_RATE * econ * buyFactor(cha))) };
+    return { restore, cost: Math.max(1, Math.round((restore / g.max) * value(g) * C.SILVER * C.REPAIR_RATE * econ * buyFactor(cha))) };
   }
 
-  // 打造：礦石數、工錢（原價一半，乘聚落經濟與魅力）、品質範圍（村莊鐵匠普通～精良，城鎮做工好～優秀）
+  // 打造：礦石數、工錢（銅；原價一半，乘聚落經濟與魅力）、品質範圍（村莊鐵匠普通～精良，城鎮做工好～優秀）
   function craftQuote(type, v, cha) {
     const d = G[type];
     const kind = v && v.kind === 'town' ? 'town' : 'village';
-    return { ore: d.ore, fee: Math.round(d.price * C.CRAFT_FEE_RATE * FE.Steading.shopFactor(v) * buyFactor(cha)), range: C.CRAFT_RANGE[kind] };
+    return { ore: d.ore, fee: Math.round(d.price * C.SILVER * C.CRAFT_FEE_RATE * FE.Steading.shopFactor(v) * buyFactor(cha)), range: C.CRAFT_RANGE[kind] };
   }
 
   // 隨機品質：範圍 lo～hi（含），每高一級機率減半

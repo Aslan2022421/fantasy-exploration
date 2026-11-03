@@ -137,7 +137,8 @@
     if (prof && opts.ammoQ !== undefined) prof.pierce = FE.QUALITIES[opts.ammoQ].pierce; // 射出去的箭：穿甲看箭矢的品質
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值
-    let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + prof.hit : 0;
+    // 力竭（第三十版）：冒險者出手的 d20 每級 −2
+    let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + prof.hit - C.EXHAUST_D20 * (A.exhaust || 0) : 0;
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
     else if (cA.h < cD.h) mod -= C.HIGH_GROUND;
     // 優勢與劣勢：各自有幾個來源，兩者同時有就抵消（擲一次）

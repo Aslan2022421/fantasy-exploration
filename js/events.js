@@ -1,4 +1,4 @@
-// 事件：冒險者做事時累積修補力（不顯示），每隔幾步拿目前的修補力演算事件。
+// 事件：冒險者做事時累積修補力（不顯示），每 100 刻（遊戲裡的一小時，第三十版）拿目前的修補力演算事件。
 // 事件生成器跟世界生成器一樣粗糙，生成出錯的地方交給檢查器，抓到的變成怪物（影響範圍上限看世界狀態，3～6）。
 (function () {
   const C = FE.CONFIG;
@@ -41,7 +41,7 @@
       total: ids.length,
       village: best.v.name,
       exp: Math.round((C.HUNT_EXP_BASE + C.HUNT_EXP_PER * ids.length) * f),
-      gold: Math.round((C.HUNT_GOLD_BASE + C.HUNT_GOLD_PER * ids.length) * f),
+      copper: Math.round((C.HUNT_GOLD_BASE + C.HUNT_GOLD_PER * ids.length) * f) * C.SILVER, // 單位是銅（數字照舊是銀）；領的時候再乘經濟標籤與魅力
       compute: C.COMPUTE_HUNT + C.COMPUTE_HUNT_PER * ids.length, // 完成時給的算力（單人份量）
       accepted: false,
       done: false,
@@ -50,7 +50,28 @@
     return true;
   }
 
-  // 村民有了新的委託。村莊周遭有小怪物時優先發清除委託；
+  // 採藥、採礦委託（第三十版）：帶幾份藥草或幾顆礦石交給委託人（交背包裡的，舊的也能交）。
+  // 經驗值＝基本 15＋每份 1；金錢＝基本 10 銀＋材料本身的價錢（藥草一份 2 銀、礦石一顆 5 銀），再乘「需求（冒險者）」；
+  // 算力 3＋每份 0.5（藥草）或每顆 1（礦石）。由事件生出，不算進創世門檻
+  function gatherQuest(game, giver, kind) {
+    const G = C.GATHER_QUEST[kind];
+    const v = game.world.villageById(giver.villageId);
+    const n = FE.randInt(game.rng, G.n[0], G.n[1]);
+    const f = FE.Steading.rewardFactor(v);
+    giver.quest = {
+      kind,
+      n,
+      village: v ? v.name : '',
+      exp: Math.round((C.QUEST_EXP + C.GATHER_QUEST_EXP_PER * n) * f),
+      copper: Math.round((C.QUEST_GOLD + G.value * n) * f * C.SILVER),
+      compute: G.compute + G.computePer * n,
+      accepted: false,
+      done: false,
+    };
+    game.say(`${v ? v.name + '的' : ''}${giver.name}想要 ${n} ${kind === 'herb' ? '份藥草' : '顆礦石'}。`, 'npc');
+  }
+
+  // 村民有了新的委託。村莊周遭有小怪物時優先發清除委託；不然一半機率發採藥或採礦委託（各一半），其餘發送貨委託。
   // 送貨委託的收貨人一定是碰得到的村民（第二十五版起不再指向不存在的人）。
   function questEvent(game, canReach) {
     const w = game.world;
@@ -61,6 +82,10 @@
     if (huntQuest(game, givers)) return { found: null };
     givers.sort((a, b) => dist(a, p) - dist(b, p));
     const giver = FE.pick(game.rng, givers.slice(0, 3));
+    if (game.rng() < C.GATHER_QUEST_CHANCE) {
+      gatherQuest(game, giver, game.rng() < 0.5 ? 'herb' : 'ore');
+      return { found: null };
+    }
 
     // 收貨人可以在別的村莊，路程越遠獎勵越多；有誓約或貿易關係的聚落，一半機率優先送過去
     const v = w.villageById(giver.villageId);
@@ -163,5 +188,5 @@
     }
   }
 
-  FE.Events = { tick };
+  FE.Events = { tick, gatherQuest };
 })();

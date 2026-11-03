@@ -700,7 +700,7 @@
       <p><b>${esc(p.name)}</b>　${esc(c.name)}　Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}${p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加</b>` : ''}</p>
       <p>${esc(body)}${p.skillPack ? `　起始技能組合：${esc(p.skillPack)}` : ''}</p>
       <p>主手 ${p.equip.main ? esc(FE.Gear.name(p.equip.main)) : '空著'}　副手 ${p.equip.off ? esc(FE.Gear.name(p.equip.off)) : '空著'}${p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''}　身上 ${p.equip.body ? esc(FE.Gear.name(p.equip.body)) : '空著'}</p>
-      <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Ch.moveTicks(p) + C.EXHAUST_MOVE * (p.exhaust || 0)} 刻　野外歇一小時回 ${heal}（最少 1）${tired}</p>
+      <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Math.round(Ch.moveTicks(p) * Ch.exhaustMoveMul(p))} 刻　野外歇一小時回 ${heal}（最少 1）${tired}</p>
       <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
       <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th></tr>${attrRows}</table>
       <h3>技能（用了就累積經驗，升到第 N 級要 ${C.SKILL_NEED_BASE}＋${C.SKILL_NEED_STEP}N 點，沒有上限；經驗倍率 ×${Ch.expFactor(p).toFixed(1)}）</h3>

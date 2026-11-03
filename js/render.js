@@ -488,7 +488,10 @@
     $('stAtk').textContent = `傷害 ${game.attackText()}`;
     $('stPhys').textContent = `物理減傷 ${FE.Gear.physReduce(p)}`;
     $('stMagic').textContent = `魔法減傷 ${FE.Gear.magicReduce(p)}`;
-    $('stDodge').textContent = `閃避 ${Math.round(d.dodge * 100)}%`;
+    // 第三十三版：AC（含法術的加護）寫在閃避前面
+    // （加護照 game.wardAC 的規則算，但不叫它：它會順手結束穿了防具的魔法防禦）
+    const ward = p.ward && !(FE.SPELLS[p.ward.id].unarmored && game.armored()) ? p.ward.ac : 0;
+    $('stDodge').textContent = `AC ${FE.Gear.playerAC(p) + ward}　閃避 ${Math.round(d.dodge * 100)}%`;
     $('stBlock').textContent = `格擋 ${Math.round(d.block * 100)}%`;
     $('stLoad').textContent = game.loadTier() ? `超重 ${game.weight()} / ${game.carryLimit()} 磅` : '';
     $('stLoad').classList.toggle('hidden', !game.loadTier());
@@ -1175,6 +1178,20 @@
     else drawLevelUp();
   }
 
+  // 怪物的攻擊（第三十三版）：攻擊加值與傷害骰，例如「+4，1d6+2 揮砍」（世界等級的加成乘在擲出來的傷害上，這裡不寫）
+  function monAttackText(m) {
+    if (!m.die) return `傷害約 ${m.atk}`;
+    const b = m.dmgBonus || 0;
+    return `${m.toHit >= 0 ? '+' : ''}${m.toHit}，${FE.Gear.dieText(m.die)}${b ? (b > 0 ? '+' : '') + b : ''} ${FE.DMG_TYPES[m.dmgType] || ''}`;
+  }
+  // 怪物的特性：群體戰術、靈巧脫身、易傷、再生
+  function monTraitText(m) {
+    const out = (m.traits || []).map((k) => FE.MONSTER_TRAITS[k]).filter(Boolean);
+    for (const t of m.vuln || []) out.push(`怕${FE.DMG_TYPES[t]}（傷害加倍）`);
+    if (m.regen) out.push(`再生（每回合 ${m.regen} 點）`);
+    return out.join('、');
+  }
+
   // 查看（滑鼠右鍵點地圖，第三十一版）：那一格的怪物、村民、工匠、士兵或地形
   function drawLook() {
     const L = ui.look;
@@ -1188,7 +1205,7 @@
       const T = FE.BUG_TYPES[m.type];
       const st = monStates(m);
       const chasing = game.battle.targetId === m.id ? '你的目標' : m.chase > 0 ? '正在追你' : '還沒發現你';
-      el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>異常</dt><dd>${esc(T.name)}</dd><dt>抗性</dt><dd>${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</dd><dt>攻擊力</dt><dd>${m.atk}</dd>${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl>${T.desc ? `<p class="dim">${esc(T.desc)}</p>` : ''}<div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
+      el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>異常</dt><dd>${esc(T.name)}</dd><dt>抗性</dt><dd>${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</dd><dt>AC</dt><dd>${m.ac}</dd><dt>攻擊</dt><dd>${esc(monAttackText(m))}</dd>${monTraitText(m) ? `<dt>特性</dt><dd>${esc(monTraitText(m))}</dd>` : ''}${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl>${T.desc ? `<p class="dim">${esc(T.desc)}</p>` : ''}<div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
     } else if (n) {
       const role = n.role === 'smith' ? (W.villageAt(n.x, n.y) && W.villageAt(n.x, n.y).kind === 'town' ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'soldier' ? '士兵' : '村民';
       const race = FE.PLAYER_RACES[FE.npcRace(W, n)];

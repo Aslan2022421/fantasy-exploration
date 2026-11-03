@@ -106,14 +106,15 @@ function testSpells31() {
     const p = g.player;
     ok(g.cast('ward') && p.ward && p.ward.ac === 3 && g.wardAC() === 3, '魔法防禦 AC +3');
     ok(!g.cast('ward') && /效果結束才能再放/.test(g.log[0].text), '效果還在不能再放');
-    // AC：怪物打冒險者的 d20 −3
+    // AC：第三十三版起加護真的加 AC（原本是怪物打冒險者的 d20 −3）；怪物出手的加值只有自己的攻擊加值
     const mods = [];
+    const acs = [];
     const roll0 = FE.rollD20;
-    FE.rollD20 = (r, mod, adv, crit) => { mods.push(mod); return roll0(r, mod, adv, crit); };
+    FE.rollD20 = (r, mod, adv, crit, ac) => { mods.push(mod); acs.push(ac); return roll0(r, mod, adv, crit, ac); };
     const m = mon(g, p.x + 1, p.y);
     FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true });
     FE.rollD20 = roll0;
-    ok(mods[0] === -3, `怪物出手 d20 −3：${mods[0]}`);
+    ok(mods[0] === m.toHit && acs[0] === FE.Gear.playerAC(p) + 3, `魔法防禦讓 AC +3：出手加值 ${mods[0]}、AC ${acs[0]}（沒加護 ${FE.Gear.playerAC(p)}）`);
     // 穿上防具就散掉
     p.equip.body = FE.Gear.make('light', 0, g.nextGearId++);
     ok(g.wardAC() === 0 && !p.ward, '魔法防禦穿上防具就散掉');

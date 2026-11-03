@@ -17,6 +17,13 @@
     return FE.monsterDef(o);
   }
 
+  // AC（第三十三版）：冒險者看身上的防具、敏捷與盾牌（gear.js 的 playerAC），再加法術的加護（魔法防禦、神聖加護、守護，game.wardAC）；
+  // 怪物看 SRD 數值塊（bugs.js 的 statMonster），士兵照小怪物（soldierStats）；沒有的當 10
+  function acOf(game, o) {
+    if (isPlayer(game, o)) return FE.Gear.playerAC(o) + (game.wardAC ? game.wardAC() : 0);
+    return o.ac != null ? o.ac : C.BASE_AC;
+  }
+
   // 目前的格擋值：沒設過就是滿的。格擋值扣掉吸收的傷害，每回合回最大值的一部分
   function currentBlock(o, max) {
     if (o.block == null || !Number.isFinite(o.block)) o.block = max;
@@ -144,11 +151,10 @@
     const prof = aP ? FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
     if (prof && opts.ammoQ !== undefined) prof.pierce = FE.QUALITIES[opts.ammoQ].pierce; // 射出去的箭：穿甲看箭矢的品質
 
-    // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值
+    // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值；
+    // 怪物與士兵加自己的攻擊加值（SRD 數值塊，第三十三版）。d20＋加值到對方的 AC 才命中（acOf；法術的加護算在 AC 裡）
     // 力竭（第三十版）：冒險者出手的 d20 每級 −2
-    let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + prof.hit - C.EXHAUST_D20 * (A.exhaust || 0) : 0;
-    // 魔法防禦、神聖加護、守護（第三十一版）：怪物打冒險者的 d20 減掉加護的 AC
-    if (dP && game.wardAC) mod -= game.wardAC();
+    let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + prof.hit - C.EXHAUST_D20 * (A.exhaust || 0) : A.toHit || 0;
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
     else if (cA.h < cD.h) mod -= C.HIGH_GROUND;
     // 優勢與劣勢：各自有幾個來源，兩者同時有就抵消（擲一次）
@@ -164,7 +170,8 @@
     const advState = adv.length && dis.length ? 0 : adv.length ? 1 : dis.length ? -1 : 0;
     // opts.cling：纏著冒險者的目標趁冒險者移開或換目標時出手，不擲 d20 命中，只看冒險者的閃避（閃開就沒事），
     // 沒閃開照一般傷害，不暴擊、不格擋，護甲照扣
-    const roll = opts.cling ? { n: 0, dice: [], adv: 0, key: 'hit', name: '命中' } : FE.rollD20(r, mod, advState, aP ? FE.Char.critMin(A, mode === 'bash' ? null : wpn) : 20);
+    const ac = acOf(game, D);
+    const roll = opts.cling ? { n: 0, dice: [], adv: 0, key: 'hit', name: '命中' } : FE.rollD20(r, mod, advState, aP ? FE.Char.critMin(A, mode === 'bash' ? null : wpn) : 20, ac);
     // 削弱與侵擾用掉了：削弱的目標下一次擲 d20 出手有劣勢；侵擾讓冒險者下一次打牠有優勢
     if (!opts.cling) A.sapped = false;
     if (aP) D.vexed = false;
@@ -202,7 +209,7 @@
     };
     if (opts.cling) {
       dodged = r() < dd.dodge;
-      dmg = dodged ? 0 : baseDamage(game, A, prof, 1, opts);
+      dmg = dodged ? 0 : baseDamage(game, A, prof, 1, opts, advState);
       armor();
     } else if (roll.key !== 'miss') {
       // 2. 沒命中就沒有傷害；失手與命中都讓防守方擲閃避
@@ -210,12 +217,12 @@
       const half = (n) => (aP && opts.counter ? Math.floor(n / 2) : Math.ceil(n / 2));
       dodged = r() < dd.dodge;
       if (roll.key === 'fumble') {
-        dmg = dodged ? 0 : half(baseDamage(game, A, prof, deep, opts)); // 失手：閃開沒傷害，沒閃開吃一半
+        dmg = dodged ? 0 : half(baseDamage(game, A, prof, deep, opts, advState)); // 失手：閃開沒傷害，沒閃開吃一半
       } else if (dodged) {
-        dmg = half(baseDamage(game, A, prof, deep, opts)); // 命中但被閃開：吃一半
+        dmg = half(baseDamage(game, A, prof, deep, opts, advState)); // 命中但被閃開：吃一半
       } else {
         crit = roll.key === 'crit';
-        dmg = baseDamage(game, A, prof, deep * (crit ? 2 : 1), opts); // 沒閃開：暴擊時傷害骰擲兩次加總
+        dmg = baseDamage(game, A, prof, deep * (crit ? 2 : 1), opts, advState); // 沒閃開：暴擊時傷害骰擲兩次加總
       }
       // 抗性在暴擊之後、格擋之前減半（冒險者打怪物時）
       if (aP && dmg > 0 && FE.isResisted(D, kind, prof.clear)) {
@@ -330,11 +337,13 @@
           : aP
             ? heads[mode] || (kind === 'deep' ? `你對${dName}使出重擊` : opts.cleave ? `你順勢劈向${dName}` : opts.off ? `你用副手攻擊${dName}` : `你攻擊${dName}`)
             : `${aName}攻擊${dName}`;
-      // 擲出 6～10 的「對方必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中
-      // 反擊與趁機攻擊本身不能再被反擊，也只寫「命中」；遠程打不貼著的目標也不會被反擊
-      const rollName = roll.key === 'hard' && (!aP || opts.counter || opts.opportunity || opts.noForced || !adjacent(game, A, D)) ? '命中' : roll.name;
+      // 勉強命中（比 AC 高不到 5）的「對方必定反擊」只罰冒險者：怪物與士兵勉強命中只寫「勉強命中」
+      // 反擊與趁機攻擊本身不能再被反擊，也只寫「勉強命中」；遠程打不貼著的目標也不會被反擊
+      const rollName = roll.key === 'hard' && (!aP || opts.counter || opts.opportunity || opts.noForced || !adjacent(game, A, D)) ? '勉強命中' : roll.name;
       const advTxt = roll.adv ? `${roll.adv > 0 ? '優勢' : '劣勢'}：${roll.dice.join('、')}，` : adv.length && dis.length ? '優勢與劣勢抵消，' : '';
-      const tag = `（${advTxt}擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''}：${rollName}）`;
+      // 優勢的來源寫在前面（群體戰術、靈巧脫身這類只有怪物有的，玩家才看得懂為什麼）
+      const why = roll.adv > 0 && adv.length ? `${adv.join('、')}，` : '';
+      const tag = `（${why}${advTxt}擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''} 對 AC ${roll.ac == null ? ac : roll.ac}：${rollName}）`;
       let text;
       if (opts.cling) {
         text = `${aName}緊緊纏著你，趁你${opts.clingWord || '移開'}出手，${dodged ? '被你閃開了' : `造成 ${dmg} 點傷害${reduced > 0 ? `（護甲擋下 ${reduced} 點）` : ''}${conCut > 0 ? `（你硬挺過去，又少受 ${conCut} 點）` : ''}`}。`;

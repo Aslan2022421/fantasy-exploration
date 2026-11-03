@@ -551,10 +551,11 @@ function testBackpack() {
   }
   FE.Gear.counterChance = counter0;
   FE.Combat.hook = hook0;
-  ok(seen.mHard > 50 && seen.mHardCountered === 0, `怪物擲出 6～10 ${seen.mHard} 次，冒險者反擊了 ${seen.mHardCountered} 次（反擊機率設成 0，應該是 0）`);
-  ok(seen.pHard > 50 && seen.pHardCountered === seen.pHard, `冒險者擲出 6～10 ${seen.pHard} 次，怪物只反擊了 ${seen.pHardCountered} 次（應該每次都反擊）`);
-  const line = g.log.find((l) => l.text.startsWith(m.name + '攻擊你') && /擲出 ([6-9]|10)：/.test(l.text));
-  ok(!line || !line.text.includes('必定反擊'), `怪物擲出 6～10 的訊息還寫著必定反擊：${line && line.text}`);
+  // 第三十三版：「擲出 6～10」改成「勉強命中」（d20＋加值比 AC 高不到 5）
+  ok(seen.mHard > 50 && seen.mHardCountered === 0, `怪物勉強命中 ${seen.mHard} 次，冒險者反擊了 ${seen.mHardCountered} 次（反擊機率設成 0，應該是 0）`);
+  ok(seen.pHard > 50 && seen.pHardCountered === seen.pHard, `冒險者勉強命中 ${seen.pHard} 次，怪物只反擊了 ${seen.pHardCountered} 次（應該每次都反擊）`);
+  const line = g.log.find((l) => l.text.startsWith(m.name + '攻擊你') && /對 AC \d+：勉強命中/.test(l.text));
+  ok(line && !line.text.includes('必定反擊'), `怪物勉強命中的訊息還寫著必定反擊（或沒有勉強命中的訊息）：${line && line.text}`);
 }
 UNITS.backpack = () => { try { testBackpack(); } catch (e) { fail('背包測試拋出例外：' + e.stack); } };
 

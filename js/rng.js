@@ -19,17 +19,19 @@ FE.makeRng = function (seed) {
 // 擲 d20，回傳點數與五段結果。mod 是加減值（例如地形）。
 // adv：1 是優勢（擲兩次取高）、-1 是劣勢（擲兩次取低）、0 只擲一次；優勢、劣勢同時有的時候由呼叫的一方先抵消成 0。
 // critMin：擲出幾點以上算暴擊（平常 20；感知修正值 +2 以上 19，短刀再擴大 1）。
-// 擲出的點數到 critMin 一定暴擊、擲出 1 一定失手，其他照加減後的點數分段（最多加到 19、最少減到 2）。
-// 回傳 { n 採用的那一顆, dice 擲出的每一顆, adv, mod, total, key, name }
-FE.rollD20 = function (rng, mod, adv, critMin) {
+// ac：對方的 AC（第三十三版）。擲出的點數到 critMin 一定暴擊、擲出 1 一定失手，其他看 d20＋mod 比 AC 高多少分段（FE.ROLL_BANDS）；
+// 沒給 AC 照第三十二版的分段（FE.ROLL_OLD_AC）。
+// 回傳 { n 採用的那一顆, dice 擲出的每一顆, adv, mod, total d20＋mod, ac, key, name }
+FE.rollD20 = function (rng, mod, adv, critMin, ac) {
   const a = FE.randInt(rng, 1, 20);
   const dice = adv ? [a, FE.randInt(rng, 1, 20)] : [a];
   const n = adv > 0 ? Math.max(...dice) : adv < 0 ? Math.min(...dice) : a;
   const m = mod || 0;
-  const crit = n >= (critMin || 20);
-  const total = crit ? 20 : n === 1 ? 1 : Math.max(2, Math.min(19, n + m));
-  const band = FE.ROLL_BANDS.find((b) => total >= b.min);
-  return { n, dice, adv: adv || 0, mod: m, total, key: band.key, name: band.name };
+  const target = ac == null ? FE.ROLL_OLD_AC : ac;
+  const total = n + m;
+  const key = n >= (critMin || 20) ? 'crit' : n === 1 ? 'fumble' : null;
+  const band = key ? FE.ROLL_BANDS.find((b) => b.key === key) : FE.ROLL_BANDS.find((b) => !b.nat && total - target >= b.min);
+  return { n, dice, adv: adv || 0, mod: m, total, ac: target, key: band.key, name: band.name };
 };
 
 // 擲傷害骰：die 是 [顆數, 面數]，times 是擲幾次（暴擊、重擊擲兩次）

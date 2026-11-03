@@ -84,13 +84,13 @@ function testGear() {
     const g2 = newGame(12);
     const q = g2.player;
     ok(q.equip.main && q.equip.main.type === 'sword' && q.equip.main.q === 0 && !q.equip.off && !q.equip.body && g2.attackText() === '1d10 揮砍' && G.name(q.equip.main) === '長劍', `起始裝備不是普通長劍（${g2.attackText()}）`);
-    ok(G.playerDefense(q).block === 0 && G.playerDefense(q).blockMax === 0 && near(G.playerDefense(q).dodge, 0.1), '沒拿盾牌時格擋機率該是 0');
+    ok(G.playerDefense(q).block === 0 && G.playerDefense(q).blockMax === 0 && near(G.playerDefense(q).dodge, 0) && G.playerAC(q) === 10 + FE.Char.attrMod(q, 'dex'), '沒拿盾牌時格擋機率該是 0');
     ok(G.name(G.make('sword', 1, 1)) === '-做工好-長劍' && G.name(G.make('heavy', 5, 1)) === '☼傑作☼鎖子甲' && G.name(G.make('light', 3, 1)) === '*優秀*皮甲' && G.name(G.make('medium', 4, 1)) === '≡卓越≡鱗甲' && G.name(G.make('shield', 2, 1)) === '+精良+盾牌', '裝備名字的品質符號');
     // 盾牌與重甲的其他數字
     q.equip.body = G.make('heavy', 0, 99);
-    ok(near(G.playerDefense(q).dodge, 0.1) && G.extraTicks(q) === 2, '重甲每個動作多 2 刻（閃避不再另外扣 5%）');
+    ok(near(G.playerDefense(q).dodge, 0) && G.playerAC(q) === 16 && G.extraTicks(q) === 2, '重甲每個動作多 2 刻（閃避不再另外扣 5%）');
     q.equip.body = G.make('medium', 0, 99);
-    ok(near(G.playerDefense(q).dodge, 0.1) && G.extraTicks(q) === 1, '中甲該多 1 刻、不扣閃避');
+    ok(near(G.playerDefense(q).dodge, 0) && G.playerAC(q) === 14 + Math.min(2, FE.Char.attrMod(q, 'dex')) && G.extraTicks(q) === 1, '中甲該多 1 刻、不扣閃避');
     q.equip.body = G.make('light', 0, 99);
     ok(G.extraTicks(q) === 0, '輕甲不該多花刻');
   }

@@ -147,14 +147,22 @@
     return dmg;
   }
 
+  // 冒險者的 AC（第三十三版，照 SRD 5.2.1 的防具表）：身上防具的基本 AC＋敏捷修正值（輕甲全加、中甲最多 +2、重甲不加，見 Char.dexForDodge），
+  // 沒穿防具或穿衣袍是 10＋敏捷修正值；副手拿盾牌再 +2。品質不加 AC（品質照舊加減傷）。法術的加護另外加（combat.js 的 acOf）
+  function playerAC(p) {
+    const b = p.equip.body ? def(p.equip.body) : null;
+    const sh = shieldOf(p);
+    return (b && b.ac ? b.ac : C.BASE_AC) + FE.Char.dexForDodge(p) + (sh ? def(sh).ac : 0);
+  }
+
   // 冒險者的防禦數字：
-  //   閃避＝PLAYER_DODGE＋敏捷修正值×2%（輕甲與無甲照加、中甲最多 +2 點修正值、重甲不加不扣，見 Char.dexForDodge）＋閃避技能每級 1%，最低 0
+  //   閃避＝PLAYER_DODGE（0）＋閃避技能每級 1%（第三十三版：敏捷不再加閃避，改加 AC；閃避是被命中之後再擲，閃開只吃一半傷害）
   //   格擋機率＝盾牌的機率＋盾牌使用每級 2%；格擋值＝盾牌與品質的格擋值，戰士再加力量修正值（其他職業只照盾牌）；沒拿盾牌都是 0
   function playerDefense(p) {
     const sh = shieldOf(p);
     const blockMax = sh ? Math.max(0, Math.round(def(sh).value * qual(sh).armor) + (p.cls === 'warrior' ? FE.Char.attrMod(p, 'str') : 0)) : 0;
     return {
-      dodge: Math.max(0, C.PLAYER_DODGE + C.DEX_DODGE * FE.Char.dexForDodge(p) + C.SKILL_DODGE * FE.Char.skillLv(p, 'dodge')),
+      dodge: Math.max(0, C.PLAYER_DODGE + C.SKILL_DODGE * FE.Char.skillLv(p, 'dodge')),
       counter: FE.Gear.counterChance(p),
       block: sh ? def(sh).block + C.SKILL_BLOCK * FE.Char.skillLv(p, 'shield') : 0,
       blockMax,
@@ -232,11 +240,12 @@
     if (d.cat === 'ammo') return `一捆 ${d.bundle} 支${q.pierce ? `、穿甲 ${Math.round(q.pierce * 100)}%` : ''}、重 ${d.weight}`;
     if (d.cat === 'armor') {
       const kind = { light: '輕甲', medium: '中甲', heavy: '重甲', none: '無甲' }[d.cls] || '';
-      const dodge = { light: '敏捷照加閃避', medium: '敏捷最多加 +2 點修正值的閃避', heavy: '敏捷不加不扣閃避', none: '敏捷照加閃避' }[d.cls] || '';
+      // AC（第三十三版）：輕甲與衣袍加整個敏捷修正值、中甲最多 +2、重甲不加
+      const ac = { light: `AC ${d.ac}＋敏捷`, medium: `AC ${d.ac}＋敏捷（最多 +2）`, heavy: `AC ${d.ac}`, none: `AC ${C.BASE_AC}＋敏捷` }[d.cls] || '';
       const ex = (d.ticks ? `、每個動作多 ${d.ticks} 刻` : '') + (d.str ? `、力量要 ${d.str}` : '') + (d.stealth ? '、不利隱匿' : '');
-      return `${kind}、物理減傷 ${Math.round(d.phys * q.armor)}、魔法減傷 ${Math.round(d.magic * q.armor)}、${dodge}、${w}${ex}${d.desc ? '。' + d.desc : ''}`;
+      return `${kind}、${ac}、物理減傷 ${Math.round(d.phys * q.armor)}、魔法減傷 ${Math.round(d.magic * q.armor)}、${w}${ex}${d.desc ? '。' + d.desc : ''}`;
     }
-    if (d.cat === 'shield') return `格擋 ${Math.round(d.block * 100)}%、格擋值 ${Math.round(d.value * q.armor)}、${w}`;
+    if (d.cat === 'shield') return `AC +${d.ac}、格擋 ${Math.round(d.block * 100)}%、格擋值 ${Math.round(d.value * q.armor)}、${w}`;
     return w;
   }
 
@@ -311,7 +320,7 @@
 
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
-    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerDefense, counterChance, counterDamage, wearTier, wearPenalty,
+    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerAC, playerDefense, counterChance, counterDamage, wearTier, wearPenalty,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText,
     SHOPS, CAT_NAMES, craftCats, shopOf, isShopkeeper, offOk,
   };

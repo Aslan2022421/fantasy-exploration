@@ -17,6 +17,7 @@ function testCharacter() {
     m.maxHp = m.hp = 1e9;
     m.atk = 1;
     m.die = null; // 照固定的攻擊力算傷害（第三十三版起怪物用 SRD 的傷害骰）
+    m.ac = FE.ROLL_OLD_AC; // 這裡量的是出手加減與傷害，AC 照第三十二版的分段（等於 AC 6），命中率跟原本一樣
     g.monsters = [m];
     return m;
   };
@@ -269,12 +270,12 @@ function testCharacter() {
     ok(G.playerDefense(w).blockMax === 0 && G.playerDefense(w).block === 0, '沒拿盾牌不能格擋');
   }
 
-  // 7. 敏捷：出手 d20 加修正值（跟品質、地形、高處疊加）；閃避每點修正值 +2%（PLAYER_DODGE 10% 為基準，再加技能、扣防具，最低 0）
+  // 7. 敏捷：出手 d20 加修正值（跟品質、地形、高處疊加）；第三十三版起敏捷加 AC（照防具類別），閃避只剩技能
   {
     const g = mk(33, 'ranger', ['shortspear']);
     const p = g.player;
     const m = arena(g, 'RUNTIME');
-    const tag = () => { const l = g.log.find((x) => /擲出/.test(x.text)); const r = /擲出 \d+([+-]\d+)?：/.exec(l.text); return r && r[1] ? Number(r[1]) : 0; };
+    const tag = () => { const l = g.log.find((x) => /擲出/.test(x.text)); const r = /擲出 \d+([+-]\d+)? 對 AC \d+：/.exec(l.text); return r && r[1] ? Number(r[1]) : 0; };
     const roll = () => { p.hp = p.maxHp = 1e9; p.equip.main.dur = p.equip.main.max = 1e9; FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true }); return tag(); };
     p.attr.dex = 10;
     const base = roll();
@@ -299,13 +300,17 @@ function testCharacter() {
     // 閃避
     const d = (q) => G.playerDefense(q).dodge;
     const mkp = (dex, body, armorLv, dodgeLv) => { const q = mk(34, 'ranger').player; q.attr.dex = dex; q.equip.body = body ? G.make(body, 0, 99) : null; if (body) q.skills[FE.GEAR[body].cls].lv = armorLv || 0; q.skills.dodge.lv = dodgeLv || 0; return q; };
-    ok(near(d(mkp(10)), 0.10) && near(d(mkp(16)), 0.16) && near(d(mkp(13)), 0.12) && near(d(mkp(8)), 0.08), `閃避隨敏捷：${d(mkp(10))}、${d(mkp(16))}、${d(mkp(13))}、${d(mkp(8))}`);
-    ok(near(d(mkp(16, 'light')), 0.16) && near(d(mkp(16, 'studded')), 0.16) && near(d(mkp(8, 'light')), 0.08), '輕甲的敏捷加減全照算（包含負的）');
-    ok(near(d(mkp(16, 'medium')), 0.14) && near(d(mkp(14, 'hide')), 0.14) && near(d(mkp(13, 'medium')), 0.12) && near(d(mkp(8, 'medium')), 0.08), '中甲的敏捷加成最多 +2 點修正值，負的照扣');
-    ok(near(d(mkp(16, 'heavy')), 0.10) && near(d(mkp(8, 'heavy')), 0.10) && near(d(mkp(16, 'plate')), 0.10), '重甲敏捷不加也不扣');
-    ok(near(d(mkp(16, null, 0, 5)), 0.21) && near(d(mkp(10, null, 0, 20)), 0.30), '閃避技能每級該加 1%');
-    ok(near(d(mkp(16, 'heavy', 14)), 0.10) && near(d(mkp(16, 'heavy', 0, 5)), 0.15), '重甲穿多高的技能都不改敏捷的閃避');
-    ok(d(mkp(1)) === 0 && d(mkp(1, 'heavy')) === 0.10, `閃避最低 0：${d(mkp(1))}、重甲 ${d(mkp(1, 'heavy'))}`);
+    // 第三十三版：敏捷不再加閃避，改加 AC（照 SRD 5.2.1 的防具表）；閃避只剩技能（每級 1%，基本 0）
+    const ac = (q) => G.playerAC(q);
+    ok([10, 16, 13, 8, 1].every((x) => d(mkp(x)) === 0), `閃避不隨敏捷：${[10, 16, 13, 8, 1].map((x) => d(mkp(x))).join('、')}`);
+    ok(ac(mkp(10)) === 10 && ac(mkp(16)) === 13 && ac(mkp(13)) === 11 && ac(mkp(8)) === 9, `沒穿防具的 AC＝10＋敏捷：${ac(mkp(10))}、${ac(mkp(16))}、${ac(mkp(13))}、${ac(mkp(8))}`);
+    ok(ac(mkp(16, 'light')) === 14 && ac(mkp(16, 'studded')) === 15 && ac(mkp(8, 'light')) === 10 && ac(mkp(16, 'padded')) === 14, '輕甲的敏捷全照算（包含負的）：皮甲、布甲 11、鑲釘皮甲 12');
+    ok(ac(mkp(16, 'medium')) === 16 && ac(mkp(14, 'hide')) === 14 && ac(mkp(13, 'chainshirt')) === 14 && ac(mkp(8, 'medium')) === 13 && ac(mkp(18, 'halfplate')) === 17 && ac(mkp(10, 'breastplate')) === 14, '中甲的敏捷最多 +2，負的照扣：厚皮甲 12、鎖子襯衫 13、鱗甲與胸甲 14、半身板甲 15');
+    ok(ac(mkp(16, 'heavy')) === 16 && ac(mkp(8, 'heavy')) === 16 && ac(mkp(16, 'plate')) === 18 && ac(mkp(16, 'ringmail')) === 14 && ac(mkp(16, 'splint')) === 17, '重甲敏捷不加也不扣：環甲 14、鎖子甲 16、條板甲 17、全身板甲 18');
+    { const r1 = mkp(10); r1.equip.body = G.make('robe', 0, 97); const r2 = mkp(16); r2.equip.body = G.make('mrobe', 0, 96); ok(ac(r1) === 10 && ac(r2) === 13, '衣袍算沒穿防具（10＋敏捷）'); }
+    { const q = mkp(16, 'heavy'); q.equip.off = G.make('shield', 0, 98); ok(ac(q) === 18, `盾牌 AC +2：${ac(q)}`); q.equip.body.q = 5; q.equip.off.q = 5; ok(ac(q) === 18, '品質不加 AC'); }
+    ok(near(d(mkp(16, null, 0, 5)), 0.05) && near(d(mkp(10, null, 0, 20)), 0.20), '閃避技能每級該加 1%');
+    ok(near(d(mkp(16, 'heavy', 14)), 0) && near(d(mkp(16, 'heavy', 0, 5)), 0.05), '穿甲技能不改閃避');
   }
 
   // 8. 體質：休息回復加修正值（最少 1），村莊住一晚回滿不變
@@ -594,12 +599,15 @@ function testCharacter() {
     let dodged = 0;
     let blocked = 0;
     FE.Combat.hook = (e) => { if (e.d === p && e.by === 'monster') { if (e.dodged) dodged++; if (e.blocked) blocked++; } };
+    const pd0 = C.PLAYER_DODGE;
+    C.PLAYER_DODGE = 0.1; // 第三十三版起基本閃避是 0（閃避只剩技能）；這裡量的是「閃開就練」，先給 10%
     for (let i = 0; i < 800; i++) {
       p.hp = p.maxHp = 1e9;
       p.equip.off.dur = p.equip.off.max = 1e9;
       p.block = null; // 格擋值每下都從滿的開始，不然很快就吸收不了
       FE.Combat.resolveAttack(g, m, p, 'attack', { noCounter: true, ...(i % 7 === 0 ? { cling: true, clingWord: '後退' } : {}) });
     }
+    C.PLAYER_DODGE = pd0;
     FE.Combat.hook = hook0;
     ok(dodged > 20 && uses(p, 'dodge') === dodged * C.SKILL_EXP_DODGE, `閃開 ${dodged} 次，閃避技能經驗 ${uses(p, 'dodge')}（應該 ${dodged * 10}）`);
     ok(blocked > 20 && uses(p, 'shield') === blocked * C.SKILL_EXP_BLOCK, `格擋成功 ${blocked} 次，盾牌使用經驗 ${uses(p, 'shield')}（應該 ${blocked * 10}）`);
@@ -710,7 +718,7 @@ function testCharacter() {
       return { g, p, m };
     };
     const lines = (g, re) => g.log.filter((l) => re.test(l.text));
-    const modOf = (l) => { const r = /擲出 \d+([+-]\d+)?：/.exec(l.text); return r && r[1] ? Number(r[1]) : 0; };
+    const modOf = (l) => { const r = /擲出 \d+([+-]\d+)? 對 AC \d+：/.exec(l.text); return r && r[1] ? Number(r[1]) : 0; };
     // 重擊：短刀傷害骰擲兩次＋較高修正值，不再減半。遊俠敏捷 16（+3）、力量 12（+1）：2d4＋3 ＝ 5～11
     {
       const { g, p, m } = setup();

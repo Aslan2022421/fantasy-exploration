@@ -31,7 +31,7 @@ function testGrowth29() {
   };
   const mon = (g, x, y, type) => {
     const m = FE.dressMonster(FE.makeMonster({ type: type || 'RUNTIME', x, y, cells: [[x, y]], scope: 2, data: {} }, g.nextMonsterId++, 1), g.world);
-    Object.assign(m, { x, y, home: { x, y }, maxHp: 1e9, hp: 1e9, atk: 1, die: null }); // die: null：照固定的攻擊力算傷害（第三十三版起怪物用 SRD 的傷害骰）
+    Object.assign(m, { x, y, home: { x, y }, maxHp: 1e9, hp: 1e9, atk: 1, die: null, ac: FE.ROLL_OLD_AC }); // die: null：照固定的攻擊力算傷害；ac：AC 照第三十二版的分段（等於 AC 6），量出手加減與傷害時命中率跟原本一樣（第三十三版起怪物用 SRD 的數值）
     g.monsters.push(m);
     return m;
   };

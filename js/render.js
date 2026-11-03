@@ -616,9 +616,9 @@
     const list = game.bagList();
     const drop = ui.bagDrop;
     const tier = game.loadTier();
-    // 裝備欄（第三十一版）：點一格就脫下放回背包（Shift＋1／2／3），算一個動作
+    // 裝備欄（第三十一版）：滑鼠點一格就脫下放回背包，算一個動作
     const slot = (label, g, key, n) =>
-      `<li><button data-unequip="${key}" ${g ? '' : 'disabled'}><kbd>⇧${n}</kbd><span class="dim">${label}</span> ${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）【脫下】</span>` : '<span class="dim">空著</span>'}</button></li>`;
+      `<li><button data-unequip="${key}" ${g ? '' : 'disabled'}><span class="dim">${label}</span> ${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）【脫下】</span>` : '<span class="dim">空著</span>'}</button></li>`;
     $('bagInfo').innerHTML = `
       <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
         tier === 1 ? '　超過能背的重量：走一步要 60 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''

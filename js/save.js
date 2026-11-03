@@ -53,6 +53,7 @@
         spawn: w.spawn,
         nextTownAt: w.nextTownAt,
         regions: w.regions,
+        calm: w.calm,
         ringsDone: w.ringsDone,
         dormant: [...w.dormant],
       },
@@ -84,6 +85,7 @@
       w.chunkMap.set(s.cx + ',' + s.cy, ch);
     }
     for (const k of ['npcs', 'chests', 'villages', 'landmarks', 'nodes', 'items', 'nextId', 'spawn', 'nextTownAt', 'regions', 'ringsDone']) w[k] = d[k];
+    w.calm = d.calm || [];
     if (!Array.isArray(w.items)) w.items = [];
     w.dormant = new Set(d.dormant);
     return game;

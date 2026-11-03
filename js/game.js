@@ -613,7 +613,7 @@
           const y = lead.y + FE.randInt(this.rng, -r1, r1);
           const r = Math.max(Math.abs(x - lead.x), Math.abs(y - lead.y));
           if (r < r0 || !w.passable(x, y) || w.inBuffer(x, y) || this.monsterAt(x, y) || this.isPlayerAt(x, y) || w.npcAt(x, y) || w.chestAt(x, y) || this.soldierAt(x, y)) continue;
-          if (canReach && !canReach(x, y)) continue;
+          if ((canReach && !canReach(x, y)) || this.isCalm(x, y)) continue;
           at = { x, y };
         }
         if (!at) at = this.findFreeNear(lead.x, lead.y, canReach);
@@ -628,7 +628,26 @@
       return group;
     }
 
+    // 這一格在不在冷卻區裡（清掉怪物後 5～7 天不生怪物）；過期的順手清掉
+    isCalm(x, y) {
+      const w = this.world;
+      if (!w.calm || !w.calm.length) return false;
+      const now = this.ticks || 0;
+      w.calm = w.calm.filter((c) => c.until > now);
+      return w.calm.some((c) => Math.max(Math.abs(x - c.x), Math.abs(y - c.y)) <= c.r);
+    }
+
+    // 清掉一處怪物：那一帶記成冷卻區
+    calmAt(x, y) {
+      const days = FE.randInt(this.rng, C.CALM_DAYS[0], C.CALM_DAYS[1]);
+      this.world.calm.push({ x, y, r: C.CALM_RADIUS, until: (this.ticks || 0) + days * C.DAY_TICKS });
+    }
+
     spawnMonster(d, canReach) {
+      // 冷卻區裡不生怪物；錯誤在區外但要挪位置時，也不挪進區裡
+      if (this.isCalm(d.x, d.y)) return null;
+      const reach0 = canReach;
+      canReach = (x, y) => !this.isCalm(x, y) && (!reach0 || reach0(x, y));
       let { x, y } = d;
       const blocked = this.monsterAt(x, y) || this.isPlayerAt(x, y) || this.soldierAt(x, y) || this.world.inBuffer(x, y);
       if (blocked || (canReach && !canReach(x, y))) {
@@ -2112,7 +2131,11 @@
       if (m.arrows || m.bolts) this.recoverArrows(m); // 射向牠的箭、弩矢撿回一半
       // 第三十二版：一群共用一處錯誤，全群倒下才修好
       const left = m.group ? this.monsters.filter((o) => o.group === m.group).length : 0;
-      const repair = (opts) => (left ? `這一群還剩 ${left} 隻，全倒下才修得好。` : FE.repairBug(this, m, opts));
+      const repair = (opts) => {
+        if (left) return `這一群還剩 ${left} 隻，全倒下才修得好。`;
+        this.calmAt(m.home ? m.home.x : m.x, m.home ? m.home.y : m.y); // 這一帶 5～7 天不再生怪物
+        return FE.repairBug(this, m, opts);
+      };
       if (by) {
         const fix = repair({ noExp: true });
         FE.Stability.stat(this).soldierKills++;

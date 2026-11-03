@@ -105,7 +105,7 @@
     if (!game.fixed || !game.fixed.length) return false;
     const rec = game.fixed.splice(Math.floor(game.rng() * game.fixed.length), 1)[0];
     const ok = (x, y) =>
-      w.inBounds(x, y) && !w.inBuffer(x, y) && !w.landmarkAt(x, y) && w.passable(x, y) && !game.isPlayerAt(x, y) && !game.monsterAt(x, y);
+      w.inBounds(x, y) && !w.inBuffer(x, y) && !w.landmarkAt(x, y) && w.passable(x, y) && !game.isPlayerAt(x, y) && !game.monsterAt(x, y) && !game.isCalm(x, y);
     const cells = rec.cells.slice().sort(() => game.rng() - 0.5).slice(0, 12);
     for (const [x, y] of cells) {
       if (!ok(x, y)) continue;

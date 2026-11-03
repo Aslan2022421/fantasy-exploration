@@ -439,6 +439,10 @@ Object.assign(FE.CONFIG, {
   GROUP_NEST_MUL: 1.5,
   GROUP_SPREAD: [2, 5],    // 跟班散在帶頭那隻周圍 2～5 格
   GROUP_GUARD: 0.5,        // 一半的群守著原地（只在 1 格內走動），一半照常徘徊
+  // 清掉一處怪物（一群全倒，或事件生的那一隻）等於把修補力打進那裡：那一帶 5～7 天不再生怪物（使用者定的天數；半徑是 Claude 定的，
+  // 蓋住群的散布 2～5 格加上徘徊範圍）。事件、侵蝕、復發、破壞都不在區內生怪物，侵蝕與復發也不在區內弄壞地面
+  CALM_DAYS: [5, 7],
+  CALM_RADIUS: 10,
 });
 FE.raceFor = (biome) => Object.keys(FE.RACES).find((k) => FE.RACES[k].biomes.includes(biome)) || 'goblin';
 

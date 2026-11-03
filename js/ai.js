@@ -116,6 +116,7 @@
       const [dx, dy] = FE.pick(game.rng, DIRS);
       if (!free(game, x, y) || !free(game, x + dx, y + dy)) continue;
       if (w.landmarkAt(x, y) || w.landmarkAt(x + dx, y + dy) || w.inBuffer(x, y) || w.inBuffer(x + dx, y + dy)) continue;
+      if (game.isCalm(x, y) || game.isCalm(x + dx, y + dy)) continue; // 冷卻區不侵蝕
       w.setCell(x, y, '.', 'tundra');
       w.setCell(x + dx, y + dy, ':', 'desert');
       FE.Stability.stat(game).corrupt++;

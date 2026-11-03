@@ -208,6 +208,15 @@ function testCreation() {
       ok(g.world.cell(cx, cy).biome !== 'grassland', `seed${seed} 一群還沒全倒就修好了`);
       g.defeat(gr[gr.length - 1]);
       ok(g.world.cell(cx, cy).biome === 'grassland', `seed${seed} 一群全倒下了卻沒修好`);
+      // 清掉之後那一帶 5～7 天不生怪物：還沒全倒時沒有冷卻區，全倒後有；5 天內生不出來，7 天後生得出來
+      const last = gr[gr.length - 1];
+      const hx = last.home.x, hy = last.home.y;
+      const d = { type: 'TERRAIN', x: hx, y: hy, cells: [], scope: 2, data: {} };
+      ok(g.world.calm.length === 1 && g.isCalm(hx, hy) && !g.spawnMonster(d), `seed${seed} 清掉之後冷卻區沒記下來，或區內還生得出怪物`);
+      const until = g.world.calm[0].until - g.ticks;
+      ok(until >= 5 * C.DAY_TICKS && until <= 7 * C.DAY_TICKS, `seed${seed} 冷卻 ${until} 刻，不在 5～7 天之間`);
+      g.ticks += 7 * C.DAY_TICKS;
+      ok(!g.isCalm(hx, hy) && g.world.calm.length === 0, `seed${seed} 7 天後冷卻區還在`);
       repairSeen = true;
     }
   }
@@ -343,6 +352,7 @@ function testSoldiers() {
   ok(stat.soldierKills >= (g.monsters.includes(prey) ? 0 : 1), '士兵清掉的數量沒有記下來');
   // 公平的一戰：滿血的小怪物，看整隊士兵打不打得贏（只統計，不算錯）
   if (g.monsters.includes(bystander)) g.monsters = g.monsters.filter((m) => m !== bystander);
+  w.calm = []; // 上一輪士兵清掉的地方成了冷卻區（5～7 天不生怪物），這一場要放在同一帶
   const fair = put(cand[2] || cand[0], true);
   C.STATE_CUTS = [0.5, 1];
   FE.Stability.update(g, true);

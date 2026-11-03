@@ -5388,7 +5388,16 @@ function runJob(id) {
     simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 2000 : 3000, untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
   else if (kind === 'unit') { useClasses('legacy'); NO_TIRE = a !== 'economy30'; UNITS[a](); NO_TIRE = false; }
-  else if (kind === 'arena') { NO_TIRE = true; runArena(a); NO_TIRE = false; } // 競技場量的是幾下打倒，不讓角色累
+  else if (kind === 'arena') {
+    // 競技場量的是幾下打倒：不讓角色累；也不演算事件（第三十版起事件每 100 刻演算，原本要走路才演算，站著打的競技場碰不到；
+    // 演算了會把侵蝕的地面變成新的怪物、改動競技場的地形）
+    NO_TIRE = true;
+    const tick0 = FE.Events.tick;
+    FE.Events.tick = () => {};
+    runArena(a);
+    FE.Events.tick = tick0;
+    NO_TIRE = false;
+  }
   else throw new Error('不認得的工作 ' + id);
 }
 // 這個行程累積的所有結果（交給主行程合併）

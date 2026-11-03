@@ -365,6 +365,18 @@
     if (!c) return;
     const m = game.monsterAt(c.x, c.y);
     const n = game.world.npcAt(c.x, c.y) || game.soldierAt(c.x, c.y);
+    // 瞄準中（按了 F 或選了要瞄準的招）：點射程內的怪物就對牠出手，點別的地方取消瞄準
+    if (game.aim) {
+      const i = m ? game.aim.ids.indexOf(m.id) : -1;
+      if (i >= 0) {
+        game.aim.i = i;
+        dispatch('戰鬥：遠程', () => game.aimFire());
+      } else {
+        game.aimCancel();
+        FE.UI.update();
+      }
+      return;
+    }
     if (m) {
       stopWalk();
       game.battle.targetId = m.id;

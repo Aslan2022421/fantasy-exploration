@@ -78,7 +78,7 @@
         seg = this.world.nextSegment(at.x, at.y);
         if (!seg) return false;
       }
-      const { index, rect, village } = this.world.addRegion(seg);
+      const { index, rect, village, landmarks } = this.world.addRegion(seg);
       // 新聚落的周圍那一圈可能伸進舊的區塊：已經在那裡的怪物挪到圈外
       // （站在圈外、但生成點在圈內的，生成點改成現在站的位置）
       const bad = (m) => this.world.inBuffer(m.x, m.y) || this.world.inBuffer(m.home.x, m.home.y);
@@ -109,7 +109,7 @@
       const spawned = [];
       // 沒生怪物的地形錯位與斷崖記起來（沉睡），之後檢查侵蝕時不把它當成新的
       const sleep = (d) => { if (d.type === 'TERRAIN' || d.type === 'CLIFF') for (const [x, y] of d.cells) this.world.dormant.add(x + ',' + y); };
-      const { sites, rest } = this.pickSites(found, rect, first);
+      const { sites, rest } = this.pickSites(found, rect, first, landmarks || []);
       rest.forEach(sleep);
       for (const site of sites) {
         // 開局最多 24 隻：名額用完了，選到的地形錯位與斷崖也先沉睡（一定要生的那幾種至少生帶頭的 1 隻）
@@ -551,10 +551,12 @@
       return null;
     }
 
-    // 第三十二版（三之二）：一段裡挑幾處錯誤生怪物——開局 4 處（至少 1 處在興趣點），之後照面積 1～3 處。
+    // 第三十二版（三之二）：一段就是一場戰役，裡面的怪物群是這場戰役的危害（試做：照 Dungeon World〈前置〉「一個冒險前置 2～3 個危害」，
+    // 地區的樣子照《奇幻探索物語 Quest》：聚落在中間、興趣點在兩側）。開局 4 處，之後每段 2～3 處；
+    // 這一段的每個興趣點各放一處（錯誤落在興趣點附近就用它，沒有就挑一處錯誤，把那一群放到興趣點上），其餘的散在這一段裡。
     // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），其餘從地形錯位與斷崖裡隨機挑，沒挑到的沉睡
-    // （不生怪物、不算進創世門檻）。回傳 { sites: [{ d, must, at }], rest }，at 是開局放到興趣點上的位置
-    pickSites(found, rect, first) {
+    // （不生怪物、不算進創世門檻）。回傳 { sites: [{ d, must, at }], rest }，at 是放到興趣點上的位置
+    pickSites(found, rect, first, landmarks) {
       const rng = this.rng;
       const sites = found.filter((d) => d.type !== 'TERRAIN' && d.type !== 'CLIFF').map((d) => ({ d, must: true }));
       const opt = found.filter((d) => d.type === 'TERRAIN' || d.type === 'CLIFF');
@@ -562,21 +564,13 @@
         const j = Math.floor(rng() * (i + 1));
         [opt[i], opt[j]] = [opt[j], opt[i]];
       }
-      let n = C.START_SITES;
-      if (!first) {
-        const area = (rect.x1 - rect.x0) * (rect.y1 - rect.y0);
-        n = Math.max(1, Math.min(C.SITE_MAX, Math.round(area / C.SITE_AREA + rng() - 0.5)));
-      }
-      if (first) {
-        // 至少 1 處在興趣點：興趣點（含外圍 3 格）裡有錯誤就挑它，沒有就挑一處錯誤，把那一群放到興趣點上
-        const lms = this.world.landmarks.filter((l) => FE.inRect(rect, l.x0, l.y0));
-        const near = (l, d) => d.x >= l.x0 - 3 && d.x <= l.x1 + 3 && d.y >= l.y0 - 3 && d.y <= l.y1 + 3;
-        if (lms.length && !sites.some((s) => lms.some((l) => near(l, s.d)))) {
-          const l = FE.pick(rng, lms);
-          const i = opt.findIndex((d) => near(l, d));
-          if (i >= 0) sites.push({ d: opt.splice(i, 1)[0] });
-          else if (opt.length) sites.push({ d: opt.shift(), at: { x: Math.floor((l.x0 + l.x1) / 2), y: Math.floor((l.y0 + l.y1) / 2) } });
-        }
+      const n = first ? C.START_SITES : FE.randInt(rng, C.SITE_COUNT[0], C.SITE_COUNT[1]);
+      const near = (l, d) => d.x >= l.x0 - 3 && d.x <= l.x1 + 3 && d.y >= l.y0 - 3 && d.y <= l.y1 + 3;
+      for (const l of landmarks) {
+        if (sites.some((x) => near(l, x.d) || (x.at && near(l, x.at)))) continue;
+        const i = opt.findIndex((d) => near(l, d));
+        if (i >= 0) sites.push({ d: opt.splice(i, 1)[0] });
+        else if (opt.length) sites.push({ d: opt.shift(), at: { x: Math.floor((l.x0 + l.x1) / 2), y: Math.floor((l.y0 + l.y1) / 2) } });
       }
       while (sites.length < n && opt.length) sites.push({ d: opt.shift() });
       return { sites, rest: opt };

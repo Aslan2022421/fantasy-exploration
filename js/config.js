@@ -432,8 +432,8 @@ Object.assign(FE.CONFIG, {
   START_SITES: 4,          // 開局挑 4 處錯誤生怪物，至少 1 處在興趣點
   START_SITE_MAX: 6,       // 開局每處最多 6 隻
   START_MONSTER_MAX: 24,   // 開局最多 24 隻
-  SITE_AREA: 2304,         // 之後每段照面積挑 1～3 處：每 2,304 格（4 個小塊）約 1 處，再加減亂數
-  SITE_MAX: 3,
+  // 之後每段 2～3 處（試做：照 Dungeon World〈前置〉「一個冒險前置有 2～3 個危害」，一段就是一場戰役；原本照面積 1～3 處）
+  SITE_COUNT: [2, 3],
   GROUP_STRAGGLER: 0.15,   // 15% 只有落單的 1 隻
   GROUP_NEST: 0.1,         // 10% 是大窩，隻數 ×1.5
   GROUP_NEST_MUL: 1.5,

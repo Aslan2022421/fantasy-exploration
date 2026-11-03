@@ -926,12 +926,14 @@
 
   const TREE = { tundra: '↑', taiga: '↑', glacier: '↑', jungle: '♠', swamp: '♠' };
 
-  // 聚落的標籤決定地貌：法師塔、神聖的地方、出產礦石的地方各有對應；其他隨機
+  // 聚落的標籤決定地貌：法師塔、神聖的地方、出產礦石的地方各有對應；其他隨機（照 Dungeon World〈世界〉：
+  // 村莊靠著它的資源，由來決定旁邊有什麼，其餘的獨特地貌像茂密的森林、古老的立石、廢棄的堡壘）
+  const NEUTRAL_LANDMARKS = ['fort', 'stones', 'grove', 'graves'];
   function landmarkKind(rng, v) {
     if (has(v, '重要人士', '法師')) return 'tower';
     if (isHoly(v)) return 'shrine';
     if (has(v, '資源', '鐵礦') || has(v, '資源', '石材')) return 'mine';
-    return FE.pick(rng, ['fort', 'stones', 'grove', 'graves']);
+    return FE.pick(rng, NEUTRAL_LANDMARKS);
   }
 
   // 從範圍外圍一圈（只在範圍和外圍裡走）走得到範圍裡每一格能走的地方
@@ -1025,6 +1027,6 @@
 
   FE.Steading = {
     roll, layout, has, villagerCount, shopFactor, rewardFactor, econ, econTier, addEcon, questEcon, isHoly, related, describe, tagText, placeLandmark,
-    roomAt, canWalk, freeHome, siteScore, exitViable,
+    roomAt, canWalk, freeHome, siteScore, exitViable, landmarkKind, NEUTRAL_LANDMARKS,
   };
 })();

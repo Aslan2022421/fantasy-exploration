@@ -447,11 +447,12 @@
             }
           }
           if (best) this.spawn = { x: best.x, y: best.y };
-          // 兩個興趣點，分在聚落的兩側（照《奇幻探索物語 Quest》的「地區」：起始地點在兩個興趣點之間）
-          const kinds = Object.keys(FE.LANDMARKS);
-          const k1 = FE.pick(rng, kinds);
-          const k2 = FE.pick(rng, kinds.filter((k) => k !== k1));
-          for (const [kind, side] of [[k1, 'west'], [k2, 'east']]) {
+          // 兩個興趣點，分在聚落的兩側（照《奇幻探索物語 Quest》的「地區」：起始地點在兩個興趣點之間）。
+          // 一個看聚落是什麼（有法師是法師塔、神聖的是聖所、靠鐵礦或石材維生是礦坑，其餘從中性的地貌挑），另一個從中性的地貌挑
+          const kTag = FE.Steading.landmarkKind(rng, village);
+          const kFree = FE.pick(rng, FE.Steading.NEUTRAL_LANDMARKS.filter((k) => k !== kTag));
+          const [kw, ke] = rng() < 0.5 ? [kTag, kFree] : [kFree, kTag];
+          for (const [kind, side] of [[kw, 'west'], [ke, 'east']]) {
             const lm = FE.Steading.placeLandmark(this, rng, rect, village, { kind, side });
             if (lm) landmarks.push(lm);
           }

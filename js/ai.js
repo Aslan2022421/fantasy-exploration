@@ -13,36 +13,11 @@
     return !game.monsterAt(x, y) && !w.npcAt(x, y) && !w.chestAt(x, y) && !game.isPlayerAt(x, y) && !game.soldierAt(x, y);
   }
 
-  // 沿直線看過去，中間的地形擋住的量累積到 1 就看不到；冒險者在村莊裡時看不到。
-  // 中間有比兩端都高出 2 階以上的地方（隔著山丘），也看不到。
+  // 怪物看不看得到冒險者：SIGHT 步以內、冒險者不在村莊裡，視線跟冒險者遠程同一套（combat.js 的 lineClear），
+  // 門檻看這隻怪物數值塊的感知修正值（FE.SRD_WIS；第三十三版之一）
   function canSee(world, m, p) {
     if (dist(m, p) > C.SIGHT || world.inVillage(p.x, p.y)) return false;
-    const top = Math.max(world.cell(m.x, m.y).h, world.cell(p.x, p.y).h);
-    let x = m.x;
-    let y = m.y;
-    const dx = Math.abs(p.x - x);
-    const dy = -Math.abs(p.y - y);
-    const sx = x < p.x ? 1 : -1;
-    const sy = y < p.y ? 1 : -1;
-    let err = dx + dy;
-    let block = 0;
-    for (;;) {
-      const e2 = 2 * err;
-      if (e2 >= dy) {
-        err += dy;
-        x += sx;
-      }
-      if (e2 <= dx) {
-        err += dx;
-        y += sy;
-      }
-      if (x === p.x && y === p.y) return true;
-      const c = world.cell(x, y);
-      // 視線穿過還沒創出來的空缺（世界不一定是方的）就看不到
-      if (!c) return false;
-      block +=(C.SIGHT_BLOCK[c.t] || 0) + (c.h >= top + 2 ? 1 : 0);
-      if (block >= 1) return false;
-    }
+    return FE.Combat.lineClear(world, m, p, FE.SRD_WIS[m.srd] || 0);
   }
 
   // 走到 arrived(x, y) 成立的格子的最短路的第一步

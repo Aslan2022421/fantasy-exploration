@@ -182,7 +182,9 @@ FE.CONFIG = {
 
   // 怪物行動：冒險者每做一個動作（移動、攻擊、撤退、休息、對話），所有怪物各做一件事（移動一步或攻擊）；戰鬥中世界不暫停
   SIGHT: 8,                               // 會追人的怪物（m.small，事件與侵蝕生的）在幾步以內看得到冒險者就會追
-  SIGHT_BLOCK: { '#': 1, '♣': 0.5, '↑': 0.5, '♠': 0.6, 'Γ': 0.3, '▓': 1, 'Θ': 1, 'Π': 0.5, 'Ω': 1, '†': 1, '⌂': 1, '∩': 1, '♦': 1, W: 1, w: 1, '▌': 0.5, 'π': 0.3, '╤': 0.3, '¤': 0.3, '╥': 0.3 }, // 視線經過的地形擋多少，累積到 1 就看不到（樹林兩格才擋住）
+  SIGHT_BLOCK: { '#': 1, '♣': 0.5, '↑': 0.5, '♠': 0.6, 'Γ': 0.3, '▓': 1, 'Θ': 1, 'Π': 0.5, 'Ω': 1, '†': 1, '⌂': 1, '∩': 1, '♦': 1, W: 1, w: 1, '▌': 0.5, 'π': 0.3, '╤': 0.3, '¤': 0.3, '╥': 0.3 }, // 視線經過的地形擋多少：擋 1 的一格就擋死，其餘累積到門檻才擋（感知修正值 0 時門檻 1，樹林兩格才擋住）
+  SIGHT_WIS_STEP: 0.5,                    // 感知修正值每 +1，視線門檻加多少（多看穿一棵樹；沒有上限，第三十三版之一）
+  SIGHT_LIMIT_MIN: 0.5,                   // 視線門檻最低多少（感知修正值 −1 以下：一棵樹就擋住）
 
   // 時間（參考矮人要塞的刻）：每個動作花幾刻，怪物每 10 刻行動一次
   TICKS_MOVE: 10,                         // 一般地形走一格
@@ -628,6 +630,9 @@ FE.MONSTER_BLOCKS = {
     mid: { srd: 'Ghast', proposed: true, ac: 13, hd: [8, 8], con: 10, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 8], extraType: 'necrotic', traits: [] }, // Bite（不用會麻痺的 Claw）
   },
 };
+
+// 數值塊的感知修正值（SRD 5.2.1 的 WIS／SAG，出處見 data/srd-monsters.json）：怪物看冒險者的視線門檻用（ai.js 的 canSee；第三十三版之一）
+FE.SRD_WIS = { 'Allosaurus': 1, 'Ape': 1, 'Awakened Shrub': 0, 'Awakened Tree': 0, 'Boar': -1, 'Brown Bear': 1, 'Bugbear Stalker': 1, 'Bugbear Warrior': 0, 'Constrictor Snake': 0, 'Crocodile': 0, 'Dire Wolf': 1, 'Dust Mephit': 0, 'Gargoyle': 0, 'Ghast': 0, 'Ghoul': 0, 'Giant Boar': -2, 'Giant Constrictor Snake': 0, 'Giant Crocodile': 0, 'Giant Frog': 0, 'Giant Hyena': 1, 'Giant Rat': 0, 'Giant Scorpion': -1, 'Giant Spider': 0, 'Giant Wolf Spider': 1, 'Gnoll Warrior': 0, 'Goblin Boss': -1, 'Goblin Warrior': -1, 'Harpy': 0, 'Hyena': 1, 'Ice Mephit': 0, 'Kobold Warrior': -2, 'Lion': 1, 'Minotaur Skeleton': -1, 'Mummy': 1, 'Ogre': -2, 'Ogre Zombie': -2, 'Owlbear': 1, 'Polar Bear': 1, 'Sahuagin Warrior': 1, 'Shambling Mound': 0, 'Skeleton': -1, 'Swarm of Rats': 0, 'Troll': -1, 'Troll Limb': -1, 'Werewolf': 0, 'White Dragon Wyrmling': 0, 'Winter Wolf': 1, 'Wolf': 1, 'Worg': 0, 'Zombie': -2 };
 FE.MONSTER_TRAITS = { pack: '群體戰術', nimble: '靈巧脫身' };
 // 怪物多擲的傷害種類的名字（查看怪物時顯示；遊戲裡還沒有這些種類的減傷與抗性，照一般傷害算）
 FE.EXTRA_DMG_TYPES = { poison: '毒', necrotic: '死靈', cold: '寒冷', lightning: '閃電', fire: '火', acid: '酸' };
@@ -796,7 +801,7 @@ FE.ATTRS = [
   { key: 'dex', name: '敏捷', info: '出手擲骰、遠程傷害、閃避機率（穿中甲最多算 +2、穿重甲不算）、攻擊與走路的快慢' },
   { key: 'con', name: '體質', info: '生命上限、休息的回復量、挨到的物理傷害再減一些' },
   { key: 'int', name: '智力', info: '技能練得快（每點修正值經驗 ±10%）；法師拿法杖施法：命中、傷害、範圍' },
-  { key: 'wis', name: '感知', info: '射程（射擊、投擲、施法）；+2 起擲出 19 也算暴擊；牧師的治療與神聖之光' },
+  { key: 'wis', name: '感知', info: '射程（射擊、投擲、施法）；每 +1 遠程視線多看穿一棵樹；+2 起擲出 19 也算暴擊；牧師的治療與神聖之光' },
   { key: 'cha', name: '魅力', info: '向工匠買東西更便宜、賣東西更貴，委託的金錢獎勵更多；聖騎士的治療' },
 ];
 // 技能（第二十九版，照 Dwarf Fortress：用了就累積經驗，升到第 N 級要 400＋100N 點，等級沒有上限，15 級以上都是傳奇）。

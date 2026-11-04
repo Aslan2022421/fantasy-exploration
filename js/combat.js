@@ -76,10 +76,13 @@
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1 && game.world.heightOk(a.x, a.y, b.x, b.y);
   }
 
-  // 遠程的視線：沿直線看過去，中間有牆、樹、巨石、建築、家具（任何會擋視線的東西，見 SIGHT_BLOCK）就打不到；
-  // 中間隔著比兩端都高出 2 階以上的山丘也打不到；穿過還沒創出來的空缺也不行。怪物不擋
-  function lineClear(world, a, b) {
+  // 視線（冒險者遠程、怪物看冒險者共用）：沿直線看過去，中間的地形擋多少（見 SIGHT_BLOCK）累積起來。
+  // 擋 1 的（巨石、牆、建築）、比兩端都高出 2 階以上的山丘、還沒創出來的空缺，一格就擋死；
+  // 樹、家具這些半擋的累積到門檻才擋，門檻＝1＋感知修正值×SIGHT_WIS_STEP（最低 SIGHT_LIMIT_MIN，沒有上限；第三十三版之一）。怪物不擋
+  function lineClear(world, a, b, wis = 0) {
     const top = Math.max(world.cell(a.x, a.y).h, world.cell(b.x, b.y).h);
+    const limit = Math.max(C.SIGHT_LIMIT_MIN, 1 + wis * C.SIGHT_WIS_STEP);
+    let block = 0;
     let x = a.x;
     let y = a.y;
     const dx = Math.abs(b.x - x);
@@ -100,13 +103,17 @@
       }
       if (x === b.x && y === b.y) return true;
       const c = world.cell(x, y);
-      if (!c || (C.SIGHT_BLOCK[c.t] || 0) > 0 || c.h >= top + 2) return false;
+      if (!c) return false;
+      const s = C.SIGHT_BLOCK[c.t] || 0;
+      if (s >= 1 || c.h >= top + 2) return false;
+      block += s;
+      if (block >= limit) return false;
     }
   }
 
-  // 冒險者遠程打得到這隻怪物嗎：在最遠射程內、視線沒被擋住（range 是 [正常, 最遠]）
+  // 冒險者遠程打得到這隻怪物嗎：在最遠射程內、視線沒被擋住（range 是 [正常, 最遠]；感知越高越看得穿樹林）
   function canShoot(game, p, m, range) {
-    return dist(p, m) <= range[1] && lineClear(game.world, p, m);
+    return dist(p, m) <= range[1] && lineClear(game.world, p, m, FE.Char.attrMod(p, 'wis'));
   }
 
   // 推擊：把目標從攻擊方直線推開最多 n 格，下一格走不過去（擋路的地形、斷崖、別的怪物、村民、士兵、寶箱、聚落周圍的圈）就停。回傳推了幾格

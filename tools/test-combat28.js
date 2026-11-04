@@ -235,12 +235,30 @@ function testCombat28() {
     ok(e && e.adv === -1, `超出正常射程有劣勢：${e && e.adv}`);
     // 最遠射程：手動算看看（空地只有 31×31，22 格外在空地外面，只檢查 canShoot 的距離判斷）
     ok(FE.Combat.canShoot(g, p, { x: p.x + 15, y: p.y }, [7, 14]) === false && FE.Combat.canShoot(g, p, { x: p.x + 14, y: p.y }, [7, 14]) === true, '超出最遠射程打不到');
-    // 視線：巨石、樹、建築的牆都擋；水不擋
-    for (const [t, blocks] of [['#', true], ['♣', true], ['⌂', true], ['≈', false]]) {
+    // 視線：巨石、建築的牆一格就擋；水不擋；樹（0.5）累積到門檻才擋，門檻＝1＋0.5×感知修正值（第三十三版之一）
+    for (const [t, blocks] of [['#', true], ['⌂', true], ['♣', false], ['≈', false]]) {
       g.world.setCell(p.x + 3, p.y, t, 'plain');
       ok(FE.Combat.canShoot(g, p, near, r.range) === !blocks, `中間是「${t}」${blocks ? '該擋住' : '不該擋'}`);
     }
     g.world.setCell(p.x + 3, p.y, '.', 'plain');
+    const trees = (n) => { for (let i = 1; i <= 5; i++) g.world.setCell(p.x + i, p.y, i <= n ? '♣' : '.', 'plain'); return FE.Combat.canShoot(g, p, near, r.range); };
+    const wis0 = p.attr.wis;
+    // 感知 +2（門檻 2）：3 棵看得穿、4 棵擋住；感知 +0（門檻 1）：1 棵穿、2 棵擋；感知 −1（門檻 0.5）：1 棵就擋
+    for (const [w, pass, stop] of [[15, 3, 4], [10, 1, 2], [8, 0, 1]]) {
+      p.attr.wis = w;
+      ok((pass === 0 || trees(pass)) && !trees(stop), `感知 ${w}：${pass} 棵樹該看得穿、${stop} 棵該擋住`);
+    }
+    // 感知沒有上限：+5（門檻 3.5）看得穿 5 棵樹
+    p.attr.wis = 20;
+    ok(trees(5), '感知 20 該看得穿 5 棵樹');
+    p.attr.wis = wis0;
+    trees(0);
+    // 怪物看冒險者也同一套，門檻看數值塊的感知：狼（+1）看得穿 2 棵、哥布林戰士（−1）1 棵就擋
+    {
+      const look = (srd, n) => { for (let i = 1; i <= 5; i++) g.world.setCell(p.x + i, p.y, i <= n ? '♣' : '.', 'plain'); return FE.AI.canSee(g.world, { x: p.x + 6, y: p.y, srd }, p); };
+      ok(look('Wolf', 2) && !look('Wolf', 3) && !look('Goblin Warrior', 1) && look('Goblin Warrior', 0), '怪物的視線門檻該看數值塊的感知修正值');
+      look('Wolf', 0);
+    }
     // 中間隔著高出 2 階的山丘也打不到
     g.world.setHeight(p.x + 3, p.y, 3);
     ok(!FE.Combat.canShoot(g, p, near, r.range), '隔著山丘打不到');

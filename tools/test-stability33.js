@@ -487,11 +487,47 @@ function testStability33() {
   }
 }
 UNITS.stability33 = () => {
-  // 精確的檢查（每小時掉的量、冷卻區與聚落圈不掉）要每一格都掉，先把機率設成 1；機率本身另外在 testDecayChance 量
+  // 精確的檢查（每小時掉的量、冷卻區與聚落圈不掉）要每一格都掉，先把機率設成 1；機率本身另外在 testDecayChance 量。
+  // 生怪的檢查（每小時最多 2 群）也先不限速（DECAY_GROUP_RATE 0）；限速另外在 testGroupRate 量
   const chance0 = C.DECAY_CELL_CHANCE;
+  const rate0 = C.DECAY_GROUP_RATE;
   C.DECAY_CELL_CHANCE = 1;
-  try { testStability33(); C.DECAY_CELL_CHANCE = chance0; testDecayChance(); } catch (e) { fail('穩定值測試拋出例外：' + e.stack); } finally { C.DECAY_CELL_CHANCE = chance0; }
+  C.DECAY_GROUP_RATE = 0;
+  try {
+    testStability33();
+    C.DECAY_CELL_CHANCE = chance0;
+    C.DECAY_GROUP_RATE = rate0;
+    testDecayChance();
+    testGroupRate();
+  } catch (e) { fail('穩定值測試拋出例外：' + e.stack); } finally { C.DECAY_CELL_CHANCE = chance0; C.DECAY_GROUP_RATE = rate0; }
 };
+
+// 衰敗生怪的速度（第三十三版之三（三））：每小時能生的群數＝區塊數 × DECAY_GROUP_RATE，小數部分照機率擲，最多 DECAY_GROUPS_PER_HOUR
+function testGroupRate() {
+  const ok = (cond, msg) => { stabChecks++; if (!cond) fail('穩定值 ' + msg); };
+  ok(C.DECAY_GROUP_RATE > 0, `限速設定 ${C.DECAY_GROUP_RATE}`);
+  const g = new FE.Game(6262);
+  g.start();
+  const n = g.world.chunks.length;
+  const e = n * C.DECAY_GROUP_RATE;
+  let sum = 0;
+  let max = 0;
+  const H = 20000;
+  for (let h = 0; h < H; h++) {
+    const c = FE.Stability.groupCap(g);
+    sum += c;
+    max = Math.max(max, c);
+  }
+  ok(Math.abs(sum / H - Math.min(e, C.DECAY_GROUPS_PER_HOUR)) < 0.01 && max <= Math.max(1, Math.ceil(e)) && max <= C.DECAY_GROUPS_PER_HOUR, `${n} 塊：每小時平均 ${(sum / H).toFixed(3)} 群（應為 ${e.toFixed(3)}），最多 ${max}`);
+  // 欠很多也照速度生：開局的 16 塊整片欠債，100 小時生的群數接近 100 × 區塊數 × 速度，不是每小時 2 群
+  g.monsters = [];
+  const w = g.world;
+  const reach = FE.Checker.reachable(w);
+  w.forEachCell((x, y) => { if (w.passable(x, y) && !w.inBuffer(x, y)) w.setStab(x, y, -300); });
+  let groups = 0;
+  for (let h = 0; h < 100; h++) groups += FE.Stability.spawnDecay(g, reach);
+  ok(groups <= Math.ceil(100 * e * 2) + 2 && groups < 100 * C.DECAY_GROUPS_PER_HOUR / 4, `整片欠債 100 小時生了 ${groups} 群（期望約 ${(100 * e).toFixed(1)}）`);
+}
 
 // 每小時只有少數格子往下掉：每一格各自有 DECAY_CELL_CHANCE 的機率會掉，掉的量照狀態、同一小時全世界一樣；動盪、失序的機率不另外加
 function testDecayChance() {

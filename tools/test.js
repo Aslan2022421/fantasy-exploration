@@ -41,8 +41,9 @@ function runJob(id) {
   else if (kind === 'idle') simResults.push(simulateIdle(Number(b), a, Number(process.env.FE_DAYS) || 30));
   else if (kind === 'ctrl') simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, untilDays: Number(process.env.FE_DAYS) || 30, noCreate: true, cls: a }));
   else if (kind === 'sim4') {
-    // FE_MIN：最少動作數（預設 3000，快測 2000）；調世界狀態的分界要拉長（世界等級 4 要長滿 3 圈，約 100 塊），搭配 FE_MAX 放寬上限
-    simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: Number(process.env.FE_MIN) || (QUICK ? 2000 : 3000), untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
+    // FE_MIN：最少動作數（預設 3000，快測 2000）；調世界狀態的分界要拉長（世界等級 4 要長滿 3 圈，約 100 塊），搭配 FE_MAX 放寬上限；
+    // FE_CHUNKS：至少創出幾塊才停（預設 15，快測 8；144 是長滿 288×288）
+    simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: Number(process.env.FE_MIN) || (QUICK ? 2000 : 3000), untilChunks: Number(process.env.FE_CHUNKS) || (QUICK ? 8 : 15), maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
   else if (kind === 'unit') { useClasses('legacy'); NO_TIRE = a !== 'economy30'; UNITS[a](); NO_TIRE = false; }
   else if (kind === 'arena') {

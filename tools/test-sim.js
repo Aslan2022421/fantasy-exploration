@@ -16,7 +16,8 @@ function botGear(game) {
   const noArmor = !!game.botNoArmor;
   // 第二十八版：機器人只換同一種武器（品質比較好的），不換掉職業的武器（遊俠的弓箭、法師的法杖）
   const wearable = (g) => FE.Char.canWear(p, g) && !(FE.GEAR[g.type].str > p.attr.str); // 野蠻人不穿中甲重甲；力量不夠的防具走路會變慢，機器人不穿
-  const better = (g, s) => (s === 'body' && !wearable(g) ? false : !p.equip[s] || (s === 'main' ? g.type === p.equip.main.type && g.q > p.equip.main.q : gearScore(g) > gearScore(p.equip[s])));
+  // 第三十三版之三（三）：體型拿不起來的武器不拿（主手壞掉時原本會一直想拿起撿到的巨斧，拿不起來又不花時間，整場模擬卡住）
+  const better = (g, s) => (s === 'body' && !wearable(g) ? false : FE.GEAR[g.type].cat === 'weapon' && FE.Char.grip(p, g) === 'none' ? false : !p.equip[s] || (s === 'main' ? g.type === p.equip.main.type && g.q > p.equip.main.q : gearScore(g) > gearScore(p.equip[s])));
   const junk = () => p.bag.findIndex((e) => {
     if (e.id !== 'gear') return false;
     const s = slotOf(e.gear);
@@ -137,8 +138,12 @@ function botStep(game, rng, goal, lazy) {
     // 回聚落休息：走到任何一格聚落就停，找路看得遠一點（聚落可能在好幾塊世界外）
     const prev = new Map([[key(p.x, p.y), null]]);
     const q = [[p.x, p.y]];
+    const far = !tgt.home && Math.abs(tgt.x - p.x) + Math.abs(tgt.y - p.y) >= 60; // 遠的目標（BOT_FAR 找到的怪物）找不到路時，先往找過的格子裡離它最近的那格走
+    let best = null;
+    let bestD = Infinity;
     for (let h = 0; h < q.length && h < (tgt.home ? 40000 : 6000); h++) {
       const [x, y] = q[h];
+      if (far && h > 0 && Math.abs(x - tgt.x) + Math.abs(y - tgt.y) < bestD) { best = key(x, y); bestD = Math.abs(x - tgt.x) + Math.abs(y - tgt.y); }
       if (tgt.home ? h > 0 && w.inVillage(x, y) : Math.abs(x - tgt.x) + Math.abs(y - tgt.y) === 1 && w.heightOk(x, y, tgt.x, tgt.y)) {
         let k = key(x, y);
         let step = null;
@@ -152,6 +157,13 @@ function botStep(game, rng, goal, lazy) {
         prev.set(key(nx, ny), key(x, y));
         q.push([nx, ny]);
       }
+    }
+    if (best) {
+      let k = best;
+      let step = k;
+      while (prev.get(k) !== null) { step = k; k = prev.get(k); }
+      const [sx, sy] = step.split(',').map(Number);
+      return game.move(sx - p.x, sy - p.y);
     }
     goal.drop();
   }
@@ -379,7 +391,11 @@ function simulate(seed, opts) {
           const ns = w.npcs.filter((n) => Math.abs(n.x - p.x) + Math.abs(n.y - p.y) < 80);
           if (ns.length) target = { kind: 'npc', id: FE.pick(rng, ns).id };
         } else {
-          const ms = game.monsters.filter((m) => Math.abs(m.x - p.x) + Math.abs(m.y - p.y) < 60).sort((a, b) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y) - (Math.abs(b.x - p.x) + Math.abs(b.y - p.y)));
+          // 第三十三版之三（三）：60 步內沒有怪物時，改找 BOT_FAR 步內最近的（種子 777 開局的怪物都在 73 步外，機器人原本只送貨、採集，
+          // 一隻怪物都沒打，職業只在打架時有差，戰士與法師兩場四人等效的世界走勢一模一樣）
+          const dm = (m) => Math.abs(m.x - p.x) + Math.abs(m.y - p.y);
+          const byDist = game.monsters.filter((m) => dm(m) < BOT_FAR).sort((a, b) => dm(a) - dm(b));
+          const ms = byDist[0] && dm(byDist[0]) < 60 ? byDist.filter((m) => dm(m) < 60) : byDist;
           // 創世時的怪物才是推進世界的內容（創世門檻算的是牠們），事件與侵蝕生的小怪物會自己追上來、打架時順便清掉：
           // 先找最近的創世怪物，沒有才找最近的別種怪物
           const prog = ms.filter((m) => !m.small && !m.members);
@@ -404,6 +420,7 @@ function simulate(seed, opts) {
   const dayRows = [];
   let lastDay = 0;
   let maxMonsters = 0;
+  const frozen = { t: -1, n: 0 };
   const stopAt = (i) => (opts.untilDays ? game.ticks >= opts.untilDays * C.DAY_TICKS : opts.untilChunks ? i >= opts.maxActions || (i >= opts.minActions && game.world.chunks.length >= opts.untilChunks) : i >= opts.steps);
   let i = 0;
   for (; !stopAt(i); i++) {
@@ -428,6 +445,10 @@ function simulate(seed, opts) {
       const r = FE.Steading.roomAt(nv, n.x, n.y);
       if (!FE.Gear.isShopkeeper(n) && r >= 0 && (!n.home || n.home.b !== r)) fail(`模擬 seed${seed} ${n.name} 進了別人的建築`);
     }
+    // 第三十三版之三（三）：時間停住（連續 500 個動作都沒花刻）表示機器人卡在不算動作的事情上（例如一直想拿起拿不動的武器），整場模擬就白跑了
+    if (game.ticks === frozen.t) frozen.n++;
+    else { frozen.t = game.ticks; frozen.n = 0; }
+    if (frozen.n === 500) fail(`模擬 seed${seed} 第${i}步 連續 500 個動作時間沒有往前（最新訊息「${game.log[0] && game.log[0].text}」）`);
     const L = FE.Stability.state(game);
     lv[L]++;
     if (game.loadTier() >= 1) overActs++;
@@ -572,6 +593,8 @@ const SEEDS = (process.env.FE_SEEDS || '20201,777,314159').split(',').map(Number
 // 單人模擬：每個職業每個種子各一場；四人等效模擬：每個職業一場，種子輪流用（見 test.js 的 buildJobs）
 // 四人等效：機器人每做 4 個動作，世界才走 1 回合（冒險者算力照常，已乘 PLAYER_COMPUTE_SCALE）
 const MAX_ACTIONS = Number(process.env.FE_MAX || 8000);
+// 機器人找怪物的範圍：平常找 60 步內的，沒有才找這個步數內最近的（第三十三版之三（三））
+const BOT_FAR = 160;
 // 四人等效：機器人每做 4 個動作世界才走 1 回合（四個人的清怪力），每個動作的算力不乘 4（四個人各出一份，一回合合計 4 份）
 // 四人等效的模擬每次創世也跟舊的全世界檢查比對（這時的地形被侵蝕、修復、重算改過，驗證連通性快取有跟著更新）；
 // 第二十九版起新舊比對只在一個種子上跑（第一個職業的第一個種子）

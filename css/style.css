@@ -101,7 +101,6 @@
   --m-village: #3d6a6c;
   --m-town: #7a6aa0;
   --m-relic: #a8916a;
-  --m-flash: #c58fd6;
   --m-mon: #c4685a;
   --m-boss: #e0503f;
   --m-view: rgba(246, 243, 222, 0.6);
@@ -203,7 +202,7 @@ b { font-weight: bold; }
 .bar { width: 110px; height: 8px; overflow: hidden; background: var(--void); border: 1px solid var(--line); }
 .bar > i { display: block; height: 100%; background: var(--bad); transition: width 0.2s; }
 #lowrow { display: flex; align-items: stretch; gap: 12px; margin-top: 3px; }
-#place { flex: 1 1 0; min-width: 0; height: 64px; overflow: hidden; padding-right: 10px; border-right: 1px solid var(--line); }
+#place { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 10px; font-size: 13px; }
 #place .t-head { display: flex; justify-content: space-between; gap: 8px; }
 #place p { margin: 2px 0; font-size: 12px; }
 #quick { flex: none; display: flex; align-items: center; gap: 6px; }
@@ -220,6 +219,8 @@ b { font-weight: bold; }
 }
 .qs svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .qs .qk { color: var(--head); }
+.qs.qw { margin-left: 14px; } /* 右下角的視窗按鈕（背包、角色、地圖）跟動作分開一點 */
+#stPlace { margin-left: auto; color: var(--dim); }
 .qs .qcd { color: var(--bad); }
 .qs:disabled { opacity: 0.4; }
 
@@ -358,8 +359,12 @@ ul.tags li { margin: 2px 0; }
 ol { margin: 0; padding-left: 20px; }
 li { margin: 2px 0; }
 .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-#miniwrap { display: flex; justify-content: center; }
-#minimap { display: block; max-width: 100%; image-rendering: pixelated; border: 1px solid var(--line); background: var(--void); }
+#miniwrap { display: flex; justify-content: center; position: relative; }
+/* 地圖照實際像素畫（render.js 設好寬高），不讓瀏覽器縮放 */
+#minimap { display: block; image-rendering: pixelated; border: 1px solid var(--line); background: var(--void); cursor: crosshair; }
+#mapTip { position: absolute; z-index: 5; max-width: 260px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--line2); font-size: 13px; line-height: 1.5; pointer-events: none; }
+#mapTip.hidden { display: none; }
+.maplegend { font-size: 12px; margin: 4px 0 8px; }
 
 button {
   padding: 6px 10px;
@@ -429,9 +434,11 @@ input {
 /* 寬度不夠（例如 800×600）：訊息欄變窄，快捷列只留圖示＋按鍵，地點資訊少一行 */
 @media (max-width: 899px) {
   #side { width: 190px; }
+  .t-extra { display: none; }
+}
+@media (max-width: 1399px) {
   .qs .qn { display: none; }
   .qs { padding: 5px 8px; }
-  .t-extra { display: none; }
 }
 
 /* 手機（視窗寬小於 520px）：訊息欄移到地圖下面變成兩三行，建角改單欄 */

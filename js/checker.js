@@ -352,7 +352,7 @@
     });
   }
 
-  // 出入口不足：聚落能走出去的出入口少於 3 個（外面被巨石、水擋住，或排版開不出來）。
+  // 出入口不足：聚落能走出去的出入口少於 3 個（外面被巨石、水擋住，或排版開不出來）；堡壘、要塞本來就只有窄路兩頭的 2 個城門（第三十四版）。
   // 包裝成斷層，打倒時在外牆上打開一個寬 3 格的出入口
   function findGates(world, r, monsters) {
     const bugs = [];
@@ -368,7 +368,7 @@
           if (DIRS4.some(([dx, dy]) => !own(x + dx, y + dy) && world.passable(x + dx, y + dy))) opens.add(key(x, y));
         }
       }
-      if (components(opens, DIRS8).length >= 3) continue;
+      if (components(opens, DIRS8).length >= (v.kind === 'fort' || v.kind === 'fortress' ? 2 : 3)) continue;
       // 挑一段外牆：連續 3 格，裡面是聚落能走的地方，外面能走
       const isWall = (x, y) => own(x, y) && (world.cell(x, y).t === 'W' || world.cell(x, y).t === 'w');
       const spots = [];
@@ -401,16 +401,16 @@
     return bugs;
   }
 
-  // 數值暴走：寶箱金幣是負數或 NaN
+  // 數值暴走：寶箱的錢（銅）是負數或 NaN；影響範圍照算壞了幾銀算（每 4 銀 1 格）
   function checkChest(c) {
-    if (Number.isFinite(c.gold) && c.gold >= 0) return null;
-    const scope = Number.isFinite(c.gold) ? Math.min(10, Math.max(1, Math.ceil(-c.gold / 4))) : 8;
-    return { type: 'VALUE', x: c.x, y: c.y, cells: [[c.x, c.y]], scope, data: { chestId: c.id, value: c.gold } };
+    if (Number.isFinite(c.copper) && c.copper >= 0) return null;
+    const scope = Number.isFinite(c.copper) ? Math.min(10, Math.max(1, Math.ceil(-c.copper / FE.CONFIG.SILVER / 4))) : 8;
+    return { type: 'VALUE', x: c.x, y: c.y, cells: [[c.x, c.y]], scope, data: { chestId: c.id, value: c.copper } };
   }
 
-  // 懸空指標：任務指向不存在的村民
+  // 懸空指標：送貨任務指向不存在的村民（清除、採藥、採礦委託沒有收貨人，不檢查）
   function checkNpc(world, n) {
-    if (!n.quest || n.quest.done || n.quest.kind === 'hunt' || world.npcById(n.quest.targetId)) return null;
+    if (!n.quest || n.quest.done || ['hunt', 'herb', 'ore'].includes(n.quest.kind) || world.npcById(n.quest.targetId)) return null;
     return {
       type: 'REFERENCE',
       x: n.x,
@@ -456,15 +456,6 @@
   }
   const scan = (world, r, monsters) => scanWith(world, r, monsters, (covered) => findUnreachable(world, covered, r));
 
-  // 整個世界找還沒有怪物負責的地形錯位與斷崖（侵蝕、地形重算造成的）
-  function findGlitches(world, monsters, dormant) {
-    const b = world.bounds();
-    return [].concat(
-      findTerrain(world, b, coveredBy(monsters, 'TERRAIN', dormant)),
-      findCliffs(world, b, coveredBy(monsters, 'CLIFF', dormant))
-    );
-  }
-
   // full：舊做法（整個世界走一遍、整個世界掃一遍），只給測試對照新做法用，遊戲本身不呼叫
   const full = {
     reachable: reachableFull,
@@ -473,5 +464,5 @@
       scanWith(world, r, monsters, (covered) => unreachableIn(world, covered, reachableFull(world), (fn) => world.forEachCell(fn))),
   };
 
-  FE.Checker = { scan, reachable, checkChest, checkNpc, findGlitches, full };
+  FE.Checker = { scan, reachable, checkChest, checkNpc, full };
 })();

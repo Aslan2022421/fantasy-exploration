@@ -82,15 +82,18 @@
     return Object.keys(count).sort((a, b) => count[b] - count[a])[0] || 'plain';
   }
 
-  // 跟另一個聚落的關係：優先挑還沒跟這裡有任何關係的聚落（免得同一個聚落又是誓約又是敵對），
-  // 沒有的話挑還沒有同種關係的；還沒有別的聚落時先空著，等下一個聚落出現再補上
+  // 同一對聚落只會有一種關係（第三十三版修）：a 這邊已經跟 b 有任何關係，就不能再加；
+  // b 那邊已經對 a 有關係時，a 只能跟著用同一種（例如 b 對 a 是誓約，a 對 b 就不能是敵對）
+  const relsOf = (tags) => tags.filter((t) => RELATIONS.includes(t.k) && t.rel != null);
+  function relOk(aTags, aId, b, k) {
+    if (relsOf(aTags).some((t) => t.rel === b.id)) return false;
+    return !b.steading || relsOf(b.steading.tags).every((t) => t.rel !== aId || t.k === k);
+  }
+
+  // 跟另一個聚落的關係：只挑還沒跟這裡有任何關係、而且對方對這裡沒有別種關係的聚落；
+  // 沒有的話先空著，等下一個聚落出現再補上（原本找不到時會挑「還沒有同種關係」的，同一對聚落可能又是誓約又是敵對）
   function pickOther(world, rng, v, s, k) {
-    const rels = s.tags.filter((t) => t.rel !== undefined);
-    const any = new Set(rels.map((t) => t.rel));
-    const same = new Set(rels.filter((t) => t.k === k).map((t) => t.rel));
-    const others = world.villages.filter((o) => o.id !== v.id);
-    const fresh = others.filter((o) => !any.has(o.id));
-    const pool = fresh.length ? fresh : others.filter((o) => !same.has(o.id));
+    const pool = world.villages.filter((o) => o.id !== v.id && relOk(s.tags, v.id, o, k));
     return pool.length ? FE.pick(rng, pool).id : null;
   }
 
@@ -99,14 +102,16 @@
       if (o.id === v.id || !o.steading) continue;
       for (const t of o.steading.tags) {
         if (!RELATIONS.includes(t.k) || t.rel !== null) continue;
-        if (o.steading.tags.some((u) => u.k === t.k && u.rel === v.id)) continue;
+        if (!relOk(o.steading.tags, o.id, v, t.k)) continue;
         t.rel = v.id;
       }
     }
   }
 
+  // 城市照城鎮的規則、堡壘與要塞照村莊的規則（第三十四版，Claude 定的）
+  const townish = (v) => !!v && (v.kind === 'town' || v.kind === 'city');
   function roll(world, rng, v) {
-    const town = v.kind === 'town';
+    const town = townish(v);
     const s = { prosperity: town ? 2 : 1, population: 2, tags: [], option: null, problem: null };
     const biome = localBiome(world, v);
     const res = RESOURCES[biome];
@@ -151,6 +156,7 @@
   // 人口決定住多少村民（不含鐵匠、武器匠、盔甲匠）
   function villagerCount(rng, v) {
     const p = v.steading ? v.steading.population : 2;
+    if (v.kind === 'city') return 2 * [4, 6, FE.randInt(rng, C.TOWN_VILLAGERS[0], C.TOWN_VILLAGERS[1]), 10, 11][p]; // 城市是兩座城鎮併起來（第三十四版，Claude 定的）
     if (v.kind === 'town') return [4, 6, FE.randInt(rng, C.TOWN_VILLAGERS[0], C.TOWN_VILLAGERS[1]), 10, 11][p];
     return [1, 2, FE.randInt(rng, 3, 4), 5, 6][p];
   }
@@ -164,6 +170,30 @@
 
   // 需求（冒險者）：這裡的委託獎勵多五成
   const rewardFactor = (v) => (has(v, '需求', '冒險者') ? 1.5 : 1);
+
+  // ---- 經濟值（第三十版）----
+  // 每個聚落有看不見的經濟值（0～ECON_MAX），每 ECON_STEP 一段對應一個經濟標籤（荒蕪、貧窮、普通、繁盛、富裕）；
+  // 初始值落在原本標籤那一段的中間（第一次用到時才補上，存在 v.econ）。標籤（steading.prosperity）跟著經濟值走，物價也就跟著變
+  function econ(v) {
+    if (!v || !v.steading) return 0;
+    if (!Number.isFinite(v.econ)) v.econ = v.steading.prosperity * C.ECON_STEP + C.ECON_STEP / 2;
+    return v.econ;
+  }
+  const econTier = (x) => Math.max(0, Math.min(FE.PROSPERITY.length - 1, Math.floor(x / C.ECON_STEP)));
+
+  // 經濟值加減 d（上下限 0～ECON_MAX）；標籤變了回傳 { from, to }（標籤的索引），沒變回傳 null
+  function addEcon(v, d) {
+    if (!v || !v.steading || !d) return null;
+    const from = v.steading.prosperity;
+    v.econ = Math.max(0, Math.min(C.ECON_MAX, econ(v) + d));
+    const to = econTier(Math.min(v.econ, C.ECON_MAX - 1e-9));
+    if (to === from) return null;
+    v.steading.prosperity = to;
+    return { from, to };
+  }
+
+  // 委託的金錢照委託人聚落的經濟標籤乘倍率（荒蕪 ×0.8、貧窮 ×0.9、普通 ×1、繁盛與富裕 ×1.2）
+  const questEcon = (v) => (v && v.steading ? C.QUEST_ECON[v.steading.prosperity] : 1);
 
   const isHoly = (v) => has(v, '神聖') || has(v, '力量', '神聖');
 
@@ -205,12 +235,9 @@
   const BUILDING_WALLS = '⌂∩♦';
   // 排版用的格子：' ' 聚落外面、'.' 空地、'·' 路、W／w 外牆、',' 室內地板（寫進世界時換成 '.'）、'+' 門，
   // 其他是建築外牆與家具
-  const WALK = new Set(['.', '·', ',', '+', '≡']);
-  const BLOCKING = new Set(['π', '▌', '╤', '¤', '╥']);
+  const WALK = new Set(['.', '·', ',', '+', '≡', '╥']);
+  const BLOCKING = new Set(['π', '▌', '╤', '¤', '■', '÷', 'Æ']);
 
-  // 室內形狀：最小的房屋用俄羅斯方塊 J、L、O、S、T、Z（4 格，不用 I），8 格的房屋用兩條 I 並排（2×4）
-  const TETROMINOES = [['#..', '###'], ['..#', '###'], ['##', '##'], ['.##', '##.'], ['###', '.#.'], ['##.', '.##']];
-  const fromRows = (rows) => rows.flatMap((r, y) => [...r].map((ch, x) => (ch === '#' ? [x, y] : null)).filter(Boolean));
   const rectCells = (w, h) => Array.from({ length: w * h }, (_, i) => [i % w, Math.floor(i / w)]);
   // 旋轉、翻面後所有不同的擺法
   function orientations(cells) {
@@ -230,14 +257,16 @@
   }
 
   // 建築：外牆字元、室內形狀、門數、家具。spot 是站人的格子（住戶、鐵匠），貼著門內那一格，進門就能對話；
-  // 擋路的家具不能把室內切開；門內那一格一律空著。家具先只有符號，還沒有作用
+  // 擋路的家具不能把室內切開；門內那一格一律空著。家具先只有符號，還沒有作用。
+  // 第三十二版照 Dwarf Fortress 的蓋法：室內一律是長方形（原本民房是俄羅斯方塊的形狀），家具照房間的用途擺：
+  // 民房有床、櫃、椅；大房子多一張桌；工坊有鐵砧（╤，畫成 σ）與木桶或箱子；神殿有祭壇與椅；市場有攤位與木桶
   const BUILDINGS = {
-    house: { wall: '⌂', shapes: TETROMINOES.flatMap((r) => orientations(fromRows(r))), doors: 1, spot: true, items: ['≡', '▌'] },
-    big: { wall: '⌂', shapes: orientations(rectCells(4, 2)), doors: 1, items: ['π', '▌'] }, // 住 2～3 人，床另外加
-    smithy: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['╤'] },
-    armory: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['╤'] }, // 盔甲匠工坊（只在城鎮），蓋法跟鐵匠工坊一樣
-    temple: { wall: '∩', shapes: orientations(rectCells(4, 3)), doors: 1, items: ['¤'] },
-    market: { wall: '♦', shapes: orientations(rectCells(5, 2)), doors: 2, items: ['╥', '╥', '╥'] },
+    house: { wall: '⌂', shapes: orientations(rectCells(3, 2)), doors: 1, spot: true, items: ['≡', '▌', '╥'] },
+    big: { wall: '⌂', shapes: orientations(rectCells(4, 3)), doors: 1, items: ['π', '▌', '╥', '╥'] }, // 住 2～3 人，床另外加
+    smithy: { wall: '⌂', shapes: orientations(rectCells(4, 2)), doors: 1, spot: true, items: ['╤', '÷'] },
+    armory: { wall: '⌂', shapes: orientations(rectCells(4, 2)), doors: 1, spot: true, items: ['╤', 'Æ'] }, // 盔甲匠工坊（只在城鎮），蓋法跟鐵匠工坊一樣
+    temple: { wall: '∩', shapes: orientations(rectCells(5, 3)), doors: 1, items: ['¤', '╥', '╥'] },
+    market: { wall: '♦', shapes: orientations(rectCells(5, 2)), doors: 2, items: ['■', '■', '■', '÷'] },
   };
 
   function shuffle(rng, arr) {
@@ -288,17 +317,20 @@
     return null;
   }
 
-  // 出入口可以開在哪些方向（東、西、南、北）：從中央往外鋪 3 格寬的通道，一直鋪到工作範圍外三格，通道上不能有水
-  // （巨石可以，路經過時清掉）。外面被水擋住的方向就不開，換另一個方向
-  function exitViable(world, box) {
+  // 出入口可以開在哪些方向（東、西、南、北）：從中央往外鋪 3 格寬的通道，一直鋪到工作範圍外三格，通道上不能有水或山壁
+  // （巨石可以，路經過時清掉）。外面被水擋住的方向就不開，換另一個方向。
+  // 第三十四版（使用者定的：出口不朝湖開）：通道再往外多看「聚落周圍的圈＋3 格」（far，跟 World 的 openExits 確認走不走得出去的距離一樣），
+  // 那一段有湖或山壁也不開；還沒長出來的格子看將來會不會是湖（FE.futureLake）
+  function exitViable(world, box, far) {
+    if (far === undefined) far = C.SETTLE_BUFFER[box.kind || 'village'] + 3;
     return DIRS.map(([dx, dy]) => {
-      const lim = dx > 0 ? box.x1 + 3 : dx < 0 ? box.x0 - 3 : dy > 0 ? box.y1 + 3 : box.y0 - 3;
+      const lim = dx > 0 ? box.x1 + 3 + far : dx < 0 ? box.x0 - 3 - far : dy > 0 ? box.y1 + 3 + far : box.y0 - 3 - far;
       for (let o = -1; o <= 1; o++) {
         let x = box.cx + (dy ? o : 0);
         let y = box.cy + (dx ? o : 0);
         while (dx ? (dx > 0 ? x <= lim : x >= lim) : dy > 0 ? y <= lim : y >= lim) {
           const c = world.cell(x, y);
-          if (c && c.t === '≈') return false;
+          if (c ? c.t === '≈' || c.t === '█' : FE.futureLake(world, x, y)) return false; // 第三十四版：山壁也開不出去；還沒長出來的格子看將來是不是湖
           x += dx;
           y += dy;
         }
@@ -309,11 +341,12 @@
 
   // 選址的評分：能開出至少 3 個出入口、中央沒有水，周圍有一段連續的水或巨石就加分（聚落靠水、靠巨石蓋），
   // 工作範圍裡擋路的格子太多則扣分（排不下內容）
-  function siteScore(world, box, town) {
+  // 第三十四版：城鎮四通八達，四面都要開得出出入口（使用者定的），不然跟開不出 3 個一樣不蓋
+  function siteScore(world, box, town, kind) {
     let score = 0;
-    const open = exitViable(world, box).filter(Boolean).length;
-    if (open < 3) score -= 500;
-    else if (town && open < 4) score -= 3;
+    // 城市的出入口固定在圖樣上，另外由 plans.js 的 exitsViable 看
+    const open = kind === 'city' ? 4 : exitViable(world, box, C.SETTLE_BUFFER[kind || (town ? 'town' : 'village')] + 3).filter(Boolean).length;
+    if (open < 3 || (kind === 'town' && open < 4)) score -= 500;
     for (let dy = -3; dy <= 3; dy++) {
       for (let dx = -5; dx <= 5; dx++) {
         const c = world.cell(box.cx + dx, box.cy + dy);
@@ -327,7 +360,7 @@
     for (let y = box.y0 - 3; y <= box.y1 + 3; y++) {
       for (let x = box.x0 - 3; x <= box.x1 + 3; x++) {
         const c = world.cell(x, y);
-        if (!c || (c.t !== '≈' && c.t !== '#')) continue;
+        if (!c || (c.t !== '≈' && c.t !== '#' && c.t !== '█')) continue;
         blocked.add(ckey([x, y]));
         if (x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1) inBox++;
       }
@@ -382,7 +415,7 @@
       const row = [];
       for (let x = 0; x < W; x++) {
         const c = world.cell(v.x0 + x, v.y0 + y);
-        row.push(!c || c.t === '≈' ? 2 : c.t === '#' ? 1 : 0);
+        row.push(!c || c.t === '≈' || c.t === '█' ? 2 : c.t === '#' ? 1 : 0);
       }
       blk.push(row);
     }
@@ -717,7 +750,7 @@
         else connected = false;
       }
     }
-    return { g: out, approach, entrances: chosen.length, buildings, houses, beds: bedCount, ok: connected && !!smithy && extrasOk && houses === want && bedCount >= cap && chosen.length >= 3 };
+    return { g: out, approach, chosen, entrances: chosen.length, buildings, houses, beds: bedCount, ok: connected && !!smithy && extrasOk && houses === want && bedCount >= cap && chosen.length >= 3 };
   }
 
   // 聚落排版：排不齊就換一組亂數重排，最多 6 次，取最好的一次。
@@ -785,6 +818,7 @@
       spots: b.spots.map(toWorld),
     }));
     v.entrances = best.entrances;
+    v.exitDirs = best.chosen; // 第三十四版：出入口的方向，生成完再確認每個都走得出去（World 的 openExits）
     v.x0 = bx0 + ox;
     v.y0 = by0 + oy;
     v.x1 = bx1 + ox;
@@ -795,6 +829,22 @@
         if (ch !== ' ') world.setCell(x + ox, y + oy, ch === ',' ? '.' : ch, 'plain');
       }
     }
+    // 窗（第三十二版，照 DF）：牆的內側是室內、外側是室外，而且不在轉角、不貼著門的牆格，挑幾格開成窗（▒，跟牆一樣擋路）
+    v.buildings.forEach((b, i) => {
+      const cand = [];
+      for (let y = b.y0 - 1; y <= b.y1 + 1; y++) {
+        for (let x = b.x0 - 1; x <= b.x1 + 1; x++) {
+          const c = world.cell(x, y);
+          if (!c || c.t !== BUILDINGS[b.kind].wall) continue;
+          const inner = DIRS.filter(([dx, dy]) => roomAt(v, x + dx, y + dy) === i && world.cell(x + dx, y + dy).t !== '+');
+          const outer = DIRS.filter(([dx, dy]) => roomAt(v, x + dx, y + dy) < 0 && world.passable(x + dx, y + dy));
+          const nearDoor = b.doors.some(([dx, dy]) => Math.abs(dx - x) + Math.abs(dy - y) <= 1);
+          if (inner.length === 1 && outer.length === 1 && inner[0][0] === -outer[0][0] && inner[0][1] === -outer[0][1] && !nearDoor) cand.push([x, y]);
+        }
+      }
+      const n = Math.min(cand.length, b.kind === 'house' || b.kind === 'smithy' || b.kind === 'armory' ? 1 + Math.floor(rng() * 2) : 2 + Math.floor(rng() * 2));
+      for (const [x, y] of shuffle(rng, cand).slice(0, n)) world.setCell(x, y, '▒', 'plain');
+    });
     // 出入口外的路不算聚落，保留原本的生態區；還沒創出來的地方跳過
     for (const [lx, ly] of approach) {
       const [x, y] = toWorld([lx, ly]);
@@ -837,19 +887,12 @@
   // 圖樣裡的 . 是保留原本的地形；~ 是依當地生態區長的樹；o 是室內地板（空地）
   // 法師塔、聖所、礦坑、堡壘是有外框的建築：外牆圍出室內，留門（+）、坑口或缺口
   const LANDMARKS = {
+    // 第三十四版：堡壘廢墟照草稿 4.1 放大成 39×25（外城牆、轉角塔樓、城門、庭院、主堡、兵營，北牆、東牆、西牆各崩一段，東南角塔整座塌掉；使用者定的）。
+    // 圖樣在 plans.js（PLANS.ruin）：W 石牆（畫面照雙線接）、X 塔樓的樓梯、O 井、≡ 床、π 桌、╥ 椅
     fort: {
-      name: '廢棄的堡壘',
-      desc: '斷牆圍著一片碎石地，早就沒有人守了。',
-      art: [
-        '▓▓▓▓▓▓▓▓▓▓▓.',
-        '▓░░░▓░░░░░▓.',
-        '▓░░░+░░░░░░░',
-        '▓▓+▓▓░░░░░▓.',
-        '▓░░░▓▓▓+▓▓▓.',
-        '▓░░░+░░░░░▓.',
-        '▓▓▓▓▓▓▓▓░▓▓.',
-        '........░...',
-      ],
+      name: '堡壘廢墟',
+      desc: '倒塌的城牆圍著一片碎石地，塔樓還站著，早就沒有人守了。',
+      big: true, // 比一段世界的帶子（24 格）還大：可以蓋到已經長出來的舊區塊上（見 placeLandmark）
     },
     stones: {
       name: '古老立石',
@@ -864,7 +907,7 @@
     graves: {
       name: '墓地',
       desc: '一排排墓碑，有些名字已經被風磨平。',
-      art: ['‡░‡░‡', '░░░░░', '‡░‡░‡'],
+      art: ['‡░‡≥‡', '░≤░░░', '‡░‡░‡'],
     },
     tower: {
       name: '法師塔',
@@ -883,15 +926,21 @@
     },
   };
   FE.LANDMARKS = LANDMARKS;
+  // 這一處地貌畫上去的圖樣（直放的堡壘廢墟是轉 90 度的，第三十四版）
+  FE.landmarkArt = (lm) => (lm.rot ? FE.Plans.rotate(LANDMARKS[lm.kind].art) : LANDMARKS[lm.kind].art);
+  // 堡壘廢墟的圖樣在 plans.js：用 getter，載入順序不影響
+  Object.defineProperty(LANDMARKS.fort, 'art', { get: () => FE.Plans.PLANS.ruin, enumerable: true });
 
   const TREE = { tundra: '↑', taiga: '↑', glacier: '↑', jungle: '♠', swamp: '♠' };
 
-  // 聚落的標籤決定地貌：法師塔、神聖的地方、出產礦石的地方各有對應；其他隨機
+  // 聚落的標籤決定地貌：法師塔、神聖的地方、出產礦石的地方各有對應；其他隨機（照 Dungeon World〈世界〉：
+  // 村莊靠著它的資源，由來決定旁邊有什麼，其餘的獨特地貌像茂密的森林、古老的立石、廢棄的堡壘）
+  const NEUTRAL_LANDMARKS = ['fort', 'stones', 'grove', 'graves'];
   function landmarkKind(rng, v) {
     if (has(v, '重要人士', '法師')) return 'tower';
     if (isHoly(v)) return 'shrine';
     if (has(v, '資源', '鐵礦') || has(v, '資源', '石材')) return 'mine';
-    return FE.pick(rng, ['fort', 'stones', 'grove', 'graves']);
+    return FE.pick(rng, NEUTRAL_LANDMARKS);
   }
 
   // 從範圍外圍一圈（只在範圍和外圍裡走）走得到範圍裡每一格能走的地方
@@ -926,38 +975,58 @@
 
   // 放在聚落外面 3～12 格、整塊落在這塊世界裡，不壓到水、湖、路、出生點；
   // 地貌不改高度，所以挑畫上去的格子之間沒有斷崖的位置（室內才走得通）
-  function placeLandmark(world, rng, rect, v) {
-    const kind = landmarkKind(rng, v);
+  // 第三十二版：opts.kind 指定種類；opts.side（'west'、'east'）是開局的興趣點，放在聚落的那一側、離聚落 12～40 格
+  function placeLandmark(world, rng, rect, v, opts) {
+    opts = opts || {};
+    const kind = opts.kind || landmarkKind(rng, v);
+    const far = opts.side ? [12, 40] : [3, 12];
     const L = LANDMARKS[kind];
-    const H = L.art.length;
-    const W = L.art[0].length;
+    // 第三十四版：堡壘廢墟每次試的時候隨機橫放或直放（轉 90 度，記在 lm.rot），比較容易找到位置
+    let art = L.art;
+    let H = art.length;
+    let W = art[0].length;
+    let rot = false;
     const s = world.spawn;
-    const painted = (dx, dy) => dy >= 0 && dy < H && dx >= 0 && dx < W && L.art[dy][dx] !== '.';
+    const painted = (dx, dy) => dy >= 0 && dy < H && dx >= 0 && dx < W && art[dy][dx] !== '.';
+    const nodes = new Set(world.nodes.map((n) => n.x + ',' + n.y)); // 第三十四版：不蓋到先前的段放的採集點（原本會把藥草圍進法師塔的牆裡）
     const ok = (x0, y0) => {
-      // 離這塊世界的邊至少一格，門外才不會是還沒創出來的地方
-      if (x0 <= rect.x0 || y0 <= rect.y0 || x0 + W >= rect.x1 || y0 + H >= rect.y1) return false;
+      // 離這塊世界的邊至少一格，門外才不會是還沒創出來的地方。
+      // 第三十四版：堡壘廢墟（L.big）比一段的帶子還大，改成外圍一圈都已經長出來就好（可以蓋到舊的區塊上；舊區塊上的寶箱不蓋，怪物由 game.js 挪開）
+      if (L.big) {
+        for (let y = y0 - 1; y <= y0 + H; y++) for (let x = x0 - 1; x <= x0 + W; x++) if (!world.cell(x, y) || world.chestAt(x, y)) return false;
+      } else if (x0 <= rect.x0 || y0 <= rect.y0 || x0 + W >= rect.x1 || y0 + H >= rect.y1) return false;
       const gap = Math.max(v.x0 - (x0 + W - 1), x0 - v.x1, v.y0 - (y0 + H - 1), y0 - v.y1);
-      if (gap < 3 || gap > 12) return false;
+      if (gap < far[0] || gap > far[1]) return false;
+      if (opts.side === 'west' && x0 + W - 1 >= v.x0) return false;
+      if (opts.side === 'east' && x0 <= v.x1) return false;
       for (let y = y0; y < y0 + H; y++) {
         for (let x = x0; x < x0 + W; x++) {
           const c = world.cell(x, y);
-          if (c.t === '≈' || c.t === '·' || c.biome === 'lake' || world.landmarkAt(x, y) || world.villageAt(x, y) || (s && s.x === x && s.y === y)) return false;
+          if (!c) return false; // 還沒長出來的地方
+          if (c.t === '≈' || c.t === '█' || c.t === '·' || c.biome === 'lake' || (!L.big && nodes.has(x + ',' + y)) || world.landmarkAt(x, y) || world.villageAt(x, y) || (s && s.x === x && s.y === y)) return false;
           if (!painted(x - x0, y - y0)) continue;
           for (const [dx, dy] of [[1, 0], [0, 1]]) {
-            if (painted(x - x0 + dx, y - y0 + dy) && Math.abs(c.h - world.cell(x + dx, y + dy).h) > 1) return false;
+            if (painted(x - x0 + dx, y - y0 + dy) && (!world.cell(x + dx, y + dy) || Math.abs(c.h - world.cell(x + dx, y + dy).h) > 1)) return false;
           }
         }
       }
       return true;
     };
-    for (let tries = 0; tries < 120; tries++) {
-      const x0 = FE.randInt(rng, v.x0 - 12 - W, v.x1 + 12);
-      const y0 = FE.randInt(rng, v.y0 - 12 - H, v.y1 + 12);
+    for (let tries = 0; tries < (opts.side || L.big ? 400 : 120); tries++) {
+      if (L.big) {
+        rot = rng() < 0.5;
+        art = rot ? FE.Plans.rotate(L.art) : L.art;
+        H = art.length;
+        W = art[0].length;
+      }
+      const x0 = FE.randInt(rng, v.x0 - far[1] - W, v.x1 + far[1]);
+      const y0 = FE.randInt(rng, v.y0 - far[1] - H, v.y1 + far[1]);
+      if (!world.inBounds(x0, y0) || !world.inBounds(x0 + W, y0 + H)) continue;
       if (!ok(x0, y0)) continue;
       const prev = [];
       for (let dy = 0; dy < H; dy++) {
         for (let dx = 0; dx < W; dx++) {
-          const ch = L.art[dy][dx];
+          const ch = art[dy][dx];
           if (ch === '.') continue;
           const c = world.cell(x0 + dx, y0 + dy);
           prev.push([x0 + dx, y0 + dy, c.t]);
@@ -970,14 +1039,19 @@
         continue;
       }
       const lm = { id: world.nextId++, kind, name: L.name, villageId: v.id, x0, y0, x1: x0 + W - 1, y1: y0 + H - 1, found: false };
+      if (rot) lm.rot = true;
       world.landmarks.push(lm);
+      // 堡壘廢墟蓋到舊區塊上的藥草收掉（不然會長在牆裡或廢墟中間）
+      if (L.big) world.nodes = world.nodes.filter((n) => !world.landmarkAt(n.x, n.y));
       return lm;
     }
+    // 第三十四版：堡壘廢墟放不下（例如開局那一大塊兩側的空間不夠 39 格寬）就改放別種中性的地貌
+    if (L.big) return placeLandmark(world, rng, rect, v, Object.assign({}, opts, { kind: FE.pick(rng, NEUTRAL_LANDMARKS.filter((k) => !LANDMARKS[k].big)) }));
     return null;
   }
 
   FE.Steading = {
-    roll, layout, has, villagerCount, shopFactor, rewardFactor, isHoly, related, describe, tagText, placeLandmark,
-    roomAt, canWalk, freeHome, siteScore, exitViable,
+    roll, relOk, layout, has, villagerCount, shopFactor, rewardFactor, econ, econTier, addEcon, questEcon, isHoly, related, describe, tagText, placeLandmark,
+    roomAt, canWalk, freeHome, siteScore, exitViable, landmarkKind, NEUTRAL_LANDMARKS, townish, furnish, BUILDINGS,
   };
 })();

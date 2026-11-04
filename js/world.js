@@ -19,15 +19,68 @@
       this.items = [];          // 地上的東西（第二十八版：擲出去的武器）：{ x, y, gear }，冒險者走過去就撿回來
       this.nextId = 1;
       this.spawn = null;
-      this.dormant = new Set(); // 創世時放不下怪物的地形錯位
-      this.nextTownAt = null;   // 下一座大城鎮蓋在第幾塊區塊（創世順序，從 0 算）；null 是還沒蓋過，看世界等級
+      this.debt = 0;            // 全世界負的穩定值加總的絕對值（第三十三版之三：負的穩定值就是 BUG 值）；setStab 跟著增減，存檔讀回來時重算
+      this.calm = [];           // 清掉怪物的地點：{ x, y, r, until }，到 until（刻）之前區內不生怪物（第三十二版）
+      this.camps = [];          // 營地：{ id（帶頭那隻的群）, kind（FE.CAMPS）, x, y, origin（campaign 戰役、disorder 失序）}（第三十三版之二）
+      this.campaigns = {};      // 還沒清光的戰役：段的索引 → { seg, place, day, content }（清光時寫進歷史紀錄）
+      this.remnants = [];       // 遺留地點：失序的營地清掉後留下的 { kind, x, y, day }（第三十三版之二）
+      this.nextTownAt = null;   // 下一座大城鎮蓋在第幾段（創世順序，從 0 算）；null 是還沒蓋過，看世界等級
+      this.regions = 0;         // 第三十二版：創過幾段（開局那一大塊算第 0 段）
+      this.ringsDone = 0;       // 長滿了幾圈（開局不算）；世界等級＝1＋ringsDone
+      this.passes = [];         // 第三十四版：隘口 { x, y, normal, gap, ring, side, len, lake, fort }（fort 是守這裡的堡壘或要塞的 id）
+      this.passPlan = {};       // 每圈的隘口排在哪幾邊：圈數 → [{ side, fort }]（用種子和圈數算，讀檔後算出一樣的）
     }
 
-    // 創出第 index 塊區塊（從 0 算）時要不要蓋大城鎮：世界等級到 TOWN_FIRST_LEVEL 才開始，
-    // 第一座在世界等級剛好達到的那一塊，之後每隔 4 或 5 塊一座
+    // 創出第 index 段時要不要蓋大城鎮：世界等級到 TOWN_FIRST_LEVEL 才開始，第一座在世界等級剛好達到的那一段，之後每隔 4 或 5 段一座
     townDue(index) {
-      if (FE.worldLevelFor(index + 1) < C.TOWN_FIRST_LEVEL) return false;
+      if (1 + this.ringsDone < C.TOWN_FIRST_LEVEL) return false;
       return this.nextTownAt == null || index >= this.nextTownAt;
+    }
+
+    // ---- 第三十二版：一圈一圈往外長 ----
+    // 第 r 圈（開局是第 0 圈）的小塊座標範圍 [lo, hi]
+    ringRange(r) {
+      const h = C.START_SPAN / 2;
+      return [-h - r, h - 1 + r];
+    }
+    // 下一段：還沒長滿的最內圈裡，上下左右四邊中還有小塊沒長出來、離 (x, y) 最近的那一邊（只回傳還沒長出來的小塊）；長滿 RING_MAX 圈就是 null
+    nextSegment(x, y) {
+      const span = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+      for (let r = 1; r <= C.RING_MAX; r++) {
+        const [lo, hi] = this.ringRange(r);
+        const sides = [
+          ['top', span(lo, hi).map((cx) => [cx, lo]), [0, -1]],
+          ['bottom', span(lo, hi).map((cx) => [cx, hi]), [0, 1]],
+          ['left', span(lo + 1, hi - 1).map((cy) => [lo, cy]), [-1, 0]],
+          ['right', span(lo + 1, hi - 1).map((cy) => [hi, cy]), [1, 0]],
+        ];
+        let best = null;
+        for (const [side, blocks, out] of sides) {
+          const missing = blocks.filter(([cx, cy]) => !this.hasChunk(cx, cy));
+          if (!missing.length) continue;
+          let d = Infinity;
+          for (const [cx, cy] of missing) {
+            const nx = Math.max(cx * C.CHUNK_W, Math.min(x, (cx + 1) * C.CHUNK_W - 1));
+            const ny = Math.max(cy * C.CHUNK_H, Math.min(y, (cy + 1) * C.CHUNK_H - 1));
+            d = Math.min(d, Math.abs(nx - x) + Math.abs(ny - y));
+          }
+          if (!best || d < best.d) best = { side, ring: r, blocks: missing, out, d };
+        }
+        if (best) return best;
+      }
+      return null;
+    }
+    // 長滿了幾圈：從裡往外數，整圈的小塊都在才算
+    countRings() {
+      let n = 0;
+      for (let r = 1; r <= C.RING_MAX; r++) {
+        const [lo, hi] = this.ringRange(r);
+        for (let c = lo; c <= hi; c++) {
+          if (![[c, lo], [c, hi], [lo, c], [hi, c]].every(([cx, cy]) => this.hasChunk(cx, cy))) return n;
+        }
+        n = r;
+      }
+      return n;
     }
 
     // 查格子是最常做的事：先看是不是跟上一次同一塊，省掉組字串查表
@@ -62,6 +115,46 @@
       c.h = h;
       this.chunkAt(x, y).ver++;
     }
+    // ---- 穩定值（第三十三版之三）----
+    // 每格有一個穩定值，存在區塊的 ch.stab（Int16Array，一列接一列）。正的不生怪物，負的生怪物，負的量就是 BUG 值（跟 FE.blockValue 同一個單位）。
+    // 起始值看世界種子和座標（FE.stabilityAt，純函數雜訊，不碰任何亂數）；之後每小時往下掉、怪物踩過會減、修補與清掉怪物會補。
+    // ch.debt、world.debt 是負值的絕對值加總，setStab 順手維護，不用每次把全世界掃一遍
+    stab(x, y) {
+      const ch = this.chunkAt(x, y);
+      return ch ? ch.stab[(y - ch.y0) * C.CHUNK_W + (x - ch.x0)] : 0;
+    }
+    setStab(x, y, v) {
+      const ch = this.chunkAt(x, y);
+      if (!ch) return;
+      const i = (y - ch.y0) * C.CHUNK_W + (x - ch.x0);
+      v = Math.max(-C.STAB_LIMIT, Math.min(C.STAB_LIMIT, Math.round(v)));
+      const old = ch.stab[i];
+      if (old === v) return;
+      const d = Math.max(0, -v) - Math.max(0, -old);
+      ch.stab[i] = v;
+      ch.debt += d;
+      this.debt += d;
+    }
+    addStab(x, y, d) {
+      this.setStab(x, y, this.stab(x, y) + d);
+    }
+    // 欠 n 點：從 0 起算往下扣（原本的正值蓋掉），所以全世界負值的加總剛好多 n
+    addDebt(x, y, n) {
+      this.setStab(x, y, Math.min(0, this.stab(x, y)) - n);
+    }
+    // 這一格補回起始值
+    resetStab(x, y) {
+      this.setStab(x, y, FE.stabilityAt(this.seed, x, y));
+    }
+    // 重新數全世界欠多少（讀檔用）
+    recountDebt() {
+      this.debt = 0;
+      for (const ch of this.chunks) {
+        ch.debt = 0;
+        for (let i = 0; i < ch.stab.length; i++) if (ch.stab[i] < 0) ch.debt -= ch.stab[i];
+        this.debt += ch.debt;
+      }
+    }
     // 所有區塊合起來的外框（右、下不含）
     bounds() {
       const b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
@@ -90,18 +183,11 @@
       }
       return [...out.values()];
     }
-    // 離 (x, y) 最近的邊界位置：量到那塊區域的最近一格
-    nearestFrontier(x, y) {
-      let best = null;
-      for (const [cx, cy] of this.frontier()) {
-        const x0 = cx * C.CHUNK_W;
-        const y0 = cy * C.CHUNK_H;
-        const nx = Math.max(x0, Math.min(x, x0 + C.CHUNK_W - 1));
-        const ny = Math.max(y0, Math.min(y, y0 + C.CHUNK_H - 1));
-        const d = Math.abs(nx - x) + Math.abs(ny - y);
-        if (!best || d < best.d) best = { cx, cy, d };
-      }
-      return best;
+    // 下一段的外接矩形（小地圖畫紫色虛線框用）；長滿了是 null
+    nextSegmentRect(x, y) {
+      const seg = this.nextSegment(x, y);
+      if (!seg) return null;
+      return blocksRect(seg.blocks);
     }
     passable(x, y) {
       const c = this.cell(x, y);
@@ -151,7 +237,7 @@
       return this.villages.find((v) => v.id === id) || null;
     }
     // 聚落周圍的圈：從聚落的 mask 格子（外牆）量起，切比雪夫距離在寬度以內（含聚落本身；寬度看聚落種類）。
-    // 圈裡不生怪物、不侵蝕、不重算地形，怪物也不能踏進來。先用外接矩形加寬度快速排除，再查 mask 膨脹出來的格子
+    // 圈裡不生怪物、穩定值不往下掉，怪物也不能踏進來。先用外接矩形加寬度快速排除，再查 mask 膨脹出來的格子
     bufferWidth(v) {
       return C.SETTLE_BUFFER[v.kind] || C.SETTLE_BUFFER.village;
     }
@@ -323,10 +409,10 @@
       return null;
     }
 
-    // 在區塊座標 (cx, cy) 創出一塊新世界，回傳它的範圍（右、下不含）
-    addChunk(cx, cy) {
+    // 創出一個 24×24 的小塊（只有地形：生態區、高度、湖），回傳小塊；這塊的溫度偏差記在 ch.rough
+    addBlock(cx, cy) {
       const index = this.chunks.length;
-      // 區塊的亂數只看世界種子和區塊座標，跟創世順序無關
+      // 小塊的亂數只看世界種子和小塊座標，跟創世順序無關
       const rng = FE.makeRng(Math.floor(hash(this.seed, cx * 7919 + 13, cy * 104729 + 7) * 4294967296));
       const rect = { x0: cx * C.CHUNK_W, y0: cy * C.CHUNK_H, x1: (cx + 1) * C.CHUNK_W, y1: (cy + 1) * C.CHUNK_H };
       const cells = [];
@@ -335,20 +421,83 @@
         for (let x = rect.x0; x < rect.x1; x++) row.push({ t: '.', biome: 'plain', h: 0 });
         cells.push(row);
       }
-      const chunk = Object.assign({ index, cx, cy, cells, ver: 0 }, rect);
+      const chunk = Object.assign({ index, cx, cy, cells, ver: 0, stab: new Int16Array(C.CHUNK_W * C.CHUNK_H), debt: 0 }, rect);
+      for (let y = rect.y0; y < rect.y1; y++) for (let x = rect.x0; x < rect.x1; x++) chunk.stab[(y - rect.y0) * C.CHUNK_W + (x - rect.x0)] = FE.stabilityAt(this.seed, x, y);
       this.chunkMap.set(cx + ',' + cy, chunk);
       this.chunks.push(chunk);
-      const rough = paintBiomes(this, rng, rect, index);
-      const village = placeVillage(this, rng, rect, index, rough, this.townDue(index));
+      chunk.rough = paintBiomes(this, rng, rect, this.regions === 0 ? 0 : index);
+      return chunk;
+    }
+
+    // 收回一個小塊（預留選址時暫時長出來、沒用到的）
+    removeBlock(ch) {
+      this.debt -= ch.debt; // 暫時長出來的小塊還沒人動過穩定值，ch.debt 是 0；保險起見照扣
+      this.chunkMap.delete(ch.cx + ',' + ch.cy);
+      this.chunks.splice(this.chunks.indexOf(ch), 1);
+      this.chunks.forEach((c, i) => { c.index = i; });
+      this._lastChunk = null;
+      this._reach = null;
+    }
+
+    // 創出一段新世界：seg 是 nextSegment 的結果，沒給就是開局的 4×4 塊（96×96）。回傳 { index, rect, village, landmark }，rect 是這一段（含預留的小塊）的外接矩形。
+    // 一段裡最多蓋一座聚落：開局的聚落在正中間，兩側各放一個興趣點（照《奇幻探索物語 Quest》的「地區」）；
+    // 之後的聚落可以伸進下一圈還沒長出來的地方（預留）：那幾個小塊這一段就先長出來，之後長到那一圈時跳過
+    addRegion(seg) {
+      const index = this.regions;
+      const first = !seg;
+      const [lo, hi] = this.ringRange(0);
+      const blocks = first ? [] : seg.blocks.slice();
+      if (first) for (let cy = lo; cy <= hi; cy++) for (let cx = lo; cx <= hi; cx++) blocks.push([cx, cy]);
+      const made = blocks.map(([cx, cy]) => this.addBlock(cx, cy));
+      // 一段的亂數看世界種子和第一個小塊
+      const rng = FE.makeRng(Math.floor(hash(this.seed, blocks[0][0] * 6151 + 101 + index, blocks[0][1] * 3571 + 17) * 4294967296));
+      let rect = blocksRect(blocks);
+      // 聚落選址的範圍：開局是整塊；之後是這一段，再往外多一圈（預留），最外圈就不往外
+      let area = rect;
+      if (!first && seg.ring < C.RING_MAX) {
+        const [ox, oy] = seg.out;
+        area = {
+          x0: rect.x0 + Math.min(0, ox) * C.CHUNK_W,
+          y0: rect.y0 + Math.min(0, oy) * C.CHUNK_H,
+          x1: rect.x1 + Math.max(0, ox) * C.CHUNK_W,
+          y1: rect.y1 + Math.max(0, oy) * C.CHUNK_H,
+        };
+      }
+      const town = this.townDue(index);
+      // 第三十四版：這一圈輪到這一邊放隘口時，看排定的是不是堡壘守的隘口（passPlan）
+      const plan = first ? null : passFor(this, seg);
+      // 預留：選址前先把往外那一圈暫時長出來（選址要看得到那裡的水和巨石），選完只留聚落用到的小塊，其他的收回去；
+      // 地形只看種子和小塊座標，之後長到那一圈時會長出一模一樣的
+      const temp = [];
+      if (area !== rect) {
+        for (let cy = area.y0 / C.CHUNK_H; cy < area.y1 / C.CHUNK_H; cy++) {
+          for (let cx = area.x0 / C.CHUNK_W; cx < area.x1 / C.CHUNK_W; cx++) if (!this.hasChunk(cx, cy) && inRing(this, cx, cy)) temp.push(this.addBlock(cx, cy));
+        }
+      }
+      // 一段裡最多蓋一座聚落：輪到堡壘守隘口的這一段蓋堡壘（兩邊都有聚落就是要塞），放不下就照舊蓋村莊或城鎮、隘口照普通的放。
+      // 輪到城鎮的這一段：已經有城鎮之後，三成機率改蓋城市（CITY_RATE，放不下就蓋城鎮）
+      let village = plan && plan.fort ? placeFort(this, rng, seg, made, temp) : null;
+      if (!village && town && !first && this.villages.some((v) => v.kind === 'town' || v.kind === 'city') && rng() < C.CITY_RATE) {
+        village = placeVillage(this, rng, area, first, 'city', made, temp, seg.side === 'left' || seg.side === 'right');
+      }
+      if (!village) village = placeVillage(this, rng, area, first, town ? 'town' : 'village', made, temp, false);
+      for (const ch of temp) if (!made.includes(ch)) this.removeBlock(ch);
       let landmark = null;
-      // 蓋了城鎮，用這一塊的亂數決定下一座隔 4 還是 5 塊
-      if (village && village.kind === 'town') this.nextTownAt = index + (rng() < 0.5 ? C.TOWN_GAP[0] : C.TOWN_GAP[1]);
+      const landmarks = [];
+      if (village) Object.assign(village, { region: index, wl: 1 + this.ringsDone }); // 第幾段蓋的、當時的世界等級
+      if (village && (village.kind === 'town' || village.kind === 'city')) this.nextTownAt = index + (rng() < 0.5 ? C.TOWN_GAP[0] : C.TOWN_GAP[1]);
       if (village) {
-        // 先定聚落標籤（人口決定住多少人），再在附近放地貌
+        rect = blocksRect(made.map((c) => [c.cx, c.cy]));
         FE.Steading.roll(this, rng, village);
-        FE.Steading.layout(this, rng, village);
+        // 村莊與城鎮照 steading.js 排版；城市、堡壘、要塞照圖樣蓋（plans.js）
+        if (village.kind === 'village' || village.kind === 'town') FE.Steading.layout(this, rng, village);
+        else FE.Plans.stamp(this, rng, village);
+        // 新聚落蓋到的寶箱收掉（城市、要塞可能伸進舊的區塊）
+        this.chests = this.chests.filter((c) => !this.inVillage(c.x, c.y));
+        if (village.kind === 'fort' || village.kind === 'fortress') fortWalls(this, rng, village, seg);
+        upgradeForts(this, rng, village, made, temp);
         // 出生點放在離預定位置最近的路上（排版可能在原本那一格蓋了房子）
-        if (index === 0) {
+        if (first) {
           const s = this.spawn;
           let best = null;
           for (let y = village.y0; y <= village.y1; y++) {
@@ -359,22 +508,51 @@
             }
           }
           if (best) this.spawn = { x: best.x, y: best.y };
+          // 兩個興趣點，分在聚落的兩側（照《奇幻探索物語 Quest》的「地區」：起始地點在兩個興趣點之間）。
+          // 一個看聚落是什麼（有法師是法師塔、神聖的是聖所、靠鐵礦或石材維生是礦坑，其餘從中性的地貌挑），另一個從中性的地貌挑
+          const kTag = FE.Steading.landmarkKind(rng, village);
+          const kFree = FE.pick(rng, FE.Steading.NEUTRAL_LANDMARKS.filter((k) => k !== kTag));
+          const [kw, ke] = rng() < 0.5 ? [kTag, kFree] : [kFree, kTag];
+          for (const [kind, side] of [[kw, 'west'], [ke, 'east']]) {
+            const lm = FE.Steading.placeLandmark(this, rng, rect, village, { kind, side });
+            if (lm) landmarks.push(lm);
+          }
+        } else {
+          landmark = FE.Steading.placeLandmark(this, rng, rect, village);
+          if (landmark) landmarks.push(landmark);
         }
-        landmark = FE.Steading.placeLandmark(this, rng, rect, village);
         placeNpcs(this, rng, village);
       }
+      // 第三十四版：這一圈輪到這一邊時留一處隘口（堡壘守的隘口已經跟堡壘一起放了）；聚落的出口確認走得出去（被擋就鋪路打通）
+      if (plan && !(village && (village.kind === 'fort' || village.kind === 'fortress'))) placePass(this, rng, seg);
+      if (village) openExits(this, village);
+      // 先前的段放在預留小塊上的採集點，可能被這一段的聚落蓋到：落進聚落或已經不能走的收掉
+      this.nodes = this.nodes.filter((n) => this.passable(n.x, n.y) && !this.inVillage(n.x, n.y));
       // 採集點先放，寶箱再避開礦脈放進地貌裡
-      placeNodes(this, rng, rect, landmark);
-      placeChests(this, rng, landmark);
-      return { index, rect, village, landmark };
+      placeNodes(this, rng, rect, landmarks);
+      for (const lm of landmarks) placeChests(this, rng, lm);
+      this.regions++;
+      this.ringsDone = this.countRings();
+      return { index, rect, village, landmark: landmarks[0] || null, landmarks };
     }
+  }
+
+  // 一串小塊的外接矩形（右、下不含）
+  function blocksRect(blocks) {
+    const xs = blocks.map((b) => b[0]);
+    const ys = blocks.map((b) => b[1]);
+    return { x0: Math.min(...xs) * C.CHUNK_W, y0: Math.min(...ys) * C.CHUNK_H, x1: (Math.max(...xs) + 1) * C.CHUNK_W, y1: (Math.max(...ys) + 1) * C.CHUNK_H };
   }
 
   FE.inRect = (r, x, y) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1;
 
   // ---- 高度：參考矮人要塞的上下坡 ----
-  // 用平滑的雜訊算高度（0～4），整個世界連續，跨區塊也接得上。
-  // 每走一格高度最多變化不到一階，所以自然生成的地形只有坡、沒有斷崖；斷崖只出現在出錯的地方。
+  // 第三十四版：高度（0～4）由三層疊起來，整個世界連續，跨區塊也接得上（只看種子和座標）：
+  //   丘陵：大尺度的雜訊，低的地方是平地（0），高的地方隆起 1～2 層；
+  //   山脈：脊狀雜訊（1 - |2n - 1|，雜訊剛好在中間值的那條線最高），細長成條，再用另一張雜訊切成一段一段；
+  //   湖：濕又低的地方（見 lakeScore），湖裡壓成 0。
+  // 疊完取整數，再把每一格壓到「不比任何鄰格高出 1 以上」（往下削，不往上墊），所以相鄰兩格最多差 1，全是坡、沒有斷崖。
+  // 削的時候只看 MAX_HEIGHT 格以內（高度最多差 MAX_HEIGHT，更遠的格子影響不到），所以每一格的結果只看附近的種子雜訊
   function hash(seed, x, y) {
     let h = (seed ^ Math.imul(x, 374761393) ^ Math.imul(y, 668265263)) >>> 0;
     h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -397,18 +575,89 @@
     return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
   }
 
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  // 還沒削之前的連續高度（0 起，可以超過 MAX_HEIGHT）
+  function rawHeight(seed, x, y) {
+    const hill = clamp01((valueNoise(seed, x, y, C.HILL_SCALE) - C.HILL_FLOOR) / (1 - C.HILL_FLOOR));
+    const n = 0.7 * valueNoise(seed + 11, x, y, C.RANGE_SCALE) + 0.3 * valueNoise(seed + 12, x, y, C.RANGE_SCALE / 2);
+    const ridge = 1 - Math.abs(2 * n - 1);
+    const m = clamp01((ridge - C.RANGE_CUT) / (1 - C.RANGE_CUT));
+    const cut = clamp01((valueNoise(seed + 13, x, y, C.RANGE_SCALE * 1.5) - C.RANGE_MASK[0]) / (C.RANGE_MASK[1] - C.RANGE_MASK[0]));
+    return C.HILL_AMP * hill + C.RANGE_AMP * m * cut;
+  }
+  // 湖的分數：大尺度的濕度（跟雨量那張圖混一點，湖邊比較會是沼澤），越高的地方扣越多。分數超過 LAKE_CUT 就是湖
+  function lakeScore(seed, x, y, raw) {
+    const wet = 0.75 * valueNoise(seed + 505, x, y, C.LAKE_SCALE) + 0.25 * valueNoise(seed + 202, x, y, 22);
+    return wet - C.LAKE_H_WEIGHT * raw;
+  }
+
+  // 一塊範圍（右、下不含）的高度與湖：回傳 { h(x, y), lake(x, y) }。往外多算 MAX_HEIGHT 格，削坡才算得準
+  FE.heightGrid = function (seed, r) {
+    const P = C.MAX_HEIGHT;
+    const x0 = r.x0 - P;
+    const y0 = r.y0 - P;
+    const W = r.x1 - r.x0 + 2 * P;
+    const H = r.y1 - r.y0 + 2 * P;
+    const h = new Int8Array(W * H);
+    const lake = new Uint8Array(W * H);
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        const raw = rawHeight(seed, x0 + i, y0 + j);
+        const k = j * W + i;
+        if (lakeScore(seed, x0 + i, y0 + j, raw) > C.LAKE_CUT) {
+          lake[k] = 1;
+          h[k] = 0;
+        } else h[k] = Math.max(0, Math.min(C.MAX_HEIGHT, Math.floor(raw)));
+      }
+    }
+    // 削坡：往右下掃一次、往左上掃一次，每格不比上下左右的鄰格高出 1 以上（兩次掃完就是最低的那個合格的高度）
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        const k = j * W + i;
+        if (i > 0) h[k] = Math.min(h[k], h[k - 1] + 1);
+        if (j > 0) h[k] = Math.min(h[k], h[k - W] + 1);
+      }
+    }
+    for (let j = H - 1; j >= 0; j--) {
+      for (let i = W - 1; i >= 0; i--) {
+        const k = j * W + i;
+        if (i < W - 1) h[k] = Math.min(h[k], h[k + 1] + 1);
+        if (j < H - 1) h[k] = Math.min(h[k], h[k + W] + 1);
+      }
+    }
+    const at = (x, y) => (y - y0) * W + (x - x0);
+    return { h: (x, y) => h[at(x, y)], lake: (x, y) => lake[at(x, y)] === 1 };
+  };
+
+  // 第三十四版：還沒長出來的格子將來是不是湖（湖只看種子和座標，削坡之前就決定了）。在最外圈以外的格子永遠不會長出來，回傳 false。
+  // 選址時看出入口朝不朝湖用：通道伸進還沒長出來的小塊時，聚落預留才把那些小塊長出來，不先看會在長出來之後才發現出口朝湖
+  FE.futureLake = function (world, x, y) {
+    const [lo, hi] = world.ringRange(C.RING_MAX);
+    const cx = Math.floor(x / C.CHUNK_W);
+    const cy = Math.floor(y / C.CHUNK_H);
+    if (cx < lo || cx > hi || cy < lo || cy > hi) return false;
+    return lakeScore(world.seed, x, y, rawHeight(world.seed, x, y)) > C.LAKE_CUT;
+  };
+
   FE.heightAt = function (seed, x, y) {
-    const n = 0.7 * valueNoise(seed, x, y, 12) + 0.3 * valueNoise(seed + 7, x, y, 6);
-    return Math.max(0, Math.min(C.MAX_HEIGHT, Math.floor(n * (C.MAX_HEIGHT + 1))));
+    return FE.heightGrid(seed, { x0: x, y0: y, x1: x + 1, y1: y + 1 }).h(x, y);
+  };
+
+  // 起始穩定值（第三十三版之三）：平均 240，成片起伏在 120～360 之間。純函數雜訊（世界種子＋座標），
+  // 不從 game.rng 或生成用的亂數取數字，所以基本生成的亂數序列不受影響；大尺度（16 格）為主、小尺度（7 格）為輔，
+  // 兩層值雜訊疊起來的分佈集中在中間，乘 STAB_STRETCH 拉開後夾在範圍內，才有接近 120 與 360 的地方
+  FE.stabilityAt = function (seed, x, y) {
+    const n = 0.65 * valueNoise(seed + 303, x, y, 16) + 0.35 * valueNoise(seed + 404, x, y, 7);
+    const t = Math.max(0, Math.min(1, 0.5 + (n - 0.5) * C.STAB_STRETCH));
+    return Math.round(C.STAB_RANGE[0] + (C.STAB_RANGE[1] - C.STAB_RANGE[0]) * t);
   };
 
   // ---- 氣候與生態區：參考矮人要塞，用海拔、溫度、雨量三張圖疊起來決定 ----
-  // 溫度和雨量也是平滑的雜訊（尺度比高度大），越高的地方越冷。
+  // 溫度和雨量也是平滑的雜訊（尺度比高度大），越高的地方越冷。湖不在這裡決定（第三十四版：看 heightGrid 的 lake）
   function classify(h, temp, rain) {
     const t = temp - 0.04 * h;
-    if (h >= 3) return t < 0.3 ? 'glacier' : 'mountain';
-    if ((rain > 0.66 && h === 0) || (rain > 0.74 && h === 1)) return 'lake';
-    if (rain > 0.6 && h <= 1) return t < 0.48 ? 'marsh' : 'swamp';
+    if (h >= 3) return t < C.GLACIER_TEMP ? 'glacier' : 'mountain';
+    if (rain > C.MARSH_RAIN && h <= C.MARSH_MAXH) return t < 0.48 ? 'marsh' : 'swamp';
     if (t < 0.36) return rain < 0.45 ? 'tundra' : 'taiga';
     if (t < 0.56) return rain < 0.38 ? 'grassland' : rain < 0.5 ? 'shrubland' : 'forest';
     return rain < 0.36 ? 'desert' : rain < 0.5 ? 'savanna' : 'jungle';
@@ -417,55 +666,31 @@
   const STAMP_BIOMES = ['tundra', 'taiga', 'desert', 'savanna', 'jungle', 'grassland', 'forest', 'shrubland'];
   FE.STAMP_BIOMES = STAMP_BIOMES;
 
-  // 生成器刻意粗糙：每塊世界的溫度帶一點偏差，四邊的接縫處偶爾冷熱直接相鄰；
-  // 再隨手蓋上幾塊「印章」，印章跟周圍的氣候對不上就成了地形錯位；幾小塊地突然高或低 2 階，周圍就成了斷崖。
-  // 已有聚落周圍的圈（含外圍的坡）不蓋印章、不突變，那裡不會長出怪物
+  // 生成器刻意粗糙：每塊世界的溫度帶一點偏差，四邊的接縫處偶爾冷熱直接相鄰。
+  // 第三十四版：拿掉隨手蓋的氣候印章與高度突變（斷崖的來源）；rough 只剩溫度偏差
   function paintBiomes(world, rng, r, index) {
-    const W = r.x1 - r.x0;
-    const H = r.y1 - r.y0;
-    const rough = {
-      tempOffset: index === 0 ? 0 : (rng() - 0.5) * 0.45,
-      stamps: [],
-      spikes: [],
-    };
-    const nStamps = FE.randInt(rng, C.STAMPS[0], C.STAMPS[1]);
-    for (let i = 0; i < nStamps; i++) {
-      rough.stamps.push({ x: r.x0 + rng() * W, y: r.y0 + rng() * H, r: 1.5 + rng() * 2, biome: FE.pick(rng, STAMP_BIOMES) });
-    }
-    const nSpikes = FE.randInt(rng, C.SPIKES[0], C.SPIKES[1]);
-    for (let i = 0; i < nSpikes; i++) {
-      rough.spikes.push({ x: r.x0 + rng() * W, y: r.y0 + rng() * H, r: 0.8 + rng() * 1.2, dh: rng() < 0.5 ? 2 : -2 });
-    }
+    const rough = { tempOffset: index === 0 ? 0 : (rng() - 0.5) * 0.45 };
+    const grid = FE.heightGrid(world.seed, r);
     for (let y = r.y0; y < r.y1; y++) {
-      for (let x = r.x0; x < r.x1; x++) paintCell(world, rng, x, y, rough, world.inBuffer(x, y));
+      for (let x = r.x0; x < r.x1; x++) {
+        const h = grid.h(x, y);
+        const temp = valueNoise(world.seed + 101, x, y, 40) + rough.tempOffset;
+        const rain = valueNoise(world.seed + 202, x, y, 22);
+        const biome = grid.lake(x, y) ? 'lake' : classify(h, temp, rain);
+        const B = FE.BIOMES[biome];
+        const t = rng() < B.rocks * C.ROCKS_MUL ? '#' : B.paint(rng, h);
+        world.setCell(x, y, t, biome);
+        world.setHeight(x, y, h);
+      }
     }
     return rough;
   }
 
-  // 這一格有沒有被印章或突變蓋到
-  function roughAt(rough, x, y) {
-    return rough.spikes.some((s) => (s.x - x) ** 2 + (s.y - y) ** 2 <= s.r * s.r) || rough.stamps.some((s) => (s.x - x) ** 2 + (s.y - y) ** 2 <= s.r * s.r);
-  }
-
-  function paintCell(world, rng, x, y, rough, clean) {
-    let h = FE.heightAt(world.seed, x, y);
-    const spike = !clean && rough.spikes.find((s) => (s.x - x) ** 2 + (s.y - y) ** 2 <= s.r * s.r);
-    if (spike) h = Math.max(0, Math.min(C.MAX_HEIGHT, h + spike.dh));
-    const temp = valueNoise(world.seed + 101, x, y, 40) + rough.tempOffset;
-    const rain = valueNoise(world.seed + 202, x, y, 22);
-    let biome = classify(h, temp, rain);
-    const stamp = !clean && rough.stamps.find((s) => (s.x - x) ** 2 + (s.y - y) ** 2 <= s.r * s.r);
-    if (stamp && biome !== 'lake' && h < 3) biome = stamp.biome;
-    const B = FE.BIOMES[biome];
-    const t = rng() < B.rocks ? '#' : B.paint(rng, h);
-    world.setCell(x, y, t, biome);
-    world.setHeight(x, y, h);
-  }
-
+  // 工作範圍：中央在 (cx, cy)、寬 w 高 h（第三十四版起寬高剛好是 w、h；奇數時跟原本一樣左右對稱）
   function villageBox(cx, cy, w, h) {
-    const hw = Math.floor(w / 2);
-    const hh = Math.floor(h / 2);
-    return { x0: cx - hw, x1: cx + hw, y0: cy - hh, y1: cy + hh, cx, cy };
+    const x0 = cx - Math.floor(w / 2);
+    const y0 = cy - Math.floor(h / 2);
+    return { x0, x1: x0 + w - 1, y0, y1: y0 + h - 1, cx, cy };
   }
 
   function pickVillageName(world, rng, names) {
@@ -476,26 +701,37 @@
 
   // 第 1 塊世界的村莊在出生點；之後的村莊要離最近的村莊夠遠（照實際路程算），不夠遠這塊就不蓋
   // 世界等級 3 起，每隔 4 或 5 塊世界蓋一座大城鎮（World.townDue）：比村莊大、住的人多；城鎮不受村莊間距的限制。
-  // 這裡只選工作範圍（外框）的位置：靠水或靠巨石的位置加分（steading.js 的 siteScore），整平，清掉印章與突變；
-  // 外牆怎麼貼著建築蓋、聚落最後多大，由 Steading.layout 決定
-  function placeVillage(world, rng, r, index, rough, town) {
-    const W = town ? C.TOWN_W : C.VILLAGE_W;
-    const H = town ? C.TOWN_H : C.VILLAGE_H;
+  // 這裡只選工作範圍（外框）的位置：靠水或靠山壁的位置加分（steading.js 的 siteScore），整平；
+  // 外牆怎麼貼著建築蓋、聚落最後多大，由 Steading.layout 決定。
+  // 第三十四版：kind 是 'village'、'town' 或 'city'（城市照圖樣蓋，rot 是轉 90 度：這一段是左右兩邊時直放）；城鎮要四面都開得出出入口
+  function placeVillage(world, rng, r, first, kind, made, temp, rot) {
+    const town = kind !== 'village';
+    const P = kind === 'city' ? FE.Plans.get('city', rot) : null;
+    // 城市（90×29）連同周圍 16 格的圈比這一段加預留還厚（最外圈時更放不下）：選址範圍往四周多兩個小塊，可以蓋到已經長出來的舊區塊上
+    // （不碰現有的聚落與地貌，見 boxReady；蓋到的寶箱、採集點收掉，怪物挪開）
+    if (P) r = { x0: r.x0 - 2 * C.CHUNK_W, y0: r.y0 - 2 * C.CHUNK_H, x1: r.x1 + 2 * C.CHUNK_W, y1: r.y1 + 2 * C.CHUNK_H };
+    const W = P ? P.w : town ? C.TOWN_W : C.VILLAGE_W;
+    const H = P ? P.h : town ? C.TOWN_H : C.VILLAGE_H;
     const hw = Math.floor(W / 2);
     const hh = Math.floor(H / 2);
     // 村莊整個落在這塊世界裡，離邊界至少留一格
     const randomBox = () =>
-      villageBox(FE.randInt(rng, r.x0 + hw + 1, r.x1 - hw - 2), FE.randInt(rng, r.y0 + hh + 1, r.y1 - hh - 2), W, H);
+      villageBox(FE.randInt(rng, r.x0 + hw + 1, r.x0 + hw + 1 + Math.max(0, r.x1 - r.x0 - W - 2)), FE.randInt(rng, r.y0 + hh + 1, r.y0 + hh + 1 + Math.max(0, r.y1 - r.y0 - H - 2)), W, H);
+    // 城市的出入口固定在圖樣上，全部開得出去才蓋；分數照城鎮的算法再加上這一條
+    const score = (cand) => (P && !FE.Plans.exitsViable(world, 'city', rot, cand) ? -1000 : 0) + FE.Steading.siteScore(world, cand, town, kind);
     let box = null;
-    if (index === 0 || town) {
+    if (first || town) {
       let best = null;
       // 至少開得出 3 個出入口、中央沒有水的位置（分數比 -400 高）；找不到就多試幾次
-      for (let tries = 0; tries < 12 || (best.score < -400 && tries < 80); tries++) {
-        const cand = randomBox();
-        const score = FE.Steading.siteScore(world, cand, town);
-        if (!best || score > best.score) best = { box: cand, score };
+      for (let tries = 0; tries < 12 || ((!best || best.score < -400) && tries < 80); tries++) {
+        // 開局的聚落在正中間（照《奇幻探索物語 Quest》：起始地點在地區的中間），只在中央 ±8 格裡挑
+        const cand = first ? villageBox(FE.randInt(rng, (r.x0 + r.x1) / 2 - 8, (r.x0 + r.x1) / 2 + 8), FE.randInt(rng, (r.y0 + r.y1) / 2 - 8, (r.y0 + r.y1) / 2 + 8), W, H) : randomBox();
+        if (!first && !boxReady(world, cand, kind)) continue;
+        const sc = score(cand);
+        if (!best || sc > best.score) best = { box: cand, score: sc };
       }
-      box = best.box;
+      // 城市、城鎮找不到合格的位置就不蓋（城市改蓋城鎮、城鎮等下一段）；開局的村莊一定蓋
+      box = best && (first || best.score >= -400) ? best.box : null;
     } else {
       // 只需要知道「是不是不到 VILLAGE_MIN_STEPS 步」，所以從現有村莊只往外走到 VILLAGE_MIN_STEPS - 1 步（第二十五版，不再把整個世界走一遍）；
       // 範圍內一格都沒走到的位置，要分清是「很遠」還是「從現有村莊走不到」（中間被圍住）：後者才用直線距離估，
@@ -506,6 +742,7 @@
       let bestScore = -Infinity;
       for (let tries = 0; tries < 8; tries++) {
         const cand = randomBox();
+        if (!boxReady(world, cand, kind)) continue;
         let d = Infinity;
         let linked = false;
         for (let y = cand.y0; y <= cand.y1; y++) {
@@ -530,15 +767,23 @@
       }
     }
     if (!box) return null;
-    // 工作範圍加上周圍那一圈，重畫成沒有印章、沒有突變的樣子（這塊世界裡的部分）；沒被蓋到的格子不動，水和巨石照舊
-    const B = C.SETTLE_BUFFER[town ? 'town' : 'village'];
-    for (let y = Math.max(r.y0, box.y0 - B); y <= Math.min(r.y1 - 1, box.y1 + B); y++) {
-      for (let x = Math.max(r.x0, box.x0 - B); x <= Math.min(r.x1 - 1, box.x1 + B); x++) {
-        if (roughAt(rough, x, y)) paintCell(world, rng, x, y, rough, true);
-      }
-    }
-    // 工作範圍整平成中心的高度，外圍三圈修成坡，進出村莊不會碰到斷崖（只改高度，水和巨石與生態區照舊）。
-    // 範圍裡的地形之後由聚落排版決定：聚落本身（路、建築、走道、外牆）換成聚落的地形，其餘保留原本的地形
+    reserve(world, box, kind, made, temp);
+    // 第三十四版：村莊背後刻意擺一片湖或山壁（城鎮四通八達，不擺）
+    const backdrop = !town && rng() < C.BACKDROP_RATE ? placeBackdrop(world, rng, box) : null;
+    flatten(world, box);
+    const village = Object.assign(
+      { id: world.villages.length + 1, kind, name: pickVillageName(world, rng, kind === 'city' ? FE.CITY_NAMES : town ? FE.TOWN_NAMES : FE.VILLAGE_NAMES) },
+      box,
+      { flat: { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 }, backdrop, rot: !!P && !!rot } // 整平過的工作範圍；排版後 x0..y1 縮到外牆的外接矩形
+    );
+    world.villages.push(village);
+    if (first) world.spawn = { x: box.cx - 3, y: box.cy };
+    return village;
+  }
+
+  // 工作範圍整平成中心的高度，外圍三圈修成坡，進出聚落不會碰到斷崖（只改高度，水和山壁與生態區照舊）。
+  // 範圍裡的地形之後由聚落排版決定：聚落本身（路、建築、走道、外牆）換成聚落的地形，其餘保留原本的地形
+  function flatten(world, box) {
     const vh = world.cell(box.cx, box.cy).h;
     for (let y = box.y0 - 3; y <= box.y1 + 3; y++) {
       for (let x = box.x0 - 3; x <= box.x1 + 3; x++) {
@@ -552,14 +797,342 @@
         }
       }
     }
-    const village = Object.assign(
-      { id: world.villages.length + 1, kind: town ? 'town' : 'village', name: pickVillageName(world, rng, town ? FE.TOWN_NAMES : FE.VILLAGE_NAMES) },
-      box,
-      { flat: { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 } } // 整平過的工作範圍；排版後 x0..y1 縮到外牆的外接矩形
-    );
-    world.villages.push(village);
-    if (index === 0) world.spawn = { x: box.cx - 3, y: box.cy };
-    return village;
+  }
+
+  // 聚落連同周圍那一圈與外圍三圈坡伸進還沒長出來的小塊，那幾塊現在就長出來（算在這一段裡；第三十二版的預留）
+  function reserve(world, box, kind, made, temp) {
+    const m = C.SETTLE_BUFFER[kind] + 3;
+    for (let cy = Math.floor((box.y0 - m) / C.CHUNK_H); cy <= Math.floor((box.y1 + m) / C.CHUNK_H); cy++) {
+      for (let cx = Math.floor((box.x0 - m) / C.CHUNK_W); cx <= Math.floor((box.x1 + m) / C.CHUNK_W); cx++) {
+        const ch = world.chunkMap.get(cx + ',' + cy);
+        if (ch && temp && temp.includes(ch) && !made.includes(ch)) made.push(ch); // 暫時長出來的小塊，聚落用到了就留下
+        else if (!ch && inRing(world, cx, cy)) made.push(world.addBlock(cx, cy));
+      }
+    }
+  }
+
+  // ---- 第三十四版：刻意放的湖與山壁 ----
+  // 先前的段放的採集點不能被蓋掉（不然會變成長在湖裡、山壁裡）
+  const nodeAt = (world, x, y) => world.nodes.some((n) => n.x === x && n.y === y);
+  // 村莊背後：南或北其中一側（拿掉那一側後還開得出 3 個出入口），離工作範圍 BACKDROP_GAP 格外，沿著那一側擺一長條湖或山壁。
+  // 厚度隨位置起伏（湖 2～5 格、山壁 2～3 格），兩端收窄。擺了之後那一側開不出出入口，排版自然開東、西加另一側。回傳 'lake'、'wall' 或 null
+  function placeBackdrop(world, rng, box) {
+    const viable = FE.Steading.exitViable(world, box); // 順序同 DIRS：東、西、南、北
+    const open = viable.filter(Boolean).length;
+    const sides = [2, 3].filter((i) => viable[i] && open - 1 >= 3);
+    if (!sides.length) return null;
+    const dy = DIRS[FE.pick(rng, sides)][1];
+    const lake = rng() < C.BACKDROP_LAKE;
+    const edge = dy > 0 ? box.y1 : box.y0;
+    const phase = rng() * 6;
+    const xa = box.x0 + 2;
+    const xb = box.x1 - 2;
+    for (let x = xa; x <= xb; x++) {
+      const end = Math.min(x - xa, xb - x); // 離兩端幾格
+      let th = lake ? 3.5 + 1.5 * Math.sin((x - xa) / 4 + phase) : 2.5 + 0.6 * Math.sin((x - xa) / 3 + phase);
+      th = Math.max(1, Math.round(Math.min(th, 1 + end)));
+      for (let k = 0; k < th; k++) {
+        const y = edge + dy * (C.BACKDROP_GAP + 1 + k);
+        const c = world.cell(x, y);
+        if (!c || world.inVillage(x, y) || world.landmarkAt(x, y) || nodeAt(world, x, y)) continue;
+        world.setCell(x, y, lake ? '≈' : '█', lake ? 'lake' : c.biome);
+      }
+    }
+    return lake ? 'lake' : 'wall';
+  }
+
+  // ---- 第三十四版：堡壘守隘口（使用者定的）----
+  // 輪到堡壘的那一段，先選堡壘的位置，再沿著它兩側拉山壁（fortWalls），堡壘的城門開在窄路的兩頭（草稿 4.2 的圖）。
+  // 堡壘 45×29（城門南北），這一段是左右兩邊時轉 90 度（城門東西）；跨在這一段的帶子中間，伸進內外兩圈的部分照聚落的預留長出來。
+  // 要塞（兩座堡壘併起來，45×58）守「兩邊都有聚落、只靠這條路相通」的隘口：蓋堡壘的時候外側還沒長出來，所以等之後窄路外側
+  // 離堡壘 FORTRESS_REACH 格內出現聚落、內側也已經有聚落時，把堡壘往外加蓋成要塞（upgradeFort，Claude 定的做法）。放不下回傳 null
+  function placeFort(world, rng, seg, made, temp) {
+    const rot = seg.side === 'left' || seg.side === 'right'; // 城門東西向
+    const r = blocksRect(seg.blocks);
+    const along = rot ? [r.y0, r.y1] : [r.x0, r.x1];   // 沿著這一圈的方向
+    const across = rot ? [r.x0, r.x1] : [r.y0, r.y1];  // 穿過帶子的方向（窄路的方向）
+    const mid = Math.floor((across[0] + across[1]) / 2);
+    const out = rot ? (seg.side === 'right' ? 1 : -1) : seg.side === 'bottom' ? 1 : -1; // 往外是座標變大還是變小
+    const P = FE.Plans.get('fort', rot);
+    for (let tries = 0; tries < 40; tries++) {
+      const len = rot ? P.h : P.w;
+      const a = FE.randInt(rng, along[0] + Math.floor(len / 2) + 6, along[1] - Math.ceil(len / 2) - 6);
+      const b = mid + FE.randInt(rng, -3, 3);
+      const x0 = rot ? b - Math.floor(P.w / 2) : a - Math.floor(P.w / 2);
+      const y0 = rot ? a - Math.floor(P.h / 2) : b - Math.floor(P.h / 2);
+      const box = { x0, y0, x1: x0 + P.w - 1, y1: y0 + P.h - 1, cx: x0 + Math.floor(P.w / 2), cy: y0 + Math.floor(P.h / 2) };
+      if (!boxReady(world, box, 'fort') || !FE.Plans.exitsViable(world, 'fort', rot, box) || !cellsReady(world, box)) continue;
+      reserve(world, box, 'fort', made, temp);
+      flatten(world, box);
+      const v = Object.assign(
+        { id: world.villages.length + 1, kind: 'fort', name: pickVillageName(world, rng, FE.FORT_NAMES) },
+        box,
+        { flat: { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 }, backdrop: null, rot, out } // out：窄路往外（下一圈）是座標變大（1）還是變小（-1）
+      );
+      world.villages.push(v);
+      return v;
+    }
+    return null;
+  }
+
+  // 新聚落 nv 蓋好之後，看有沒有堡壘因此「窄路兩邊都有聚落」：nv 在某座堡壘窄路的外側、離堡壘中央 FORTRESS_REACH 格內，
+  // 內側也已經有聚落（同樣的距離），就把那座堡壘往外加蓋成要塞。加蓋的地方要放得下（不碰別的聚落與它的圈、地貌、水，出入口開得出去），放不下就維持堡壘
+  function upgradeForts(world, rng, nv, made, temp) {
+    const near = (v, f) => Math.max(Math.abs(v.cx - f.cx), Math.abs(v.cy - f.cy)) <= C.FORTRESS_REACH;
+    const side = (v, f) => Math.sign((f.rot ? v.cx - f.cx : v.cy - f.cy) * f.out); // 1 外側、-1 內側
+    for (const f of world.villages) {
+      if (f.kind !== 'fort' || f === nv || !near(nv, f) || side(nv, f) <= 0) continue;
+      if (!world.villages.some((v) => v !== f && v.kind !== 'fort' && near(v, f) && side(v, f) < 0)) continue;
+      upgradeFort(world, rng, f, made, temp);
+    }
+  }
+
+  // 堡壘加蓋成要塞：工作範圍往外（窄路的外側）延長成要塞的大小，照要塞的圖樣重蓋；住的人換到新的家（工匠站回工坊）。名字不改（Claude 定的：委託、歷史紀錄寫的是原本的名字）
+  function upgradeFort(world, rng, f, made, temp) {
+    const P = FE.Plans.get('fortress', f.rot);
+    const o = f.flat;
+    const box = { x0: o.x0, y0: o.y0, x1: o.x0 + P.w - 1, y1: o.y0 + P.h - 1 };
+    if (f.out < 0) {
+      if (f.rot) {
+        box.x0 = o.x1 - P.w + 1;
+        box.x1 = o.x1;
+      } else {
+        box.y0 = o.y1 - P.h + 1;
+        box.y1 = o.y1;
+      }
+    }
+    box.cx = box.x0 + Math.floor(P.w / 2);
+    box.cy = box.y0 + Math.floor(P.h / 2);
+    if (!boxReady(world, box, 'fortress', f) || !FE.Plans.exitsViable(world, 'fortress', f.rot, box) || !cellsReady(world, box, f)) return false;
+    reserve(world, box, 'fortress', made, temp);
+    // 原本的堡壘（整平的工作範圍裡）先還原成空地，再整平、照要塞的圖樣蓋
+    for (let y = o.y0; y <= o.y1; y++) for (let x = o.x0; x <= o.x1; x++) if (world.villageAt(x, y) === f) world.setCell(x, y, '.', 'plain');
+    flatten(world, box);
+    Object.assign(f, box, { kind: 'fortress', flat: { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 }, mask: null, rooms: null });
+    FE.Plans.stamp(world, rng, f);
+    world.chests = world.chests.filter((c) => !world.inVillage(c.x, c.y));
+    world.nodes = world.nodes.filter((n) => world.passable(n.x, n.y) && !world.inVillage(n.x, n.y));
+    // 住的人搬到新的家：先清掉舊的家，再照 freeHome 重新挑；工匠站回工坊
+    const folk = world.npcs.filter((n) => n.villageId === f.id);
+    for (const n of folk) n.home = null;
+    for (const n of folk) {
+      if (n.role === 'smith') {
+        const si = f.buildings.findIndex((b) => b.kind === 'smithy');
+        const [sx, sy] = si >= 0 ? f.buildings[si].spots[0] : [f.cx, f.cy];
+        Object.assign(n, { x: sx, y: sy, home: si >= 0 ? { b: si } : null });
+        continue;
+      }
+      const h = FE.Steading.freeHome(world, rng, f);
+      n.home = h ? { b: h.b, bed: h.bed, spot: h.spot } : null;
+      const at = h ? h.spot : [f.cx, f.cy];
+      Object.assign(n, { x: at[0], y: at[1], mode: 'home' });
+    }
+    const pass = world.passes.find((p) => p.fort === f.id);
+    if (pass) Object.assign(pass, { x: f.cx, y: f.cy });
+    return true;
+  }
+
+  // 工作範圍裡的格子沒有水（堡壘不蓋在湖上）、地貌，也不是別的聚落（skip 是加蓋時原本的那座）
+  function cellsReady(world, box, skip) {
+    for (let y = box.y0; y <= box.y1; y++) {
+      for (let x = box.x0; x <= box.x1; x++) {
+        const c = world.cell(x, y);
+        if (c && c.t === '≈') return false;
+        const v = world.villageAt(x, y);
+        if (world.landmarkAt(x, y) || (v && v !== skip)) return false;
+      }
+    }
+    return true;
+  }
+
+  // 堡壘兩側的山壁：從圖樣兩側的山壁（█）沿著這一圈的方向往外拉，每側 PASS_LEN 的一半（20～32 格）、厚 2 格，離堡壘越遠起伏越大（最多 ±2 格）；
+  // 有 PASS_LAKE 的機率其中一側換成湖（離堡壘越遠越寬，最寬 5 格）。碰到別的聚落周圍的圈、地貌、路、採集點、出生點或還沒長出來的地方就停。
+  // 記成一處隘口（world.passes，fort 是堡壘的 id），窄路就是堡壘裡南北（或東西）穿過去的路
+  function fortWalls(world, rng, v, seg) {
+    const rot = v.rot;
+    const P = FE.Plans.get(v.kind, rot);
+    const f = v.flat;
+    const s = world.spawn;
+    const lakeSide = rng() < C.PASS_LAKE ? (rng() < 0.5 ? 0 : 1) : -1;
+    const phase = rng() * 6;
+    // 沿著這一圈的座標 a、穿過帶子的座標 b；at(a, b) 換成世界座標
+    const at = (a, b) => (rot ? [b, a] : [a, b]);
+    const base = rot ? v.cx : v.cy; // 山壁貼著堡壘中段
+    const bad = (x, y) => {
+      const c = world.cell(x, y);
+      if (!c || c.t === '·' || c.t === '≈' || world.landmarkAt(x, y) || nodeAt(world, x, y) || (s && Math.abs(s.x - x) + Math.abs(s.y - y) < 6)) return true;
+      return world.villages.some((o) => o !== v && FE.inRect({ x0: o.x0 - world.bufferWidth(o), y0: o.y0 - world.bufferWidth(o), x1: o.x1 + world.bufferWidth(o) + 1, y1: o.y1 + world.bufferWidth(o) + 1 }, x, y) && world.inBuffer(x, y));
+    };
+    let total = 0;
+    [-1, 1].forEach((dir, side) => {
+      const L = Math.floor(FE.randInt(rng, C.PASS_LEN[0], C.PASS_LEN[1]) / 2);
+      const start = dir < 0 ? (rot ? f.y0 : f.x0) - 1 : (rot ? f.y1 : f.x1) + 1;
+      const lake = lakeSide === side;
+      for (let i = 0; i < L; i++) {
+        const a = start + dir * i;
+        const off = Math.round(2 * Math.sin(i / 7 + phase) * Math.min(1, i / 8));
+        const th = lake ? Math.min(5, 2 + Math.floor(i / 6)) : 2;
+        const lo = lake ? -Math.floor((th - 2) / 2) : 0;
+        const cells = [];
+        for (let k = lo; k < lo + th; k++) cells.push(at(a, base + off + k));
+        if (cells.some(([x, y]) => bad(x, y))) break;
+        for (const [x, y] of cells) world.setCell(x, y, lake ? '≈' : '█', lake ? 'lake' : world.cell(x, y).biome);
+        total++;
+      }
+    });
+    world.passes.push({ x: v.cx, y: v.cy, normal: rot ? [1, 0] : [0, 1], gap: [], ring: seg.ring, side: seg.side, len: total + (rot ? P.h : P.w), lake: lakeSide >= 0, fort: v.id });
+  }
+
+  // 這一圈的隘口排在哪幾邊（world.passPlan，那一圈第一次長的時候用種子和圈數決定，讀檔後算出一樣的）：每圈 PASS_PER_RING 處，
+  // 從第 FORT_FIRST_RING 圈起每一處有 FORT_RATE 的機率由堡壘守（第三十四版：堡壘算進這一圈的隘口數，使用者定的）。
+  // 輪到這一邊回傳 { side, fort }，沒輪到回傳 null
+  function passFor(world, seg) {
+    if (!world.passPlan[seg.ring]) {
+      const pr = FE.makeRng(Math.floor(hash(world.seed, seg.ring * 31 + 5, 77) * 4294967296));
+      const k = FE.randInt(pr, C.PASS_PER_RING[0], C.PASS_PER_RING[1]);
+      const sides = ['top', 'bottom', 'left', 'right'];
+      for (let i = sides.length - 1; i > 0; i--) {
+        const j = Math.floor(pr() * (i + 1));
+        [sides[i], sides[j]] = [sides[j], sides[i]];
+      }
+      world.passPlan[seg.ring] = sides.slice(0, k).map((side) => ({ side, fort: seg.ring >= C.FORT_FIRST_RING && pr() < C.FORT_RATE }));
+    }
+    return world.passPlan[seg.ring].find((p) => p.side === seg.side) || null;
+  }
+
+  // 隘口：一處隘口是沿著這一圈方向的一道山壁（另一側有 PASS_LAKE 的機率是湖），長 PASS_LEN、中間留 PASS_GAP 格的窄路，
+  // 擺在這一段的帶子中間（離內外兩邊各 8 格以上），彎曲起伏 ±2 格；不碰聚落周圍的圈、地貌、路與出生點，窄路和兩頭各 4 格要能走。
+  // 放不下（試 40 次）就記一次 passMiss
+  function placePass(world, rng, seg) {
+    const r = blocksRect(seg.blocks);
+    const horiz = seg.side === 'top' || seg.side === 'bottom'; // 山壁沿 x 走（上下兩邊）或沿 y 走（左右兩邊）
+    const [a0, a1] = horiz ? [r.x0, r.x1] : [r.y0, r.y1];
+    const [b0, b1] = horiz ? [r.y0, r.y1] : [r.x0, r.x1];
+    const at = (a, b) => (horiz ? [a, b] : [b, a]);
+    const s = world.spawn;
+    for (let tries = 0; tries < 40; tries++) {
+      const L = FE.randInt(rng, C.PASS_LEN[0], C.PASS_LEN[1]);
+      if (a1 - a0 < L + 6) break;
+      const start = FE.randInt(rng, a0 + 3, a1 - L - 3);
+      const base = FE.randInt(rng, b0 + 8, b1 - 9);
+      const phase = rng() * 6;
+      const lakeSide = rng() < C.PASS_LAKE ? (rng() < 0.5 ? 0 : 1) : -1; // 哪一側是湖（-1 是兩側都是山壁）
+      const mid = start + Math.floor(L / 2);
+      const g0 = mid - Math.floor(C.PASS_GAP / 2);
+      const g1 = g0 + C.PASS_GAP - 1;
+      const off = (a) => Math.round(2 * Math.sin((a - start) / 7 + phase));
+      const walls = [];
+      const lakes = [];
+      const gap = [];
+      const probe = [];
+      for (let a = start; a < start + L; a++) {
+        const b = base + off(a);
+        if (a >= g0 && a <= g1) {
+          for (let k = -4; k <= 5; k++) (k === 0 || k === 1 ? gap : probe).push(at(a, b + k));
+          continue;
+        }
+        const lake = lakeSide === (a < g0 ? 0 : 1);
+        const far = Math.min(Math.abs(a - g0), Math.abs(a - g1)); // 湖離窄路越遠越寬
+        const th = lake ? Math.min(5, 2 + Math.floor(far / 6)) : 2;
+        const lo = lake ? 1 - Math.floor((th - 2) / 2) : 0;
+        for (let k = lo; k < lo + th; k++) (lake ? lakes : walls).push(at(a, b + k));
+      }
+      const all = walls.concat(lakes, gap, probe);
+      const bad = (x, y) => {
+        const c = world.cell(x, y);
+        return !c || world.inBuffer(x, y) || world.landmarkAt(x, y) || nodeAt(world, x, y) || c.t === '·' || (s && Math.abs(s.x - x) + Math.abs(s.y - y) < 6);
+      };
+      if (all.some(([x, y]) => bad(x, y))) continue;
+      if (gap.concat(probe).some(([x, y]) => world.cell(x, y).t === '≈')) continue; // 窄路和兩頭不開在原本的湖裡
+      for (const [x, y] of walls) world.setCell(x, y, '█', world.cell(x, y).biome);
+      for (const [x, y] of lakes) world.setCell(x, y, '≈', 'lake');
+      // 窄路一定能走：原本是巨石的換成空地
+      for (const [x, y] of gap) if (!world.passable(x, y)) world.setCell(x, y, '.', world.cell(x, y).biome);
+      const gx = Math.floor((g0 + g1) / 2);
+      const [px, py] = at(gx, base + off(gx));
+      const p = { x: px, y: py, normal: horiz ? [0, 1] : [1, 0], gap: gap.slice(), ring: seg.ring, side: seg.side, len: L, lake: lakeSide >= 0, fort: null };
+      world.passes.push(p);
+      return p;
+    }
+    world.passMiss = (world.passMiss || 0) + 1;
+    return null;
+  }
+
+  // 聚落出口一定走得出去：從每個出入口外面那條路的盡頭（工作範圍外三格），不穿過聚落，要走得到離聚落外框 SETTLE_BUFFER＋3 格以外
+  // （或還沒長出來的地方）。走不出去就從盡頭沿著出口方向直直鋪路（· ，擋路的格子換掉），鋪到走得出去為止，最多 40 格。
+  // 第三十四版（使用者定的）：出口不朝湖開（排版時 exitViable 已經避開），這裡也不把湖面鋪成路，碰到水就停。打通了幾個記在 v.exitFixed
+  function openExits(world, v) {
+    const D = world.bufferWidth(v) + 3;
+    const f = v.flat;
+    const outOk = (starts) => {
+      const seen = new Set(starts.map(([x, y]) => x + ',' + y));
+      const q = starts.filter(([x, y]) => world.passable(x, y));
+      for (let h = 0; h < q.length; h++) {
+        const [x, y] = q[h];
+        if (Math.max(v.x0 - x, x - v.x1, v.y0 - y, y - v.y1) >= D) return true;
+        for (const [dx, dy] of DIRS) {
+          const nx = x + dx;
+          const ny = y + dy;
+          const k = nx + ',' + ny;
+          if (seen.has(k)) continue;
+          if (!world.cell(nx, ny)) return true;
+          if (world.villageAt(nx, ny) === v || !world.canStep(x, y, nx, ny)) continue;
+          seen.add(k);
+          q.push([nx, ny]);
+        }
+      }
+      return false;
+    };
+    v.exitFixed = 0;
+    (v.exitDirs || []).forEach(([dx, dy], k) => {
+      // 出入口那一段中間的座標：照圖樣蓋的聚落記在 v.exitAt（城市南北各兩個出入口），排版的聚落是中央
+      const c = v.exitAt ? v.exitAt[k] : dx ? v.cy : v.cx;
+      const ex = dx > 0 ? f.x1 + 3 : dx < 0 ? f.x0 - 3 : c;
+      const ey = dy > 0 ? f.y1 + 3 : dy < 0 ? f.y0 - 3 : c;
+      const lane = (i, o) => [ex + dx * i + (dy ? o : 0), ey + dy * i + (dx ? o : 0)];
+      const starts = [-1, 0, 1].map((o) => lane(0, o));
+      if (outOk(starts)) return;
+      v.exitFixed++;
+      for (let i = 1; i <= 40; i++) {
+        let edge = false;
+        for (let o = -1; o <= 1; o++) {
+          const [x, y] = lane(i, o);
+          const c = world.cell(x, y);
+          if (!c) { edge = true; continue; }
+          if (c.t === '≈') { edge = true; continue; }
+          if (!world.passable(x, y)) world.setCell(x, y, '·', c.biome);
+        }
+        if (edge || (i >= D && outOk([lane(i, 0)]))) break;
+      }
+    });
+  }
+
+  // 第三十二版：候選的工作範圍（含周圍那一圈與外圍三圈坡）都落在世界最外圈以內，而且碰到的格子要嘛已經長出來、要嘛可以預留。
+  // 第三十四版：kind 是聚落種類（周圍那一圈的寬度看它）；城市、要塞不能選在會被最外圈（288×288）切掉的位置，就是這一條
+  function boxReady(world, box, kind, skip) {
+    const m = C.SETTLE_BUFFER[kind] + 3;
+    for (let cy = Math.floor((box.y0 - m) / C.CHUNK_H); cy <= Math.floor((box.y1 + m) / C.CHUNK_H); cy++) {
+      for (let cx = Math.floor((box.x0 - m) / C.CHUNK_W); cx <= Math.floor((box.x1 + m) / C.CHUNK_W); cx++) {
+        if (!inRing(world, cx, cy)) return false;
+      }
+    }
+    // 選址範圍可能含先前預留長出來的小塊：工作範圍連同整地的外圍不能碰到現有聚落和它的外圍
+    for (const v of world.villages) {
+      if (v === skip) continue;
+      const vm = C.SETTLE_BUFFER[v.kind] + 3;
+      const f = v.flat || v;
+      if (box.x0 - m <= f.x1 + vm && box.x1 + m >= f.x0 - vm && box.y0 - m <= f.y1 + vm && box.y1 + m >= f.y0 - vm) return false;
+    }
+    // 第三十四版：大的聚落（城市、堡壘、要塞）可能伸進舊的區塊，不蓋在已經有的地貌上
+    for (const l of world.landmarks) {
+      if (box.x0 - 3 <= l.x1 && box.x1 + 3 >= l.x0 && box.y0 - 3 <= l.y1 && box.y1 + 3 >= l.y0) return false;
+    }
+    return true;
+  }
+  // 小塊在不在最外圈（RING_MAX）以內
+  function inRing(world, cx, cy) {
+    const [lo, hi] = world.ringRange(C.RING_MAX);
+    return cx >= lo && cx <= hi && cy >= lo && cy <= hi;
   }
 
   function pickName(world, rng) {
@@ -585,6 +1158,7 @@
     const reward = FE.questReward(world, giver, target);
     const tv = target ? world.villageById(target.villageId) : world.villageById(giver.villageId);
     return {
+      kind: 'deliver',
       targetId: target ? target.id : world.nextId++,
       targetName: target ? target.name : ghostName,
       targetVillage: tv ? tv.name : '附近',
@@ -592,7 +1166,7 @@
       line: FE.pick(rng, FE.QUEST_LINES),
       steps: reward.steps,
       exp: reward.exp,
-      gold: reward.gold,
+      copper: reward.gold * C.SILVER, // 單位是銅；領的時候再乘經濟標籤與魅力
       compute: reward.compute,
       accepted: false,
       done: false,
@@ -605,14 +1179,16 @@
     const si = (v.buildings || []).findIndex((b) => b.kind === 'smithy');
     const [sx, sy] = si >= 0 ? v.buildings[si].spots[0] : [v.cx, v.cy];
     world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'smith', villageId: v.id, x: sx, y: sy, quest: null, home: si >= 0 ? { b: si } : null });
-    if (v.kind === 'town') {
+    if (FE.Steading.townish(v)) {
       const ai = (v.buildings || []).findIndex((b) => b.kind === 'armory');
       const [ax, ay] = ai >= 0 ? v.buildings[ai].spots[0] : [v.cx + 1, v.cy];
       world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'armorer', villageId: v.id, x: ax, y: ay, quest: null, home: ai >= 0 ? { b: ai } : null });
     }
 
     const candidates = [];
-    const n = FE.Steading.villagerCount(rng, v);
+    // 村民不超過實際蓋出來的床位（民房沒蓋齊時人就少一點，不會有人沒有家）
+    const beds = (v.buildings || []).reduce((s, b) => s + (b.kind === 'house' || b.kind === 'big' ? b.beds.length : 0), 0);
+    const n = Math.min(FE.Steading.villagerCount(rng, v), beds);
     // 村民一開始站在聚落裡室外能走的地方（不在建築裡）
     const spots = [];
     for (let y = v.y0; y <= v.y1; y++) {
@@ -659,13 +1235,31 @@
       const alive = world.npcById(t.id);
       if (alive) npc.quest = FE.makeQuest(world, rng, npc, alive);
     }
+    for (const o of world.npcs) if (o.villageId === v.id) FE.npcRace(world, o);
   }
 
-  // 粗糙的掉落公式：約四分之一會算出負數，少數會除以零變成 NaN。所有寶箱的金幣減半（CHEST_GOLD_MUL），算壞的公式套在減半後的數字上
+  // 世界裡的人（村民、工匠、士兵）的種族（第三十版）：人類 70%、矮人 15%、精靈 15%。
+  // 用世界種子和這個人的 id 擲（不動生成用的亂數，世界的樣子不變），擲過就記在 n.race；暫時不影響行為
+  FE.npcRace = function (world, n) {
+    if (n.race) return n.race;
+    let r = hash(world.seed ^ 0x5bd1e995, n.id, 7331);
+    n.race = C.NPC_RACES[C.NPC_RACES.length - 1][0];
+    for (const [race, p] of C.NPC_RACES) {
+      if (r < p) {
+        n.race = race;
+        break;
+      }
+      r -= p;
+    }
+    return n.race;
+  };
+
+  // 粗糙的掉落公式：約四分之一會算出負數，少數會除以零變成 NaN。所有寶箱的金幣減半（CHEST_GOLD_MUL），算壞的公式套在減半後的數字上。
+  // 算出來的是銀，換成銅（第三十版）；算壞的 NaN 乘完還是 NaN
   FE.roughGold = function (rng) {
     let gold = Math.floor((25 + (rng() - 0.62) * 70) * C.CHEST_GOLD_MUL);
     if (rng() < 0.08) gold = Math.floor((gold / 0) * 0);
-    return gold;
+    return gold * C.SILVER;
   };
 
   // 創世時固定放幾個寶箱，拿了就沒有，不會重生
@@ -674,7 +1268,7 @@
   // 只放在「裡面」：圖案上的室內地板 o，或上下左右都還是地貌圖案的碎石地 ░（牆、石圈、墓碑圍住的那一片），門外的路不算
   function placeChests(world, rng, landmark) {
     if (!landmark || !C.CHEST_LANDMARKS.includes(landmark.kind)) return;
-    const art = FE.LANDMARKS[landmark.kind].art;
+    const art = FE.landmarkArt(landmark);
     const at = (dx, dy) => (dy >= 0 && dy < art.length && dx >= 0 && dx < art[dy].length ? art[dy][dx] : '.');
     const inside = (dx, dy) => at(dx, dy) === 'o' || (at(dx, dy) === '░' && [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([ax, ay]) => at(dx + ax, dy + ay) !== '.'));
     const spots = [];
@@ -689,17 +1283,19 @@
     const n = Math.min(spots.length, FE.randInt(rng, C.CHESTS[0], C.CHESTS[1]));
     for (let i = 0; i < n; i++) {
       const [x, y] = spots.splice(Math.floor(rng() * spots.length), 1)[0];
-      world.chests.push({ id: world.nextId++, x, y, gold: FE.roughGold(rng) });
+      world.chests.push({ id: world.nextId++, x, y, copper: FE.roughGold(rng) });
     }
   }
 
   // 採集點：礦坑的空地上 3～5 處礦脈；溫帶森林、針葉林、熱帶雨林裡約 2% 的格子長藥草。
-  // 藥草不放在聚落、路、地貌、寶箱與出生點上
-  function placeNodes(world, rng, r, landmark) {
-    if (landmark && landmark.kind === 'mine') {
+  // 藥草不放在聚落、路、地貌、寶箱與出生點上。第三十四版：只放在從出生點走得到的格子（原本藥草會長在斷崖上拿不到）
+  function placeNodes(world, rng, r, landmarks) {
+    const reach = FE.Checker.reachable(world);
+    for (const landmark of landmarks) {
+      if (landmark.kind !== 'mine') continue;
       const art = FE.LANDMARKS.mine.art;
       const floor = [];
-      art.forEach((row, dy) => [...row].forEach((ch, dx) => ch === 'o' && floor.push([landmark.x0 + dx, landmark.y0 + dy])));
+      art.forEach((row, dy) => [...row].forEach((ch, dx) => ch === 'o' && reach.at(landmark.x0 + dx, landmark.y0 + dy) && floor.push([landmark.x0 + dx, landmark.y0 + dy])));
       const n = Math.min(floor.length, FE.randInt(rng, C.ORE_NODES[0], C.ORE_NODES[1]));
       for (let i = 0; i < n; i++) {
         const [x, y] = floor.splice(Math.floor(rng() * floor.length), 1)[0];
@@ -710,8 +1306,8 @@
     for (let y = r.y0; y < r.y1; y++) {
       for (let x = r.x0; x < r.x1; x++) {
         const c = world.cell(x, y);
-        if (!C.HERB_BIOMES.includes(c.biome) || rng() >= C.HERB_RATE) continue;
-        if (!world.passable(x, y) || c.t === '·' || world.inVillage(x, y) || world.landmarkAt(x, y) || world.chestAt(x, y) || world.npcAt(x, y)) continue;
+        if (!c || !C.HERB_BIOMES.includes(c.biome) || rng() >= C.HERB_RATE) continue;
+        if (!world.passable(x, y) || !reach.at(x, y) || c.t === '·' || world.inVillage(x, y) || world.landmarkAt(x, y) || world.chestAt(x, y) || world.npcAt(x, y)) continue;
         if (s && s.x === x && s.y === y) continue;
         world.nodes.push({ id: world.nextId++, kind: 'herb', x, y, regrowAt: 0 });
       }
@@ -719,5 +1315,6 @@
   }
 
   FE.World = World;
+  World.openExits = openExits; // 場景測試用（第三十四版）
   FE.pickName = pickName;
 })();

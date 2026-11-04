@@ -1,6 +1,6 @@
 // 怪物行動：冒險者每做一個動作，所有怪物各做一件事（移動一步或攻擊）。
 // 所有怪物在自己的 B 點附近徘徊；會追人的怪物（m.small）看得到冒險者就追；貼在冒險者旁邊的怪物不管追不追人，在自己的回合攻擊（圍攻）；
-// 怪物進不了聚落和它周圍那一圈；怪物會侵蝕周遭的地面。
+// 怪物進不了聚落和它周圍那一圈；怪物每走進一格，那一格的穩定值減 STAB_STEP（第三十三版之三，侵蝕拿掉了）。
 (function () {
   const C = FE.CONFIG;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -13,36 +13,11 @@
     return !game.monsterAt(x, y) && !w.npcAt(x, y) && !w.chestAt(x, y) && !game.isPlayerAt(x, y) && !game.soldierAt(x, y);
   }
 
-  // 沿直線看過去，中間的地形擋住的量累積到 1 就看不到；冒險者在村莊裡時看不到。
-  // 中間有比兩端都高出 2 階以上的地方（隔著山丘），也看不到。
+  // 怪物看不看得到冒險者：SIGHT 步以內、冒險者不在村莊裡，視線跟冒險者遠程同一套（combat.js 的 lineClear），
+  // 門檻看這隻怪物數值塊的感知修正值（FE.SRD_WIS；第三十三版之一）
   function canSee(world, m, p) {
     if (dist(m, p) > C.SIGHT || world.inVillage(p.x, p.y)) return false;
-    const top = Math.max(world.cell(m.x, m.y).h, world.cell(p.x, p.y).h);
-    let x = m.x;
-    let y = m.y;
-    const dx = Math.abs(p.x - x);
-    const dy = -Math.abs(p.y - y);
-    const sx = x < p.x ? 1 : -1;
-    const sy = y < p.y ? 1 : -1;
-    let err = dx + dy;
-    let block = 0;
-    for (;;) {
-      const e2 = 2 * err;
-      if (e2 >= dy) {
-        err += dy;
-        x += sx;
-      }
-      if (e2 <= dx) {
-        err += dx;
-        y += sy;
-      }
-      if (x === p.x && y === p.y) return true;
-      const c = world.cell(x, y);
-      // 視線穿過還沒創出來的空缺（世界不一定是方的）就看不到
-      if (!c) return false;
-      block +=(C.SIGHT_BLOCK[c.t] || 0) + (c.h >= top + 2 ? 1 : 0);
-      if (block >= 1) return false;
-    }
+    return FE.Combat.lineClear(world, m, p, FE.SRD_WIS[m.srd] || 0);
   }
 
   // 走到 arrived(x, y) 成立的格子的最短路的第一步
@@ -87,12 +62,19 @@
     m.returnTurns = 0;
   }
 
+  // 怪物移動到 (x, y)：走進的那一格穩定值當下減 STAB_STEP（第三十三版之三，使用者定的；怪物每次移動都算）
+  function moveTo(game, m, x, y) {
+    m.x = x;
+    m.y = y;
+    game.world.addStab(x, y, -C.STAB_STEP);
+  }
+
   // 回生成點：回到徘徊範圍內就恢復正常；路被堵住太久，就改在當下的位置徘徊
   function returnHome(game, m) {
     const near = (x, y) => Math.abs(x - m.home.x) + Math.abs(y - m.home.y) <= C.WANDER_LEASH;
     if (!near(m.x, m.y)) {
       const s = stepToward(game, m, near);
-      if (s) [m.x, m.y] = s;
+      if (s) moveTo(game, m, s[0], s[1]);
       else if (++m.returnTurns > 20) m.home = { x: m.x, y: m.y };
     }
     if (near(m.x, m.y)) m.returning = false;
@@ -101,31 +83,16 @@
   function wander(game, m) {
     if (game.rng() >= C.WANDER_CHANCE) return;
     const options = DIRS.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(
-      ([x, y]) => free(game, x, y) && game.world.heightOk(m.x, m.y, x, y) && dist({ x, y }, m.home) <= C.WANDER_LEASH
+      ([x, y]) => free(game, x, y) && game.world.heightOk(m.x, m.y, x, y) && dist({ x, y }, m.home) <= (m.guard ? 1 : C.WANDER_LEASH) // 守著原地的群只在 1 格內走動
     );
     if (!options.length) return;
-    [m.x, m.y] = FE.pick(game.rng, options);
-  }
-
-  // 侵蝕：在怪物附近弄出一對直接相鄰的苔原和沙漠。下一次演算事件時，檢查器會把它抓成小怪物。
-  function corrupt(game, m) {
-    const w = game.world;
-    for (let tries = 0; tries < 10; tries++) {
-      const x = m.x + FE.randInt(game.rng, -2, 2);
-      const y = m.y + FE.randInt(game.rng, -2, 2);
-      const [dx, dy] = FE.pick(game.rng, DIRS);
-      if (!free(game, x, y) || !free(game, x + dx, y + dy)) continue;
-      if (w.landmarkAt(x, y) || w.landmarkAt(x + dx, y + dy) || w.inBuffer(x, y) || w.inBuffer(x + dx, y + dy)) continue;
-      w.setCell(x, y, '.', 'tundra');
-      w.setCell(x + dx, y + dy, ':', 'desert');
-      if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}侵蝕了周遭的地面。`, 'bug');
-      return;
-    }
+    const [x, y] = FE.pick(game.rng, options);
+    moveTo(game, m, x, y);
   }
 
   // 一群小怪物的難度評級（參考《奇幻探索物語》）：生命值＋單回合最高傷害＋數量
   function rating(group) {
-    const maxDmg = (m) => (m.type === 'VALUE' ? m.atk * 2 : m.atk + 1);
+    const maxDmg = (m) => m.atk + 1;
     return group.reduce((s, m) => s + m.hp + maxDmg(m), 0) + group.length;
   }
 
@@ -164,6 +131,26 @@
     let at = group.slice().sort((a, b) => dist(a, { x: cx, y: cy }) - dist(b, { x: cx, y: cy }))[0];
     game.monsters = game.monsters.filter((m) => !group.includes(m));
     if (game.world.inBuffer(at.x, at.y)) at = game.findFreeNear(at.x, at.y) || at;
+    // 第三十三版之二：動盪、失序時有機率套上營地（失序的營地，清掉後留下遺留地點）；BUG 量配不上任何營地就照舊合成一隻。
+    // 第三十三版之三：合進去的怪物身上的 bug 加總就是這一群的 BUG 量；營地配掉的不夠的零頭留在格子裡，合體怪物帶走全部
+    const st = FE.Stability.state(game);
+    const scope = group.reduce((s, m) => s + m.scope, 0);
+    const bug = group.reduce((s, m) => s + m.bug, 0);
+    if (C.CAMP_CHANCE[st] > 0 && game.rng() < C.CAMP_CHANCE[st]) {
+      const pick = game.compose(at.x, at.y, bug, { camps: true, campaign: false });
+      if (pick.camp) {
+        const d = { type, x: at.x, y: at.y, cells: group.flatMap((m) => m.cells), scope, data: {} };
+        const camp = game.spawnList(d, pick.list, null, { camp: pick.camp, origin: 'disorder' });
+        if (camp.length) {
+          for (const m of camp) m.members = group; // 最後倒下的那隻把合進來的錯一起修好
+          game.spillDebt(camp[0].x, camp[0].y, bug - camp.reduce((s, m) => s + m.bug, 0));
+          game.say(`${group.length} 隻怪物沒有清掉，聚成了一座${FE.CAMPS[pick.camp].name}！`, 'bug');
+          return;
+        }
+        game.monsters.push(...group); // 放不下就放回去，下次再合
+        return;
+      }
+    }
     const wl = FE.Stability.worldLevel(game);
     const big = FE.makeMonster(
       { type, x: at.x, y: at.y, cells: group.flatMap((m) => m.cells), scope: group.reduce((s, m) => s + m.scope, 0), data: {} },
@@ -171,10 +158,12 @@
       wl
     );
     big.tier = 'mid'; // 合體生出的一律是中型怪物，就算加總的影響範圍不到 5
-    FE.dressMonster(big, game.world);
+    // 種族看環境，AC、攻擊加值、傷害照那個種族中型怪物的數值塊（第三十三版，原本是群裡最高的攻擊力 +1、最多 9）；
+    // 血量照舊是群裡的血量加總，最多 150（乘世界等級的加成）
+    FE.dressMonster(big, game.world, game.rng);
+    big.bug = bug; // 身上的 BUG 值是合進去的加總（dressMonster 換數值塊時會改成那個數值塊的值）
     big.maxHp = Math.min(Math.round(150 * FE.wlScale(wl, C.WL_BONUS.HP)), group.reduce((s, m) => s + m.maxHp, 0));
     big.hp = Math.min(big.maxHp, group.reduce((s, m) => s + m.hp, 0));
-    big.atk = Math.min(Math.round(9 * FE.wlScale(wl, C.WL_BONUS.ATK)), Math.max(...group.map((m) => m.atk)) + 1);
     big.exp = group.reduce((s, m) => s + m.exp, 0);
     big.compute = group.reduce((s, m) => s + m.compute, 0); // 合進去的怪物給的算力加總
     big.members = group;
@@ -182,14 +171,40 @@
     game.say(`${group.length} 隻怪物沒有清掉，合成了一隻${big.name}！`, 'bug');
   }
 
+  // ---- 怪物的特性（第三十三版，照 SRD 5.2.1；群體戰術與易傷在 combat.js）----
+  // 再生（沼澤巨魔，SRD 的 Troll 15 點、Troll Limb 5 點）：每回合開頭回 regen 點生命；上一次被火或酸打到（m.noRegen）這一回合不回。
+  // SRD 裡生命歸零還要「回合開頭沒有再生」才死，這一版照舊歸零就倒下
+  function regenerate(game, m) {
+    if (!m.regen) return;
+    if (m.noRegen) {
+      m.noRegen = false;
+      return;
+    }
+    if (m.hp <= 0 || m.hp >= m.maxHp) return;
+    const n = Math.min(m.regen, m.maxHp - m.hp);
+    m.hp += n;
+    if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}的傷口蠕動著長了回來（+${n}）。`, 'sys');
+  }
+  // 靈巧脫身（哥布林，SRD 的 Nimble Escape：附贈動作躲藏）：貼上冒險者的那一回合（剛移動，還不能出手）擲 d20＋潛行（SRD 的 Stealth +6）
+  // 對冒險者的被動察覺（10＋感知修正值），到了就藏著，下一次出手有優勢（彎刀再多擲 1d4，見 combat.js）。SRD 的躲藏要有遮蔽，這一版不看地形
+  function nimbleHide(game, m) {
+    if (!FE.hasTrait(m, 'nimble') || m.hidden) return;
+    const passive = 10 + FE.Char.attrMod(game.player, 'wis');
+    if (FE.randInt(game.rng, 1, 20) + (m.stealth || 0) < passive) return;
+    m.hidden = true;
+    game.say(`${m.name}一閃身，躲進了你看不到的地方。`, 'bad');
+  }
+
   // 每個怪物做一件事：貼在冒險者旁邊就攻擊，不然追人、回生成點或徘徊（移動一步）。
   // 回合開頭就貼著才攻擊，剛移動到旁邊的那一回合不攻擊（移動或攻擊擇一）。
   function worldTurn(game) {
     const p = game.player;
     const safe = game.world.inVillage(p.x, p.y);
+    const before = new Map(game.monsters.map((m) => [m, m.x + ',' + m.y])); // 靈巧脫身看這一回合有沒有移動
     for (const m of game.monsters.slice()) {
       if (!game.monsters.includes(m)) continue; // 被反擊打倒了
       FE.Combat.regenBlock(game, m);
+      regenerate(game, m);
       // 倒地（失衡）：這一回合不能動，爬起來就過了
       if (m.prone) {
         m.prone = false;
@@ -207,13 +222,19 @@
         if (game.fell) return; // 冒險者倒下了，已經回到醒來的地方
         continue;
       }
+      // 緩速（鞭子、輕弩的精通）：下一次移動多花 10 刻，怪物 10 刻動一次，所以這一回合牠要移動的話就停在原地（攻擊不受影響）
+      const soldierNear = game.soldiers.length > 0 && game.soldiers.some((s) => touching(game, m, s));
+      if (m.slowed > 0 && !soldierNear) {
+        m.slowed--;
+        continue;
+      }
       // 纏上：冒險者設定的目標（撞上去設的）跟著冒險者走，保持貼著（路徑被擋就照追擊的走法盡量貼近），
       // 一直打到牠倒下、冒險者撤退成功或倒下才放開。冒險者在聚落裡時牠進不去，照平常行動，出來後再纏上。
       // 貼上之後的下一回合才攻擊（移動或攻擊擇一）
       if (!safe && m.id === game.battle.targetId) {
         const s = stepToward(game, m, (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1 && game.world.heightOk(x, y, p.x, p.y));
         if (s) {
-          [m.x, m.y] = s;
+          moveTo(game, m, s[0], s[1]);
           if (!m.small) m.home = { x: m.x, y: m.y }; // 不追人的怪物放開之後就在這裡徘徊
         }
         if (m.small) {
@@ -241,7 +262,7 @@
         else if (m.chase > 0) m.chase--;
         if (m.chase > 0) {
           const s = stepToward(game, m, (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1 && game.world.heightOk(x, y, p.x, p.y));
-          if (s) [m.x, m.y] = s;
+          if (s) moveTo(game, m, s[0], s[1]);
           // 走不過去（冒險者在聚落周圍的圈裡，怪物追到圈邊）也算追了一步，追滿 CHASE_LIMIT 就回生成點
           m.chaseSteps++;
           // 沒纏上冒險者：追太多步，或看不到之後追丟了，就回生成點
@@ -251,15 +272,8 @@
       }
       wander(game, m);
     }
-
-    const smallCount = game.monsters.filter((m) => m.small).length;
-    // 只有冒險者附近的怪物會侵蝕；不然整個世界的怪物一起侵蝕，怪物會越生越多。世界越亂侵蝕越勤
-    if (smallCount < C.SMALL_CAP) {
-      const chance = C.CORRUPT_CHANCE * FE.Stability.mult(game, 'CORRUPT') * FE.Stability.scale(game, 'CORRUPT');
-      for (const m of game.monsters) {
-        if (dist(m, p) <= C.CORRUPT_RANGE && game.rng() < chance) corrupt(game, m);
-      }
-    }
+    // 靈巧脫身：這一回合移動之後貼著冒險者的哥布林，躲進冒險者的死角
+    if (!safe) for (const m of game.monsters) if (before.has(m) && before.get(m) !== m.x + ',' + m.y && touching(game, m, p)) nimbleHide(game, m);
 
     tryMerge(game);
   }
@@ -319,9 +333,9 @@
   }
 
   // ---- 士兵 ----
-  // 冒險者每做一個動作，士兵做一個動作（移動、出手或站著不動）；失序時怪物動兩次，士兵仍只動一次。
+  // 士兵跟怪物照同一個時鐘（第三十版）：每 10 刻做一個動作（移動、出手或站著不動）；失序時冒險者的動作花兩倍的刻，士兵跟怪物一樣多動一次。
   // 安穩、動盪：在自己的城鎮裡室外走動（跟村民一樣，不進建築）；在城外就走回城鎮。
-  // 失序：出城，追打該塊世界裡事件與侵蝕生的小怪物（m.small）；創世時的怪物一律不碰，免得冒險者解不出下一塊。
+  // 失序：出城，追打該塊世界裡衰敗生的小怪物（m.small）；創世時的怪物一律不碰，免得冒險者解不出下一塊。
   // 打不到（沒有目標或走不到）就在城鎮附近巡邏。士兵可以走進聚落周圍的圈，怪物不行。
   const inBuilding = (w, x, y) => {
     const v = w.villageAt(x, y);
@@ -390,10 +404,11 @@
       if (!v) continue;
       const home = (x, y) => w.villageAt(x, y) === v;
       if (disorder) {
-        // 該塊世界裡事件與侵蝕生的小怪物（m.small），創世時的怪物不碰
-        const chunk = w.chunkAt(v.cx, v.cy);
-        if (!preyCache.has(chunk)) preyCache.set(chunk, game.monsters.filter((m) => m.small && w.chunkAt(m.x, m.y) === chunk));
-        const prey = preyCache.get(chunk).filter((m) => game.monsters.includes(m));
+        // 城鎮外 16 格內衰敗生的小怪物（m.small），創世時的怪物不碰
+        // （第三十二版小塊變成 24×24，不再用「城鎮所在那一塊」，改成跟原本 64×64 一塊差不多的範圍）
+        const around = (m) => m.x >= v.x0 - 16 && m.x <= v.x1 + 16 && m.y >= v.y0 - 16 && m.y <= v.y1 + 16;
+        if (!preyCache.has(v)) preyCache.set(v, game.monsters.filter((m) => m.small && around(m)));
+        const prey = preyCache.get(v).filter((m) => game.monsters.includes(m));
         const adj = prey.filter((m) => FE.Combat.adjacent(game, s, m)).sort((a, b) => a.hp - b.hp)[0];
         // 士兵比小怪物弱，要一起打才贏：同一座城鎮的士兵跟著第一位（隊長）走，
         // 隊長等其他人都跟到 2 步內，才往同一隻小怪物前進
@@ -449,5 +464,5 @@
     }
   }
 
-  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free };
+  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free, regenerate, nimbleHide };
 })();

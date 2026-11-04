@@ -324,7 +324,7 @@
         let y = box.cy + (dx ? o : 0);
         while (dx ? (dx > 0 ? x <= lim : x >= lim) : dy > 0 ? y <= lim : y >= lim) {
           const c = world.cell(x, y);
-          if (c && c.t === '≈') return false;
+          if (c && (c.t === '≈' || c.t === '█')) return false; // 第三十四版草稿：山壁也開不出去
           x += dx;
           y += dy;
         }
@@ -353,7 +353,7 @@
     for (let y = box.y0 - 3; y <= box.y1 + 3; y++) {
       for (let x = box.x0 - 3; x <= box.x1 + 3; x++) {
         const c = world.cell(x, y);
-        if (!c || (c.t !== '≈' && c.t !== '#')) continue;
+        if (!c || (c.t !== '≈' && c.t !== '#' && c.t !== '█')) continue;
         blocked.add(ckey([x, y]));
         if (x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1) inBox++;
       }
@@ -408,7 +408,7 @@
       const row = [];
       for (let x = 0; x < W; x++) {
         const c = world.cell(v.x0 + x, v.y0 + y);
-        row.push(!c || c.t === '≈' ? 2 : c.t === '#' ? 1 : 0);
+        row.push(!c || c.t === '≈' || c.t === '█' ? 2 : c.t === '#' ? 1 : 0);
       }
       blk.push(row);
     }
@@ -743,7 +743,7 @@
         else connected = false;
       }
     }
-    return { g: out, approach, entrances: chosen.length, buildings, houses, beds: bedCount, ok: connected && !!smithy && extrasOk && houses === want && bedCount >= cap && chosen.length >= 3 };
+    return { g: out, approach, chosen, entrances: chosen.length, buildings, houses, beds: bedCount, ok: connected && !!smithy && extrasOk && houses === want && bedCount >= cap && chosen.length >= 3 };
   }
 
   // 聚落排版：排不齊就換一組亂數重排，最多 6 次，取最好的一次。
@@ -811,6 +811,7 @@
       spots: b.spots.map(toWorld),
     }));
     v.entrances = best.entrances;
+    v.exitDirs = best.chosen; // 第三十四版草稿：出入口的方向，生成完再確認每個都走得出去（World 的 openExits）
     v.x0 = bx0 + ox;
     v.y0 = by0 + oy;
     v.x1 = bx1 + ox;
@@ -981,6 +982,7 @@
     const W = L.art[0].length;
     const s = world.spawn;
     const painted = (dx, dy) => dy >= 0 && dy < H && dx >= 0 && dx < W && L.art[dy][dx] !== '.';
+    const nodes = new Set(world.nodes.map((n) => n.x + ',' + n.y)); // 第三十四版草稿：不蓋到先前的段放的採集點（原本會把藥草圍進法師塔的牆裡）
     const ok = (x0, y0) => {
       // 離這塊世界的邊至少一格，門外才不會是還沒創出來的地方
       if (x0 <= rect.x0 || y0 <= rect.y0 || x0 + W >= rect.x1 || y0 + H >= rect.y1) return false;
@@ -992,7 +994,7 @@
         for (let x = x0; x < x0 + W; x++) {
           const c = world.cell(x, y);
           if (!c) return false; // 還沒長出來的地方
-          if (c.t === '≈' || c.t === '·' || c.biome === 'lake' || world.landmarkAt(x, y) || world.villageAt(x, y) || (s && s.x === x && s.y === y)) return false;
+          if (c.t === '≈' || c.t === '█' || c.t === '·' || c.biome === 'lake' || nodes.has(x + ',' + y) || world.landmarkAt(x, y) || world.villageAt(x, y) || (s && s.x === x && s.y === y)) return false;
           if (!painted(x - x0, y - y0)) continue;
           for (const [dx, dy] of [[1, 0], [0, 1]]) {
             if (painted(x - x0 + dx, y - y0 + dy) && (!world.cell(x + dx, y + dy) || Math.abs(c.h - world.cell(x + dx, y + dy).h) > 1)) return false;

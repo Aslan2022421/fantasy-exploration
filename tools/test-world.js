@@ -301,7 +301,8 @@ function testSoldiers() {
   // 這個場景測的是出城清怪，所以換用 5151（士兵卡住的情形留給第三十版重寫士兵時處理）。
   // 第三十三版之二生怪的亂數順序變了，5151 的 3 位士兵又卡在 1 格寬的通道，換用 5152（卡通道的問題還在，留給士兵重寫）。
   // 第三十三版之三創世多擲了每處欠的量，亂數順序又變了：5152 的小怪物變成會再生的巨魔斷肢（走到之前就把血補滿了），換用 5153
-  const g = new FE.Game(5153);
+  // 第三十四版地形與城鎮的規則改了（城鎮要四面開得出出入口），5153 的士兵出城後打不到小怪物，換用 5155（5157、5159 也打不到，卡通道的問題還在）
+  const g = new FE.Game(5155);
   g.start();
   for (let i = 0; i < 12 && !g.world.villages.some((v) => v.kind === 'town'); i++) g.createChunk(false);
   const town = g.world.villages.find((v) => v.kind === 'town');
@@ -420,7 +421,10 @@ function testBackpack() {
     const t = new FE.Game(seed * 131);
     t.start();
     for (let i = 0; i < 6 && !t.world.nodes.some((n) => n.kind === 'ore'); i++) t.createChunk(false);
-    if (t.world.nodes.some((n) => n.kind === 'ore') && t.world.nodes.some((n) => n.kind === 'herb')) g = t;
+    // 礦坑只有 6 格地板，礦脈加寶箱可能把礦脈旁邊能站的格子都佔掉（第三十四版亂數順序變了碰到）：要有一處礦脈旁邊是空的
+    const tw = t.world;
+    const free = (n) => DIRS.some(([dx, dy]) => tw.passable(n.x + dx, n.y + dy) && !tw.chestAt(n.x + dx, n.y + dy) && !tw.nodes.some((o) => o.x === n.x + dx && o.y === n.y + dy));
+    if (tw.nodes.some((n) => n.kind === 'ore' && free(n)) && tw.nodes.some((n) => n.kind === 'herb')) g = t;
   }
   ok(!!g, '找不到有礦脈和藥草的世界');
   if (!g) return;

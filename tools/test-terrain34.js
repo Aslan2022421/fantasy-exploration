@@ -141,11 +141,70 @@ function testExits34() {
   ok(viable.every((o) => o === false), `四面外面都是湖，exitViable 還說開得出去：${viable}`);
 }
 
+// ---- 堡壘、要塞、城市（照圖樣蓋的聚落）與堡壘廢墟 ----
+// 世界種子 158380 長滿 288×288（出生點不動）時有城市、要塞與堡壘廢墟（第三十四版量到的；規則改了沒有就要換種子）
+function testSettle34() {
+  const ok = (cond, msg) => { terrainChecks++; if (!cond) fail('堡壘與城市 ' + msg); };
+  const g = new FE.Game(158380);
+  g.start();
+  g.checkCreate = () => {};
+  for (let i = 0; i < 16; i++) g.createChunk(false);
+  const w = g.world;
+  const kinds = (k) => w.villages.filter((v) => v.kind === k);
+  ok(kinds('city').length >= 1 && kinds('fortress').length >= 1, `種子 158380 沒有城市或要塞（城市 ${kinds('city').length}、要塞 ${kinds('fortress').length}），要換種子`);
+  ok(w.landmarks.some((l) => l.kind === 'fort'), '種子 158380 沒有堡壘廢墟，要換種子');
+  const n0 = problems.length;
+  for (const v of w.villages) if (v.kind === 'city' || v.kind === 'fort' || v.kind === 'fortress') checkPlan(g, v, '場景');
+  terrainChecks += w.villages.length;
+  ok(problems.length === n0, '圖樣聚落的大小、出入口、城門、山壁有問題（見上面）');
+  // 城市：兩座城鎮的工匠與士兵（武器匠、盔甲匠各一位站在工坊裡，士兵 6 位），住的人有家
+  for (const v of kinds('city')) {
+    const folk = w.npcs.filter((n) => n.villageId === v.id);
+    const smith = folk.find((n) => n.role === 'smith');
+    const arm = folk.find((n) => n.role === 'armorer');
+    ok(!!smith && FE.Steading.roomAt(v, smith.x, smith.y) >= 0 && v.buildings[FE.Steading.roomAt(v, smith.x, smith.y)].kind === 'smithy', `${v.name} 的武器匠沒站在工坊裡`);
+    ok(!!arm && FE.Steading.roomAt(v, arm.x, arm.y) >= 0 && v.buildings[FE.Steading.roomAt(v, arm.x, arm.y)].kind === 'armory', `${v.name} 的盔甲匠沒站在盔甲匠工坊裡`);
+    ok(folk.filter((n) => n.role === 'villager').every((n) => n.home), `${v.name} 有村民沒有家`);
+    ok(g.soldiers.filter((s) => s.villageId === v.id).length === 2 * C.SOLDIER_PER_TOWN, `${v.name} 的士兵 ${g.soldiers.filter((s) => s.villageId === v.id).length} 位`);
+    ok(['temple', 'market', 'keep', 'tower', 'smithy', 'armory'].every((k) => v.buildings.some((b) => b.kind === k)), `${v.name} 少了神殿、市場、城堡、塔樓或工坊：${[...new Set(v.buildings.map((b) => b.kind))]}`);
+  }
+  // 堡壘與要塞：鐵匠站在工坊、村民住兵營；城門接窄路，不走窄路要繞很遠
+  for (const v of kinds('fort').concat(kinds('fortress'))) {
+    const folk = w.npcs.filter((n) => n.villageId === v.id);
+    const smith = folk.find((n) => n.role === 'smith');
+    ok(!!smith && FE.Steading.roomAt(v, smith.x, smith.y) >= 0, `${v.name} 的鐵匠沒站在工坊裡`);
+    ok(folk.filter((n) => n.role === 'villager').every((n) => n.home && v.buildings[n.home.b].kind === 'big'), `${v.name} 有村民沒住在兵營`);
+    const f = v.flat;
+    const [d0, d1] = v.exitDirs;
+    const end = ([dx, dy], k) => [dx > 0 ? f.x1 + 3 : dx < 0 ? f.x0 - 3 : v.exitAt[k], dy > 0 ? f.y1 + 3 : dy < 0 ? f.y0 - 3 : v.exitAt[k]];
+    const a = end(d0, 0);
+    const b = end(d1, 1);
+    const open = w.stepGrid([a], 600).at(b[0], b[1]);
+    // 把城門堵起來再量（量完放回去）
+    const gates = [];
+    for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) if (w.cell(x, y).t === '╪') gates.push([x, y]);
+    for (const [x, y] of gates) w.setCell(x, y, '█', 'plain');
+    const shut = w.stepGrid([a], 600).at(b[0], b[1]);
+    for (const [x, y] of gates) w.setCell(x, y, '╪', 'plain');
+    ok(open > 0 && open <= (v.kind === 'fortress' ? 70 : 40), `${v.name} 穿過城門 ${open} 步`);
+    ok(shut < 0 || shut >= open + 30, `${v.name} 城門堵住時繞 ${shut} 步（穿過城門 ${open} 步）`);
+    g.stat34 = (g.stat34 || []).concat([[v.kind, open, shut]]);
+  }
+  // 堡壘廢墟：39×25（或直放 25×39），從外圍走得到裡面每一格（checkInteriors 也查）
+  for (const l of w.landmarks.filter((o) => o.kind === 'fort')) {
+    const W = l.x1 - l.x0 + 1, H = l.y1 - l.y0 + 1;
+    ok((W === 39 && H === 25) || (W === 25 && H === 39), `堡壘廢墟 ${W}×${H}`);
+  }
+  checkInteriors(g, '堡壘與城市場景');
+  checkResidents(g, '堡壘與城市場景');
+}
+
 UNITS.terrain34 = () => {
   try {
     testVeil34();
     testSave34();
     testExits34();
+    testSettle34();
   } catch (e) {
     fail('第三十四版場景測試拋出例外：' + e.stack);
   }

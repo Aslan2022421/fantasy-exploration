@@ -58,7 +58,7 @@
   function repairQuote(g, v, cha) {
     const missing = g.max - g.dur;
     if (missing <= 0) return { restore: 0, cost: 0 };
-    const all = v && v.kind === 'town' ? C.REPAIR_ALL.town : C.REPAIR_ALL.village;
+    const all = FE.Steading.townish(v) ? C.REPAIR_ALL.town : C.REPAIR_ALL.village; // 城市照城鎮（第三十四版）
     const restore = all ? missing : Math.ceil(missing / 2);
     const econ = def(g).cat === 'tool' ? 1 : FE.Steading.shopFactor(v);
     return { restore, cost: Math.max(1, Math.round((restore / g.max) * value(g) * C.SILVER * C.REPAIR_RATE * econ * buyFactor(cha))) };
@@ -67,7 +67,7 @@
   // 打造：礦石數、工錢（銅；原價一半，乘聚落經濟與魅力）、品質範圍（村莊鐵匠普通～精良，城鎮做工好～優秀）
   function craftQuote(type, v, cha) {
     const d = G[type];
-    const kind = v && v.kind === 'town' ? 'town' : 'village';
+    const kind = FE.Steading.townish(v) ? 'town' : 'village';
     return { ore: d.ore, fee: Math.round(d.price * C.SILVER * C.CRAFT_FEE_RATE * FE.Steading.shopFactor(v) * buyFactor(cha)), range: C.CRAFT_RANGE[kind] };
   }
 
@@ -311,7 +311,7 @@
   function shopOf(npc, v) {
     if (!npc) return null;
     if (npc.role === 'armorer') return 'armorer';
-    if (npc.role === 'smith') return v && v.kind === 'town' ? 'weaponsmith' : 'blacksmith';
+    if (npc.role === 'smith') return FE.Steading.townish(v) ? 'weaponsmith' : 'blacksmith';
     return null;
   }
   const isShopkeeper = (n) => !!n && (n.role === 'smith' || n.role === 'armorer');

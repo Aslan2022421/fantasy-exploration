@@ -87,7 +87,7 @@
   // 一格畫成什麼字：牆照相鄰自動接；門照 DF 木門 ║（城鎮與神殿用石門 ┼）；室內地板照 DF 砌好的地板 +；其他照 SHOW
   function showGlyph(W, x, y, c, vv, indoor) {
     if (WALL_GLYPHS[c.t] || JOIN_WALLS[c.t]) return wallGlyph(W, x, y, c.t);
-    if (c.t === '+') return vv && vv.kind === 'town' ? '┼' : '║';
+    if (c.t === '+') return vv && vv.kind !== 'village' ? '┼' : '║'; // 城鎮、城市、堡壘、要塞都是石門（第三十四版）
     if (c.t === '.' && indoor) return '+';
     return SHOW[c.t] || c.t;
   }
@@ -167,7 +167,7 @@
         const vv = W.villageAt(x, y);
         const indoor = vv && FE.Steading.roomAt(vv, x, y) >= 0;
         let glyph = showGlyph(W, x, y, c, vv, indoor);
-        let bg = c.t === '·' ? P['map-road'] : indoor ? P['map-indoor'] : vv ? (vv.kind === 'town' ? P['map-town'] : P['map-village']) : P['map-h' + c.h] || P['map-h0'];
+        let bg = c.t === '·' ? P['map-road'] : indoor ? P['map-indoor'] : vv ? (FE.Steading.townish(vv) ? P['map-town'] : P['map-village']) : P['map-h' + c.h] || P['map-h0'];
         const baseBg = bg;
         let alpha = 1;
         const o = overlay.get(k);
@@ -325,7 +325,7 @@
         const relic = /[▓░▒ΠΘ†Ω‡+¤≥≤]/.test(c.t);
         const building = /[⌂∩♦]/.test(c.t);
         const wall = c.t === 'W' || c.t === 'w';
-        ctx.fillStyle = wall ? (c.t === 'W' ? P['m-stonewall'] : P['m-woodwall']) : building ? P['m-building'] : vv ? (vv.kind === 'town' ? P['m-town'] : P['m-village']) : relic ? P['m-relic'] : shade(base, c.h);
+        ctx.fillStyle = wall ? (c.t === 'W' ? P['m-stonewall'] : P['m-woodwall']) : building ? P['m-building'] : vv ? (FE.Steading.townish(vv) ? P['m-town'] : P['m-village']) : relic ? P['m-relic'] : shade(base, c.h);
         ctx.fillRect((x - x0) * S, (y - y0) * S, S, S);
       }
     }
@@ -393,7 +393,7 @@
         ctx.strokeStyle = P['map-player-fg'];
         ctx.strokeRect((v.x0 - x0) * S - 1.5, (v.y0 - y0) * S - 1.5, (v.x1 - v.x0 + 1) * S + 3, (v.y1 - v.y0 + 1) * S + 3);
       }
-      label(v.name, ((v.x0 + v.x1 + 1) / 2 - x0) * S, (v.y0 - y0) * S - 7, v.kind === 'town' ? '#e0b0ff' : '#ffe08a', 12);
+      label(v.name, ((v.x0 + v.x1 + 1) / 2 - x0) * S, (v.y0 - y0) * S - 7, FE.Steading.townish(v) ? '#e0b0ff' : '#ffe08a', 12);
     }
     for (const l of W.landmarks) label(l.name, ((l.x0 + l.x1 + 1) / 2 - x0) * S, (l.y1 + 1 - y0) * S + 7, '#e8c890', 11);
   }
@@ -409,7 +409,7 @@
     const B = FE.BIOMES[c.biome];
     out.push(`<b>${esc(B ? B.name : c.biome)}</b>　高度 ${c.h}${c.t === '≈' ? '，水' : c.t === '#' ? '，巨石' : c.t === '█' ? '，山壁' : ''}`);
     const v = W.villageAt(x, y) || W.villages.find((o) => x >= o.x0 - 2 && x <= o.x1 + 2 && y >= o.y0 - 2 && y <= o.y1 + 2);
-    if (v) out.push(`${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}${v.steading ? `，${FE.PROSPERITY[v.steading.prosperity]}、${FE.POPULATION[v.steading.population]}` : ''}）<span class="dim">點一下看詳細</span>`);
+    if (v) out.push(`${esc(v.name)}（${FE.SETTLE_KINDS[v.kind]}${v.steading ? `，${FE.PROSPERITY[v.steading.prosperity]}、${FE.POPULATION[v.steading.population]}` : ''}）<span class="dim">點一下看詳細</span>`);
     const l = W.landmarkAt(x, y);
     if (l) out.push(esc(l.name));
     const near = (o, r) => Math.abs(o.x - x) <= r && Math.abs(o.y - y) <= r;
@@ -583,7 +583,7 @@
     const p = game.player;
     const v = W.villageAt(p.x, p.y);
     if (v) {
-      $('stPlace').textContent = `${v.name}・${v.kind === 'town' ? '城鎮' : '村莊'}（安全區）`;
+      $('stPlace').textContent = `${v.name}・${FE.SETTLE_KINDS[v.kind]}（安全區）`;
       return;
     }
     const b = FE.BIOMES[W.cell(p.x, p.y).biome];
@@ -694,7 +694,7 @@
 
   // 聚落裡的人（村民、工匠、士兵）與種族，例如「艾德（鐵匠，矮人）、蜜拉（人類）⋯⋯」
   function residents(v) {
-    const role = (n) => (n.role === 'smith' ? (v.kind === 'town' ? '武器匠，' : '鐵匠，') : n.role === 'armorer' ? '盔甲匠，' : n.role === 'soldier' ? '士兵，' : '');
+    const role = (n) => (n.role === 'smith' ? (FE.Steading.townish(v) ? '武器匠，' : '鐵匠，') : n.role === 'armorer' ? '盔甲匠，' : n.role === 'soldier' ? '士兵，' : '');
     const list = game.world.npcs.filter((n) => n.villageId === v.id).concat(game.soldiers.filter((s) => s.villageId === v.id));
     return list.map((n) => `${n.name}（${role(n)}${FE.PLAYER_RACES[FE.npcRace(game.world, n)].name}）`).join('、') || '沒有人';
   }
@@ -722,7 +722,7 @@
       .map((t) => `<li><b>${esc(t.text)}</b><span class="dim">　${esc(t.info)}</span></li>`)
       .join('');
     el.innerHTML = `
-      <h3 style="margin-top:0">${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}）${inside || W.villageAt(p.x, p.y) === v ? '' : `<span class="dim">　${picked ? '在地圖上點選的聚落' : '你不在這裡，這是離你最近的聚落'}，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
+      <h3 style="margin-top:0">${esc(v.name)}（${FE.SETTLE_KINDS[v.kind]}）${inside || W.villageAt(p.x, p.y) === v ? '' : `<span class="dim">　${picked ? '在地圖上點選的聚落' : '你不在這裡，這是離你最近的聚落'}，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
       <div class="row"><span>經濟</span><span>${FE.PROSPERITY[s.prosperity]}（裝備售價 ×${FE.Steading.shopFactor(v).toFixed(2)}）</span></div>
       <div class="row"><span>住一晚</span><span>${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}（${FE.PROSPERITY[s.prosperity]}的生活${C.LIVING_REPAIR[s.prosperity] ? `，身上裝備的耐久回 ${Math.round(C.LIVING_REPAIR[s.prosperity] * 100)}%` : ''}${C.LIVING_QUEST[s.prosperity] ? `，這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[s.prosperity] * 100)}%` : ''}）</span></div>
       <div class="row"><span>人口</span><span>${FE.POPULATION[s.population]}</span></div>
@@ -1205,7 +1205,7 @@
       const chasing = game.battle.targetId === m.id ? '你的目標' : m.chase > 0 ? '正在追你' : '還沒發現你';
       el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>AC</dt><dd>${m.ac}</dd><dt>攻擊</dt><dd>${esc(monAttackText(m))}</dd>${monTraitText(m) ? `<dt>特性</dt><dd>${esc(monTraitText(m))}</dd>` : ''}${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl><div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
     } else if (n) {
-      const role = n.role === 'smith' ? (W.villageAt(n.x, n.y) && W.villageAt(n.x, n.y).kind === 'town' ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'soldier' ? '士兵' : '村民';
+      const role = n.role === 'smith' ? (FE.Steading.townish(W.villageAt(n.x, n.y)) ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'soldier' ? '士兵' : '村民';
       const race = FE.PLAYER_RACES[FE.npcRace(W, n)];
       const quest = handIn(n) ? '可以交件或回報' : n.quest && !n.quest.accepted && !n.quest.done ? '有委託可以接' : '';
       const home = W.villageById ? W.villageById(n.villageId) : null;

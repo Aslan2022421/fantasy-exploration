@@ -213,7 +213,7 @@
     const v = w.villageById(giver.villageId);
     if (!v) return null;
     // 村莊住滿了就不放，改由現有的村民接手，不然事件一直補人，村莊會擠滿
-    const cap = v.kind === 'town' ? FE.CONFIG.TOWN_MAX_NPC : FE.CONFIG.VILLAGE_MAX_NPC;
+    const cap = v.kind === 'city' ? 2 * FE.CONFIG.TOWN_MAX_NPC : v.kind === 'town' ? FE.CONFIG.TOWN_MAX_NPC : FE.CONFIG.VILLAGE_MAX_NPC; // 城市是兩座城鎮（第三十四版）
     if (w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n)).length >= cap) return null;
     // 每個村民有自己的家：沒有空床也不放
     const h = FE.Steading.freeHome(w, game.rng, v);

@@ -103,13 +103,15 @@
       }
       const { index, rect, village, landmarks } = this.world.addRegion(seg);
       // 新聚落的周圍那一圈可能伸進舊的區塊：已經在那裡的怪物挪到圈外
-      // （站在圈外、但生成點在圈內的，生成點改成現在站的位置）
-      const bad = (m) => this.world.inBuffer(m.x, m.y) || this.world.inBuffer(m.home.x, m.home.y);
-      if (village && this.monsters.some(bad)) {
+      // （站在圈外、但生成點在圈內的，生成點改成現在站的位置）。
+      // 第三十四版：堡壘廢墟、堡壘兩側的山壁、城市與要塞也可能蓋到舊的區塊上，站在變得不能走的格子上的怪物一樣挪開
+      const stuck = (m) => !this.world.passable(m.x, m.y);
+      const bad = (m) => stuck(m) || this.world.inBuffer(m.x, m.y) || this.world.inBuffer(m.home.x, m.home.y);
+      if (this.allMonsters().some(bad)) {
         const reach = FE.Checker.reachable(this.world);
-        for (const m of this.monsters) {
+        for (const m of this.allMonsters()) {
           if (!bad(m)) continue;
-          if (!this.world.inBuffer(m.x, m.y)) {
+          if (!stuck(m) && !this.world.inBuffer(m.x, m.y)) {
             m.home = { x: m.x, y: m.y };
             continue;
           }
@@ -171,7 +173,7 @@
       const content = spawned.reduce((s, m) => s + m.compute, 0) + quests.reduce((s, q) => s + q.compute, 0);
       this.nextChunkAt = (first ? 0 : this.nextChunkAt) + content * C.PLAYER_COMPUTE_SCALE * C.CREATION_SHARE;
       // 城鎮的士兵（住幾位看人口）
-      if (village && village.kind === 'town') {
+      if (village && FE.Steading.townish(village)) {
         for (let i = 0; i < this.soldierQuota(village); i++) this.spawnSoldier(village);
       }
 
@@ -179,7 +181,7 @@
       const where = first ? '' : this.directionTo(rect);
       const head = first ? '第 1 塊世界誕生了，' : `創世神在你的${where}解出第 ${index + 1} 塊世界，`;
       const vtext = village
-        ? (village.kind === 'town' ? `大城鎮${village.name}建在這塊世界` : `${village.name}在這塊世界`) +
+        ? (village.kind === 'village' ? `${village.name}在這塊世界` : `${FE.SETTLE_KINDS[village.kind]}${village.name}建在這塊世界`) +
           `（${FE.PROSPERITY[village.steading.prosperity]}、${FE.POPULATION[village.steading.population]}），`
         : '';
       this.say(`${head}${vtext}出現 ${spawned.length} 隻怪物${mids ? `（其中 ${mids} 隻中型怪物）` : ''}、${quests.length} 個任務。`, 'world');
@@ -209,8 +211,8 @@
     // ---- 士兵 ----
     // 只有城鎮有，每座城鎮固定 3 位（第二十四版起不看人口）。
     // 數值以同世界等級的小怪物為準，不升級；被打倒就消失，要等世界回到安穩，該城鎮才補回原本的人數。
-    soldierQuota() {
-      return C.SOLDIER_PER_TOWN;
+    soldierQuota(v) {
+      return v && v.kind === 'city' ? 2 * C.SOLDIER_PER_TOWN : C.SOLDIER_PER_TOWN; // 城市是兩座城鎮併起來，士兵加倍（第三十四版，Claude 定的）
     }
 
     // 在城鎮室外的空地放一位士兵；沒位置放就不放
@@ -238,7 +240,7 @@
     // 世界回到安穩，陣亡的士兵補回原本的人數
     refillSoldiers() {
       for (const v of this.world.villages) {
-        if (v.kind !== 'town') continue;
+        if (!FE.Steading.townish(v)) continue;
         const lack = this.soldierQuota(v) - this.soldiers.filter((s) => s.villageId === v.id).length;
         for (let i = 0; i < lack; i++) {
           if (this.spawnSoldier(v)) FE.Stability.stat(this).refills++;

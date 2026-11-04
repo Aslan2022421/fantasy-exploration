@@ -27,6 +27,8 @@ function testStability33() {
     w.forEachCell((x, y) => {
       if (found || (x + y) % 2) return;
       if (Math.abs(x - p.x) + Math.abs(y - p.y) < minD || (o.apart || []).some(([ax, ay]) => Math.abs(x - ax) + Math.abs(y - ay) < gap)) return;
+      // o.margin：離世界的邊至少幾格（第三十四版：清怪那一項的空地落在世界的角落時，半徑外的格子全在世界外面，量不到）
+      if (o.margin && [[-1, -1], [1, -1], [-1, 1], [1, 1]].some(([sx, sy]) => !w.inBounds(x + sx * o.margin, y + sy * o.margin))) return;
       for (let dy = -r - 1; dy <= r + 1; dy++) for (let dx = -r - 1; dx <= r + 1; dx++) {
         const cx = x + dx, cy = y + dy;
         if (!w.inBounds(cx, cy) || w.inBuffer(cx, cy) || w.landmarkAt(cx, cy) || w.inVillage(cx, cy)) return;
@@ -300,7 +302,7 @@ function testStability33() {
     const g = newGame(8181);
     const w = g.world;
     reset(g);
-    const c = field(g, 3, { minD: 14 });
+    const c = field(g, 3, { minD: 14, margin: C.CALM_RADIUS + 8 });
     const other = field(g, 3, { apart: [c], minD: 14, gap: 2 * C.CALM_RADIUS + 20 });
     const wide = box(c, C.CALM_RADIUS + 2).filter(([x, y]) => w.inBounds(x, y)); // 清掉之後要補的範圍比生怪物的空地大，空地外的格子是什麼地形都行
     ok(!!c && !!other, '找得到清怪用的空地');
@@ -321,7 +323,7 @@ function testStability33() {
     const cen = last.home;
     const inside = wide.filter((q) => inR(q, cen));
     ok(inside.every((q) => w.stab(q[0], q[1]) === startOf(q)), `全倒後半徑 ${C.CALM_RADIUS} 的格子補回起始值`);
-    ok(wide.filter((q) => !inR(q, cen)).some((q) => w.stab(q[0], q[1]) !== startOf(q)), '半徑以外的格子不動');
+    ok(wide.filter((q) => !inR(q, cen)).some((q) => w.stab(q[0], q[1]) !== startOf(q)), `半徑以外的格子不動（c ${c}、cen ${cen.x},${cen.y}、外面 ${wide.filter((q) => !inR(q, cen)).length} 格）`);
     ok(g.world.calm.length === 1 && g.isCalm(cen.x, cen.y) && w.debt === sumDebt(g), `進了冷卻區，全世界欠 ${w.debt}（逐格 ${sumDebt(g)}）`);
     // 冷卻區裡不掉，區外照掉
     const rch = FE.Checker.reachable(w);

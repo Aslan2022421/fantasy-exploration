@@ -236,16 +236,22 @@ function testGear() {
 
   // 5. 工匠：買、修、打造、賣；鐵匠、武器匠、盔甲匠都修到完整，盾牌歸盔甲匠
   {
-    const g = new FE.Game(5150);
-    g.start();
-    g.checkCreate = () => {};
-    for (let i = 0; i < 14 && !g.world.villages.some((v) => v.kind === 'town'); i++) g.createChunk(false);
+    // 第三十四版：城鎮要四面開得出出入口，比較常等不到，從 5150 起找第一個長滿之前蓋得出城鎮的種子
+    let g = null;
+    for (let sd = 5150; sd < 5190 && !g; sd++) {
+      const t = new FE.Game(sd);
+      t.start();
+      t.checkCreate = () => {};
+      for (let i = 0; i < 16 && !t.world.villages.some((v) => v.kind === 'town'); i++) t.createChunk(false);
+      if (t.world.villages.some((v) => v.kind === 'town')) g = t;
+    }
+    ok(!!g, '找不到蓋得出城鎮的世界');
+    if (!g) return;
     g.monsters = [];
     const w = g.world;
     const p = g.player;
     const vil = w.villages.find((v) => v.kind === 'village');
     const town = w.villages.find((v) => v.kind === 'town');
-    ok(!!town, '14 塊內沒有城鎮');
     if (!town) return;
     g.econ = () => {}; // 這一段只測價錢：在聚落花錢不改經濟值（經濟值的升降在 testEconomy30 測）
     const smith = w.npcs.find((n) => n.villageId === vil.id && n.role === 'smith');

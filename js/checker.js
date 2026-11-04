@@ -352,7 +352,7 @@
     });
   }
 
-  // 出入口不足：聚落能走出去的出入口少於 3 個（外面被巨石、水擋住，或排版開不出來）。
+  // 出入口不足：聚落能走出去的出入口少於 3 個（外面被巨石、水擋住，或排版開不出來）；堡壘、要塞本來就只有窄路兩頭的 2 個城門（第三十四版）。
   // 包裝成斷層，打倒時在外牆上打開一個寬 3 格的出入口
   function findGates(world, r, monsters) {
     const bugs = [];
@@ -368,7 +368,7 @@
           if (DIRS4.some(([dx, dy]) => !own(x + dx, y + dy) && world.passable(x + dx, y + dy))) opens.add(key(x, y));
         }
       }
-      if (components(opens, DIRS8).length >= 3) continue;
+      if (components(opens, DIRS8).length >= (v.kind === 'fort' || v.kind === 'fortress' ? 2 : 3)) continue;
       // 挑一段外牆：連續 3 格，裡面是聚落能走的地方，外面能走
       const isWall = (x, y) => own(x, y) && (world.cell(x, y).t === 'W' || world.cell(x, y).t === 'w');
       const spots = [];

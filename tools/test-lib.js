@@ -11,7 +11,7 @@ const vm = require('vm');
 const cp = require('child_process');
 const ROOT = path.join(path.dirname(require.main.filename), '..', 'js') + path.sep; // require.main 是 tools/test.js
 global.window = global;
-for (const f of ['config', 'rng', 'world', 'checker', 'bugs', 'steading', 'char', 'gear', 'combat', 'stability', 'events', 'ai', 'game', 'save']) {
+for (const f of ['config', 'rng', 'world', 'checker', 'bugs', 'steading', 'plans', 'char', 'gear', 'combat', 'stability', 'events', 'ai', 'game', 'save']) {
   vm.runInThisContext(fs.readFileSync(ROOT + f + '.js', 'utf8'), { filename: f + '.js' });
   if (f === 'rng') {
     const mem = new Map();
@@ -145,7 +145,7 @@ function checkInteriors(game, tag) {
     for (let y = l.y0 - 1; y <= l.y1 + 1; y++) for (let x = l.x0 - 1; x <= l.x1 + 1; x++) if (x < l.x0 || x > l.x1 || y < l.y0 || y > l.y1) ring.push([x, y]);
     const seen = flood(w, ring, box);
     // 只看地貌畫上去的格子；圖樣裡的 . 保留原本的地形，那些格子走不走得到歸檢查器（斷層）管
-    const art = FE.LANDMARKS[l.kind].art;
+    const art = FE.landmarkArt(l);
     for (let y = l.y0; y <= l.y1; y++) for (let x = l.x0; x <= l.x1; x++) {
       if (art[y - l.y0][x - l.x0] === '.') continue;
       if (w.passable(x, y) && !seen.has(key(x, y))) fail(`${tag} 地貌${l.name} (${x},${y}) 走不到`);

@@ -1,6 +1,6 @@
 // 生成統計：各種子創出多塊世界，量聚落、地貌、城鎮、創世耗時
 // ---- 生成統計 ----
-const stats = { village: [], town: [], landmarks: 0, landmarkMiss: 0, ms: [], short: [], gateBugs: 0, townGaps: [], firstTowns: [], soldiers: 0, cliffs: 0, walls: 0, nodes: 0, nodeMiss: 0, passes: 0, passMiss: 0, worlds: 0 };
+const stats = { village: [], town: [], city: [], fort: [], fortress: [], ruins: 0, landmarks: 0, landmarkMiss: 0, ms: [], short: [], gateBugs: 0, townGaps: [], firstTowns: [], soldiers: 0, cliffs: 0, walls: 0, nodes: 0, nodeMiss: 0, passes: 0, passMiss: 0, worlds: 0 };
 const geo = { w: [], h: [], area: [], open: [], nearBlock: 0, count: 0 };
 const GEN_SEEDS = 40;
 function runGen(seedLo, seedHi) {
@@ -38,7 +38,7 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
   stats.passMiss += w.passMiss || 0;
   stats.worlds++;
   // 城鎮出現時機（第三十二版照圈算）：蓋城鎮的那一段創出時世界等級至少 3，之後至少隔 4 段（4 或 5 段；最外圈放不下就再等）；開局是村莊
-  const towns = w.villages.filter((v) => v.kind === 'town').sort((a, b) => a.region - b.region);
+  const towns = w.villages.filter((v) => v.kind === 'town' || v.kind === 'city').sort((a, b) => a.region - b.region); // 城市算在城鎮的間隔裡（第三十四版）
   for (const t of towns) if (t.wl < C.TOWN_FIRST_LEVEL) fail(`生成 seed${seed} ${t.name} 在世界等級 ${t.wl} 就蓋了`);
   if (towns.length) stats.firstTowns.push(towns[0].region);
   for (let i = 1; i < towns.length; i++) {
@@ -50,8 +50,8 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
   // 士兵：每座城鎮固定 3 位，站在自己城鎮的室外，數值以同世界等級的小怪物為準
   for (const v of w.villages) {
     const mine = game.soldiers.filter((s) => s.villageId === v.id);
-    if (v.kind !== 'town') { if (mine.length) fail(`生成 seed${seed} 村莊 ${v.name} 有士兵`); continue; }
-    const want = 3;
+    if (!FE.Steading.townish(v)) { if (mine.length) fail(`生成 seed${seed} ${v.kind} ${v.name} 有士兵`); continue; }
+    const want = v.kind === 'city' ? 6 : 3; // 城市是兩座城鎮（第三十四版）
     if (C.SOLDIER_PER_TOWN !== 3 || mine.length !== want) fail(`生成 seed${seed} ${v.name} 有 ${mine.length} 位士兵，應該固定是 ${want}`);
     stats.soldiers += mine.length;
     for (const s of mine) {
@@ -61,8 +61,11 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
       if (s.maxHp !== Math.max(1, Math.round(base.maxHp * 0.9)) || s.atk !== Math.max(1, base.atk - 1) || s.hp !== s.maxHp || s.ac !== base.ac || s.toHit !== base.toHit || s.dmgBonus !== base.dmgBonus - 1) fail(`生成 seed${seed} 士兵數值不對 hp ${s.hp}/${s.maxHp} atk ${s.atk}（基準 ${base.maxHp}/${base.atk}）`);
     }
   }
+  stats.ruins += w.landmarks.filter((l) => l.kind === 'fort').length;
   for (const v of w.villages) {
-    const want = (v.kind === 'town' ? C.TOWN_HOUSES : C.VILLAGE_HOUSES)[v.steading.population];
+    const laid = v.kind === 'village' || v.kind === 'town'; // 排版的聚落；城市、堡壘、要塞照圖樣蓋（第三十四版）
+    if (!laid) checkPlan(game, v, `生成 seed${seed}`);
+    const want = laid ? (v.kind === 'town' ? C.TOWN_HOUSES : C.VILLAGE_HOUSES)[v.steading.population] : 0;
     const kinds = v.buildings.map((b) => b.kind);
     const houses = kinds.filter((k) => k === 'house' || k === 'big').length;
     const beds = v.buildings.reduce((s, b) => s + b.beds.length, 0);
@@ -77,8 +80,8 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
     // 工匠：每個聚落一位鐵匠（城鎮裡叫武器匠），城鎮另有一位盔甲匠；村莊沒有盔甲匠
     const smiths = w.npcs.filter((n) => n.villageId === v.id && n.role === 'smith').length;
     const armorers = w.npcs.filter((n) => n.villageId === v.id && n.role === 'armorer').length;
-    if (smiths !== 1 || armorers !== (v.kind === 'town' ? 1 : 0)) fail(`生成 seed${seed} ${v.name} 工匠 ${smiths} 位鐵匠／武器匠、${armorers} 位盔甲匠`);
-    if (v.kind === 'town') {
+    if (smiths !== 1 || armorers !== (FE.Steading.townish(v) ? 1 : 0)) fail(`生成 seed${seed} ${v.name} 工匠 ${smiths} 位鐵匠／武器匠、${armorers} 位盔甲匠`);
+    if (FE.Steading.townish(v)) {
       const am = w.npcs.find((n) => n.villageId === v.id && n.role === 'armorer');
       const bi = v.buildings.findIndex((b) => b.kind === 'armory');
       if (am && bi >= 0 && FE.Steading.roomAt(v, am.x, am.y) !== bi) fail(`生成 seed${seed} ${v.name} 盔甲匠沒站在盔甲匠工坊裡`);
@@ -87,6 +90,7 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
     // 民房沒蓋齊、床位少於上限：使用者決定當作可接受的粗糙，只統計；村民沒有家才算錯（checkResidents）
     if (houses < want) stats.short.push(`seed${seed} ${v.name} 民房 ${houses}/${want}`);
     if (!s.smithy) fail(`生成 seed${seed} ${v.name} 沒有工坊`);
+    if (!laid) { s.groups = v.entrances; s.kind = v.kind; continue; } // 圖樣聚落的出入口、大小在 checkPlan 查
     if (!s.armory) stats.noArmory = (stats.noArmory || 0) + 1; // 城鎮沒蓋成盔甲匠工坊（可接受的粗糙，盔甲匠改站在廣場旁）
     if (!s.temple || !s.market) fail(`生成 seed${seed} ${v.name} 少了神殿或市場`);
     if (beds < (v.kind === 'town' ? C.TOWN_MAX_NPC : C.VILLAGE_MAX_NPC)) stats.short.push(`seed${seed} ${v.name} 床位 ${beds}`);
@@ -115,7 +119,7 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
     // 出入口不足要有一隻斷層怪物負責（打倒時開一個出入口）
     const gateBug = game.monsters.some((m) => m.data && m.data.villageId === v.id);
     if (gateBug) stats.gateBugs++;
-    if ((groups.length < 3 && !gateBug) || groups.length > 4) fail(`生成 seed${seed} ${v.name} 量到的出入口 ${groups.length} 個`);
+    if ((groups.length < (v.kind === 'town' ? 4 : 3) && !gateBug) || groups.length > 4) fail(`生成 seed${seed} ${v.kind} ${v.name} 量到的出入口 ${groups.length} 個`);
     // 規格是「每座至少 3 個、每個寬至少 3 格」：走道鋪成路之後，走道貼著出入口時量起來會寬 4～5 格，也可能多出一個口，都合規格
     for (const g of groups) if (g.length < 3) fail(`生成 seed${seed} ${v.name} 出入口寬 ${g.length}`);
     const out = flood(w, opens);
@@ -146,3 +150,65 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
 }
 }
 
+
+// 第三十四版：照圖樣蓋的聚落（城市、堡壘、要塞）。大小照圖樣（堡壘 45×29、要塞 45×58、城市 90×29，直放時寬高對調）、
+// 出入口的數量（堡壘與要塞 2 個城門、城市 6 個）、每個出入口走得出去；堡壘與要塞在隘口上：記成一處隘口、
+// 城門（╪）開在窄路的兩頭並接著路（城門外 3 格是路）、兩側貼著山壁（█）
+function checkPlan(game, v, tag) {
+  const w = game.world;
+  const size = { fort: [45, 29], fortress: [45, 58], city: [90, 29] }[v.kind];
+  const [fw, fh] = v.rot ? [size[1], size[0]] : size;
+  const f = v.flat;
+  if (f.x1 - f.x0 + 1 !== fw || f.y1 - f.y0 + 1 !== fh) fail(`${tag} ${v.kind} ${v.name} 大小 ${f.x1 - f.x0 + 1}×${f.y1 - f.y0 + 1}，應該是 ${fw}×${fh}`);
+  const wantExits = v.kind === 'city' ? 6 : 2;
+  if (v.entrances !== wantExits || (v.exitDirs || []).length !== wantExits) fail(`${tag} ${v.kind} ${v.name} 出入口 ${v.entrances} 個，應該是 ${wantExits}`);
+  // 每個出入口外的路走得出去（不穿過聚落，走到離聚落外框「周圍的圈＋3 格」以外，或還沒長出來的地方）
+  const D = w.bufferWidth(v) + 3;
+  (v.exitDirs || []).forEach(([dx, dy], k) => {
+    const c = v.exitAt[k];
+    const sx = dx > 0 ? f.x1 + 3 : dx < 0 ? f.x0 - 3 : c;
+    const sy = dy > 0 ? f.y1 + 3 : dy < 0 ? f.y0 - 3 : c;
+    const seen = new Set([key(sx, sy)]);
+    const q = [[sx, sy]];
+    let out = false;
+    for (let h = 0; h < q.length && !out; h++) {
+      const [x, y] = q[h];
+      if (Math.max(v.x0 - x, x - v.x1, v.y0 - y, y - v.y1) >= D) out = true;
+      for (const [ax, ay] of DIRS) {
+        const nx = x + ax, ny = y + ay;
+        if (!w.cell(nx, ny)) { out = true; break; }
+        if (seen.has(key(nx, ny)) || w.villageAt(nx, ny) === v || !w.canStep(x, y, nx, ny)) continue;
+        seen.add(key(nx, ny));
+        q.push([nx, ny]);
+      }
+    }
+    if (!out) fail(`${tag} ${v.kind} ${v.name} 往 (${dx},${dy}) 的出入口走不出去`);
+    if (v.kind !== 'city') {
+      // 城門：出入口那一段的牆上是 3 格 ╪；城門外一直到圖樣外 3 格都是路
+      const gate = [];
+      for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) if (w.cell(x, y).t === '╪') gate.push([x, y]);
+      if (gate.length !== (v.kind === 'fortress' ? 9 : 6)) fail(`${tag} ${v.kind} ${v.name} 城門 ${gate.length} 格（堡壘兩頭各 3 格、要塞中間的隔牆再 3 格）`);
+      for (const o of [-1, 0, 1]) {
+        const x = dx > 0 ? f.x1 + 3 : dx < 0 ? f.x0 - 3 : c + o;
+        const y = dy > 0 ? f.y1 + 3 : dy < 0 ? f.y0 - 3 : c + o;
+        if (w.cell(x, y) && w.cell(x, y).t !== '·' && w.cell(x, y).t !== '≈') fail(`${tag} ${v.kind} ${v.name} 城門外的路斷了 (${x},${y}) 是 ${w.cell(x, y).t}`);
+      }
+    }
+  });
+  if (v.kind === 'fort' || v.kind === 'fortress') {
+    const pass = (w.passes || []).find((p) => p.fort === v.id);
+    if (!pass) fail(`${tag} ${v.kind} ${v.name} 沒有記成隘口`);
+    // 兩側貼著山壁：圖樣兩側那一欄（或一列）全是 █，外面再接出去的山壁或湖至少 1 格
+    const side = v.rot ? [[f.y0, 0], [f.y1, 0]] : [[f.x0, 0], [f.x1, 0]];
+    for (const [edge] of side) {
+      let wall = 0;
+      const n = v.rot ? fw : fh;
+      for (let i = 0; i < n; i++) {
+        const [x, y] = v.rot ? [f.x0 + i, edge] : [edge, f.y0 + i];
+        if (w.cell(x, y).t === '█') wall++;
+      }
+      if (wall !== n) fail(`${tag} ${v.kind} ${v.name} 側邊的山壁只有 ${wall}/${n} 格`);
+    }
+    stats.fortWall = (stats.fortWall || 0) + (pass ? pass.len : 0);
+  }
+}

@@ -477,7 +477,7 @@
     $('stName').innerHTML = `<b>${esc(p.name)}</b>（${esc(FE.Char.cls(p).name)}）`;
     $('stTime').textContent = FE.clockText(game.ticks);
     const lvl = FE.Stability.state(game);
-    $('stWorld').innerHTML = `世界 <b class="ws-${lvl}">${FE.Stability.names[lvl]}</b>`;
+    $('stWorld').innerHTML = `世界 <b class="ws-${lvl}">${FE.Stability.names[lvl]}</b>${game.veil ? '<span class="dim">（怪物遮蔽）</span>' : ''}`; // 怪物遮蔽中（第三十四版）在狀態列標出來
     $('stGold').textContent = FE.money(p.copper);
     const d = FE.Gear.playerDefense(p);
     $('stAtk').textContent = `傷害 ${game.attackText()}`;

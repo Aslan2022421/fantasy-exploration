@@ -1119,5 +1119,6 @@
   }
 
   FE.World = World;
+  World.openExits = openExits; // 場景測試用（第三十四版）
   FE.pickName = pickName;
 })();

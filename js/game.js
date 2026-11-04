@@ -13,6 +13,8 @@
       this.rng = FE.makeRng((seed ^ 0x9e3779b9) >>> 0);
       this.world = new FE.World(seed);
       this.monsters = [];
+      this.veil = false;     // 怪物遮蔽（第三十四版）：打開時怪物收進 veiled（不顯示、不行動、碰不到），不生新的怪物（不進存檔，看設定或網址的 ?nomonsters）
+      this.veiled = [];
       this.nextMonsterId = 1;
       this.log = [];
       this.turn = 0;
@@ -65,6 +67,28 @@
 
     // ---- 世界與怪物 ----
 
+    // 怪物遮蔽（第三十四版，給使用者專心測地形與聚落）：打開時把怪物收起來（不顯示、不行動、碰不到，也不算進清除委託剩幾隻的「打倒了」），
+    // 創世、衰敗都不生怪物，每小時穩定值不往下掉，所以整體 BUG 值不往上加（收起來的怪物照樣算進整體 BUG 值）；關掉時原封不動放回來
+    setVeil(on) {
+      on = !!on;
+      if (on === this.veil) return;
+      this.veil = on;
+      if (on) {
+        this.veiled = this.veiled.concat(this.monsters);
+        this.monsters = [];
+        this.battle.targetId = null;
+        this.aim = null;
+      } else {
+        this.monsters = this.monsters.concat(this.veiled);
+        this.veiled = [];
+      }
+    }
+
+    // 所有怪物（含遮蔽時收起來的）：整體 BUG 值、存檔、清除委託剩幾隻用
+    allMonsters() {
+      return this.veiled.length ? this.monsters.concat(this.veiled) : this.monsters;
+    }
+
     // 創世時替這塊世界的每隻怪物配好「打倒時給的算力」、每個任務配好「完成時給的算力」，
     // 加總後乘 PLAYER_COMPUTE_SCALE 與 CREATION_SHARE，就是到下一塊要累積的創世力。
     // 清光這塊世界，一定解得出下一塊；途中的移動、出手、清掉衰敗生的怪物，都會讓它更快。
@@ -108,7 +132,8 @@
       };
       const spawned = [];
       // 檢查器找到的地形錯位與斷崖（rest）不處理：第三十三版之三起錯的種類不決定怪物，只有挑上的地點才欠 BUG 值
-      const { sites } = this.pickSites(found, rect, first, landmarks || []);
+      // 怪物遮蔽時不生怪物（一定要生的也不生；創世門檻只剩任務）
+      const { sites } = this.veil ? { sites: [] } : this.pickSites(found, rect, first, landmarks || []);
       this.curCampaign = index; // 這一段生的怪物都記上是第幾段戰役（spawnGroup）
       for (const site of sites) {
         // 開局最多 24 隻：名額用完了，選到的地方（一定要生的那幾種至少生帶頭的 1 隻）欠的量全部留在格子裡
@@ -965,7 +990,8 @@
     // 創世力累積到門檻就解出下一塊（可能連續解出幾塊）。
     // 新的一塊沒有怪物也沒有任務時，門檻不會往後推，會連續往下創；設上限避免無窮迴圈
     checkCreate() {
-      for (let i = 0; i < 10 && this.creation >= this.nextChunkAt; i++) if (this.createChunk(false) === false) break; // 長滿 288×288 就停
+      // 長滿 288×288 就停。怪物遮蔽時門檻只剩任務的算力，一個動作最多長一段（不然一步就把世界長滿）
+      for (let i = 0; i < (this.veil ? 1 : 10) && this.creation >= this.nextChunkAt; i++) if (this.createChunk(false) === false) break;
     }
 
     // ---- 冒險者行動 ----
@@ -1777,7 +1803,7 @@
 
     // 清除委託指定的小怪物還剩幾隻；合體了的話，合體怪物還在就算還在
     huntRemaining(ids) {
-      return ids.filter((id) => this.monsters.some((m) => m.id === id || (m.members && m.members.some((o) => o.id === id)))).length;
+      return ids.filter((id) => this.allMonsters().some((m) => m.id === id || (m.members && m.members.some((o) => o.id === id)))).length;
     }
 
     // ---- 對話 ----

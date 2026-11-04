@@ -24,6 +24,11 @@
     game = new FE.Game(Number.isFinite(urlSeed) ? urlSeed : Math.floor(Math.random() * 1e9));
   }
 
+  // 怪物遮蔽（第三十四版，給專心測地形與聚落用）：設定視窗的開關，記在這台瀏覽器（fe.veil，不進存檔）；網址加 ?nomonsters 也能打開。
+  // 在開局之前就套上，開局那一大塊也不生怪物
+  let veil = params.has('nomonsters') || !!FE.store.load('fe.veil', false);
+  game.setVeil(veil);
+
   // 試玩紀錄：每個動作記一筆（動作、位置、生命、等級、武器、世界狀態、這個動作新增的訊息），
   // 存在這台瀏覽器（fe.playlog，最多留最近 PLAYLOG_MAX 筆），設定視窗可以匯出成檔案給開發者分析；不上傳
   const PLAYLOG_MAX = 5000;
@@ -462,7 +467,20 @@
     }
   });
 
-  const freshSeed = () => '?seed=' + Math.floor(Math.random() * 1e9);
+  const veilBox = document.getElementById('veil');
+  veilBox.checked = veil;
+  veilBox.addEventListener('change', () => {
+    veil = veilBox.checked;
+    FE.store.save('fe.veil', veil);
+    game.setVeil(veil);
+    if (!ready) return; // 還在建角：開局時就照這個設定
+    game.say(veil ? '怪物遮蔽打開了：怪物都看不見，也不會再出現。' : '怪物遮蔽關掉了，怪物回到了世界上。', 'sys');
+    FE.Save.save(game);
+    FE.UI.update();
+  });
+
+  // 網址保留 ?nomonsters（開新世界時也照樣遮蔽）
+  const freshSeed = () => '?seed=' + Math.floor(Math.random() * 1e9) + (params.has('nomonsters') ? '&nomonsters' : '');
 
   document.getElementById('newWorld').addEventListener('click', () => {
     location.search = freshSeed();

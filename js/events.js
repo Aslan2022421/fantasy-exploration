@@ -110,8 +110,11 @@
   function tick(game) {
     const reach = FE.Checker.reachable(game.world);
     const canReach = (x, y) => reach.at(x, y);
-    FE.Stability.decay(game, reach);
-    FE.Stability.spawnDecay(game, reach);
+    // 怪物遮蔽（第三十四版）：穩定值不往下掉、不生衰敗的怪物（整體 BUG 值不往上加）；委託事件與修補照常
+    if (!game.veil) {
+      FE.Stability.decay(game, reach);
+      FE.Stability.spawnDecay(game, reach);
+    }
     for (let guard = 0; guard < 5; guard++) {
       const kinds = Object.keys(KINDS).filter((k) => game.compute >= C.EVENT_COST[k]);
       if (!kinds.length) break;

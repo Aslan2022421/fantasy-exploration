@@ -45,7 +45,7 @@
       log: game.log.slice(0, 20),
       player: game.player,
       lastSafe: game.lastSafe,
-      monsters: game.monsters,
+      monsters: game.allMonsters(), // 怪物遮蔽時收起來的也存（讀檔後照設定再收起來）
       world: {
         // 每塊區塊各自存成幾列字串：地形字元、生態區代碼、高度；穩定值是 base64
         chunks: w.chunks.map((ch) => ({

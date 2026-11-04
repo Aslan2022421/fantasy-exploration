@@ -111,10 +111,11 @@
       const sleep = (d) => { if (d.type === 'TERRAIN' || d.type === 'CLIFF') for (const [x, y] of d.cells) this.world.dormant.add(x + ',' + y); };
       const { sites, rest } = this.pickSites(found, rect, first, landmarks || []);
       rest.forEach(sleep);
+      this.curCampaign = index; // 這一段生的怪物都記上是第幾段戰役（spawnGroup）
       for (const site of sites) {
         // 開局最多 24 隻：名額用完了，選到的地形錯位與斷崖也先沉睡（一定要生的那幾種至少生帶頭的 1 隻）
         const room = first ? C.START_MONSTER_MAX - spawned.length : Infinity;
-        const group = room > 0 || site.must ? this.spawnGroup(site, canReach, first, Math.max(1, room)) : [];
+        const group = room > 0 || site.must ? this.spawnGroup(site, canReach, first, Math.max(1, first ? Math.min(room, C.START_SITE_MAX) : room)) : [];
         if (!group.length) {
           sleep(site.d);
           continue;
@@ -136,6 +137,16 @@
           return spawned.some((m) => m.type === 'REFERENCE' && m.data.npcId === n.id);
         })
         .map((n) => n.quest);
+      // 這一段戰役記下來，清光時寫進歷史紀錄：哪一段、在哪裡（這一段的聚落，沒有就寫最近的聚落）、第幾天、有哪些危害
+      if (spawned.length) {
+        const cx = Math.floor((rect.x0 + rect.x1) / 2);
+        const cy = Math.floor((rect.y0 + rect.y1) / 2);
+        const near = village || this.world.villages.slice().sort((a, b) => Math.abs(a.cx - cx) + Math.abs(a.cy - cy) - (Math.abs(b.cx - cx) + Math.abs(b.cy - cy)))[0];
+        const heads = spawned.filter((m) => m.id === m.group);
+        const content = heads.map((h) => (h.camp ? FE.CAMPS[h.camp].name : `${h.name}${spawned.filter((o) => o.group === h.group).length > 1 ? `等 ${spawned.filter((o) => o.group === h.group).length} 隻` : ''}`)).join('、');
+        this.world.campaigns = this.world.campaigns || {};
+        this.world.campaigns[index] = { seg: index + 1, place: near ? `${near.name}${village ? '' : '附近'}` : '荒野', day: this.day(), content };
+      }
       const content = spawned.reduce((s, m) => s + m.compute, 0) + quests.reduce((s, q) => s + q.compute, 0);
       this.nextChunkAt = (first ? 0 : this.nextChunkAt) + content * C.PLAYER_COMPUTE_SCALE * C.CREATION_SHARE;
       // 城鎮的士兵（住幾位看人口）
@@ -576,31 +587,132 @@
       return { sites, rest: opt };
     }
 
-    // 一群幾隻：照種族（FE.GROUP_SIZE），15% 落單 1 隻、10% 大窩 ×1.5；開局每處最多 6 隻
-    groupSize(race, first) {
+    // 第三十三版之二：一處的 BUG 量（影響範圍 × BUDGET_PER_SCOPE）拿去配一組怪物，也就是套皮。每隻怪物值多少 BUG 量看數值塊
+    // （FE.blockValue：生命 × 一下的平均傷害）。候選：這裡每個種族的一群小怪物、中怪物帶小怪物（熊地精在草原帶哥布林）、
+    // 只有中怪物的種族一群中怪物、營地（opts.camps；哥布林營地只在戰役 opts.campaign）。總值不超過 BUG 量、又夠接近最好的那幾種，
+    // 照種族的權重挑一種；錯誤程度到中怪物（影響範圍 5 以上）就先挑中怪物帶頭的。一個都放不下就生最便宜的那 1 隻。
+    // 回傳 { camp, list: [[種族, 數值塊], ...] }，第一隻是帶頭的
+    compose(x, y, scope, opts) {
       const rng = this.rng;
-      const [lo, hi] = FE.GROUP_SIZE[race] || [1, 3];
-      let n = FE.randInt(rng, lo, hi);
-      const r = rng();
-      if (r < C.GROUP_STRAGGLER) n = 1;
-      else if (r < C.GROUP_STRAGGLER + C.GROUP_NEST) n = Math.ceil(n * C.GROUP_NEST_MUL);
-      return first ? Math.min(n, C.START_SITE_MAX) : n;
+      const budget = scope * C.BUDGET_PER_SCOPE;
+      const c = this.world.cell(x, y);
+      const biome = c ? c.biome : 'grassland';
+      const val = (race, key) => FE.blockValue(FE.monsterBlock(race, key));
+      const has = FE.hasTier;
+      const cands = [];
+      const add = (list, weight, camp) => cands.push({ list, weight, camp: camp || null, value: list.reduce((t, [r, k]) => t + val(r, k), 0), mid: FE.tierOfKey(list[0][1]) === 'mid' });
+      const fit = (v, lo, hi, room) => Math.max(lo, Math.min(hi, Math.floor(room / v)));
+      for (const race of FE.racesAt(this.world, x, y)) {
+        const R = FE.RACES[race];
+        const [, hi] = FE.GROUP_SIZE[race] || [1, 3];
+        const H = R.alone && R.alone.includes(biome) ? 1 : hi;
+        const lead = R.leads && R.leads[biome];
+        if (has(race, 'small') && H > 1) {
+          const n = fit(val(race, 'small'), 1, H, budget);
+          add(Array(n).fill([race, 'small']), R.weight);
+        }
+        if (has(race, 'mid')) {
+          const vm = val(race, 'mid');
+          if (lead) {
+            const k = fit(val(lead, 'small'), 0, FE.GROUP_SIZE[lead][1], budget - vm);
+            add([[race, 'mid']].concat(Array(k).fill([lead, 'small'])), R.weight);
+          } else if (has(race, 'small') && H > 1) {
+            const k = fit(val(race, 'small'), 0, H - 1, budget - vm);
+            add([[race, 'mid']].concat(Array(k).fill([race, 'small'])), R.weight);
+          } else {
+            add(Array(fit(vm, 1, H, budget)).fill([race, 'mid']), R.weight);
+          }
+        } else if (!has(race, 'small')) {
+          // 只有菁英數值塊的種族（恐狼、獅子⋯⋯）平常不生，戰役帶頭時才換上（applyElite）
+        }
+      }
+      if (opts && opts.camps) {
+        const here = FE.racesAt(this.world, x, y);
+        for (const [id, camp] of Object.entries(FE.CAMPS)) {
+          if (!here.includes(camp.race) || (camp.campaignOnly && !opts.campaign)) continue;
+          // 先放最少的，再一隻一隻往最多加，加到超過 BUG 量為止
+          const counts = camp.members.map((m) => m[2][0]);
+          const total = () => camp.members.reduce((t, m, i) => t + counts[i] * val(m[0], m[1]), 0);
+          if (total() > budget) continue;
+          for (let grew = true; grew; ) {
+            grew = false;
+            for (let i = 0; i < counts.length; i++) {
+              if (counts[i] >= camp.members[i][2][1]) continue;
+              counts[i]++;
+              if (total() > budget) counts[i]--;
+              else grew = true;
+            }
+          }
+          const list = [];
+          camp.members.forEach((m, i) => { for (let j = 0; j < counts[i]; j++) list.push([m[0], m[1]]); });
+          add(list, FE.RACES[camp.race].weight, id);
+        }
+      }
+      let ok = cands.filter((k) => k.value <= budget);
+      if (!ok.length) {
+        // 一隻都放不下：生最便宜的 1 隻
+        const one = cands.map((k) => ({ list: [k.list[0]], weight: k.weight, camp: null, value: val(k.list[0][0], k.list[0][1]) })).sort((p, q) => p.value - q.value)[0];
+        return one ? { camp: null, list: one.list } : { camp: null, list: [['goblin', 'small']] };
+      }
+      if (scope >= C.MID_SCOPE && ok.some((k) => k.mid || k.camp)) ok = ok.filter((k) => k.mid || k.camp);
+      const best = Math.max(...ok.map((k) => k.value));
+      const pool = ok.filter((k) => k.value >= best * C.SKIN_FIT);
+      let r = rng() * pool.reduce((t, k) => t + k.weight, 0);
+      const pick = pool.find((k) => (r -= k.weight) < 0) || pool[pool.length - 1];
+      return { camp: pick.camp, list: pick.list };
     }
 
-    // 在一處錯誤生一群：帶頭的那隻照原本的錯誤生（帶著錯誤），跟班同族、影響範圍減半（最多到小怪物）、
-    // 散在帶頭那隻周圍 2～5 格；整群守著原地或照常徘徊。room 是這一群最多幾隻
+    // 戰役帶頭的是菁英（使用者定的）：帶頭那隻的種族有這一級的菁英數值塊就換上；沒有就換成這裡有菁英數值塊的種族；
+    // 這裡也沒有，就由那一群最強的那隻（帶頭的）升成菁英，數值照牠自己的數值塊（怪物圖鑑的數字就夠，不另外加）
+    // 營地（camp）照營地自己的規則：沒有菁英就由營地裡最強的那隻升上來（使用者定的，例如最強的食人魔、最強的豺狼人），不換別族
+    applyElite(list, x, y, camp) {
+      const [race, key] = list[0];
+      if (/Elite$/.test(key)) return { list, promoted: false };
+      if (camp) return this.promote(list);
+      const ek = (FE.tierOfKey(key) === 'mid' ? 'mid' : 'small') + 'Elite';
+      if (FE.hasTier(race, ek)) return { list: [[race, ek]].concat(list.slice(1)), promoted: false };
+      const others = FE.racesAt(this.world, x, y).filter((k) => FE.hasTier(k, ek));
+      if (others.length) return { list: [[FE.pickRace(others, this.rng), ek]].concat(list.slice(1)), promoted: false };
+      return this.promote(list);
+    }
+
+    // 最強的那隻排到最前面帶頭（升成菁英，數值不變）
+    promote(list) {
+      const val = (m) => FE.blockValue(FE.monsterBlock(m[0], m[1]));
+      const i = list.reduce((bi, m, j) => (val(m) > val(list[bi]) ? j : bi), 0);
+      const out = [list[i]].concat(list.filter((_, j) => j !== i));
+      return { list: out, promoted: true };
+    }
+
+    // 在一處錯誤生一組怪物（compose 配好的）：帶頭的那隻帶著錯誤，跟班散在帶頭那隻周圍 2～5 格（營地散得開一點）；
+    // 整群守著原地或照常徘徊。每隻的影響範圍照牠值多少 BUG 量分（經驗值、算力跟著算）。room 是這一群最多幾隻。
+    // 創世時生的都是戰役的危害，帶頭的是菁英；開局那一塊不套營地
     spawnGroup(site, canReach, first, room) {
       const d = site.at ? Object.assign({}, site.d, site.at) : site.d;
-      const lead = this.spawnMonster(d, canReach);
+      if (this.isCalm(d.x, d.y)) return [];
+      const pick = this.compose(d.x, d.y, d.scope, { campaign: true, camps: !first });
+      const el = this.applyElite(pick.list, d.x, d.y, pick.camp);
+      const group = this.spawnList(d, el.list.slice(0, Math.max(1, room)), canReach, { camp: pick.camp, origin: 'campaign', elite: true });
+      for (const m of group) m.campaign = this.curCampaign; // 這一段戰役的危害（清光寫進歷史紀錄）
+      return group;
+    }
+
+    // 照清單（[[種族, 數值塊], ...]，第一隻帶頭）在錯誤 d 那裡生一組；opts：camp 營地種類、origin（campaign 戰役、disorder 失序）、
+    // elite 帶頭的是菁英。營地記進 world.camps
+    spawnList(d, list, canReach, opts) {
+      opts = opts || {};
+      const pick = { camp: opts.camp || null };
+      const share = ([race, key]) => Math.max(1, Math.round(FE.blockValue(FE.monsterBlock(race, key)) / C.BUDGET_PER_SCOPE));
+      const one = (i, at) => Object.assign({}, d, at, { race: list[i][0], block: list[i][1], elite: i === 0 && !!opts.elite, scope: share(list[i]) });
+      const lead = this.spawnMonster(one(0, {}), canReach);
       if (!lead) return [];
-      const guard = this.rng() < C.GROUP_GUARD;
+      const guard = pick.camp ? true : this.rng() < C.GROUP_GUARD;
       Object.assign(lead, { group: lead.id, guard });
+      if (pick.camp) lead.camp = pick.camp;
       const group = [lead];
-      const n = Math.min(room, this.groupSize(lead.race, first));
       const w = this.world;
-      const scope = Math.max(1, Math.min(C.MID_SCOPE - 1, Math.floor(d.scope / 2)));
-      const [r0, r1] = C.GROUP_SPREAD;
-      for (let i = 1; i < n; i++) {
+      const [r0, r1] = pick.camp ? C.CAMP_SPREAD : C.GROUP_SPREAD;
+      for (let i = 1; i < list.length; i++) {
         let at = null;
         for (let t = 0; t < 30 && !at; t++) {
           const x = lead.x + FE.randInt(this.rng, -r1, r1);
@@ -612,15 +724,55 @@
         }
         if (!at) at = this.findFreeNear(lead.x, lead.y, canReach);
         if (!at) break;
-        const m = FE.makeMonster(Object.assign({}, d, { x: at.x, y: at.y, scope }), this.nextMonsterId++, FE.Stability.worldLevel(this));
-        m.race = lead.race;
+        const m = FE.makeMonster(one(i, at), this.nextMonsterId++, FE.Stability.worldLevel(this));
+        m.elite = false;
         m.name = FE.monsterName(m);
-        FE.statMonster(m); // 換了種族，數值塊跟著換
         Object.assign(m, { group: lead.id, guard });
         this.monsters.push(m);
         group.push(m);
       }
+      if (pick.camp) w.camps.push({ id: lead.id, kind: pick.camp, x: lead.x, y: lead.y, origin: opts.origin || 'campaign' });
       return group;
+    }
+
+    // 一群全倒：是營地就把營地拿掉；失序的營地留下遺留地點（第三十三版之二，使用者定的），戰役的營地不留
+    siteCleared(groupId) {
+      const w = this.world;
+      const camp = w.camps.find((c) => c.id === groupId);
+      if (!camp) return '';
+      w.camps = w.camps.filter((c) => c !== camp);
+      const name = FE.CAMPS[camp.kind].name;
+      if (camp.origin === 'disorder') {
+        w.remnants.push({ kind: camp.kind, x: camp.x, y: camp.y, day: this.day() });
+        return `${name}清空了，只剩下一片廢棄的營地。`;
+      }
+      return `${name}清空了。`;
+    }
+
+    // 一段戰役的危害全清光：寫進歷史紀錄（第三十三版之二：戰役是歷史紀錄，接上原本的歷史紀錄）
+    campaignCleared(i) {
+      const w = this.world;
+      const rec = w.campaigns && w.campaigns[i];
+      if (!rec) return;
+      delete w.campaigns[i];
+      this.history.unshift({
+        kind: 'campaign',
+        time: FE.nowTaipei(),
+        seed: this.seed,
+        player: this.player.name,
+        seg: rec.seg,
+        place: rec.place,
+        day: rec.day,
+        cleared: this.day(),
+        content: rec.content,
+      });
+      FE.store.save('fe.history', this.history.slice(0, 200));
+      this.say(`第 ${rec.seg} 段戰役（${rec.place}）的危害都清光了，寫進了世界的歷史紀錄。`, 'world');
+    }
+
+    // 遊戲裡的第幾天（從 1 起算）
+    day() {
+      return Math.floor((this.ticks || 0) / C.DAY_TICKS) + 1;
     }
 
     // 這一格在不在冷卻區裡（清掉怪物後 5～7 天不生怪物）；過期的順手清掉
@@ -652,7 +804,8 @@
         y = free.y;
       }
       // 新生成的怪物照生成當下的世界等級套用加成
-      const m = FE.dressMonster(FE.makeMonster(Object.assign({}, d, { x, y }), this.nextMonsterId++, FE.Stability.worldLevel(this)), this.world, this.rng);
+      const m0 = FE.makeMonster(Object.assign({}, d, { x, y }), this.nextMonsterId++, FE.Stability.worldLevel(this));
+      const m = d.race ? m0 : FE.dressMonster(m0, this.world, this.rng); // 給了種族（compose 配好的）就不再照環境換
       this.monsters.push(m);
       return m;
     }
@@ -2128,7 +2281,10 @@
       const repair = (opts) => {
         if (left) return `這一群還剩 ${left} 隻，全倒下才修得好。`;
         this.calmAt(m.home ? m.home.x : m.x, m.home ? m.home.y : m.y); // 這一帶 5～7 天不再生怪物
-        return FE.repairBug(this, m, opts);
+        const camp = m.group ? this.siteCleared(m.group) : '';
+        const fix = FE.repairBug(this, m, opts) + camp;
+        if (m.campaign != null && !this.monsters.some((o) => o.campaign === m.campaign)) this.campaignCleared(m.campaign);
+        return fix;
       };
       if (by) {
         const fix = repair({ noExp: true });

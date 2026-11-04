@@ -21,6 +21,9 @@
       this.spawn = null;
       this.dormant = new Set(); // 創世時放不下怪物的地形錯位
       this.calm = [];           // 清掉怪物的地點：{ x, y, r, until }，到 until（刻）之前區內不生怪物（第三十二版）
+      this.camps = [];          // 營地：{ id（帶頭那隻的群）, kind（FE.CAMPS）, x, y, origin（campaign 戰役、disorder 失序）}（第三十三版之二）
+      this.campaigns = {};      // 還沒清光的戰役：段的索引 → { seg, place, day, content }（清光時寫進歷史紀錄）
+      this.remnants = [];       // 遺留地點：失序的營地清掉後留下的 { kind, x, y, day }（第三十三版之二）
       this.nextTownAt = null;   // 下一座大城鎮蓋在第幾段（創世順序，從 0 算）；null 是還沒蓋過，看世界等級
       this.regions = 0;         // 第三十二版：創過幾段（開局那一大塊算第 0 段）
       this.ringsDone = 0;       // 長滿了幾圈（開局不算）；世界等級＝1＋ringsDone

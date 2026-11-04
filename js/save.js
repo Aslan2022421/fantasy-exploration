@@ -54,6 +54,9 @@
         nextTownAt: w.nextTownAt,
         regions: w.regions,
         calm: w.calm,
+        camps: w.camps,
+        remnants: w.remnants,
+        campaigns: w.campaigns,
         ringsDone: w.ringsDone,
         dormant: [...w.dormant],
       },
@@ -86,6 +89,9 @@
     }
     for (const k of ['npcs', 'chests', 'villages', 'landmarks', 'nodes', 'items', 'nextId', 'spawn', 'nextTownAt', 'regions', 'ringsDone']) w[k] = d[k];
     w.calm = d.calm || [];
+    w.camps = d.camps || [];
+    w.remnants = d.remnants || [];
+    w.campaigns = d.campaigns || {};
     if (!Array.isArray(w.items)) w.items = [];
     w.dormant = new Set(d.dormant);
     return game;

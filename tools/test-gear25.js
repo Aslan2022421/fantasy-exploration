@@ -98,11 +98,8 @@ function testGear() {
   // 2. 清除等級與抗性門檻：狂亂、虛影從清除等級 1 起不再減半，斷層從清除等級 2 起；其他沒有抗性
   {
     const mk = (type) => FE.makeMonster({ type, x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
-    ok(FE.isResisted(mk('VALUE'), 'attack', 0) && !FE.isResisted(mk('VALUE'), 'attack', 1) && !FE.isResisted(mk('VALUE'), 'deep', 0), '狂亂的抗性門檻');
-    ok(FE.isResisted(mk('REFERENCE'), 'deep', 0) && !FE.isResisted(mk('REFERENCE'), 'deep', 1) && !FE.isResisted(mk('REFERENCE'), 'attack', 0), '虛影的抗性門檻');
-    ok(FE.isResisted(mk('UNREACHABLE'), 'attack', 0) && FE.isResisted(mk('UNREACHABLE'), 'attack', 1) && !FE.isResisted(mk('UNREACHABLE'), 'attack', 2) && !FE.isResisted(mk('UNREACHABLE'), 'deep', 0), '斷層的抗性門檻');
-    for (const t of ['TERRAIN', 'CLIFF', 'RUNTIME']) ok(!FE.isResisted(mk(t), 'attack', 0) && !FE.isResisted(mk(t), 'deep', 0), `${t} 不該有抗性`);
-    ok(FE.resistText(mk('UNREACHABLE'), 1).includes('+精良+') && FE.resistText(mk('VALUE'), 1).includes('已經對付得了') && FE.resistText(mk('TERRAIN'), 0) === '沒有抗性', `抗性說明：${FE.resistText(mk('UNREACHABLE'), 1)}`);
+    // 第三十三版之二：異常種類不再給怪物抗性
+    for (const t of Object.keys(FE.BUG_TYPES)) ok(!FE.isResisted(mk(t), 'attack', 0) && !FE.isResisted(mk(t), 'deep', 0), `${t} 不該有抗性`);
     // 真的出手：主手武器品質 0 打狂亂會減半，品質 1 起不會；斷層要品質 2
     const g = newGame(13);
     const p = g.player;
@@ -125,7 +122,7 @@ function testGear() {
       for (let i = 0; i < 300; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
       return resisted;
     };
-    ok(run('VALUE', 0) > 50 && run('VALUE', 1) === 0 && run('UNREACHABLE', 1) > 50 && run('UNREACHABLE', 2) === 0 && run('TERRAIN', 0) === 0, '實際出手時抗性門檻沒看清除等級');
+    ok(run('VALUE', 0) === 0 && run('UNREACHABLE', 0) === 0 && run('TERRAIN', 0) === 0, '第三十三版之二：異常種類不再給怪物抗性，實際出手也不該減半');
     FE.Combat.hook = hook0;
   }
 

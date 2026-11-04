@@ -10,7 +10,7 @@
   const HITS = ['crit', 'hit', 'hard']; // d20 判定「命中」的三段（被閃開也算命中，只是吃一半傷害）
 
   // 防禦數字：冒險者看身上的防具（閃避）和副手的盾牌（格擋機率與格擋值，沒拿盾牌是 0，見 gear.js 的 playerDefense），
-  // 怪物看異常、分級與世界等級（bugs.js 的 monsterDef），士兵閃避、格擋、反擊都是 0
+  // 怪物看世界等級（bugs.js 的 monsterDef；防禦主要是數值塊的 AC），士兵閃避、格擋、反擊都是 0
   function defense(game, o) {
     if (isPlayer(game, o)) return FE.Gear.playerDefense(o);
     if (isSoldier(o)) return { dodge: 0, counter: 0, block: 0, blockMax: 0 };
@@ -64,10 +64,10 @@
       if (adv > 0 && A.advDie) n += FE.rollDice(r, A.advDie, times);
       if (A.extraDie) n += FE.rollDice(r, A.extraDie, times); // 每次命中都多擲的（毒、死靈、寒冷、閃電；第三十三版之一），暴擊也擲兩次
       n = Math.round(Math.max(1, n) * FE.wlScale(A.wl, C.WL_BONUS.ATK));
-      return A.type === 'VALUE' ? FE.randInt(r, 0, n * 2) : Math.max(1, n);
+      return Math.max(1, n);
     }
     let sum = 0;
-    for (let i = 0; i < times; i++) sum += A.type === 'VALUE' ? FE.randInt(r, 0, A.atk * 2) : FE.randInt(r, Math.max(1, A.atk - 1), A.atk + 1);
+    for (let i = 0; i < times; i++) sum += FE.randInt(r, Math.max(1, A.atk - 1), A.atk + 1);
     return sum;
   }
 

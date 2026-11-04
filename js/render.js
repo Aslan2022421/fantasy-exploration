@@ -229,9 +229,9 @@
         }
         const m = monsters.get(k);
         if (m) {
-          // 平常顯示種族的字母，異常發作時閃出異常的字元（數字、亂碼、問號⋯⋯）
+          // 顯示種族的字母（第三十三版之二：異常種類只在世界底層，怪物身上不再閃異常的字元）
           const race = FE.RACES[m.race] || FE.RACES.goblin;
-          glyph = Math.random() < 0.6 ? race.glyph : flicker(FE.BUG_TYPES[m.type].glyphs);
+          glyph = race.glyph;
           bold = true;
           alpha = 1;
           if (m.boss) { fg = P['map-mid-fg']; bg = P['map-boss-bg']; }
@@ -539,7 +539,6 @@
     const p = game.player;
     const m = focusMonster();
     if (m) {
-      const T = FE.BUG_TYPES[m.type];
       const st = monStates(m);
       let aim = '';
       if (game.aim && m === game.aimTarget()) {
@@ -548,7 +547,7 @@
         const far = r && d > r.range[0];
         aim = `<span class="aim">瞄準（${game.aim.i + 1}/${game.aim.ids.length}）距離 ${d} 格${far ? '，超出正常射程（劣勢）' : ''}${game.adjacentMonsters().length ? '，貼著怪物（劣勢）' : ''}：Tab 換目標，F 或 Enter 出手，Esc 取消</span>`;
       }
-      $('tgtText').innerHTML = `<span class="tname">${esc(m.name)}</span><span class="t-hp"><span class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></span>生命 ${m.hp} / ${m.maxHp}</span>${aim}${st.length ? `<span class="t-state">${esc(st.join('、'))}</span>` : ''}<span class="dim t-extra">體型 ${FE.sizeName(m)}　異常：${esc(T.name)}　抗性：${esc(FE.resistText(m, FE.Gear.clearLevel(p)))}</span>`;
+      $('tgtText').innerHTML = `<span class="tname">${esc(m.name)}</span><span class="t-hp"><span class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></span>生命 ${m.hp} / ${m.maxHp}</span>${aim}${st.length ? `<span class="t-state">${esc(st.join('、'))}</span>` : ''}<span class="dim t-extra">體型 ${FE.sizeName(m)}　AC ${m.ac}</span>`;
     } else $('tgtText').textContent = '無';
     $('tgtText').className = m ? 'tgt' : '';
     // 快捷列：攻擊 <1>、重擊 <2>（冷卻中顯示剩幾回合、變暗）、撤退 <3>、射擊／施法 <F>、治療 <4>（牧師、聖騎士）、盾擊 <5>（戰士）
@@ -666,9 +665,13 @@
     const list = game.history.filter((h) => h.seed === game.seed);
     $('history').innerHTML = list.length
       ? list
-          .map((h) => `<li>${esc(h.time)}｜${esc(h.player)}擊敗了${esc(h.bug)}（第 ${h.chunk} 塊世界，影響 ${h.scope} 格）</li>`)
+          .map((h) =>
+            h.kind === 'campaign'
+              ? `<li>${esc(h.time)}｜第 ${h.seg} 段戰役（${esc(h.place)}，第 ${h.day} 天出現、第 ${h.cleared} 天清光）：${esc(h.player)}清除了${esc(h.content)}</li>`
+              : `<li>${esc(h.time)}｜${esc(h.player)}擊敗了${esc(h.bug)}（第 ${h.chunk} 塊世界，影響 ${h.scope} 格）</li>`
+          )
           .join('')
-      : '<li class="dim">還沒有人打倒大型怪物。</li>';
+      : '<li class="dim">還沒有清光的戰役。</li>';
   }
 
   function drawReports() {
@@ -1203,10 +1206,9 @@
     const n = W.npcAt(L.x, L.y) || game.soldierAt(L.x, L.y);
     const c = W.cell(L.x, L.y);
     if (m) {
-      const T = FE.BUG_TYPES[m.type];
       const st = monStates(m);
       const chasing = game.battle.targetId === m.id ? '你的目標' : m.chase > 0 ? '正在追你' : '還沒發現你';
-      el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>異常</dt><dd>${esc(T.name)}</dd><dt>抗性</dt><dd>${esc(FE.resistText(m, FE.Gear.clearLevel(game.player)))}</dd><dt>AC</dt><dd>${m.ac}</dd><dt>攻擊</dt><dd>${esc(monAttackText(m))}</dd>${monTraitText(m) ? `<dt>特性</dt><dd>${esc(monTraitText(m))}</dd>` : ''}${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl>${T.desc ? `<p class="dim">${esc(T.desc)}</p>` : ''}<div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
+      el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>AC</dt><dd>${m.ac}</dd><dt>攻擊</dt><dd>${esc(monAttackText(m))}</dd>${monTraitText(m) ? `<dt>特性</dt><dd>${esc(monTraitText(m))}</dd>` : ''}${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl><div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
     } else if (n) {
       const role = n.role === 'smith' ? (W.villageAt(n.x, n.y) && W.villageAt(n.x, n.y).kind === 'town' ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'soldier' ? '士兵' : '村民';
       const race = FE.PLAYER_RACES[FE.npcRace(W, n)];

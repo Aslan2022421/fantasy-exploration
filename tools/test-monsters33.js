@@ -43,24 +43,26 @@ function testMonsters33() {
 
   // 1. 數值塊：9 個種族各有小怪物與中型怪物；生命照（面數＋體質值）×1.5 捨去，每多一級加 面數÷2＋體質修正值
   {
-    const want = {
-      goblin: ['Goblin Warrior', 30, 'Goblin Boss', 39], bugbear: ['Bugbear Warrior', 56, 'Bugbear Stalker', 87],
-      werewolf: ['Worg', 52, 'Werewolf', 93], yeti: ['Polar Bear', 71, 'Polar Bear', 95], lizardfolk: ['Sahuagin Warrior', 45, 'Allosaurus', 80],
-      gnoll: ['Gnoll Warrior', 48, 'Gnoll Warrior', 60], skeleton: ['Skeleton', 40, 'Minotaur Skeleton', 72],
-      troll: ['Troll Limb', 33, 'Troll', 125], kobold: ['Kobold Warrior', 26, 'White Dragon Wyrmling', 57],
+    // 第三十三版之二：每個種族有哪幾級照使用者定的清單
+    const TIERS = {
+      small: 'goblin worg wolf giantrat boar spider icemephit lizardfolk constrictor ape gnoll hyena skeleton dustmephit troll frog crocodile kobold zombie',
+      smallElite: 'goblin bugbear spider direwolf brownbear lion hyena harpy ghoul',
+      mid: 'bugbear werewolf yeti owlbear winterwolf lizardfolk constrictor boar skeleton scorpion mummy kobold ogre zombie ghoul gargoyle',
+      midElite: 'troll crocodile shambler',
     };
     ok(Object.keys(FE.MONSTER_BLOCKS).sort().join() === Object.keys(FE.RACES).sort().join(), '每個種族都要有數值塊');
-    for (const race of Object.keys(want)) {
-      const [sName, sHp, mName, mHp] = want[race];
-      const s = FE.monsterBlock(race, 'small');
-      const d = FE.monsterBlock(race, 'mid');
-      ok(s.srd === sName && d.srd === mName && FE.monsterBlock(race, 'big') === d, `${FE.RACES[race].name}的數值塊：${s.srd}／${d.srd}`);
-      ok(FE.monsterHp(s) === sHp && FE.monsterHp(d) === mHp, `${FE.RACES[race].name}的生命 ${FE.monsterHp(s)}／${FE.monsterHp(d)}（應該 ${sHp}／${mHp}）`);
+    for (const [key, list] of Object.entries(TIERS)) {
+      const want = list.split(' ').sort().join();
+      const got = Object.keys(FE.MONSTER_BLOCKS).filter((r) => FE.MONSTER_BLOCKS[r][key]).sort().join();
+      ok(want === got, `${key} 的種族：${got}（應該 ${want}）`);
     }
+    ok(FE.monsterBlock('crocodile', 'midElite').name === '巨鱷' && FE.monsterBlock('goblin', 'minion').srd === 'Goblin Minion' && FE.monsterHp(FE.monsterBlock('goblin', 'minion')) === 27, '巨鱷、哥布林手下');
+    ok(!FE.racesOf('grassland').includes('tree') && !FE.RACES.tree && FE.RACES.gargoyle.biomes.length === 0, '甦醒樹移除、石像鬼先不在地表');
+    ok(FE.racesOf('plain', 'mid').join() === 'bugbear' && FE.racesOf('taiga', 'small').sort().join() === 'wolf,worg' && FE.racesOf('savanna', 'mid').join() === 'boar' && FE.racesOf('marsh', 'mid').join() === 'constrictor', '補缺：平原熊地精、針葉林狼與座狼、莽原野豬、濕地蟒蛇');
     // 第三十三版之一：每個數值塊（含新種族）跟原件 data/srd-monsters.json（dd2024.fr 法文版）逐欄比對：
     // AC、生命骰（骰數扣掉多加的 up 級）、體質值、攻擊加值、傷害骰與加值、傷害種類、多擲的傷害骰；有群體戰術、易傷的要跟原件一樣
     const SRD = require('fs').existsSync('data/srd-monsters.json') ? JSON.parse(require('fs').readFileSync('data/srd-monsters.json', 'utf8')).monsters : [];
-    ok(SRD.length === 55, `讀到原件的數值塊 ${SRD.length} 個（要在倉庫根目錄跑）`);
+    ok(SRD.length >= 55, `讀到原件的數值塊 ${SRD.length} 個（要在倉庫根目錄跑）`);
     const TY = { tranchants: 'slash', perforants: 'pierce', contondants: 'blunt', tranchant: 'slash' };
     const EX = { poison: 'poison', nécrotiques: 'necrotic', froid: 'cold', foudre: 'lightning' };
     const parseSrd = (t) => {
@@ -76,8 +78,8 @@ function testMonsters33() {
       return { ac: +g1(/Classe d'armure : (\d+)/), hd: hp ? [+hp[1], +hp[2]] : null, con: +g1(/CON (\d+)/), atks, pack: /Tactique de meute/.test(t), vuln: (g1(/Vulnérabilités : ([^\n]+)/) || '').split(', ').map((v) => ({ contondants: 'blunt', feu: 'fire' })[v]).filter(Boolean) };
     };
     let srdBad = [];
-    for (const race of Object.keys(FE.MONSTER_BLOCKS)) for (const tier of ['small', 'mid']) {
-      const b = FE.monsterBlock(race, tier);
+    for (const race of Object.keys(FE.MONSTER_BLOCKS)) for (const tier of Object.keys(FE.MONSTER_BLOCKS[race])) {
+      const b = FE.MONSTER_BLOCKS[race][tier];
       const src = SRD.find((m) => m.en === b.srd);
       if (!src) { srdBad.push(`${race}.${tier} 找不到 ${b.srd}`); continue; }
       const s = parseSrd(src.text);
@@ -93,13 +95,13 @@ function testMonsters33() {
       if (why.length) srdBad.push(`${race}.${tier}（${b.srd}）：${why.join('、')}`);
     }
     ok(srdBad.length === 0, `數值塊跟原件不一致：${srdBad.join('｜')}`);
-    for (const r of Object.values(FE.MONSTER_BLOCKS)) for (const b of [r.small, r.mid]) ok(b.ac >= 5 && b.hd[0] >= 1 && b.die[0] >= 1 && Number.isInteger(b.hit) && FE.DMG_TYPES[b.type] && FE.monsterHp(b) > 0, `${b.srd} 的欄位不齊`);
+    for (const r of Object.values(FE.MONSTER_BLOCKS)) for (const b of Object.values(r)) ok(b.ac >= 5 && b.hd[0] >= 1 && b.die[0] >= 1 && Number.isInteger(b.hit) && FE.DMG_TYPES[b.type] && FE.monsterHp(b) > 0, `${b.srd} 的欄位不齊`);
     // 套到怪物身上：AC、攻擊加值、傷害、生命乘異常倍率與世界等級加成
     const g = mk(3301);
     const t = mon(g, 0, 0, 'troll', 'mid', 'CLIFF');
-    ok(t.ac === 15 && t.toHit === 7 && t.die.join() === '2,6' && t.dmgBonus === 4 && t.regen === 15 && t.maxHp === Math.round(125 * 1.2) && t.hp === t.maxHp, `沼澤巨魔（斷崖）：AC ${t.ac}、+${t.toHit}、${t.die}+${t.dmgBonus}、生命 ${t.maxHp}`);
+    ok(t.ac === 15 && t.toHit === 7 && t.die.join() === '2,6' && t.dmgBonus === 4 && t.regen === 15 && t.maxHp === 125 && t.hp === t.maxHp, `沼澤巨魔（斷崖）：AC ${t.ac}、+${t.toHit}、${t.die}+${t.dmgBonus}、生命 ${t.maxHp}`);
     const k = FE.makeMonster({ type: 'UNREACHABLE', x: 0, y: 0, cells: [], scope: 2, race: 'kobold' }, 1, 4);
-    ok(k.maxHp === Math.round(26 * 1.3 * (1 + 3 * C.WL_BONUS.HP)) && k.dmgBonus === 1 && k.ac === 14, `狗頭人（斷層、世界等級 4）：生命 ${k.maxHp}、傷害加值 ${k.dmgBonus}`);
+    ok(k.maxHp === Math.round(26 * (1 + 3 * C.WL_BONUS.HP)) && k.dmgBonus === 2 && k.ac === 14, `狗頭人（斷層、世界等級 4；第三十三版之二異常不改數值）：生命 ${k.maxHp}、傷害加值 ${k.dmgBonus}`);
     // 看環境換種族：數值塊跟著換
     const m = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 2 }, 2, 1);
     m.race = 'skeleton';
@@ -110,8 +112,8 @@ function testMonsters33() {
     g2.start();
     const groups = {};
     for (const o of g2.monsters) (groups[o.group] = groups[o.group] || []).push(o);
-    const bad = g2.monsters.filter((o) => { const b = FE.monsterBlock(o.race, o.tier); return o.ac !== b.ac || o.toHit !== b.hit || o.srd !== b.srd; });
-    ok(g2.monsters.length > 0 && bad.length === 0 && Object.values(groups).every((a) => a.every((o) => o.race === a[0].race)), `開局的怪物數值照種族與分級：不對 ${bad.length} 隻`);
+    const bad = g2.monsters.filter((o) => { const b = FE.monsterBlock(o.race, FE.blockKey(o)); return o.ac !== b.ac || o.toHit !== b.hit || o.srd !== b.srd; });
+    ok(g2.monsters.length > 0 && bad.length === 0 && Object.values(groups).every((a) => a.every((o) => o === a[0] || o.race === a[a.length - 1].race)), `開局的怪物數值照種族與分級：不對 ${bad.length} 隻`);
   }
 
   // 2. AC 命中的分段：擲 20 暴擊、擲 1 失手；其他 d20＋加值比 AC 高 5 以上命中、0～4 勉強命中、不到沒命中
@@ -188,7 +190,7 @@ function testMonsters33() {
     ok(advOf(kob).every((e) => e.adv === 1), '狗頭人有群體戰術');
     g.monsters = [kob, mon(g, p.x + 3, p.y, 'goblin', 'small')];
     ok(advOf(kob).every((e) => e.adv === 0), '同伴不貼著目標就沒有');
-    ok(FE.monsterBlock('werewolf', 'mid').traits.includes('pack') && !FE.monsterBlock('kobold', 'mid').traits.includes('pack') && !FE.monsterBlock('werewolf', 'small').traits.includes('pack'), '狼人中型有、小狼人（代用的 Worg）與狗頭人中型（代用的白龍幼龍）沒有');
+    ok(FE.monsterBlock('werewolf', 'mid').traits.includes('pack') && !FE.monsterBlock('kobold', 'mid').traits.includes('pack') && !FE.monsterBlock('worg', 'small').traits.includes('pack'), '狼人有、座狼與白龍幼龍沒有');
   }
 
   // 6. 靈巧脫身：哥布林貼上來的那一回合擲潛行，到了就藏著，下一次出手有優勢（彎刀多 1d4），出手後露出來
@@ -308,14 +310,14 @@ function testMonsters33() {
   }
   // 10. 第三十三版之一：擴充種族。每個生態區抽得到原本的種族、也抽得到新的，原本的最常見；遺跡、墓地附近是殭屍或食屍鬼；同一群同族
   {
-    const OLD = { plain: 'goblin', grassland: 'goblin', shrubland: 'goblin', forest: 'bugbear', taiga: 'werewolf', tundra: 'yeti', glacier: 'yeti', jungle: 'lizardfolk', savanna: 'gnoll', desert: 'skeleton', marsh: 'troll', swamp: 'troll', lake: 'troll', mountain: 'kobold' };
+    const OLD = { plain: 'goblin', grassland: 'goblin', shrubland: 'goblin', forest: null, taiga: 'werewolf', tundra: 'yeti', glacier: 'yeti', jungle: 'lizardfolk', savanna: 'gnoll', desert: 'skeleton', marsh: 'troll', swamp: 'troll', lake: 'troll', mountain: 'kobold' };
     const rng = FE.makeRng(3310);
     for (const biome of Object.keys(FE.BIOMES)) {
       const want = FE.racesOf(biome);
       const cnt = {};
       for (let i = 0; i < 2000; i++) { const k = FE.raceFor(biome, rng); cnt[k] = (cnt[k] || 0) + 1; }
       const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
-      ok(FE.raceFor(biome) === OLD[biome] && top === OLD[biome] && want.length >= 3 && want.every((k) => cnt[k] > 0) && Object.keys(cnt).every((k) => want.includes(k)), `${FE.BIOMES[biome].name}：${JSON.stringify(cnt)}`);
+      ok((OLD[biome] === null || (FE.raceFor(biome) === OLD[biome] && top === OLD[biome])) && want.length >= 3 && want.every((k) => cnt[k] > 0) && Object.keys(cnt).every((k) => want.includes(k)), `${FE.BIOMES[biome].name}：${JSON.stringify(cnt)}`);
     }
     ok(Object.keys(FE.RACES).every((k) => FE.GROUP_SIZE[k] && FE.MONSTER_BLOCKS[k] && FE.RACES[k].glyph.length === 1), '每個種族都要有字母、一處幾隻、數值塊');
     const glyphs = Object.values(FE.RACES).map((r) => r.glyph);
@@ -346,7 +348,8 @@ function testMonsters33() {
       for (const o of g2.monsters) if (o.group != null) (by[o.group] = by[o.group] || []).push(o);
       for (const a of Object.values(by)) {
         groups++;
-        if (!a.every((o) => o.race === a[0].race)) bad++;
+        // 第三十三版之二：帶頭的菁英可能是別族、營地本來就混族、熊地精在草原帶哥布林
+        if (!a[0].camp && !a.every((o) => o === a[0] || o.race === a[a.length - 1].race)) bad++;
         races.add(a[0].race);
       }
     }
@@ -355,7 +358,7 @@ function testMonsters33() {
     // 新名字出得來（滑鼠提示與查看都寫 m.name）
     const m = FE.makeMonster({ type: 'VALUE', x: 0, y: 0, cells: [], scope: 6, race: 'owlbear' }, 1, 1);
     m.name = FE.monsterName(m);
-    ok(m.name === '中型梟熊（狂亂）', `新種族的名字：${m.name}`);
+    ok(m.name === '梟熊', `新種族的名字（第三十三版之二不顯示異常）：${m.name}`);
   }
   FE.Combat.hook = hook0;
   useClasses('legacy');

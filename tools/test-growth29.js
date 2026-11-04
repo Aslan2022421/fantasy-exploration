@@ -548,6 +548,8 @@ function testGrowth29() {
     const lim = [C.FLEE_MIN, C.FLEE_MAX];
     const setup = (n) => {
       g.monsters = [];
+      // 四周整平（第三十三版之二：怪物配置改了，冒險者站的地方旁邊可能有高低差，貼身的怪物就不算貼著）
+      for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) if (g.world.cell(p.x + dx, p.y + dy)) { g.world.setCell(p.x + dx, p.y + dy, '.', 'plain'); g.world.setHeight(p.x + dx, p.y + dy, 0); }
       const ms = [[1, 0], [0, 1], [-1, 0], [0, -1]].slice(0, n).map(([dx, dy]) => mon(g, p.x + dx, p.y + dy));
       for (const m of ms) m.atk = 3;
       g.battle.targetId = ms[0].id;

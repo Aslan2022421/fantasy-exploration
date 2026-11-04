@@ -4,68 +4,38 @@
 (function () {
   // 遊戲內的字（name、desc）只寫世界裡看得到的現象，不寫程式用語；
   // 程式裡的種類代碼（TERRAIN、VALUE⋯⋯）對應的程式錯誤寫在旁邊的註解。
-  // name 是異常的名字；glyphs 是異常發作時閃出來的字元；resist：對哪一種招式有抗性（傷害減半），主手武器的清除等級（品質，見 FE.QUALITIES）到 until 就不再減半；
-  // def 是攻防判定（combat.js）裡的防禦：dodge 閃避、counter 反擊、block 格擋機率、blockMax 格擋值上限，沒寫的是 0
+  // name 是異常的名字、desc 是現象。第三十三版之二：異常種類只在世界底層（檢查器找錯、修補時修什麼），
+  // 不再給怪物生命倍率、傷害加減、抗性與防禦；怪物怎麼打只看套上去的數值塊
   FE.BUG_TYPES = {
     // 生態區冷熱直接相鄰
     TERRAIN: {
       name: '氣候錯位',
-      glyphs: ['*', ':', '*', ':', '%'],
       desc: '冷熱兩地硬生生接在一起，周圍的空氣扭曲不定。',
-      hpMul: 1,
-      atkMod: 0,
-      resist: null,
-      def: { dodge: 0.05, counter: 0.1 },
     },
     // 走不到的區域
     UNREACHABLE: {
       name: '斷層',
-      glyphs: ['%', '%', '&', '%', '#'],
       desc: '大地裂出一道斷層，把一塊土地跟世界隔開了。',
-      hpMul: 1.3,
-      atkMod: -1,
-      resist: { kind: 'attack', until: 2 },
-      def: { block: 0.4, blockMax: 6 },
     },
     // 寶箱金幣算成負數或 NaN
     VALUE: {
       name: '狂亂',
-      glyphs: '0123456789'.split(''),
       desc: '牠守著一個被扭曲的寶箱，力氣時強時弱，捉摸不定。',
-      hpMul: 0.9,
-      atkMod: 0,
-      resist: { kind: 'attack', until: 1 },
-      def: { counter: 0.2 },
     },
     // 任務指向不存在的村民
     REFERENCE: {
       name: '虛影',
-      glyphs: ['?', '?', '¿', '?'],
       desc: '牠纏著一個不在這世上的人，身形虛實不定，很難打中。',
-      hpMul: 1,
-      atkMod: 0,
-      resist: { kind: 'deep', until: 1 },
-      def: { dodge: 0.3 },
     },
     // 相鄰兩格高度差 2 以上
     CLIFF: {
       name: '斷崖',
-      glyphs: ['▲', '▼', '|', '▲'],
       desc: '地面的高低突然斷開，四周的土地跟著崩落。',
-      hpMul: 1.2,
-      atkMod: 0,
-      resist: null,
-      def: { block: 0.2, blockMax: 4 },
     },
     // 執行時抓到的例外或不合法的狀態
     RUNTIME: {
       name: '碎裂',
-      glyphs: ['!', '!', '¡', '|'],
       desc: '空間碎裂時留下的殘響。',
-      hpMul: 1,
-      atkMod: 1,
-      resist: null,
-      def: { counter: 0.15 },
     },
   };
 
@@ -74,29 +44,24 @@
   // 分級（m.tier）：影響範圍 1～4 是小怪物，5 以上是中型怪物，12 以上才是大怪物（只來自世界級事件，第 2 階段才做）。
   // 注意 m.small 不是「小怪物」，是「會追人、會合體」的旗標，只有事件與侵蝕生出的怪物有；
   // 創世時生出的怪物就算影響範圍只有 1，m.small 也是 false，只在自己的 B 點附近徘徊
-  const TIER_PREFIX = { small: '', mid: '中型', big: '大型' };
+  // 第三十三版之二：名字看數值塊（Giant Crocodile 是巨鱷）；沒有菁英數值塊、由一群裡最強的那隻升上來的菁英，名字前加「菁英」
 
   // 體型：畫面上只顯示體型，不顯示格數
   FE.sizeName = (m) => ({ small: '小', mid: '中', big: '巨大' })[m.tier] || '小';
 
   // 怪物的名字＝（中型、大型）種族（異常），例如「中型哥布林（狂亂）」
   FE.monsterName = (m) => {
-    const race = FE.RACES[m.race] || FE.RACES.goblin;
-    return `${TIER_PREFIX[m.tier] || ''}${race.name}（${FE.BUG_TYPES[m.type].name}）`;
+    const b = FE.monsterBlock(m.race, FE.blockKey(m));
+    const name = b.name || (FE.RACES[m.race] || FE.RACES.goblin).name;
+    return m.elite && !/Elite$/.test(FE.blockKey(m)) ? '菁英' + name : name;
   };
 
-  // 攻防判定用的防禦數字：異常本身的數字，中型怪物再高一些，生成當下的世界等級每升一級再加一點
+  // 攻防判定用的防禦數字：防禦看數值塊的 AC，這裡只剩生成當下的世界等級每升一級加的一點閃避與格擋
+  // （第三十三版之二拿掉異常本身的閃避、反擊、格擋與中型怪物多加的防禦）
   FE.monsterDef = (m) => {
-    const d = FE.BUG_TYPES[m.type].def || {};
-    const mid = m.tier === 'mid' || m.tier === 'big' ? FE.CONFIG.MID_DEF : {};
     const up = (m.wl || 1) - 1;
     const B = FE.CONFIG.WL_BONUS;
-    return {
-      dodge: (d.dodge || 0) + (mid.dodge || 0) + up * B.DODGE,
-      counter: d.counter || 0,
-      block: (d.block || 0) + (mid.block || 0) + up * B.BLOCK,
-      blockMax: (d.blockMax || 0) + (mid.blockMax || 0) + up * B.BLOCK_MAX,
-    };
+    return { dodge: up * B.DODGE, counter: 0, block: up * B.BLOCK, blockMax: up * B.BLOCK_MAX };
   };
 
   // 打倒怪物時給的算力（單人份量）：小怪物 3，中型怪物 8＋影響範圍÷2，再乘世界等級的獎勵倍率
@@ -118,28 +83,40 @@
     };
   };
 
+  // 傷害骰的平均（顯示攻擊力、合體的難度評級與 BUG 量用）
+  const avgDie = (die) => (die[0] * (die[1] + 1)) / 2;
+
   // ---- 第三十三版：怪物的數值照 SRD 5.2.1（資料與出處見 config.js 的 FE.MONSTER_BLOCKS）----
-  // 這個種族、這個分級用哪一個數值塊：小怪物用 small，中型以上用 mid；沒有的種族當哥布林
-  FE.monsterBlock = (race, tier) => (FE.MONSTER_BLOCKS[race] || FE.MONSTER_BLOCKS.goblin)[tier === 'small' ? 'small' : 'mid'];
+  // 這隻怪物用哪一級的數值塊：m.bkey（small、smallElite、mid、midElite、minion），沒給就照分級（小怪物 small，中型以上 mid）
+  FE.blockKey = (m) => m.bkey || (m.tier === 'small' ? 'small' : 'mid');
+  // 數值塊屬於小怪物還是中怪物（小怪物的菁英、哥布林手下算小怪物）
+  FE.tierOfKey = (key) => (key === 'mid' || key === 'midElite' ? 'mid' : 'small');
+  // 這個種族、這一級的數值塊；這個種族沒有這一級就找最接近的（同一級的菁英或一般、再來是另一級）；沒有的種族當哥布林
+  const KEY_ORDER = { small: ['small', 'smallElite', 'minion', 'mid', 'midElite'], smallElite: ['smallElite', 'small', 'mid', 'midElite'], minion: ['minion', 'small'],
+    mid: ['mid', 'midElite', 'smallElite', 'small'], midElite: ['midElite', 'mid', 'smallElite', 'small'], big: ['midElite', 'mid'] };
+  FE.monsterBlock = (race, key) => {
+    const R = FE.MONSTER_BLOCKS[race] || FE.MONSTER_BLOCKS.goblin;
+    for (const k of KEY_ORDER[key] || KEY_ORDER.small) if (R[k]) return R[k];
+    return R[Object.keys(R)[0]];
+  };
+  // 一隻怪物值多少 BUG 量：世界等級 1 的生命 × 一下的平均傷害（第三十三版之二，使用者同意的算法）
+  FE.blockValue = (b) => FE.monsterHp(b) * (avgDie(b.die) + b.dmg + (b.extraDie ? avgDie(b.extraDie) : 0));
   // 生命：跟冒險者同一套（char.js 的 maxHp）：（生命骰面數＋體質值）×1.5 無條件捨去，每多一級（生命骰多 1 顆）再加 面數÷2＋體質修正值
   FE.monsterHp = (b) => {
     const [n, f] = b.hd;
     return Math.floor((f + b.con) * FE.CONFIG.HP_MULT) + (n - 1) * (Math.floor(f / 2) + Math.floor((b.con - 10) / 2));
   };
-  // 傷害骰的平均（顯示攻擊力與合體的難度評級用）
-  const avgDie = (die) => (die[0] * (die[1] + 1)) / 2;
   // 套上數值塊：AC、攻擊加值、傷害、特性與生命（生命再乘異常的倍率與世界等級的加成；血量回滿）。
-  // 傷害加值再加異常的 atkMod（斷層 −1、碎裂 +1）；m.atk 是一下的平均傷害（含世界等級的加成），只拿來顯示與算難度評級
+  // m.atk 是一下的平均傷害（含世界等級的加成），只拿來顯示與算難度評級；異常種類不改數值（第三十三版之二）
   FE.statMonster = (m) => {
-    const b = FE.monsterBlock(m.race, m.tier);
-    const T = FE.BUG_TYPES[m.type];
+    const b = FE.monsterBlock(m.race, FE.blockKey(m));
     const B = FE.CONFIG.WL_BONUS;
     Object.assign(m, {
       srd: b.srd,
       ac: b.ac,
       toHit: b.hit,
       die: b.die.slice(),
-      dmgBonus: b.dmg + T.atkMod,
+      dmgBonus: b.dmg,
       dmgType: b.type,
       advDie: b.advDie ? b.advDie.slice() : null,
       extraDie: b.extraDie ? b.extraDie.slice() : null, // 每次命中都多擲的傷害（毒、死靈、寒冷、閃電），照一般傷害算
@@ -150,43 +127,36 @@
       regen: b.regen || 0,
     });
     m.atk = Math.max(1, Math.round((avgDie(m.die) + (m.extraDie ? avgDie(m.extraDie) : 0) + m.dmgBonus) * FE.wlScale(m.wl, B.ATK)));
-    m.maxHp = m.hp = Math.max(1, Math.round(FE.monsterHp(b) * T.hpMul * FE.wlScale(m.wl, B.HP)));
+    m.maxHp = m.hp = Math.max(1, Math.round(FE.monsterHp(b) * FE.wlScale(m.wl, B.HP)));
     return m;
   };
   FE.hasTrait = (m, k) => !!(m && m.traits && m.traits.includes(k));
 
   // 依 B 點所在的環境決定種族，名字與數值跟著改。第三十三版之一：每個生態區有 3～5 種，給了 rng 就照權重隨機套一種
   // （沒給就是那一區原本的種族）；遺跡、墓地附近是殭屍或食屍鬼（FE.raceAt）
+  // 第三十三版之二：先定級別再套皮，只從這裡有這一級數值塊的種族挑
   FE.dressMonster = (m, world, rng) => {
-    m.race = FE.raceAt(world, m.x, m.y, rng);
+    const key = m.tier === 'small' ? 'small' : 'mid';
+    m.race = FE.raceAt(world, m.x, m.y, rng, key);
+    m.bkey = FE.hasTier(m.race, key) ? key : FE.hasTier(m.race, key + 'Elite') ? key + 'Elite' : Object.keys(FE.MONSTER_BLOCKS[m.race] || { small: 1 })[0];
     m.name = FE.monsterName(m);
     FE.statMonster(m);
     return m;
   };
 
   // 這一擊會不會被抗性減半。clear 是主手武器的清除等級（普通 0 ～ 傑作 5、傳說物 6，空手 0）
-  FE.isResisted = (m, kind, clear) => {
-    const r = FE.BUG_TYPES[m.type].resist;
-    return !!r && r.kind === kind && clear < r.until;
-  };
-
-  FE.resistText = (m, clear) => {
-    const r = FE.BUG_TYPES[m.type].resist;
-    if (!r) return '沒有抗性';
-    if (clear >= r.until) return `原本抗${FE.KIND_NAMES[r.kind]}，你的武器已經對付得了`;
-    const q = FE.QUALITIES[r.until];
-    return `${FE.KIND_NAMES[r.kind]}傷害減半（武器要${q.sym}${q.name}${q.sym}以上才不減半）`;
-  };
+  // 第三十三版之二：異常種類不再給怪物抗性，抗不抗只看數值塊（易傷見 combat.js）
+  FE.isResisted = () => false;
 
   // wl 是生成當下的世界等級：血量、傷害、打倒時的經驗值與算力照等級加成，之後不再變。
   // 第三十三版：血量、AC、攻擊加值、傷害照種族與分級的 SRD 數值塊（statMonster）；影響範圍只決定分級、經驗值與算力。
   // 種族沒給先當哥布林，dressMonster 看環境換種族時數值跟著換
   FE.makeMonster = function (d, id, wl) {
-    const T = FE.BUG_TYPES[d.type];
     const B = FE.CONFIG.WL_BONUS;
     wl = wl || 1;
-    // 這一版創世時的大錯也只算中型；大怪物（tier 'big'）要由世界級事件指定，d.tier 是留給第 2 階段用的
-    const tier = d.tier || (d.scope >= FE.CONFIG.MID_SCOPE ? 'mid' : 'small');
+    // 這一版創世時的大錯也只算中型；大怪物（tier 'big'）要由世界級事件指定，d.tier 是留給第 2 階段用的。
+    // 給了數值塊（d.block）就照數值塊的級別（第三十三版之二：創世時照 BUG 量配好的組合）
+    const tier = d.tier || (d.block ? FE.tierOfKey(d.block) : d.scope >= FE.CONFIG.MID_SCOPE ? 'mid' : 'small');
     const boss = tier === 'big';
     const m = {
       id,
@@ -200,7 +170,9 @@
       tier,
       boss,                     // 大怪物：打倒時寫進歷史紀錄（這一版不會出現）
       race: d.race || 'goblin',
-      name: TIER_PREFIX[tier] + T.name, // spawnMonster 會依環境改成「種族（異常）」
+      bkey: d.block || null,    // 用哪一級的數值塊（FE.blockKey），沒給照分級
+      elite: !!d.elite,          // 戰役帶頭的菁英（第三十三版之二）
+      name: '',                 // statMonster 照數值塊填
       maxHp: 1,                 // 生命、AC、攻擊加值、傷害由 statMonster 照數值塊填
       hp: 1,
       atk: 1,
@@ -215,11 +187,12 @@
       returnTurns: 0,
       members: null,            // 合體怪物：原本那幾隻小怪物，打倒時一起修
     };
-    return FE.statMonster(m);
+    FE.statMonster(m);
+    m.name = FE.monsterName(m);
+    return m;
   };
 
   FE.progress = (m) => Math.round((1 - m.hp / m.maxHp) * 100);
-
 
   // 把被生成器刪掉的村民放回給任務那個人的村莊裡
   function restoreVillager(game, giver, id, name) {

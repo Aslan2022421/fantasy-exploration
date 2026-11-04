@@ -102,7 +102,7 @@
 
   // 一群小怪物的難度評級（參考《奇幻探索物語》）：生命值＋單回合最高傷害＋數量
   function rating(group) {
-    const maxDmg = (m) => (m.type === 'VALUE' ? m.atk * 2 : m.atk + 1);
+    const maxDmg = (m) => m.atk + 1;
     return group.reduce((s, m) => s + m.hp + maxDmg(m), 0) + group.length;
   }
 
@@ -141,6 +141,23 @@
     let at = group.slice().sort((a, b) => dist(a, { x: cx, y: cy }) - dist(b, { x: cx, y: cy }))[0];
     game.monsters = game.monsters.filter((m) => !group.includes(m));
     if (game.world.inBuffer(at.x, at.y)) at = game.findFreeNear(at.x, at.y) || at;
+    // 第三十三版之二：動盪、失序時有機率套上營地（失序的營地，清掉後留下遺留地點）；BUG 量配不上任何營地就照舊合成一隻
+    const st = FE.Stability.state(game);
+    const scope = group.reduce((s, m) => s + m.scope, 0);
+    if (C.CAMP_CHANCE[st] > 0 && game.rng() < C.CAMP_CHANCE[st]) {
+      const pick = game.compose(at.x, at.y, scope, { camps: true, campaign: false });
+      if (pick.camp) {
+        const d = { type, x: at.x, y: at.y, cells: group.flatMap((m) => m.cells), scope, data: {} };
+        const camp = game.spawnList(d, pick.list, null, { camp: pick.camp, origin: 'disorder' });
+        if (camp.length) {
+          for (const m of camp) m.members = group; // 最後倒下的那隻把合進來的錯一起修好
+          game.say(`${group.length} 隻怪物沒有清掉，聚成了一座${FE.CAMPS[pick.camp].name}！`, 'bug');
+          return;
+        }
+        game.monsters.push(...group); // 放不下就放回去，下次再合
+        return;
+      }
+    }
     const wl = FE.Stability.worldLevel(game);
     const big = FE.makeMonster(
       { type, x: at.x, y: at.y, cells: group.flatMap((m) => m.cells), scope: group.reduce((s, m) => s + m.scope, 0), data: {} },

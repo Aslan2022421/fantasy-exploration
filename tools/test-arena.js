@@ -79,10 +79,13 @@ const ARENA_SCOPE = { small: [2, 4], mid: [6, 10] };
 // 第三十三版起種族決定數值塊：競技場一律用同一個種族（預設哥布林，整平的空地本來就是哥布林；FE_ARENA_RACE 可以指定別的種族）。
 // 原本看腳下的生態區，對打途中怪物侵蝕地面（苔原、沙漠）之後，後面生的怪物會變成雪怪、骷髏
 const ARENA_RACE = process.env.FE_ARENA_RACE || 'goblin';
+// 第三十三版之二：哥布林沒有中怪物，中型改用同一片平原的中怪物熊地精潛獵者（FE_ARENA_MID 可以指定別的種族）
+const ARENA_MID = process.env.FE_ARENA_MID || 'bugbear';
 function arenaMonster(game, tier, wl, i, dx) {
   const p = game.player;
   const sc = ARENA_SCOPE[tier][i % 2];
-  const m = FE.makeMonster({ type: ARENA_TYPES[i % ARENA_TYPES.length], x: p.x + dx, y: p.y, cells: [], scope: sc, data: {}, race: ARENA_RACE }, 700000 + i, wl);
+  const race = tier === 'mid' ? ARENA_MID : ARENA_RACE;
+  const m = FE.makeMonster({ type: ARENA_TYPES[i % ARENA_TYPES.length], x: p.x + dx, y: p.y, cells: [], scope: sc, data: {}, race, block: tier === 'mid' ? 'mid' : 'small' }, 700000 + i, wl);
   m.name = FE.monsterName(m);
   m.home = { x: m.x, y: m.y };
   game.monsters = [m];

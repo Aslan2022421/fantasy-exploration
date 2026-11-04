@@ -320,7 +320,7 @@
   // 出入口可以開在哪些方向（東、西、南、北）：從中央往外鋪 3 格寬的通道，一直鋪到工作範圍外三格，通道上不能有水或山壁
   // （巨石可以，路經過時清掉）。外面被水擋住的方向就不開，換另一個方向。
   // 第三十四版（使用者定的：出口不朝湖開）：通道再往外多看「聚落周圍的圈＋3 格」（far，跟 World 的 openExits 確認走不走得出去的距離一樣），
-  // 那一段有湖或山壁也不開；只看已經長出來的格子
+  // 那一段有湖或山壁也不開；還沒長出來的格子看將來會不會是湖（FE.futureLake）
   function exitViable(world, box, far) {
     if (far === undefined) far = C.SETTLE_BUFFER[box.kind || 'village'] + 3;
     return DIRS.map(([dx, dy]) => {
@@ -330,7 +330,7 @@
         let y = box.cy + (dx ? o : 0);
         while (dx ? (dx > 0 ? x <= lim : x >= lim) : dy > 0 ? y <= lim : y >= lim) {
           const c = world.cell(x, y);
-          if (c && (c.t === '≈' || c.t === '█')) return false; // 第三十四版：山壁也開不出去
+          if (c ? c.t === '≈' || c.t === '█' : FE.futureLake(world, x, y)) return false; // 第三十四版：山壁也開不出去；還沒長出來的格子看將來是不是湖
           x += dx;
           y += dy;
         }

@@ -9,7 +9,7 @@ const path = require('path');
 const vm = require('vm');
 const ROOT = process.env.FE_ROOT ? path.resolve(process.env.FE_ROOT) + path.sep : path.join(__dirname, '..', 'js') + path.sep;
 global.window = global;
-for (const f of ['config', 'rng', 'world', 'checker', 'bugs', 'steading', 'char', 'gear', 'combat', 'stability', 'events', 'ai', 'game', 'save']) {
+for (const f of ['config', 'rng', 'world', 'checker', 'bugs', 'steading', 'plans', 'char', 'gear', 'combat', 'stability', 'events', 'ai', 'game', 'save']) {
   vm.runInThisContext(fs.readFileSync(ROOT + f + '.js', 'utf8'), { filename: f + '.js' });
   if (f === 'rng') {
     const mem = new Map();

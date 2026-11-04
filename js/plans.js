@@ -357,7 +357,7 @@
     v.y1 = by1 + oy;
   }
 
-  // 圖樣的出入口都開得出去：每個出入口外 3 格寬的通道，從圖樣的邊一直看到外面「聚落周圍的圈＋6 格」，不能有水或山壁（只看已經長出來的格子）。
+  // 圖樣的出入口都開得出去：每個出入口外 3 格寬的通道，從圖樣的邊一直看到外面「聚落周圍的圈＋6 格」，不能有水或山壁（還沒長出來的格子看將來會不會是湖）。
   // 跟 steading.js 的 exitViable 同一個道理（出口不朝湖開）；圖樣的出入口固定，所以只回答全部開不開得出去
   function exitsViable(world, kind, rot, box) {
     const P = get(kind, rot);
@@ -369,7 +369,7 @@
           const x = dx > 0 ? box.x0 + P.w - 1 + i : dx < 0 ? box.x0 - i : box.x0 + e.c + o;
           const y = dy > 0 ? box.y0 + P.h - 1 + i : dy < 0 ? box.y0 - i : box.y0 + e.c + o;
           const c = world.cell(x, y);
-          if (c && (c.t === '≈' || c.t === '█')) return false;
+          if (c ? c.t === '≈' || c.t === '█' : FE.futureLake(world, x, y)) return false;
         }
       }
     }

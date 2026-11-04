@@ -629,6 +629,16 @@
     return { h: (x, y) => h[at(x, y)], lake: (x, y) => lake[at(x, y)] === 1 };
   };
 
+  // 第三十四版：還沒長出來的格子將來是不是湖（湖只看種子和座標，削坡之前就決定了）。在最外圈以外的格子永遠不會長出來，回傳 false。
+  // 選址時看出入口朝不朝湖用：通道伸進還沒長出來的小塊時，聚落預留才把那些小塊長出來，不先看會在長出來之後才發現出口朝湖
+  FE.futureLake = function (world, x, y) {
+    const [lo, hi] = world.ringRange(C.RING_MAX);
+    const cx = Math.floor(x / C.CHUNK_W);
+    const cy = Math.floor(y / C.CHUNK_H);
+    if (cx < lo || cx > hi || cy < lo || cy > hi) return false;
+    return lakeScore(world.seed, x, y, rawHeight(world.seed, x, y)) > C.LAKE_CUT;
+  };
+
   FE.heightAt = function (seed, x, y) {
     return FE.heightGrid(seed, { x0: x, y0: y, x1: x + 1, y1: y + 1 }).h(x, y);
   };

@@ -28,18 +28,19 @@ function makeLevelChar(cls, level, wl, seed) {
   for (const g of FE.Gear.equipped(p)) g.q = q;
   const c = FE.CLASSES[cls];
   const E = FE.levelExp(level);
-  const lv = (k) => ({ lv: skillLevelFor(E * SKILL_PER_EXP[k]), n: 0 });
+  // 技能照累計經驗換算；第三十三版之一起，量競技場時另外保底出手用的技能（見 arenaGame）
+  const lvOf = (id, k) => ({ lv: skillLevelFor(E * SKILL_PER_EXP[k]), n: 0 });
   const w = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
-  p.skills.dodge = lv('dodge');
-  if (p.equip.off && FE.GEAR[p.equip.off.type].cat === 'shield') p.skills.shield = lv('shield');
+  p.skills.dodge = lvOf('dodge', 'dodge');
+  if (p.equip.off && FE.GEAR[p.equip.off.type].cat === 'shield') p.skills.shield = lvOf('shield', 'shield');
   const aid = FE.Char.armorSkillId(p);
-  if (aid && aid !== 'light') p.skills[aid] = lv('armor'); // 輕甲幾乎擋不下傷害（皮甲物理減傷 0），機器人也練不起來，不給
+  if (aid && aid !== 'light') p.skills[aid] = lvOf(aid, 'armor'); // 輕甲幾乎擋不下傷害（皮甲物理減傷 0），機器人也練不起來，不給
   if (w) {
-    p.skills[w.skill] = lv('main');
-    if (w.ammo) p.skills.shoot = lv('fight');
-    else p.skills.fight = lv('fight');
+    p.skills[w.skill] = lvOf(w.skill, 'main');
+    if (w.ammo) p.skills.shoot = lvOf('shoot', 'fight');
+    else p.skills.fight = lvOf('fight', 'fight');
   }
-  if (c.spell) p.skills.staff = lv('main');
+  if (c.spell) p.skills.staff = lvOf('staff', 'main');
   return game;
 }
 // 競技場：把冒險者放在一塊整平的空地上（聚落的圈外），怪物也直接放上去對打；關掉創世、掉落、經驗值，免得量測途中角色變了
@@ -47,6 +48,10 @@ function arenaGame(cls, level, wl, seed) {
   const game = makeLevelChar(cls, level, wl, seed);
   const w = game.world;
   const p = game.player;
+  // 機器人開局沒有擲起始技能（全部 0 級），真正的玩家一定擲過，挑的武器至少 1 級。1 級角色累計經驗是 0，技能會算成 0 級、沒有熟練加值，
+  // 比真正開局的角色弱；所以競技場裡出手用的技能（近戰武器、射擊、杖術）至少算 1 級（第三十三版之一）
+  const mainW = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
+  for (const k of [mainW && mainW.skill, mainW && mainW.ammo && 'shoot', FE.CLASSES[cls].spell && 'staff']) if (k && p.skills[k] && p.skills[k].lv < 1) p.skills[k].lv = 1;
   let spot = null;
   w.forEachCell((x, y) => {
     if (spot || w.inBuffer(x, y) || !w.passable(x, y)) return;

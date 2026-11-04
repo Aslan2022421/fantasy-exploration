@@ -42,7 +42,7 @@ function testSpells31() {
     p.skills.staff.lv = 6;
     p.equip.main.q = 2; // 精良：命中 +2
     const a = Ch.profile(p, null, 'bolt');
-    ok(a.hit === 3 + 2 + 1 && a.dmg === 3 + 2 && a.skills.join() === 'staff' && a.type === 'magic' && a.die.join() === '1,8', `拿法杖的魔法攻擊：命中 ${a.hit}、傷害 ${a.dmg}`);
+    ok(a.hit === 3 + 2 + 3 && a.dmg === 3 + 2 && a.skills.join() === 'staff' && a.type === 'magic' && a.die.join() === '1,8', `拿法杖的魔法攻擊：命中 ${a.hit}、傷害 ${a.dmg}`);
     p.equip.main = null;
     const b = Ch.profile(p, null, 'bolt');
     ok(b.hit === 3 && b.dmg === 3 && b.skills.length === 0, `沒拿法杖：命中 ${b.hit}、傷害 ${b.dmg}`);

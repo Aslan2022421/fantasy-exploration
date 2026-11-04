@@ -789,7 +789,7 @@
     // 這項武器技能管哪些武器、學會哪些精通（一律要 5 級才會）
     const weaponsOf = (id) => Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon' && (FE.GEAR[k].skill === id || FE.GEAR[k].meleeSkill === id));
     const effect = (id, lv) => {
-      const hit = Math.floor(lv / C.SKILL_HIT_EVERY);
+      const hit = lv <= 0 ? 0 : Math.min(C.PROF_MAX, C.PROF_BASE + Math.floor(lv / C.PROF_EVERY)); // 熟練加值（跟 char.js 的 lvHit 同一套）
       const dmg = Math.floor(lv / C.SKILL_DMG_EVERY);
       if (id === 'fight') return `所有近戰出手（含徒手）命中 +${Math.floor(lv / C.FIGHT_HIT_EVERY)}，跟武器技能疊加`;
       if (id === 'shoot') return `所有遠程（射擊、投擲）命中 +${hit}`;

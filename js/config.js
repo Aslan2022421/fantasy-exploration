@@ -48,7 +48,10 @@ FE.CONFIG = {
   SKILL_INT_STEP: 0.1,  // 每點智力修正值，技能經驗 ±10%
   SKILL_INT_MIN: 0.5,   // 技能經驗倍率最少 ×0.5
   SKILL_LEGEND: 15,     // 15 級起是傳奇（顯示「傳奇 +N」）
-  SKILL_HIT_EVERY: 5,   // 武器技能每幾級，出手 d20 +1
+  // 熟練加值（第三十三版之一，取代原本「武器技能每 5 級 +1」）：技能 1～4 級 +2，之後每 5 級 +1，最多 +6（20 級以上）
+  PROF_BASE: 2,
+  PROF_EVERY: 5,
+  PROF_MAX: 6,
   SKILL_DMG_EVERY: 3,   // 武器技能每幾級，傷害 +1
   FIGHT_HIT_EVERY: 10,  // 格鬥（所有近戰出手都練）每幾級，近戰出手 d20 +1，跟武器技能疊加
   SKILL_DODGE: 0.01,    // 閃避技能每級，閃避機率 +1%

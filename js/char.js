@@ -65,8 +65,12 @@
     if (mode === 'melee' && d.ammo) return d.meleeSkill || null;
     return d.skill || null;
   }
-  // 技能等級帶來的命中（每 5 級 +1）與傷害（每 3 級 +1）
-  const lvHit = (p, id) => (id ? Math.floor(skillLv(p, id) / C.SKILL_HIT_EVERY) : 0);
+  // 技能等級帶來的命中與傷害（每 3 級 +1）。命中是熟練加值（第三十三版之一，使用者定的，照技能等級的固定值、不疊加）：
+  // 1～4 級 +2、5～9 級 +3、10～14 級 +4、15～19 級 +5、20 級以上 +6；0 級（涉獵）沒有。只看出手用的那一項技能
+  const lvHit = (p, id) => {
+    const lv = id ? skillLv(p, id) : 0;
+    return lv <= 0 ? 0 : Math.min(C.PROF_MAX, C.PROF_BASE + Math.floor(lv / C.PROF_EVERY));
+  };
   const lvDmg = (p, id) => (id ? Math.floor(skillLv(p, id) / C.SKILL_DMG_EVERY) : 0);
   const skillHit = (p, w, mode) => lvHit(p, weaponSkill(p, w, mode));
   const skillDmg = (p, w, mode) => lvDmg(p, weaponSkill(p, w, mode));

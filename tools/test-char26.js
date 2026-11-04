@@ -287,9 +287,9 @@ function testCharacter() {
     // 跟品質、技能、超重疊加
     p.attr.dex = 16;
     p.equip.main = G.make('spear', 2, g.nextGearId++); // 精良 +2
-    p.skills.spear.lv = 10; // 長槍練的是槍術，+2；格鬥 10 級再 +1
+    p.skills.spear.lv = 10; // 長槍練的是槍術，熟練加值 +4（第三十三版之一）；格鬥 10 級再 +1
     p.skills.fight.lv = 10;
-    ok(G.hitMod(p) === 3 + 2 + 2 + 1 && roll() - base === 8, `敏捷 +3、精良 +2、槍術 10 級 +2、格鬥 10 級 +1 該疊成 +8：${roll() - base}`);
+    ok(G.hitMod(p) === 3 + 2 + 4 + 1 && roll() - base === 10, `敏捷 +3、精良 +2、槍術 10 級熟練 +4、格鬥 10 級 +1 該疊成 +10：${roll() - base}`);
     p.attr.dex = 10;
     p.equip.main = G.make('spear', 0, g.nextGearId++);
     p.skills.spear.lv = 0;
@@ -480,10 +480,10 @@ function testCharacter() {
     // 智力修正值：每點 ±10%，最少 ×0.5
     const iq = (v) => { p.attr.int = v; p.skills.dodge = { lv: 0, n: 0 }; Ch.useSkill(g, 'dodge', 10); return p.skills.dodge.n; };
     ok(iq(10) === 10 && iq(12) === 11 && iq(18) === 14 && iq(8) === 9 && iq(3) === 6 && iq(1) === 5, `智力對經驗的倍率：10→${iq(10)}、12→${iq(12)}、18→${iq(18)}、8→${iq(8)}、3→${iq(3)}、1→${iq(1)}（每點 ±10%，最少 ×0.5）`);
-    // 加成：武器技能命中每 5 級 +1、傷害每 3 級 +1（只算主手武器那一項）
+    // 加成：武器技能命中是熟練加值（1～4 級 +2、每 5 級再 +1、最多 +6，0 級沒有；第三十三版之一）、傷害每 3 級 +1（只算主手武器那一項）
     const q = mk(41, 'warrior').player;
     const bonus = (lv) => { q.skills.sword.lv = lv; return [Ch.skillHit(q), Ch.skillDmg(q)]; };
-    ok(bonus(0).join() === '0,0' && bonus(2).join() === '0,0' && bonus(3).join() === '0,1' && bonus(4).join() === '0,1' && bonus(5).join() === '1,1' && bonus(6).join() === '1,2' && bonus(10).join() === '2,3' && bonus(15).join() === '3,5' && bonus(20).join() === '4,6' && bonus(40).join() === '8,13', '武器技能的命中與傷害加成不對');
+    ok(bonus(0).join() === '0,0' && bonus(2).join() === '2,0' && bonus(3).join() === '2,1' && bonus(4).join() === '2,1' && bonus(5).join() === '3,1' && bonus(6).join() === '3,2' && bonus(10).join() === '4,3' && bonus(15).join() === '5,5' && bonus(20).join() === '6,6' && bonus(40).join() === '6,13', '武器技能的命中與傷害加成不對');
     q.skills.sword.lv = 20;
     q.equip.main = G.make('dagger', 0, 80);
     ok(Ch.skillHit(q) === 0 && Ch.skillDmg(q) === 0 && Ch.weaponSkill(q) === 'knife', '短刀練刀術，不吃劍術');
@@ -495,20 +495,20 @@ function testCharacter() {
     q.equip.main = G.make('sword', 0, 79);
     q.skills.sword.lv = 10;
     q.skills.fight.lv = 10;
-    ok(Ch.profile(q, q.equip.main, 'melee').hit === Ch.attrMod(q, 'dex') + 2 + 1 && Ch.profile(q, q.equip.main, 'melee').skills.join() === 'sword,fight', '格鬥 10 級＋劍術 10 級的近戰命中該疊成 +3');
+    ok(Ch.profile(q, q.equip.main, 'melee').hit === Ch.attrMod(q, 'dex') + 4 + 1 && Ch.profile(q, q.equip.main, 'melee').skills.join() === 'sword,fight', '格鬥 10 級＋劍術 10 級（熟練 +4）的近戰命中該疊成 +5');
     q.skills.fight.lv = 0;
     q.equip.main = G.make('bow', 0, 81);
     ok(Ch.weaponSkill(q) === 'bow' && Ch.weaponSkill(q, undefined, 'melee') === 'sword', '弓箭射擊練弓術，拿弓近戰練劍術');
-    // 遠程：武器技能只加傷害，命中看射擊（每 5 級 +1）
+    // 遠程：武器技能只加傷害，命中看射擊的熟練加值
     q.skills.bow.lv = 9;
     q.skills.shoot.lv = 10;
     const sh = Ch.profile(q, q.equip.main, 'shoot');
-    ok(sh.dmg === Ch.attrMod(q, 'dex') + 3 && sh.hit === Ch.attrMod(q, 'dex') + 2 && sh.skills.join() === 'bow,shoot', `弓箭 9 級傷害 +3、射擊 10 級命中 +2：傷害 ${sh.dmg}、命中 ${sh.hit}`);
+    ok(sh.dmg === Ch.attrMod(q, 'dex') + 3 && sh.hit === Ch.attrMod(q, 'dex') + 4 && sh.skills.join() === 'bow,shoot', `弓箭 9 級傷害 +3、射擊 10 級熟練 +4：傷害 ${sh.dmg}、命中 ${sh.hit}`);
     q.equip.main = G.make('dagger', 0, 83);
     q.skills.knife.lv = 6;
     const th = Ch.profile(q, q.equip.main, 'throw');
     const best = Math.max(Ch.attrMod(q, 'str'), Ch.attrMod(q, 'dex'));
-    ok(th.dmg === best + 2 && th.hit === best + 2 && th.skills.join() === 'knife,shoot', `投擲短刀：傷害吃刀術（+2）、命中吃射擊（+2）：傷害 ${th.dmg}、命中 ${th.hit}`);
+    ok(th.dmg === best + 2 && th.hit === best + 4 && th.skills.join() === 'knife,shoot', `投擲短刀：傷害吃刀術（+2）、命中吃射擊（熟練 +4）：傷害 ${th.dmg}、命中 ${th.hit}`);
     q.equip.main = G.make('staff', 0, 82);
     ok(Ch.weaponSkill(q) === 'staff', '法杖練杖術');
     // 實際的傷害加成：劍術 6 級 → 傷害 +2、命中 +1
@@ -523,7 +523,7 @@ function testCharacter() {
     FE.Combat.hook = hook0;
     ok(Math.min(...seen) === 1 + 2 && Math.max(...seen) === 10 + 2, `長劍 6 級（副手空著 1d10）傷害該 +2：量到 ${Math.min(...seen)}～${Math.max(...seen)}`);
     p2.skills.sword = { lv: 6, n: 0 };
-    ok(G.hitMod(p2) === 1 + 1, `劍術 6 級命中該 +1（再加敏捷 13 的 +1）：${G.hitMod(p2)}`);
+    ok(G.hitMod(p2) === 3 + 1, `劍術 6 級熟練 +3（再加敏捷 13 的 +1）：${G.hitMod(p2)}`);
   }
   // 技能怎麼算用一次
   {
@@ -785,7 +785,7 @@ function testCharacter() {
       const od = p.equip.off.dur;
       g.strike('deep', m);
       const dl = lines(g, /^你對.*重擊/);
-      ok(dl.length === 1 && lines(g, /^你用副手/).length === 0 && modOf(dl[0]) === base - 1 && uses(p, 'knife') - u1 <= C.SKILL_EXP_HIT * Ch.expFactor(p) + 1e-6 && uses(p, 'knife') > u1 && p.equip.off.dur === od, `重擊只用主手：${dl.length} 行、擲骰 ${dl.length && modOf(dl[0])}（單手 ${base}，技能重設後少刀術 5 級的 1）`);
+      ok(dl.length === 1 && lines(g, /^你用副手/).length === 0 && modOf(dl[0]) === base - 3 && uses(p, 'knife') - u1 <= C.SKILL_EXP_HIT * Ch.expFactor(p) + 1e-6 && uses(p, 'knife') > u1 && p.equip.off.dur === od, `重擊只用主手：${dl.length} 行、擲骰 ${dl.length && modOf(dl[0])}（單手 ${base}，技能重設後少刀術 5 級的熟練 +3）`);
       // 副手也吃自己的命中加值（品質）
       p.equip.off = G.make('dagger', 3, g.nextGearId++);
       p.equip.off.dur = p.equip.off.max = 1000;
@@ -823,6 +823,7 @@ function testCharacter() {
     {
       const { g, p, m } = setup();
       m.type = 'CLIFF'; // 沒有自己的反擊機率，反擊只可能來自必定反擊
+      m.ac = 10 + G.hitMod(p); // 讓擲 0～4 落在勉強命中（第三十三版之一有熟練加值後勉強命中變少，量不到兩下都勉強命中）
       p.equip.off = G.make('dagger', 0, g.nextGearId++);
       let ev = [];
       FE.Combat.hook = (e) => { if (e.by === 'player' && !e.counter) ev.push(e); };

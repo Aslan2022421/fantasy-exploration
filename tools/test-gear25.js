@@ -62,7 +62,8 @@ function testGear() {
     ok(nw('warhammer') === '1d8/blunt/push/mace/5/30/3/32500-37500' && W.warhammer.versatile === 10, `戰錘 ${nw('warhammer')}`);
     ok(nw('whip') === '1d4/slash/slow/whip/3/10/0/22500-27500' && W.whip.finesse && W.whip.reach && !W.whip.ore, `鞭子 ${nw('whip')}`);
     ok(nw('crossbow') === '1d8/pierce/slow/crossbow/5/35/0/15000-0' && W.crossbow.ammo === 'bolt' && W.crossbow.range.join() === '5,20' && W.crossbow.loading && W.crossbow.twoHand && W.crossbow.meleeSkill === 'mace' && !W.crossbow.ore, `輕弩 ${nw('crossbow')}`);
-    ok(Object.values(W).filter((d) => d.cat === 'weapon' && d.twoHand).length === 2 && Object.values(W).every((d) => d.cat !== 'weapon' || (d.sold && d.drop)), '只有弓和輕弩有雙手標籤；所有武器都販售、都會掉落');
+    const newRanged = ['musket', 'pistol', 'blowgun'];
+    ok(W.bow.twoHand && W.crossbow.twoHand && newRanged.every((t) => W[t].sold && W[t].drop) && W.lance.sold && W.lance.drop, '弓弩雙手規則或第二批遠程武器、騎槍的販售與掉落');
     ok(FE.BAG_ITEMS.arrow.bundle === 20 && FE.BAG_ITEMS.arrow.weight === 1 && W.arrow.cat === 'ammo' && W.arrow.price === 5 && W.arrow.bundle === 20 && W.arrow.sold && W.arrow.drop, '箭矢資料不對');
     ok(FE.BAG_ITEMS.bolt.bundle === 20 && FE.BAG_ITEMS.bolt.weight === 1.5 && W.bolt.cat === 'ammo' && W.bolt.price === 5 && W.bolt.bundle === 20 && W.bolt.sold && W.bolt.drop, '弩矢資料不對（一捆 20 支、1.5 磅、價格 5）');
     // 第二十九版追加：防具換成十二件（類別、物理／魔法減傷、力量需求、重量、價格、隱匿劣勢）
@@ -262,21 +263,25 @@ function testGear() {
     ok(role(smith) === '鐵匠' && role(wsmith) === '武器匠' && role(armorer) === '盔甲匠', `工匠的身分 ${role(smith)}／${role(wsmith)}／${role(armorer)}`);
     const econ = (v) => FE.Steading.shopFactor(v);
     const open = (n) => { g.talking = n.id; g.talkPage = 'main'; };
-    const dump = (n, pageIds) => { // 把這家店所有「買」的選項走一遍
+    const dump = (n) => { // 把這家店所有「買」的選項走一遍
       const found = [];
+      const visited = new Set();
       open(n);
-      const walk = (depth) => {
-        for (const o of g.talkOptions(n).options) {
+      const walk = () => {
+        const page = g.talkPage;
+        if (visited.has(page)) return;
+        visited.add(page);
+        for (const o of g.talkOptions(n).options.slice()) {
           if (o.id.startsWith('buyItem:')) found.push(o.id);
-          else if ((o.id === 'buy' || o.id.startsWith('cat:') || o.id.startsWith('qual:')) && depth > 0) {
+          else if (o.id === 'buy' || o.id.startsWith('cat:') || o.id.startsWith('qual:') || o.id.startsWith('buyPage:')) {
             const page0 = g.talkPage;
             g.choose(n, g.talkOptions(n).options.findIndex((x) => x.id === o.id));
-            walk(depth - 1);
+            walk();
             g.talkPage = page0;
           }
         }
       };
-      walk(3);
+      walk();
       g.talkPage = 'main';
       return [...new Set(found)];
     };
@@ -285,12 +290,16 @@ function testGear() {
     const sW = dump(wsmith);
     const sA = dump(armorer);
     const has = (list, t, q) => list.includes(`buyItem:${t}:${q}`);
-    // 第二十九版：村莊鐵匠加短劍、戰斧、硬頭錘、戰錘；城鎮武器匠再加巨斧、巨劍、鞭子、輕弩和弩矢
-    const WEAPONS_V = ['sword', 'spear', 'shortspear', 'dagger', 'bow', 'staff', 'arrow', 'shortsword', 'waraxe', 'club', 'warhammer'];
-    const WEAPONS = WEAPONS_V.concat(['greataxe', 'greatsword', 'whip', 'crossbow', 'bolt']);
-    ok(WEAPONS_V.concat(['padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield', 'pick', 'sickle']).every((t) => has(sSmith, t, 0)) && sSmith.length === 20 && !has(sSmith, 'heavy', 0) && !has(sSmith, 'medium', 0) && !has(sSmith, 'greataxe', 0) && !has(sSmith, 'whip', 0) && !has(sSmith, 'crossbow', 0), `鐵匠賣的東西 ${sSmith}`);
-    ok(WEAPONS.every((t) => has(sW, t, 0) && has(sW, t, 1)) && has(sW, 'pick', 0) && has(sW, 'sickle', 0) && sW.length === 34, `武器匠賣的東西 ${sW}`);
-    ok(['padded', 'light', 'studded', 'hide', 'chainshirt', 'medium', 'breastplate', 'halfplate', 'ringmail', 'heavy', 'splint', 'plate', 'robe', 'shield'].every((t) => has(sA, t, 0) && has(sA, t, 1)) && sA.length === 28, `盔甲匠賣的東西 ${sA}`);
+    const BLACKSMITH = ['sword', 'shortsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'club', 'warhammer', 'handaxe', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'arrow', 'sling', 'slingBullet', 'potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower', 'padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield', 'pick', 'sickle'];
+    const WEAPONSMITH = ['sword', 'shortsword', 'greatsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'greataxe', 'handaxe', 'club', 'warhammer', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'whip', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'crossbow', 'handcrossbow', 'heavycrossbow', 'sling', 'arrow', 'bolt', 'slingBullet', 'musket', 'pistol', 'blowgun', 'bullet', 'needle', 'potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower', 'pick', 'sickle'];
+    const ARMORER = ['padded', 'light', 'studded', 'robe', 'hide', 'chainshirt', 'medium', 'breastplate', 'halfplate', 'ringmail', 'heavy', 'splint', 'plate', 'shield'];
+    const exactTypes = (list) => [...new Set(list.map((id) => id.split(':')[1]))].sort();
+    const allQ = (list, types, qualities) => types.every((t) => qualities.every((q) => has(list, t, q)));
+    ok(exactTypes(sSmith).join() === BLACKSMITH.slice().sort().join() && sSmith.length === BLACKSMITH.length && allQ(sSmith, BLACKSMITH, [0]), `鐵匠賣的東西 ${sSmith}`);
+    const weaponGear = WEAPONSMITH.filter((t) => FE.GEAR[t] && FE.GEAR[t].cat !== 'tool');
+    const weaponTools = WEAPONSMITH.filter((t) => FE.GEAR[t] && FE.GEAR[t].cat === 'tool');
+    ok(exactTypes(sW).join() === WEAPONSMITH.slice().sort().join() && sW.length === weaponGear.length * 2 + weaponTools.length + WEAPONSMITH.filter((t) => !FE.GEAR[t]).length && allQ(sW, weaponGear, [0, 1]) && allQ(sW, WEAPONSMITH.filter((t) => !weaponGear.includes(t) || weaponTools.includes(t)), [0]), `武器匠賣的東西 ${sW}`);
+    ok(exactTypes(sA).join() === ARMORER.slice().sort().join() && sA.length === ARMORER.length * 2 && allQ(sA, ARMORER, [0, 1]), `盔甲匠賣的東西 ${sA}`);
     ok(![...sSmith, ...sW, ...sA].some((id) => /:(mrobe):/.test(id)), '商店不該賣魔法衣袍');
     ok(![...sSmith, ...sW, ...sA].some((id) => /:[3-6]$/.test(id) || /:[2]$/.test(id)), '商店只賣普通與做工好');
     // 買：價錢＝原價×品質×經濟，扣金幣、東西進背包、不花動作
@@ -915,4 +924,3 @@ function testGear() {
   FE.Combat.hook = hook0;
 }
 UNITS.gear = () => { try { testGear(); } catch (e) { fail('裝備測試拋出例外：' + e.stack); } };
-

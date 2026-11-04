@@ -67,6 +67,16 @@
     m.x = x;
     m.y = y;
     game.world.addStab(x, y, -C.STAB_STEP);
+    game.triggerTrap(m, x, y);
+  }
+
+  function burn(game, m) {
+    if (!m.burning) return;
+    const dmg = FE.randInt(game.rng, 1, 4);
+    m.burning--;
+    m.hp = Math.max(0, m.hp - dmg);
+    if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}被火焰燒灼，受到 ${dmg} 點傷害。`, 'bad');
+    if (m.hp <= 0 && game.monsters.includes(m)) game.defeat(m);
   }
 
   // 回生成點：回到徘徊範圍內就恢復正常；路被堵住太久，就改在當下的位置徘徊
@@ -203,6 +213,8 @@
     const before = new Map(game.monsters.map((m) => [m, m.x + ',' + m.y])); // 靈巧脫身看這一回合有沒有移動
     for (const m of game.monsters.slice()) {
       if (!game.monsters.includes(m)) continue; // 被反擊打倒了
+      burn(game, m);
+      if (!game.monsters.includes(m)) continue;
       FE.Combat.regenBlock(game, m);
       regenerate(game, m);
       // 倒地（失衡）：這一回合不能動，爬起來就過了

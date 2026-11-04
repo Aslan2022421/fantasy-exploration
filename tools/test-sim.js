@@ -176,8 +176,12 @@ function botStep(game, rng, goal, lazy) {
 // 在工匠的對話裡找到選項 id 並選下去：從最上層一路點進買／修／打造／賣裝備和分類、品質分頁，最多三層。
 // 找到而且沒反灰才選（回傳 true）；找到但反灰回傳 false；找不到也是 false。結束時回到最上層
 function shopDo(game, npc, id) {
-  const NAV = (o) => ['buy', 'repair', 'craft', 'sell'].includes(o.id) || o.id.startsWith('cat:') || o.id.startsWith('qual:') || o.id.startsWith('craftCat:');
-  const find = (depth) => {
+  const NAV = (o) => ['buy', 'repair', 'craft', 'sell'].includes(o.id) || o.id.startsWith('cat:') || o.id.startsWith('qual:') || o.id.startsWith('craftCat:') || o.id.startsWith('buyPage:');
+  const visited = new Set();
+  const find = () => {
+    const page = game.talkPage;
+    if (visited.has(page)) return false;
+    visited.add(page);
     const t = game.talkOptions(npc);
     const direct = t.options.findIndex((o) => o.id === id);
     if (direct >= 0) {
@@ -185,18 +189,17 @@ function shopDo(game, npc, id) {
       game.choose(npc, direct);
       return true;
     }
-    if (depth === 0) return false;
-    for (const o of t.options) {
+    for (const o of t.options.slice()) {
       if (!NAV(o) || o.disabled) continue;
       const page0 = game.talkPage;
       game.choose(npc, game.talkOptions(npc).options.findIndex((x) => x.id === o.id));
-      if (find(depth - 1)) return true;
+      if (find()) return true;
       game.talkPage = page0;
     }
     return false;
   };
   game.talkPage = 'main';
-  const r = find(3);
+  const r = find();
   game.talkPage = 'main';
   return r;
 }

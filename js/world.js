@@ -17,6 +17,7 @@
       this.landmarks = [];      // 聚落附近的獨特地貌
       this.nodes = [];          // 採集點（礦脈、藥草）：{ id, kind, x, y, regrowAt }，採完到 regrowAt 刻才長回來
       this.items = [];          // 地上的東西（第二十八版：擲出去的武器）：{ x, y, gear }，冒險者走過去就撿回來
+      this.locks = [];          // 門鎖：{ x, y }；舊存檔沒有此欄位時視為沒有鎖
       this.nextId = 1;
       this.spawn = null;
       this.debt = 0;            // 全世界負的穩定值加總的絕對值（第三十三版之三：負的穩定值就是 BUG 值）；setStab 跟著增減，存檔讀回來時重算
@@ -191,7 +192,20 @@
     }
     passable(x, y) {
       const c = this.cell(x, y);
-      return !!c && FE.TERRAIN[c.t].pass;
+      return !!c && FE.TERRAIN[c.t].pass && !this.isLocked(x, y);
+    }
+    isLocked(x, y) {
+      return this.locks.some((d) => d.x === x && d.y === y);
+    }
+    lockDoor(x, y) {
+      if (!this.cell(x, y) || this.cell(x, y).t !== '+' || this.isLocked(x, y)) return false;
+      this.locks.push({ x, y });
+      return true;
+    }
+    unlockDoor(x, y) {
+      const n = this.locks.length;
+      this.locks = this.locks.filter((d) => d.x !== x || d.y !== y);
+      return this.locks.length !== n;
     }
     // 兩格的高度差在 1 以內（平地或坡）；差 2 以上是斷崖
     heightOk(x0, y0, x1, y1) {

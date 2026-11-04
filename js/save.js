@@ -63,6 +63,7 @@
         landmarks: w.landmarks,
         nodes: w.nodes,
         items: w.items,
+        locks: w.locks,
         nextId: w.nextId,
         spawn: w.spawn,
         nextTownAt: w.nextTownAt,
@@ -111,6 +112,7 @@
     w.campaigns = d.campaigns || {};
     w.passes = d.passes || [];
     w.passPlan = d.passPlan || {};
+    w.locks = d.locks || [];
     if (!Array.isArray(w.items)) w.items = [];
     w.recountDebt();
     return game;

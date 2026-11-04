@@ -112,7 +112,7 @@
     const soldiers = new Map(game.soldiers.map((s) => [key(s.x, s.y), s]));
     const chests = new Map(W.chests.map((c) => [key(c.x, c.y), c]));
     // 地上的東西（擲出去的武器）
-    const items = new Set(W.items.map((it) => key(it.x, it.y)));
+    const items = new Map(W.items.map((it) => [key(it.x, it.y), it]));
     // 採集點：採完還沒長回來的不畫（那一格就是普通地面）
     const nodes = new Map(W.nodes.filter((n) => !(n.regrowAt > (game.ticks || 0))).map((n) => [key(n.x, n.y), n]));
     const monsters = new Map(game.monsters.map((m) => [key(m.x, m.y), m]));
@@ -167,6 +167,7 @@
         const vv = W.villageAt(x, y);
         const indoor = vv && FE.Steading.roomAt(vv, x, y) >= 0;
         let glyph = showGlyph(W, x, y, c, vv, indoor);
+        if (c.t === '+' && W.isLocked(x, y)) glyph = '╫';
         let bg = c.t === '·' ? P['map-road'] : indoor ? P['map-indoor'] : vv ? (FE.Steading.townish(vv) ? P['map-town'] : P['map-village']) : P['map-h' + c.h] || P['map-h0'];
         const baseBg = bg;
         let alpha = 1;
@@ -186,8 +187,9 @@
           fg = P['map-node-' + nd.kind];
           bold = true;
         }
-        if (items.has(k)) {
-          glyph = ')';
+        const item = items.get(k);
+        if (item) {
+          glyph = item.trap ? (item.armed ? '^' : 'x') : ')';
           fg = P['map-item'];
           bold = true;
           alpha = 1;
@@ -349,6 +351,8 @@
       ctx.closePath();
       ctx.fill();
     }
+    for (const it of W.items) dot(it.x, it.y, P['map-item'], Math.max(2, S));
+    for (const d of W.locks) dot(d.x, d.y, P['map-item'], Math.max(2, S));
     for (const n of W.npcs) {
       const target = handIn(n);
       dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : P['map-npc'], target ? big : Math.max(2, S));
@@ -416,6 +420,9 @@
     const nodes = W.nodes.filter((n) => near(n, 1) && !(n.regrowAt > game.ticks));
     if (nodes.some((n) => n.kind === 'ore')) out.push('礦脈（要礦鎬）');
     if (nodes.some((n) => n.kind === 'herb')) out.push('藥草（要鐮刀）');
+    if (W.isLocked(x, y)) out.push('上鎖的門');
+    const item = W.itemsAt(x, y)[0];
+    if (item && item.trap) out.push(`${FE.BAG_ITEMS[item.trap].name}${item.armed ? '（已布置）' : '（已觸發，可收起）'}`);
     const ms = game.monsters.filter((m) => near(m, 2));
     if (ms.length) {
       const names = {};
@@ -891,7 +898,7 @@
     if (s.step === 'body') {
       const size = startSize();
       const R = FE.PLAYER_RACES[s.race];
-      const weapons = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon');
+      const weapons = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon' && (FE.GEAR[k].sold || FE.GEAR[k].drop));
       const rows = weapons
         .map((k) => {
           const g = { type: k, q: 0 };

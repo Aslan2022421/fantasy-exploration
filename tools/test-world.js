@@ -58,15 +58,18 @@ function testDialogs() {
   ok(ids(smith) === 'buy/repair/craft/sellOre/sell/leave', `鐵匠的選項是 ${ids(smith)}`);
   g.player.copper = 0;
   pick(smith, 'buy');
-  ok(g.talkPage === 'buy' && ids(smith) === 'cat:blade/cat:axe/cat:pole/cat:ranged/cat:armor/cat:tool/back', `買的分類是 ${ids(smith)}`);
+  ok(g.talkPage === 'buy' && ids(smith) === 'cat:blade/cat:axe/cat:pole/cat:ranged/cat:supplies/cat:kit/cat:armor/cat:tool/back', `買的分類是 ${ids(smith)}`);
   pick(smith, 'cat:blade');
-  ok(ids(smith) === 'buyItem:sword:0/buyItem:shortsword:0/buyItem:dagger:0/back', `劍與刀的選項是 ${ids(smith)}`);
+  ok(ids(smith) === 'buyItem:sword:0/buyItem:shortsword:0/buyItem:dagger:0/buyItem:scimitar:0/buyItem:rapier:0/back', `劍與刀的選項是 ${ids(smith)}`);
   pick(smith, 'back');
   pick(smith, 'cat:pole');
-  ok(ids(smith) === 'buyItem:spear:0/buyItem:shortspear:0/buyItem:staff:0/back', `長柄與法杖的選項是 ${ids(smith)}`);
+  ok(ids(smith) === 'buyItem:spear:0/buyItem:shortspear:0/buyItem:staff:0/buyItem:javelin:0/buyItem:glaive:0/buyItem:halberd:0/buyPage:pole::1/back', `長柄與法杖第一頁的選項是 ${ids(smith)}`);
+  pick(smith, 'buyPage:pole::1');
+  ok(ids(smith) === 'buyItem:trident:0/buyItem:lance:0/buyPage:pole::0/back', `長柄與法杖第二頁的選項是 ${ids(smith)}`);
+  pick(smith, 'back');
   pick(smith, 'back');
   pick(smith, 'cat:ranged');
-  ok(ids(smith) === 'buyItem:bow:0/buyItem:arrow:0/back', `弓弩與彈藥的選項是 ${ids(smith)}`);
+  ok(ids(smith) === 'buyItem:bow:0/buyItem:longbow:0/buyItem:arrow:0/buyItem:sling:0/buyItem:slingBullet:0/back', `弓弩與彈藥的選項是 ${ids(smith)}`);
   pick(smith, 'back');
   pick(smith, 'cat:blade');
   const price = FE.Gear.shopPrice('sword', 0, sv);
@@ -629,4 +632,3 @@ function testReach() {
   ok(a.length > 0 && JSON.stringify(a) === JSON.stringify(f), `被圍住的區域：新 ${a.length} 筆、舊 ${f.length} 筆`);
 }
 UNITS.reach = () => { try { testReach(); } catch (e) { fail('可達性測試拋出例外：' + e.stack); } };
-

@@ -211,6 +211,14 @@
       attr: a, heavy: false, crit: critMin(p, null), mastery: staff ? mastery(p, w) : null, skills: staff ? ['staff'] : [], clear: staff ? q.clear : 0, pierce: 0, staff: staff ? w : null,
     };
   }
+  // 投擲消耗品用敏捷命中，不加屬性傷害；射擊技能仍會提高命中。
+  function itemProfile(p, item) {
+    const dex = attrMod(p, 'dex');
+    return {
+      die: item.die ? item.die.slice() : null, type: item.damage, hit: dex + shootHit(p), dmg: 0, fixedDamage: item.fixedDamage,
+      attr: dex, heavy: false, crit: critMin(p, null), mastery: null, skills: ['shoot'], clear: 0, pierce: 0,
+    };
+  }
 
   // 攻擊動作花幾刻：輕型 8、一般 10、重型 12，減敏捷修正值，最少 6（防具多花的刻另外疊加，見 game.js 的 endTurn）
   function attackTicks(p, w) {
@@ -396,14 +404,30 @@
     };
     for (const id of c.fixed.concat(picks)) {
       const o = FE.START_OPTS[id];
-      if (o.gear) {
+      if (o.pack) {
+        for (const item of FE.EQUIPMENT_PACKS[o.pack].items) {
+          if (item.gear) {
+            const g = FE.Gear.make(item.gear, 0, game.nextGearId++);
+            p.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
+          } else {
+            const extra = item.id === 'goods' ? undefined : FE.BAG_ITEMS[item.id] && FE.BAG_ITEMS[item.id].bundle ? { q: 0 } : {};
+            const entry = p.bag.find((e) => e.id === item.id && (!extra || e.q === extra.q));
+            if (entry) entry.n += item.n;
+            else p.bag.push(Object.assign({ id: item.id, name: FE.BAG_ITEMS[item.id].name, n: item.n }, extra || {}));
+          }
+        }
+      } else if (o.gear) {
         const cat = FE.GEAR[o.gear].cat;
         const g = FE.Gear.make(o.gear, 0, game.nextGearId++);
         // 武器：第一把拿在主手，多的放背包（例如法師的備用短刀）
         if (cat === 'weapon' && p.equip.main) p.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
         else p.equip[cat === 'weapon' ? 'main' : cat === 'shield' ? 'off' : 'body'] = g;
         if (o.arrows) p.bag.push({ id: 'arrow', name: FE.Gear.name({ type: 'arrow', q: 0 }), n: o.arrows, q: 0 });
-        if (o.bolts) p.bag.push({ id: 'bolt', name: FE.Gear.name({ type: 'bolt', q: 0 }), n: o.bolts, q: 0 });
+        else if (o.bolts) p.bag.push({ id: 'bolt', name: FE.Gear.name({ type: 'bolt', q: 0 }), n: o.bolts, q: 0 });
+        else if (FE.GEAR[o.gear].ammo) {
+          const ammo = FE.GEAR[o.gear].ammo;
+          p.bag.push({ id: ammo, name: FE.Gear.name({ type: ammo, q: 0 }), n: FE.GEAR[ammo].bundle, q: 0 });
+        }
       } else if (o.herb) {
         const e = p.bag.find((x) => x.id === 'herb');
         if (e) e.n += o.herb;
@@ -430,7 +454,7 @@
     sizeOf, grip, GRIP_NAMES, canWieldType,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,
     armorSkillId, armorWeightMul, armorTicks, strShort, dexForDodge, canWear, startMainSkill, rollSkills, startPlusOne, rollBody, conCut,
-    mastery, critMin, range, profile, attackTicks, castPenalty, spellProfile,
+    mastery, critMin, range, profile, attackTicks, castPenalty, spellProfile, itemProfile,
     validPicks, startOk, groupOptions, defaultPicks, bodyOf, create,
   };
 })();

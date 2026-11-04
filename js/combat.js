@@ -56,6 +56,7 @@
     const r = game.rng;
     if (isPlayer(game, A) && opts && opts.counter) return FE.Gear.counterDamage(A) * times;
     if (isPlayer(game, A)) {
+      if (prof.fixedDamage != null) return prof.fixedDamage;
       const raw = prof.die ? FE.rollDice(r, prof.die, times) : C.BARE_DMG * times;
       return Math.max(1, raw + prof.dmg);
     }
@@ -153,10 +154,10 @@
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
     const mode = aP ? opts.mode || 'melee' : null;
-    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'spell' || mode === 'light' || !!(FE.SPELLS[mode] && FE.SPELLS[mode].aim);
+    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'item' || mode === 'spell' || mode === 'light' || !!(FE.SPELLS[mode] && FE.SPELLS[mode].aim);
     // 冒險者這一下用的武器（反擊用主手）與算法；先記下，免得這一下把武器磨壞了找不到
     const wpn = aP ? (opts.counter ? A.equip.main : opts.weapon !== undefined ? opts.weapon : A.equip.main) : null;
-    const prof = aP ? FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
+    const prof = aP ? opts.item ? FE.Char.itemProfile(A, opts.item) : FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
     if (prof && opts.ammoQ !== undefined) prof.pierce = FE.QUALITIES[opts.ammoQ].pierce; // 射出去的箭：穿甲看箭矢的品質
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值；
@@ -307,7 +308,7 @@
         }
       } else {
         D.hp = Math.max(0, D.hp - dmg);
-        // 再生（沼澤巨魔）：被火或酸打到，下一回合不回（REGEN_STOP；目前遊戲裡還沒有火與酸的傷害）
+        // 再生（沼澤巨魔）：被火或酸打到，下一回合不回（REGEN_STOP）
         if (D.regen && C.REGEN_STOP.includes(hitType)) D.noRegen = true;
         if (D.hp <= 0 && game.monsters.includes(D)) {
           killed = true;
@@ -349,8 +350,9 @@
       const pD = dP ? '你' : dS ? '他' : '牠';
       const wName = wpn ? FE.Gear.name(wpn) : '';
       const heads = {
-        shoot: `你朝${dName}射了一箭`,
+        shoot: `你用${wpn ? FE.GEAR[wpn.type].name : '武器'}射向${dName}`,
         throw: `你把${wName}擲向${dName}`,
+        item: `你把${opts.item ? opts.item.name : '物品'}擲向${dName}`,
         spell: `魔力炸開，波及${dName}`,
         light: `你放出神聖之光，照向${dName}`,
         bash: `你用盾牌撞向${dName}`,

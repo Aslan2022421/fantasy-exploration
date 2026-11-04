@@ -27,6 +27,8 @@
       this.nextTownAt = null;   // 下一座大城鎮蓋在第幾段（創世順序，從 0 算）；null 是還沒蓋過，看世界等級
       this.regions = 0;         // 第三十二版：創過幾段（開局那一大塊算第 0 段）
       this.ringsDone = 0;       // 長滿了幾圈（開局不算）；世界等級＝1＋ringsDone
+      this.passes = [];         // 第三十四版：隘口 { x, y, normal, gap, ring, side, len, lake, fort }（fort 是守這裡的堡壘或要塞的 id）
+      this.passPlan = {};       // 每圈的隘口排在哪幾邊：圈數 → [{ side, fort }]（用種子和圈數算，讀檔後算出一樣的）
     }
 
     // 創出第 index 段時要不要蓋大城鎮：世界等級到 TOWN_FIRST_LEVEL 才開始，第一座在世界等級剛好達到的那一段，之後每隔 4 或 5 段一座
@@ -507,7 +509,7 @@
         }
         placeNpcs(this, rng, village);
       }
-      // 第三十四版草稿：這一圈輪到這一邊時留一處隘口；聚落的出口確認走得出去（被擋就鋪路打通）
+      // 第三十四版：這一圈輪到這一邊時留一處隘口；聚落的出口確認走得出去（被擋就鋪路打通）
       if (!first) placePass(this, rng, seg);
       if (village) openExits(this, village);
       // 先前的段放在預留小塊上的採集點，可能被這一段的聚落蓋到：落進聚落或已經不能走的收掉
@@ -531,7 +533,7 @@
   FE.inRect = (r, x, y) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1;
 
   // ---- 高度：參考矮人要塞的上下坡 ----
-  // 第三十四版草稿：高度（0～4）由三層疊起來，整個世界連續，跨區塊也接得上（只看種子和座標）：
+  // 第三十四版：高度（0～4）由三層疊起來，整個世界連續，跨區塊也接得上（只看種子和座標）：
   //   丘陵：大尺度的雜訊，低的地方是平地（0），高的地方隆起 1～2 層；
   //   山脈：脊狀雜訊（1 - |2n - 1|，雜訊剛好在中間值的那條線最高），細長成條，再用另一張雜訊切成一段一段；
   //   湖：濕又低的地方（見 lakeScore），湖裡壓成 0。
@@ -627,7 +629,7 @@
   };
 
   // ---- 氣候與生態區：參考矮人要塞，用海拔、溫度、雨量三張圖疊起來決定 ----
-  // 溫度和雨量也是平滑的雜訊（尺度比高度大），越高的地方越冷。湖不在這裡決定（第三十四版草稿：看 heightGrid 的 lake）
+  // 溫度和雨量也是平滑的雜訊（尺度比高度大），越高的地方越冷。湖不在這裡決定（第三十四版：看 heightGrid 的 lake）
   function classify(h, temp, rain) {
     const t = temp - 0.04 * h;
     if (h >= 3) return t < C.GLACIER_TEMP ? 'glacier' : 'mountain';
@@ -641,7 +643,7 @@
   FE.STAMP_BIOMES = STAMP_BIOMES;
 
   // 生成器刻意粗糙：每塊世界的溫度帶一點偏差，四邊的接縫處偶爾冷熱直接相鄰。
-  // 第三十四版草稿：拿掉隨手蓋的氣候印章與高度突變（斷崖的來源）；rough 只剩溫度偏差
+  // 第三十四版：拿掉隨手蓋的氣候印章與高度突變（斷崖的來源）；rough 只剩溫度偏差
   function paintBiomes(world, rng, r, index) {
     const rough = { tempOffset: index === 0 ? 0 : (rng() - 0.5) * 0.45 };
     const grid = FE.heightGrid(world.seed, r);
@@ -741,7 +743,7 @@
         else if (!ch && inRing(world, cx, cy)) made.push(world.addBlock(cx, cy));
       }
     }
-    // 第三十四版草稿：村莊背後刻意擺一片湖或山壁（城鎮四通八達，不擺）
+    // 第三十四版：村莊背後刻意擺一片湖或山壁（城鎮四通八達，不擺）
     const backdrop = !town && rng() < C.BACKDROP_RATE ? placeBackdrop(world, rng, box) : null;
     // 工作範圍整平成中心的高度，外圍三圈修成坡，進出村莊不會碰到斷崖（只改高度，水和巨石與生態區照舊）。
     // 範圍裡的地形之後由聚落排版決定：聚落本身（路、建築、走道、外牆）換成聚落的地形，其餘保留原本的地形
@@ -768,7 +770,7 @@
     return village;
   }
 
-  // ---- 第三十四版草稿：刻意放的湖與山壁 ----
+  // ---- 第三十四版：刻意放的湖與山壁 ----
   // 先前的段放的採集點不能被蓋掉（不然會變成長在湖裡、山壁裡）
   const nodeAt = (world, x, y) => world.nodes.some((n) => n.x === x && n.y === y);
   // 村莊背後：南或北其中一側（拿掉那一側後還開得出 3 個出入口），離工作範圍 BACKDROP_GAP 格外，沿著那一側擺一長條湖或山壁。
@@ -803,7 +805,6 @@
   // 擺在這一段的帶子中間（離內外兩邊各 8 格以上），彎曲起伏 ±2 格；不碰聚落周圍的圈、地貌、路與出生點，窄路和兩頭各 4 格要能走。
   // 放不下（試 40 次）就記一次 passMiss
   function placePass(world, rng, seg) {
-    if (!world.passPlan) world.passPlan = {};
     if (!world.passPlan[seg.ring]) {
       const pr = FE.makeRng(Math.floor(hash(world.seed, seg.ring * 31 + 5, 77) * 4294967296));
       const k = FE.randInt(pr, C.PASS_PER_RING[0], C.PASS_PER_RING[1]);
@@ -862,7 +863,6 @@
       const gx = Math.floor((g0 + g1) / 2);
       const [px, py] = at(gx, base + off(gx));
       const p = { x: px, y: py, normal: horiz ? [0, 1] : [1, 0], gap: gap.slice(), ring: seg.ring, side: seg.side, len: L, lake: lakeSide >= 0 };
-      if (!world.passes) world.passes = [];
       world.passes.push(p);
       return p;
     }
@@ -871,8 +871,8 @@
   }
 
   // 聚落出口一定走得出去：從每個出入口外面那條路的盡頭（工作範圍外三格），不穿過聚落，要走得到離聚落外框 SETTLE_BUFFER＋3 格以外
-  // （或還沒長出來的地方）。走不出去就從盡頭沿著出口方向直直鋪路（· ，擋路的格子換掉；湖也鋪過去，之後改成橋），鋪到走得出去為止，最多 40 格。
-  // 打通了幾個記在 v.exitFixed
+  // （或還沒長出來的地方）。走不出去就從盡頭沿著出口方向直直鋪路（· ，擋路的格子換掉），鋪到走得出去為止，最多 40 格。
+  // 第三十四版（使用者定的）：出口不朝湖開（排版時 exitViable 已經避開），這裡也不把湖面鋪成路，碰到水就停。打通了幾個記在 v.exitFixed
   function openExits(world, v) {
     const D = world.bufferWidth(v) + 3;
     const f = v.flat;
@@ -909,7 +909,8 @@
           const [x, y] = lane(i, o);
           const c = world.cell(x, y);
           if (!c) { edge = true; continue; }
-          if (!world.passable(x, y)) world.setCell(x, y, '·', c.biome === 'lake' ? 'plain' : c.biome);
+          if (c.t === '≈') { edge = true; continue; }
+          if (!world.passable(x, y)) world.setCell(x, y, '·', c.biome);
         }
         if (edge || (i >= D && outOk([lane(i, 0)]))) break;
       }
@@ -1091,7 +1092,7 @@
   }
 
   // 採集點：礦坑的空地上 3～5 處礦脈；溫帶森林、針葉林、熱帶雨林裡約 2% 的格子長藥草。
-  // 藥草不放在聚落、路、地貌、寶箱與出生點上。第三十四版草稿：只放在從出生點走得到的格子（原本藥草會長在斷崖上拿不到）
+  // 藥草不放在聚落、路、地貌、寶箱與出生點上。第三十四版：只放在從出生點走得到的格子（原本藥草會長在斷崖上拿不到）
   function placeNodes(world, rng, r, landmarks) {
     const reach = FE.Checker.reachable(world);
     for (const landmark of landmarks) {

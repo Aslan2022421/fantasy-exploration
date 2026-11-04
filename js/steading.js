@@ -314,17 +314,20 @@
     return null;
   }
 
-  // 出入口可以開在哪些方向（東、西、南、北）：從中央往外鋪 3 格寬的通道，一直鋪到工作範圍外三格，通道上不能有水
-  // （巨石可以，路經過時清掉）。外面被水擋住的方向就不開，換另一個方向
-  function exitViable(world, box) {
+  // 出入口可以開在哪些方向（東、西、南、北）：從中央往外鋪 3 格寬的通道，一直鋪到工作範圍外三格，通道上不能有水或山壁
+  // （巨石可以，路經過時清掉）。外面被水擋住的方向就不開，換另一個方向。
+  // 第三十四版（使用者定的：出口不朝湖開）：通道再往外多看「聚落周圍的圈＋3 格」（far，跟 World 的 openExits 確認走不走得出去的距離一樣），
+  // 那一段有湖或山壁也不開；只看已經長出來的格子
+  function exitViable(world, box, far) {
+    if (far === undefined) far = C.SETTLE_BUFFER[box.kind || 'village'] + 3;
     return DIRS.map(([dx, dy]) => {
-      const lim = dx > 0 ? box.x1 + 3 : dx < 0 ? box.x0 - 3 : dy > 0 ? box.y1 + 3 : box.y0 - 3;
+      const lim = dx > 0 ? box.x1 + 3 + far : dx < 0 ? box.x0 - 3 - far : dy > 0 ? box.y1 + 3 + far : box.y0 - 3 - far;
       for (let o = -1; o <= 1; o++) {
         let x = box.cx + (dy ? o : 0);
         let y = box.cy + (dx ? o : 0);
         while (dx ? (dx > 0 ? x <= lim : x >= lim) : dy > 0 ? y <= lim : y >= lim) {
           const c = world.cell(x, y);
-          if (c && (c.t === '≈' || c.t === '█')) return false; // 第三十四版草稿：山壁也開不出去
+          if (c && (c.t === '≈' || c.t === '█')) return false; // 第三十四版：山壁也開不出去
           x += dx;
           y += dy;
         }
@@ -337,7 +340,7 @@
   // 工作範圍裡擋路的格子太多則扣分（排不下內容）
   function siteScore(world, box, town) {
     let score = 0;
-    const open = exitViable(world, box).filter(Boolean).length;
+    const open = exitViable(world, box, C.SETTLE_BUFFER[town ? 'town' : 'village'] + 3).filter(Boolean).length;
     if (open < 3) score -= 500;
     else if (town && open < 4) score -= 3;
     for (let dy = -3; dy <= 3; dy++) {
@@ -811,7 +814,7 @@
       spots: b.spots.map(toWorld),
     }));
     v.entrances = best.entrances;
-    v.exitDirs = best.chosen; // 第三十四版草稿：出入口的方向，生成完再確認每個都走得出去（World 的 openExits）
+    v.exitDirs = best.chosen; // 第三十四版：出入口的方向，生成完再確認每個都走得出去（World 的 openExits）
     v.x0 = bx0 + ox;
     v.y0 = by0 + oy;
     v.x1 = bx1 + ox;
@@ -982,7 +985,7 @@
     const W = L.art[0].length;
     const s = world.spawn;
     const painted = (dx, dy) => dy >= 0 && dy < H && dx >= 0 && dx < W && L.art[dy][dx] !== '.';
-    const nodes = new Set(world.nodes.map((n) => n.x + ',' + n.y)); // 第三十四版草稿：不蓋到先前的段放的採集點（原本會把藥草圍進法師塔的牆裡）
+    const nodes = new Set(world.nodes.map((n) => n.x + ',' + n.y)); // 第三十四版：不蓋到先前的段放的採集點（原本會把藥草圍進法師塔的牆裡）
     const ok = (x0, y0) => {
       // 離這塊世界的邊至少一格，門外才不會是還沒創出來的地方
       if (x0 <= rect.x0 || y0 <= rect.y0 || x0 + W >= rect.x1 || y0 + H >= rect.y1) return false;

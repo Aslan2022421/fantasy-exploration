@@ -107,7 +107,7 @@
         return DIRS.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy));
       };
       const spawned = [];
-      // 沒挑上的地形錯位與斷崖（rest）不處理：第三十三版之三起錯的種類不決定怪物，只有挑上的地點才欠 BUG 值
+      // 檢查器找到的地形錯位與斷崖（rest）不處理：第三十三版之三起錯的種類不決定怪物，只有挑上的地點才欠 BUG 值
       const { sites } = this.pickSites(found, rect, first, landmarks || []);
       this.curCampaign = index; // 這一段生的怪物都記上是第幾段戰役（spawnGroup）
       for (const site of sites) {
@@ -559,28 +559,44 @@
     }
 
     // 第三十二版（三之二）：一段就是一場戰役，裡面的怪物群是這場戰役的危害（試做：照 Dungeon World〈前置〉「一個冒險前置 2～3 個危害」，
-    // 地區的樣子照《奇幻探索物語 Quest》：聚落在中間、興趣點在兩側）。開局 4 處，之後每段 2～3 處；
-    // 這一段的每個興趣點各放一處（錯誤落在興趣點附近就用它，沒有就挑一處錯誤，把那一群放到興趣點上），其餘的散在這一段裡。
-    // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），其餘從地形錯位與斷崖裡隨機挑，沒挑到的不處理
-    // （不生怪物、不算進創世門檻）。回傳 { sites: [{ d, must, at }], rest }，at 是放到興趣點上的位置
+    // 地區的樣子照《奇幻探索物語 Quest》：聚落在中間、興趣點在兩側）。開局 4 處，之後每段 2～3 處。
+    // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），算進處數。
+    // 第三十四版（使用者定的）：其餘的地點不再從檢查器找到的地形錯位與斷崖裡挑（地形改成全是坡、拿掉印章之後幾乎沒有），
+    // 改在這一段裡挑「從出生點走得到、不在聚落周圍那一圈裡」的格子（type 'DECAY'：沒有哪一處具體的錯要修，清光時補回那一帶的穩定值）；
+    // 這一段的每個興趣點各放一處（附近已經有一定要生的就不再放，沒有就放在興趣點上）。檢查器找到的地形錯位與斷崖不處理
+    // （不生怪物、不算進創世門檻、不欠 BUG 值）。回傳 { sites: [{ d, must, at }], rest }，at 是放到興趣點上的位置
     pickSites(found, rect, first, landmarks) {
       const rng = this.rng;
+      const w = this.world;
       const sites = found.filter((d) => d.type !== 'TERRAIN' && d.type !== 'CLIFF').map((d) => ({ d, must: true }));
-      const opt = found.filter((d) => d.type === 'TERRAIN' || d.type === 'CLIFF');
-      for (let i = opt.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [opt[i], opt[j]] = [opt[j], opt[i]];
-      }
+      const rest = found.filter((d) => d.type === 'TERRAIN' || d.type === 'CLIFF');
       const n = first ? C.START_SITES : FE.randInt(rng, C.SITE_COUNT[0], C.SITE_COUNT[1]);
       const near = (l, d) => d.x >= l.x0 - 3 && d.x <= l.x1 + 3 && d.y >= l.y0 - 3 && d.y <= l.y1 + 3;
+      const reach = FE.Checker.reachable(w);
+      const p = this.player || w.spawn;
+      // 一處地點：這一段裡隨機試幾格，挑走得到、不在聚落周圍的圈裡、離冒險者至少 DECAY_MIN_DIST 步的（Claude 定的，跟衰敗生怪一樣不貼臉）
+      const spot = () => {
+        for (let t = 0; t < 200; t++) {
+          const x = FE.randInt(rng, rect.x0, rect.x1 - 1);
+          const y = FE.randInt(rng, rect.y0, rect.y1 - 1);
+          if (!w.passable(x, y) || !reach.at(x, y) || w.inBuffer(x, y) || w.landmarkAt(x, y)) continue;
+          if (p && Math.abs(p.x - x) + Math.abs(p.y - y) < C.DECAY_MIN_DIST) continue;
+          return { type: 'DECAY', x, y, cells: [], scope: 1, data: {} };
+        }
+        return null;
+      };
       for (const l of landmarks) {
         if (sites.some((x) => near(l, x.d) || (x.at && near(l, x.at)))) continue;
-        const i = opt.findIndex((d) => near(l, d));
-        if (i >= 0) sites.push({ d: opt.splice(i, 1)[0] });
-        else if (opt.length) sites.push({ d: opt.shift(), at: { x: Math.floor((l.x0 + l.x1) / 2), y: Math.floor((l.y0 + l.y1) / 2) } });
+        const x = Math.floor((l.x0 + l.x1) / 2);
+        const y = Math.floor((l.y0 + l.y1) / 2);
+        sites.push({ d: { type: 'DECAY', x, y, cells: [], scope: 1, data: {} }, at: { x, y } });
       }
-      while (sites.length < n && opt.length) sites.push({ d: opt.shift() });
-      return { sites, rest: opt };
+      while (sites.length < n) {
+        const d = spot();
+        if (!d) break;
+        sites.push({ d });
+      }
+      return { sites, rest };
     }
 
     // 第三十三版之二：一處的 BUG 量（budget）拿去配一組怪物，也就是套皮。每隻怪物值多少 BUG 量看數值塊

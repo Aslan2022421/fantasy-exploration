@@ -189,6 +189,7 @@ for (const k of ['village', 'town']) {
   console.log(`  外形：平均外接矩形 ${avg(a, (s) => s.gw)}×${avg(a, (s) => s.gh)}（工作範圍 ${k === 'town' ? C.TOWN_W + '×' + C.TOWN_H : C.VILLAGE_W + '×' + C.VILLAGE_H}），佔工作範圍 ${avg(a, (s) => s.garea)}，牆內空地（走道與零碎空地）佔聚落 ${avg(a, (s) => s.gopen)}`);
 }
 console.log(`貼著外牆有 3 格以上水或巨石的聚落：${geo.nearBlock}/${geo.count}`);
+console.log(`地形（第三十四版，${stats.worlds} 個世界）：相鄰高度差 2 以上 ${stats.cliffs} 對｜山壁 ${stats.worlds ? (stats.walls / stats.worlds).toFixed(0) : '-'} 格／世界｜採集點走不到 ${stats.nodeMiss}/${stats.nodes}｜隘口 ${stats.worlds ? (stats.passes / stats.worlds).toFixed(1) : '-'} 處／世界（放不下 ${stats.passMiss}）`);
 console.log(`地貌 ${stats.landmarks}，沒放成 ${stats.landmarkMiss}｜每塊創世平均 ${avg(stats.ms, (x) => x)} ms，最慢 ${stats.ms.length ? Math.max(...stats.ms).toFixed(0) : '-'} ms（${stats.ms.length} 塊，不含比對舊檢查的時間）｜城鎮沒蓋成盔甲匠工坊 ${stats.noArmory || 0} 座`);
 console.log(`可達性：跟全世界檢查逐次比對 ${reachCheck.compared} 次（含四人等效模擬途中被侵蝕、修復過的世界）｜新做法的掃描共 ${reachCheck.newMs.toFixed(0)} ms；對照的舊做法（全世界走一遍＋掃一遍）比對共 ${reachCheck.fullMs.toFixed(0)} ms`);
 console.log(`出入口不足、生出斷層怪物的聚落：${stats.gateBugs} 座｜民房或床位沒蓋齊（可接受的粗糙）：${stats.short.length} 件`);

@@ -1,6 +1,6 @@
 // 生成統計：各種子創出多塊世界，量聚落、地貌、城鎮、創世耗時
 // ---- 生成統計 ----
-const stats = { village: [], town: [], landmarks: 0, landmarkMiss: 0, ms: [], short: [], gateBugs: 0, townGaps: [], firstTowns: [], soldiers: 0 };
+const stats = { village: [], town: [], landmarks: 0, landmarkMiss: 0, ms: [], short: [], gateBugs: 0, townGaps: [], firstTowns: [], soldiers: 0, cliffs: 0, walls: 0, nodes: 0, nodeMiss: 0, passes: 0, passMiss: 0, worlds: 0 };
 const geo = { w: [], h: [], area: [], open: [], nearBlock: 0, count: 0 };
 const GEN_SEEDS = 40;
 function runGen(seedLo, seedHi) {
@@ -17,6 +17,26 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
   }
   verifyReach = false;
   const w = game.world;
+  // 第三十四版：地形全是坡（兩格都能走、高度差 2 以上的相鄰格是 0；山壁擋路，另計格數）、採集點都走得到、隘口
+  const reach = FE.Checker.reachable(w);
+  let cliffs = 0;
+  w.forEachCell((x, y, c) => {
+    if (c.t === '█') stats.walls++;
+    if (!FE.TERRAIN[c.t].pass) return;
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      const o = w.cell(x + dx, y + dy);
+      if (o && FE.TERRAIN[o.t].pass && Math.abs(o.h - c.h) >= 2) cliffs++;
+    }
+  });
+  stats.cliffs += cliffs;
+  if (cliffs) fail(`生成 seed${seed} 相鄰高度差 2 以上的格子 ${cliffs} 對`);
+  const lost = w.nodes.filter((n) => !w.passable(n.x, n.y) || !reach.at(n.x, n.y));
+  stats.nodes += w.nodes.length;
+  stats.nodeMiss += lost.length;
+  if (lost.length) fail(`生成 seed${seed} 採集點走不到 ${lost.length} 個，例如 ${lost[0].kind} (${lost[0].x},${lost[0].y})`);
+  stats.passes += (w.passes || []).length;
+  stats.passMiss += w.passMiss || 0;
+  stats.worlds++;
   // 城鎮出現時機（第三十二版照圈算）：蓋城鎮的那一段創出時世界等級至少 3，之後至少隔 4 段（4 或 5 段；最外圈放不下就再等）；開局是村莊
   const towns = w.villages.filter((v) => v.kind === 'town').sort((a, b) => a.region - b.region);
   for (const t of towns) if (t.wl < C.TOWN_FIRST_LEVEL) fail(`生成 seed${seed} ${t.name} 在世界等級 ${t.wl} 就蓋了`);

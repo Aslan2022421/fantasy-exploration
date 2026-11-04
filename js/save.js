@@ -72,6 +72,8 @@
         remnants: w.remnants,
         campaigns: w.campaigns,
         ringsDone: w.ringsDone,
+        passes: w.passes || [],   // 第三十四版：隘口（含堡壘守的）與每圈排在哪幾邊
+        passPlan: w.passPlan || {},
       },
     };
   }
@@ -107,6 +109,8 @@
     w.camps = d.camps || [];
     w.remnants = d.remnants || [];
     w.campaigns = d.campaigns || {};
+    w.passes = d.passes || [];
+    w.passPlan = d.passPlan || {};
     if (!Array.isArray(w.items)) w.items = [];
     w.recountDebt();
     return game;

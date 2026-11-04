@@ -186,7 +186,7 @@ function testCharacter() {
     // 舊版本的存檔讀不了
     FE.store.save('fe.save', { version: C.SAVE_VERSION - 1, data: {} });
     const old = FE.Save.load();
-    ok(C.SAVE_VERSION === 24 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
+    ok(C.SAVE_VERSION === 25 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
   }
 
   // 6. 力量：近戰傷害加修正值（可為負，最少 1）；長劍 1d8（副手空著 1d10）；短刀靈巧取力量與敏捷較高者，不再減半；重擊傷害骰擲兩次

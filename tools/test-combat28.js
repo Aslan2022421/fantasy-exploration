@@ -90,10 +90,15 @@ function testCombat28() {
     p.attr.wis = 12;
     ok(Ch.critMin(p, G.make('dagger', 0, 1)) === 19, '短刀平常 19 就暴擊');
     const m = mon(g, p.x + 1, p.y);
+    // 訊息紀錄只留 40 則，最後 40 下剛好沒暴擊的機率約一成多（第三十四版改亂數順序後碰到）：途中每則訊息都記下來再查
+    const said = [];
+    const say0 = g.say;
+    g.say = function (text, kind) { said.push(text); return say0.call(this, text, kind); };
     const ev = events(() => { for (let i = 0; i < 3000; i++) { p.skills = Ch.freshSkills(); FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true }); } });
+    g.say = say0;
     const crits = ev.filter((e) => e.by === 'player' && e.crit && !e.blocked && !e.resisted);
     ok(crits.length > 50 && crits.every((e) => e.n === 20) && Math.min(...crits.map((e) => e.dmg)) >= 2 && Math.max(...crits.map((e) => e.dmg)) <= 16 && Math.max(...crits.map((e) => e.dmg)) > 8, `長劍（拿盾牌 1d8）暴擊擲兩次：${spread(crits.map((e) => e.dmg))}，擲出 ${[...new Set(crits.map((e) => e.n))]}`);
-    ok(g.log.some((l) => l.text.includes('暴擊，傷害骰擲兩次')), '暴擊的訊息該寫傷害骰擲兩次');
+    ok(said.some((t) => t.includes('暴擊，傷害骰擲兩次')), '暴擊的訊息該寫傷害骰擲兩次');
     // 怪物暴擊：攻擊力照舊，擲兩次加總
     p.equip.off = null;
     p.equip.body = null;

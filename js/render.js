@@ -319,7 +319,7 @@
       for (let x = x0; x < x0 + MW; x++) {
         const c = W.cell(x, y);
         if (!c) continue;
-        const base = c.t === '#' ? P['m-rock'] : P['m-' + c.biome] || '#444444';
+        const base = c.t === '#' ? P['m-rock'] : c.t === '█' ? P['m-mountain'] : P['m-' + c.biome] || '#444444'; // 山壁（第三十四版）畫山地的顏色
         const vv = W.villageAt(x, y);
         // 地貌上的人造物（斷牆、立石、塔⋯⋯）畫成土黃色
         const relic = /[▓░▒ΠΘ†Ω‡+¤≥≤]/.test(c.t);
@@ -407,7 +407,7 @@
     if (!c) return inSlot ? '還沒創出來（下一段會長在這裡）' : '還沒創出來';
     const out = [];
     const B = FE.BIOMES[c.biome];
-    out.push(`<b>${esc(B ? B.name : c.biome)}</b>　高度 ${c.h}${c.t === '≈' ? '，水' : c.t === '#' ? '，巨石' : ''}`);
+    out.push(`<b>${esc(B ? B.name : c.biome)}</b>　高度 ${c.h}${c.t === '≈' ? '，水' : c.t === '#' ? '，巨石' : c.t === '█' ? '，山壁' : ''}`);
     const v = W.villageAt(x, y) || W.villages.find((o) => x >= o.x0 - 2 && x <= o.x1 + 2 && y >= o.y0 - 2 && y <= o.y1 + 2);
     if (v) out.push(`${esc(v.name)}（${v.kind === 'town' ? '城鎮' : '村莊'}${v.steading ? `，${FE.PROSPERITY[v.steading.prosperity]}、${FE.POPULATION[v.steading.population]}` : ''}）<span class="dim">點一下看詳細</span>`);
     const l = W.landmarkAt(x, y);

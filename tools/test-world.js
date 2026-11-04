@@ -194,21 +194,19 @@ function testCreation() {
     const groups = new Map();
     for (const m of g.monsters) groups.set(m.group, (groups.get(m.group) || []).concat(m));
     const list = [...groups.values()];
-    const must = list.filter((gr) => gr[0].type !== 'TERRAIN' && gr[0].type !== 'CLIFF').length;
+    const must = list.filter((gr) => gr[0].type !== 'DECAY').length; // 第三十四版：其餘的地點是 DECAY（不從地形錯位與斷崖裡挑）
     ok(g.monsters.every((m) => m.group) && g.monsters.length <= Math.max(C.START_MONSTER_MAX, must), `seed${seed} 開局 ${g.monsters.length} 隻（最多 ${C.START_MONSTER_MAX}）`);
     ok(list.length >= 1 && list.length <= Math.max(C.START_SITES, must), `seed${seed} 開局 ${list.length} 群`);
     // 第三十三版之二：帶頭的菁英可能換成這裡有菁英數值塊的別族，跟班同族
     ok(list.every((gr) => gr.length <= C.START_SITE_MAX && gr.every((m) => (m === gr[0] || m.race === gr[gr.length - 1].race) && m.type === gr[0].type)), `seed${seed} 有一群超過 ${C.START_SITE_MAX} 隻或跟班不同族：${list.map((gr) => gr.length).join(',')}`);
     const lms = g.world.landmarks;
     ok(!lms.length || list.some((gr) => lms.some((l) => gr[0].x >= l.x0 - 8 && gr[0].x <= l.x1 + 8 && gr[0].y >= l.y0 - 8 && gr[0].y <= l.y1 + 8)), `seed${seed} 開局沒有一群在興趣點`);
-    // 全群倒下才修：地形錯位的群，前面幾隻倒下時那幾格不動，最後一隻倒下才變成草原
-    const gr = list.find((x) => x.length >= 2 && x[0].type === 'TERRAIN' && x[0].cells.length && g.world.cell(...x[0].cells[0]).biome !== 'grassland');
+    // 全群倒下才算清掉：前面幾隻倒下時還沒有冷卻區，最後一隻倒下才有（第三十四版：地點不再是地形錯位，改看冷卻區）
+    const gr = list.find((x) => x.length >= 2);
     if (gr) {
-      const [cx, cy] = gr[0].cells[0];
       for (const m of gr.slice(0, -1)) g.defeat(m);
-      ok(g.world.cell(cx, cy).biome !== 'grassland', `seed${seed} 一群還沒全倒就修好了`);
+      ok(g.world.calm.length === 0, `seed${seed} 一群還沒全倒就清掉了`);
       g.defeat(gr[gr.length - 1]);
-      ok(g.world.cell(cx, cy).biome === 'grassland', `seed${seed} 一群全倒下了卻沒修好`);
       // 清掉之後那一帶 5～7 天不生怪物：還沒全倒時沒有冷卻區，全倒後有；5 天內生不出來，7 天後生得出來
       const last = gr[gr.length - 1];
       const hx = last.home.x, hy = last.home.y;
@@ -221,7 +219,7 @@ function testCreation() {
       repairSeen = true;
     }
   }
-  ok(repairSeen, '幾個種子都沒有 2 隻以上的地形錯位群，量不到「全群倒下才修」');
+  ok(repairSeen, '幾個種子都沒有 2 隻以上的群，量不到「全群倒下才清掉」');
 
   // 每個動作的算力：移動、出手各 1，乘上 PLAYER_COMPUTE_SCALE，一半進創世力；修補力另外有虛擬算力
   const g = new FE.Game(99);

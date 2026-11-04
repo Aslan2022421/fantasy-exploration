@@ -73,7 +73,8 @@ function testEconomy30() {
       if (Math.abs(dx) + Math.abs(dy) === 4 && g.world.passable(x, y) && !g.world.inBuffer(x, y) && FE.AI.canSee(g.world, { x, y }, p)) spot = { x, y };
     }
     if (spot && far) {
-      const c = g.spawnMonster({ type: 'TERRAIN', x: spot.x, y: spot.y, cells: [], scope: 2, data: {} });
+      // 種族固定哥布林：上面挑位置時的視線用感知修正值 0 算，照環境隨機套的種族感知不一樣，可能看不到冒險者、不追上來（第三十三版之三（三））
+      const c = g.spawnMonster({ type: 'TERRAIN', x: spot.x, y: spot.y, cells: [], scope: 2, data: {}, race: 'goblin' });
       Object.assign(c, { x: spot.x, y: spot.y, small: true });
       p.hp = 5;
       const t2 = g.ticks;

@@ -153,14 +153,26 @@
     return amt;
   }
 
+  // 衰敗生怪的速度：這一小時最多生幾群＝區塊數 × DECAY_GROUP_RATE（小數部分用 game.rng 照機率擲），不超過 DECAY_GROUPS_PER_HOUR。
+  // 不限速的話格子一過 0 就一群接一群冒出來（開局區域不打怪時，後半個月一天 2～5 群）；照世界大小算，世界長大了能生的跟著變多
+  function groupCap(game) {
+    if (!C.DECAY_GROUP_RATE) return C.DECAY_GROUPS_PER_HOUR;
+    const e = game.world.chunks.length * C.DECAY_GROUP_RATE;
+    let n = Math.floor(e);
+    if (game.rng() < e - n) n++;
+    return Math.min(n, C.DECAY_GROUPS_PER_HOUR);
+  }
+
   // 負格子連成的一片（8 方向相連），欠的量夠買那裡最便宜的一隻，就用整片欠的量當預算配一組怪物，生在那片裡走得到的格子；
   // 配掉的值從那片格子扣回（從生出來的地方往外，一格一格補到 0），零頭留著。不算已經有怪物負責的格子
-  // （離某隻怪物的生成點 RESP_RADIUS 格以內，那隻怪物倒下時整片會補回起始值）。每小時最多 DECAY_GROUPS_PER_HOUR 群，欠最多的先。
+  // （離某隻怪物的生成點 RESP_RADIUS 格以內，那隻怪物倒下時整片會補回起始值）。每小時最多 groupCap 群（照區塊數），欠最多的先。
   // 衰敗生的怪物 m.small＝true（會追人、會合體），動盪、失序時依 CAMP_CHANCE 套成營地（失序的營地，清掉後留下遺留地點，營地的怪物不追人）。
   // 回傳生了幾群
   function spawnDecay(game, reach) {
     const w = game.world;
     if (w.debt <= 0) return 0;
+    const cap = groupCap(game);
+    if (!cap) return 0;
     if (game.monsters.filter((m) => m.small).length >= C.DECAY_SMALL_CAP) return 0;
     const b = w.bounds();
     const GW = b.x1 - b.x0;
@@ -230,7 +242,7 @@
     let groups = 0;
     const floor = FE.cheapestValue(Object.keys(FE.MONSTER_BLOCKS)); // 任何地方最便宜的一隻，欠的量連這個都不到的片先略過
     for (const comp of comps) {
-      if (groups >= C.DECAY_GROUPS_PER_HOUR) break;
+      if (groups >= cap) break;
       if (comp.debt < floor) break; // 已經照欠的量由多排到少
       // 在這一片裡隨機試幾格，挑得到「沒有人、沒有東西、離冒險者夠遠、欠的量買得起那裡最便宜的一隻」的
       let spot = null;
@@ -315,5 +327,5 @@
     return healed;
   }
 
-  FE.Stability = { names: NAMES, state, worldLevel, scale, total, update, mult, roughen, decay, spawnDecay, mend, stat };
+  FE.Stability = { names: NAMES, state, worldLevel, scale, total, update, mult, roughen, decay, groupCap, spawnDecay, mend, stat };
 })();

@@ -5,7 +5,6 @@
   const $ = (id) => document.getElementById(id);
   const key = (x, y) => x + ',' + y;
   const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
-  const flicker = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
   let game = null;
 
@@ -118,12 +117,10 @@
     const nodes = new Map(W.nodes.filter((n) => !(n.regrowAt > (game.ticks || 0))).map((n) => [key(n.x, n.y), n]));
     const monsters = new Map(game.monsters.map((m) => [key(m.x, m.y), m]));
     const overlay = new Map();
+    // 第三十三版之三（三）：錯的種類不再決定怪物，氣候錯位閃 * :、斷崖閃 ▲ ▼ 拿掉了；
+    // 斷層照舊把走不到的區域畫淡、把要打通的路標出來（那是創世那處要修的錯，清光怪物時打通）
     for (const m of game.monsters) {
-      if (m.type === 'TERRAIN') {
-        for (const [x, y] of m.cells) overlay.set(key(x, y), { glyph: flicker(['*', ':']), cls: 'glitch' });
-      } else if (m.type === 'CLIFF') {
-        for (const [x, y] of m.cells) overlay.set(key(x, y), { glyph: flicker(['▲', '▼']), cls: 'glitch' });
-      } else if (m.type === 'UNREACHABLE') {
+      if (m.type === 'UNREACHABLE') {
         for (const [x, y] of m.cells) overlay.set(key(x, y), { cls: 'faded' });
         for (const [x, y] of m.data.path) overlay.set(key(x, y), { cls: 'glitch' });
       }

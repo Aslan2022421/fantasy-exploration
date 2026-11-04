@@ -1,6 +1,6 @@
 // 怪物行動：冒險者每做一個動作，所有怪物各做一件事（移動一步或攻擊）。
 // 所有怪物在自己的 B 點附近徘徊；會追人的怪物（m.small）看得到冒險者就追；貼在冒險者旁邊的怪物不管追不追人，在自己的回合攻擊（圍攻）；
-// 怪物進不了聚落和它周圍那一圈；怪物會侵蝕周遭的地面。
+// 怪物進不了聚落和它周圍那一圈；怪物每走進一格，那一格的穩定值減 STAB_STEP（第三十三版之三，侵蝕拿掉了）。
 (function () {
   const C = FE.CONFIG;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -62,12 +62,19 @@
     m.returnTurns = 0;
   }
 
+  // 怪物移動到 (x, y)：走進的那一格穩定值當下減 STAB_STEP（第三十三版之三，使用者定的；怪物每次移動都算）
+  function moveTo(game, m, x, y) {
+    m.x = x;
+    m.y = y;
+    game.world.addStab(x, y, -C.STAB_STEP);
+  }
+
   // 回生成點：回到徘徊範圍內就恢復正常；路被堵住太久，就改在當下的位置徘徊
   function returnHome(game, m) {
     const near = (x, y) => Math.abs(x - m.home.x) + Math.abs(y - m.home.y) <= C.WANDER_LEASH;
     if (!near(m.x, m.y)) {
       const s = stepToward(game, m, near);
-      if (s) [m.x, m.y] = s;
+      if (s) moveTo(game, m, s[0], s[1]);
       else if (++m.returnTurns > 20) m.home = { x: m.x, y: m.y };
     }
     if (near(m.x, m.y)) m.returning = false;
@@ -79,25 +86,8 @@
       ([x, y]) => free(game, x, y) && game.world.heightOk(m.x, m.y, x, y) && dist({ x, y }, m.home) <= (m.guard ? 1 : C.WANDER_LEASH) // 守著原地的群只在 1 格內走動
     );
     if (!options.length) return;
-    [m.x, m.y] = FE.pick(game.rng, options);
-  }
-
-  // 侵蝕：在怪物附近弄出一對直接相鄰的苔原和沙漠。下一次演算事件時，檢查器會把它抓成小怪物。
-  function corrupt(game, m) {
-    const w = game.world;
-    for (let tries = 0; tries < 10; tries++) {
-      const x = m.x + FE.randInt(game.rng, -2, 2);
-      const y = m.y + FE.randInt(game.rng, -2, 2);
-      const [dx, dy] = FE.pick(game.rng, DIRS);
-      if (!free(game, x, y) || !free(game, x + dx, y + dy)) continue;
-      if (w.landmarkAt(x, y) || w.landmarkAt(x + dx, y + dy) || w.inBuffer(x, y) || w.inBuffer(x + dx, y + dy)) continue;
-      if (game.isCalm(x, y) || game.isCalm(x + dx, y + dy)) continue; // 冷卻區不侵蝕
-      w.setCell(x, y, '.', 'tundra');
-      w.setCell(x + dx, y + dy, ':', 'desert');
-      FE.Stability.stat(game).corrupt++;
-      if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}侵蝕了周遭的地面。`, 'bug');
-      return;
-    }
+    const [x, y] = FE.pick(game.rng, options);
+    moveTo(game, m, x, y);
   }
 
   // 一群小怪物的難度評級（參考《奇幻探索物語》）：生命值＋單回合最高傷害＋數量
@@ -141,16 +131,19 @@
     let at = group.slice().sort((a, b) => dist(a, { x: cx, y: cy }) - dist(b, { x: cx, y: cy }))[0];
     game.monsters = game.monsters.filter((m) => !group.includes(m));
     if (game.world.inBuffer(at.x, at.y)) at = game.findFreeNear(at.x, at.y) || at;
-    // 第三十三版之二：動盪、失序時有機率套上營地（失序的營地，清掉後留下遺留地點）；BUG 量配不上任何營地就照舊合成一隻
+    // 第三十三版之二：動盪、失序時有機率套上營地（失序的營地，清掉後留下遺留地點）；BUG 量配不上任何營地就照舊合成一隻。
+    // 第三十三版之三：合進去的怪物身上的 bug 加總就是這一群的 BUG 量；營地配掉的不夠的零頭留在格子裡，合體怪物帶走全部
     const st = FE.Stability.state(game);
     const scope = group.reduce((s, m) => s + m.scope, 0);
+    const bug = group.reduce((s, m) => s + m.bug, 0);
     if (C.CAMP_CHANCE[st] > 0 && game.rng() < C.CAMP_CHANCE[st]) {
-      const pick = game.compose(at.x, at.y, scope, { camps: true, campaign: false });
+      const pick = game.compose(at.x, at.y, bug, { camps: true, campaign: false });
       if (pick.camp) {
         const d = { type, x: at.x, y: at.y, cells: group.flatMap((m) => m.cells), scope, data: {} };
         const camp = game.spawnList(d, pick.list, null, { camp: pick.camp, origin: 'disorder' });
         if (camp.length) {
           for (const m of camp) m.members = group; // 最後倒下的那隻把合進來的錯一起修好
+          game.spillDebt(camp[0].x, camp[0].y, bug - camp.reduce((s, m) => s + m.bug, 0));
           game.say(`${group.length} 隻怪物沒有清掉，聚成了一座${FE.CAMPS[pick.camp].name}！`, 'bug');
           return;
         }
@@ -168,6 +161,7 @@
     // 種族看環境，AC、攻擊加值、傷害照那個種族中型怪物的數值塊（第三十三版，原本是群裡最高的攻擊力 +1、最多 9）；
     // 血量照舊是群裡的血量加總，最多 150（乘世界等級的加成）
     FE.dressMonster(big, game.world, game.rng);
+    big.bug = bug; // 身上的 BUG 值是合進去的加總（dressMonster 換數值塊時會改成那個數值塊的值）
     big.maxHp = Math.min(Math.round(150 * FE.wlScale(wl, C.WL_BONUS.HP)), group.reduce((s, m) => s + m.maxHp, 0));
     big.hp = Math.min(big.maxHp, group.reduce((s, m) => s + m.hp, 0));
     big.exp = group.reduce((s, m) => s + m.exp, 0);
@@ -240,7 +234,7 @@
       if (!safe && m.id === game.battle.targetId) {
         const s = stepToward(game, m, (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1 && game.world.heightOk(x, y, p.x, p.y));
         if (s) {
-          [m.x, m.y] = s;
+          moveTo(game, m, s[0], s[1]);
           if (!m.small) m.home = { x: m.x, y: m.y }; // 不追人的怪物放開之後就在這裡徘徊
         }
         if (m.small) {
@@ -268,7 +262,7 @@
         else if (m.chase > 0) m.chase--;
         if (m.chase > 0) {
           const s = stepToward(game, m, (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1 && game.world.heightOk(x, y, p.x, p.y));
-          if (s) [m.x, m.y] = s;
+          if (s) moveTo(game, m, s[0], s[1]);
           // 走不過去（冒險者在聚落周圍的圈裡，怪物追到圈邊）也算追了一步，追滿 CHASE_LIMIT 就回生成點
           m.chaseSteps++;
           // 沒纏上冒險者：追太多步，或看不到之後追丟了，就回生成點
@@ -280,15 +274,6 @@
     }
     // 靈巧脫身：這一回合移動之後貼著冒險者的哥布林，躲進冒險者的死角
     if (!safe) for (const m of game.monsters) if (before.has(m) && before.get(m) !== m.x + ',' + m.y && touching(game, m, p)) nimbleHide(game, m);
-
-    const smallCount = game.monsters.filter((m) => m.small).length;
-    // 只有冒險者附近的怪物會侵蝕；不然整個世界的怪物一起侵蝕，怪物會越生越多。世界越亂侵蝕越勤
-    if (smallCount < C.SMALL_CAP) {
-      const chance = C.CORRUPT_CHANCE * FE.Stability.mult(game, 'CORRUPT') * FE.Stability.scale(game, 'CORRUPT');
-      for (const m of game.monsters) {
-        if (dist(m, p) <= C.CORRUPT_RANGE && game.rng() < chance) corrupt(game, m);
-      }
-    }
 
     tryMerge(game);
   }
@@ -350,7 +335,7 @@
   // ---- 士兵 ----
   // 士兵跟怪物照同一個時鐘（第三十版）：每 10 刻做一個動作（移動、出手或站著不動）；失序時冒險者的動作花兩倍的刻，士兵跟怪物一樣多動一次。
   // 安穩、動盪：在自己的城鎮裡室外走動（跟村民一樣，不進建築）；在城外就走回城鎮。
-  // 失序：出城，追打該塊世界裡事件與侵蝕生的小怪物（m.small）；創世時的怪物一律不碰，免得冒險者解不出下一塊。
+  // 失序：出城，追打該塊世界裡衰敗生的小怪物（m.small）；創世時的怪物一律不碰，免得冒險者解不出下一塊。
   // 打不到（沒有目標或走不到）就在城鎮附近巡邏。士兵可以走進聚落周圍的圈，怪物不行。
   const inBuilding = (w, x, y) => {
     const v = w.villageAt(x, y);
@@ -419,7 +404,7 @@
       if (!v) continue;
       const home = (x, y) => w.villageAt(x, y) === v;
       if (disorder) {
-        // 城鎮外 16 格內事件與侵蝕生的小怪物（m.small），創世時的怪物不碰
+        // 城鎮外 16 格內衰敗生的小怪物（m.small），創世時的怪物不碰
         // （第三十二版小塊變成 24×24，不再用「城鎮所在那一塊」，改成跟原本 64×64 一塊差不多的範圍）
         const around = (m) => m.x >= v.x0 - 16 && m.x <= v.x1 + 16 && m.y >= v.y0 - 16 && m.y <= v.y1 + 16;
         if (!preyCache.has(v)) preyCache.set(v, game.monsters.filter((m) => m.small && around(m)));

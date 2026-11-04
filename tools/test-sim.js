@@ -393,6 +393,7 @@ function simulate(seed, opts) {
   };
   const before = game.reports.length;
   const totals = [];
+  const trace = []; // FE_TRACE=N：每 N 個動作記一筆（動作數、小時、區塊、世界等級、狀態、整體 BUG 值、格子欠的量、怪物數），調世界狀態的分界用
   const lv = [0, 0, 0];
   const first = [null, null, null];
   const firstWL = [null, null, null]; // 第一次進動盪、失序時的世界等級
@@ -449,11 +450,19 @@ function simulate(seed, opts) {
     if (L > 0 && first[L] === null) { first[L] = i + 1; firstWL[L] = wl; }
     if (L > 1 && first[1] === null) { first[1] = i + 1; firstWL[1] = wl; }
     totals.push(FE.Stability.total(game));
+    if (process.env.FE_TRACE && i % Number(process.env.FE_TRACE) === 0) trace.push(`${i}|h${Math.round(game.ticks / 100)}|b${game.world.chunks.length}|wl${wl}|s${L}|T${Math.round(FE.Stability.total(game))}|d${game.world.debt}|n${game.monsters.length}`);
+    if (i % 50 === 0) {
+      // 穩定值永遠合法：整數、在 Int16 的範圍、全世界欠的量跟逐格加總一致、每隻怪物的 bug 是正整數
+      let debt = 0;
+      for (const ch of game.world.chunks) for (const v of ch.stab) if (v < 0) debt -= v;
+      if (debt !== game.world.debt) fail(`模擬 seed${seed} 第${i}步 全世界欠的量 ${game.world.debt}，逐格加總是 ${debt}`);
+      if (game.monsters.some((m) => !(m.bug > 0) || !Number.isInteger(m.bug))) fail(`模擬 seed${seed} 第${i}步 有怪物的 bug 不是正整數`);
+    }
     if (process.env.FE_DIAG && i % Number(process.env.FE_DIAG) === 0) {
       console.log(`  [卡住診斷 第${i}步] 回合 ${game.turn} 位置 ${p.x},${p.y} 負重 ${game.weight()} 階 ${game.loadTier()} 對話 ${game.talking} 目標 ${JSON.stringify(target)} 最新訊息「${game.log[0] && game.log[0].text}」鄰格 ${DIRS.map(([dx, dy]) => { const cc = game.world.cell(p.x + dx, p.y + dy); const n = game.world.npcAt(p.x + dx, p.y + dy); return (cc ? cc.t : '空') + (n ? '[' + n.role + ']' : '') + (game.monsterAt(p.x + dx, p.y + dy) ? '[怪]' : '') + (cc && !game.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) ? '[崖]' : ''); }).join(' ')}`);
       const ms = game.monsters;
-      const sum = (a) => a.reduce((s, m) => s + m.scope, 0);
-      console.log(`  [診斷 seed${seed} 第${i}步] 塊 ${game.world.chunks.length} 等級 ${wl} 狀態 ${L} 總 ${sum(ms)}｜創世怪 ${ms.filter((m) => !m.small && !m.members).length} 隻 ${sum(ms.filter((m) => !m.small && !m.members))}｜追人怪 ${ms.filter((m) => m.small).length} 隻 ${sum(ms.filter((m) => m.small))}｜合體 ${ms.filter((m) => m.members).length} 隻 ${sum(ms.filter((m) => m.members))}｜修補力 ${game.compute.toFixed(0)} 創世力 ${game.creation.toFixed(0)}/${game.nextChunkAt.toFixed(0)}`);
+      const sum = (a) => a.reduce((s, m) => s + m.bug, 0);
+      console.log(`  [診斷 seed${seed} 第${i}步] 塊 ${game.world.chunks.length} 等級 ${wl} 狀態 ${L} 總 ${FE.Stability.total(game)}（格子欠 ${game.world.debt}）｜創世怪 ${ms.filter((m) => !m.small && !m.members).length} 隻 ${sum(ms.filter((m) => !m.small && !m.members))}｜追人怪 ${ms.filter((m) => m.small).length} 隻 ${sum(ms.filter((m) => m.small))}｜合體 ${ms.filter((m) => m.members).length} 隻 ${sum(ms.filter((m) => m.members))}｜修補力 ${game.compute.toFixed(0)} 創世力 ${game.creation.toFixed(0)}/${game.nextChunkAt.toFixed(0)}`);
     }
 
     // 士兵：從不進建築；只在失序時出城（回到動盪或安穩後走回來）；陣亡後要等回到安穩才補回
@@ -495,8 +504,12 @@ function simulate(seed, opts) {
   if (!back || !back.game) fail(`存檔 seed${seed} 讀不回來`);
   else {
     const g2 = back.game;
-    if (g2.worldState !== game.worldState || g2.monsters.length !== game.monsters.length || (g2.fixed || []).length !== (game.fixed || []).length || g2.battle.cooldown !== game.battle.cooldown) fail(`存檔 seed${seed} 讀回來的狀態不一致`);
+    if (g2.worldState !== game.worldState || g2.monsters.length !== game.monsters.length || g2.battle.cooldown !== game.battle.cooldown) fail(`存檔 seed${seed} 讀回來的狀態不一致`);
     if (g2.soldiers.length !== game.soldiers.length || g2.creation !== game.creation || g2.nextChunkAt !== game.nextChunkAt || g2.world.nextTownAt !== game.world.nextTownAt) fail(`存檔 seed${seed} 士兵或創世力讀回來不一致`);
+    // 第三十三版之三：穩定值（每塊區塊的整數陣列）與全世界欠的量讀回來要一模一樣，怪物身上的 bug 也在
+    if (g2.world.debt !== game.world.debt || g2.world.chunks.length !== game.world.chunks.length || game.world.chunks.some((ch, k) => ch.stab.length !== g2.world.chunks[k].stab.length || ch.stab.some((v, j) => v !== g2.world.chunks[k].stab[j]) || ch.debt !== g2.world.chunks[k].debt)) fail(`存檔 seed${seed} 穩定值讀回來不一致`);
+    if (g2.monsters.some((m, k) => m.bug !== game.monsters[k].bug)) fail(`存檔 seed${seed} 怪物的 bug 讀回來不一致`);
+    if (FE.Stability.total(g2) !== FE.Stability.total(game)) fail(`存檔 seed${seed} 整體 BUG 值讀回來不一致`);
     const e0 = g2.reports.length;
     for (let i = 0; i < 30; i++) g2.guard('bot', () => { botStep(g2, rng, goal, true); if (g2.talking != null) botTalk(g2); });
     if (g2.reports.length !== e0) fail(`存檔 seed${seed} 讀回來玩出執行錯誤`);
@@ -523,7 +536,11 @@ function simulate(seed, opts) {
     indoorSteps: enteredHouse, stateShare: lv.map((n) => (n / steps).toFixed(2)).join('/'),
     firstUnrest: first[1], firstUnrestWL: firstWL[1], firstChaos: first[2], firstChaosWL: firstWL[2],
     perWorldLevel: perWL,
-    bugTotal: `min${pct(0)} p50 ${pct(0.5)} p90 ${pct(0.9)} max${pct(1)}`, recur: st.recur, sabotage: st.sabotage,
+    bugTotal: `min${pct(0)} p50 ${pct(0.5)} p90 ${pct(0.9)} max${pct(1)}`,
+    // 第三十三版之三：結束時怪物身上的 BUG 值、格子欠的量；衰敗的小時數、從衰敗生出的群與隻數、修補力補回的穩定值
+    bugEnd: game.monsters.reduce((t, m) => t + m.bug, 0), debtEnd: game.world.debt,
+    decay: `${st.decayHours} 小時、生 ${st.decayGroups} 群 ${st.decayMonsters} 隻、補回 ${Math.round(st.mended)}`,
+    trace: trace.length ? trace : undefined,
     soldiers: `出動 ${st.sorties} 次、出手 ${st.soldierAttacks}、清掉 ${st.soldierKills} 隻、陣亡 ${st.soldierDeaths}、補回 ${st.refills}`,
     // 第三十版：時間與經濟
     days: +(game.ticks / C.DAY_TICKS).toFixed(1), longRests: st.longRests, restPaid: st.restPaid, shortRests: st.shortRests,

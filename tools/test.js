@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 global.require = require; // 載進來的檔不是模組，借用這支的 require
-for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30', 'test-skills31', 'test-monsters33']) {
+for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30', 'test-skills31', 'test-monsters33', 'test-stability33']) {
   vm.runInThisContext(fs.readFileSync(path.join(__dirname, f + '.js'), 'utf8'), { filename: path.join(__dirname, f + '.js') });
 }
 
@@ -38,12 +38,13 @@ function runJob(id) {
   } else if (kind === 'sim') simResults.push(simulate(Number(b), { steps, cls: a }));
   else if (kind === 'lazy') simResults.push(simulate(SEEDS[0], { steps, lazy: true }));
   else if (kind === 'sim4') {
-    simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: QUICK ? 2000 : 3000, untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
+    // FE_MIN：最少動作數（預設 3000，快測 2000）；調世界狀態的分界要拉長（世界等級 4 要長滿 3 圈，約 100 塊），搭配 FE_MAX 放寬上限
+    simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: Number(process.env.FE_MIN) || (QUICK ? 2000 : 3000), untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));
   } else if (kind === 'cmp') simResults.push(simulate(Number(b), { steps: SIM_CMP_STEPS, cond: a }));
   else if (kind === 'unit') { useClasses('legacy'); NO_TIRE = a !== 'economy30'; UNITS[a](); NO_TIRE = false; }
   else if (kind === 'arena') {
     // 競技場量的是幾下打倒：不讓角色累；也不演算事件（第三十版起事件每 100 刻演算，原本要走路才演算，站著打的競技場碰不到；
-    // 演算了會把侵蝕的地面變成新的怪物、改動競技場的地形）
+    // 演算了會讓格子往下掉、從負格子生出新的怪物，擾亂競技場）
     NO_TIRE = true;
     const tick0 = FE.Events.tick;
     FE.Events.tick = () => {};
@@ -59,8 +60,7 @@ function collectState() {
     problems, pcount: problems.count || 0,
     stats, geo, reachCheck, bufferViolations, cutOff, stuckFixes, dlgStats, combat,
     measure: { armorCmp: measure.armorCmp },
-    checks: { dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks, econ: econChecks, spell: spellChecks, monster: monChecks },
-    corruptCal,
+    checks: { dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks, econ: econChecks, spell: spellChecks, monster: monChecks, stab: stabChecks },
     botDrops,
     sims: simResults, arena: arenaData,
   };
@@ -90,8 +90,7 @@ function mergeState(part) {
   cutOff.push(...part.cutOff);
   const c = part.checks;
   dlgChecks += c.dlg; creationChecks += c.creation; wlChecks += c.wl; soldierChecks += c.soldier; bagChecks += c.bag;
-  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth; econChecks += c.econ; spellChecks += c.spell; monChecks += c.monster || 0;
-  mergeDeep(corruptCal, part.corruptCal);
+  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth; econChecks += c.econ; spellChecks += c.spell; monChecks += c.monster || 0; stabChecks += c.stab || 0;
   simResults.push(...part.sims);
   mergeDeep(arenaData, part.arena);
 }
@@ -99,7 +98,7 @@ function mergeState(part) {
 function buildJobs() {
   const jobs = [];
   const add = (id, w) => jobs.push({ id, w });
-  const units = ['gear', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
+  const units = ['gear', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'stability33', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
   if (MODE === 'arena') {
     for (const cls of BOT_CLASSES) add('arena:' + cls, 30);
     return jobs;
@@ -131,7 +130,6 @@ if (JOB) {
   else {
     // 直接叫起來（不經主行程）：只印這一項的耗時、模擬結果和問題，調數字、查單項用
     for (const s of simResults) console.log(JSON.stringify(s));
-    if (Object.keys(corruptCal).length) console.log('侵蝕校準', JSON.stringify(corruptCal));
     console.log(`耗時 ${((Date.now() - t0) / 1000).toFixed(1)} 秒｜問題 ${problems.count || 0} 件`);
     for (const p of problems) console.log('  ', p);
   }
@@ -247,9 +245,7 @@ console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${b
 }
 // 第三十版：時間與經濟
 {
-  console.log(`時間與經濟（第三十版）的場景檢查 ${econChecks} 項｜施法（第三十一版）的場景檢查 ${spellChecks} 項｜怪物數值、AC 命中與特性（第三十三版）的場景檢查 ${monChecks} 項`);
-  const cal = Object.keys(corruptCal).sort((a, b) => a - b).map((k) => { const r = corruptCal[k]; return `每回合 ${k}：${r.nights} 晚、附近怪物 ${r.monsters} 隻、侵蝕 ${r.corrupt} 次（每隻 ${(r.corrupt / Math.max(1, r.monsters)).toFixed(2)} 次、每晚多出 ${(r.tiles / Math.max(1, r.nights)).toFixed(1)} 格扭曲地面）`; });
-  if (cal.length) console.log(`  侵蝕校準（長休一晚 80 回合）：${cal.join('｜')}`);
+  console.log(`時間與經濟（第三十版）的場景檢查 ${econChecks} 項｜施法（第三十一版）的場景檢查 ${spellChecks} 項｜怪物數值、AC 命中與特性（第三十三版）的場景檢查 ${monChecks} 項｜穩定值（第三十三版之三）的場景檢查 ${stabChecks} 項`);
   const all = sim.concat(sim4);
   if (all.length) {
     for (const s of all) console.log(`  ${FE.CLASSES[s.cls] ? FE.CLASSES[s.cls].name : s.cls} seed${s.seed} ${s.worldEvery > 1 ? '四人等效' : '單人'}（${s.actions} 動作、${s.days} 天）：長休 ${s.longRests} 次、平均每次付 ${FE.money(s.longRests ? s.restPaid / s.longRests : 0)}、短休 ${s.shortRests}｜經濟標籤 升 ${s.econUp}、降 ${s.econDown}（結束時 ${s.econEnd}）｜力竭最高 ${s.exhaustMax} 級｜完成委託 清除 ${s.jobs.hunt}、送貨 ${s.jobs.deliver}、採藥 ${s.jobs.herb}、採礦 ${s.jobs.ore}，同時最多 ${s.jobsMax} 個｜身上 ${FE.money(s.money)}`);

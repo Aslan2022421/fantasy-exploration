@@ -1,7 +1,6 @@
 // 第三十版的場景檢查：時間與經濟
 // ---- 第三十版：時間與經濟（時鐘、休息、生活開支、經濟值、貨幣、採藥採礦委託、四種委託、世界裡的人的種族、力竭）----
 let econChecks = 0;
-const corruptCal = {}; // 侵蝕校準：CORRUPT_CHANCE → { nights, monsters, corrupt }
 function testEconomy30() {
   const ok = (cond, msg) => { econChecks++; if (!cond) fail('時間與經濟 ' + msg); };
   // 新遊戲：清掉怪物、不再創世；冒險者放在出生的村莊中央的路上
@@ -185,7 +184,7 @@ function testEconomy30() {
     const nOld = g.monsters.length;
     g.worldEvery = 1e9; // 世界不走（怪物不移動），只看日子
     const spawn0 = g.spawnMonster;
-    g.spawnMonster = () => null; // 跨過整點時侵蝕與事件可能生出新怪物，這裡只量日子，先關掉
+    g.spawnMonster = () => null; // 跨過整點時衰敗可能生出新怪物，這裡只量日子，先關掉
     g.endTurn(false, 10, { exact: true });
     ok(FE.Steading.econ(v) === 50 - nOld * C.ECON_MONSTER, `跨過一天扣 ${50 - FE.Steading.econ(v)}（應該 ${nOld}）`);
     g.endTurn(false, 10, { exact: true });
@@ -366,52 +365,44 @@ function testEconomy30() {
     }
   }
 
-  // 12. 侵蝕校準：長休一晚（80 回合），聚落附近（冒險者 20 步內、圈外）的怪物每隻侵蝕幾次。舊的 0.012 與現在的數字各量一次
+  // 12. 侵蝕拿掉了（第三十三版之三）：怪物放著、冒險者長休一晚（80 回合，含整點的事件），地面的生態區與高度一格都沒變，
+  // 也沒有因此生出新的怪物（怪物只從負的穩定值生，離冒險者至少 DECAY_MIN_DIST 步）
   {
-    const chances = [0.012, C.CORRUPT_CHANCE];
-    const c0 = C.CORRUPT_CHANCE;
-    for (const ch of chances) {
-      C.CORRUPT_CHANCE = ch;
-      const r = corruptCal[ch] || (corruptCal[ch] = { nights: 0, monsters: 0, corrupt: 0, tiles: 0 });
-      for (let s = 0; s < 40; s++) {
-        const g = new FE.Game(6100 + s);
-        g.start();
-        g.checkCreate = () => {};
-        g.wakeSpot();
-        g.worldState = 0;
-        const p = g.player;
-        // 放 4 隻怪物在冒險者 20 步內（侵蝕的範圍）、聚落周圍的圈外（不追人，只徘徊）
-        g.monsters = [];
-        const spots = [];
-        for (let dy = -20; dy <= 20; dy++) for (let dx = -20; dx <= 20; dx++) {
-          const x = p.x + dx, y = p.y + dy;
-          if (Math.abs(dx) + Math.abs(dy) <= C.CORRUPT_RANGE - 2 && g.world.passable(x, y) && !g.world.inBuffer(x, y) && !g.world.villageAt(x, y)) spots.push([x, y]);
-        }
-        const rr = FE.makeRng(s + 9);
-        for (let k = 0; k < 4 && spots.length; k++) {
-          const [x, y] = spots.splice(Math.floor(rr() * spots.length), 1)[0];
-          const m = g.spawnMonster({ type: 'TERRAIN', x, y, cells: [], scope: 2, data: {} });
-          if (m) Object.assign(m, { x, y, home: { x, y } });
-        }
-        if (!g.monsters.length) continue;
-        const st = FE.Stability.stat(g);
-        st.corrupt = 0;
-        const evTick = FE.Events.tick;
-        FE.Events.tick = () => {}; // 只量侵蝕，不讓檢查器把扭曲的地面變成新的怪物
-        const before = g.world.chunks.reduce((n, chk) => n + chk.cells.flat().filter((c) => c.biome === 'tundra' || c.biome === 'desert').length, 0);
-        p.copper = 1000;
-        g.rest();
-        const after = g.world.chunks.reduce((n, chk) => n + chk.cells.flat().filter((c) => c.biome === 'tundra' || c.biome === 'desert').length, 0);
-        FE.Events.tick = evTick;
-        r.nights++;
-        r.monsters += g.monsters.length;
-        r.corrupt += st.corrupt;
-        r.tiles += after - before;
+    let changed = 0, spawned = 0, nights = 0;
+    for (let s = 0; s < 12; s++) {
+      const g = new FE.Game(6100 + s);
+      g.start();
+      g.checkCreate = () => {};
+      g.wakeSpot();
+      g.worldState = 0;
+      const p = g.player;
+      // 放 4 隻怪物在冒險者 20 步內、聚落周圍的圈外（不追人，只徘徊）
+      g.monsters = [];
+      for (const ch of g.world.chunks) { ch.stab.fill(240); ch.debt = 0; }
+      g.world.debt = 0;
+      const spots = [];
+      for (let dy = -20; dy <= 20; dy++) for (let dx = -20; dx <= 20; dx++) {
+        const x = p.x + dx, y = p.y + dy;
+        if (Math.abs(dx) + Math.abs(dy) <= 18 && g.world.passable(x, y) && !g.world.inBuffer(x, y) && !g.world.villageAt(x, y)) spots.push([x, y]);
       }
+      const rr = FE.makeRng(s + 9);
+      for (let k = 0; k < 4 && spots.length; k++) {
+        const [x, y] = spots.splice(Math.floor(rr() * spots.length), 1)[0];
+        const m = g.spawnMonster({ type: 'TERRAIN', x, y, cells: [], scope: 2, data: {} });
+        if (m) Object.assign(m, { x, y, home: { x, y } });
+      }
+      if (!g.monsters.length) continue;
+      const snap = () => g.world.chunks.map((chk) => chk.cells.map((row) => row.map((c) => c.biome + c.h + c.t).join()).join('|')).join('#');
+      const before = snap();
+      const n0 = g.monsters.length;
+      p.copper = 1000;
+      g.rest();
+      nights++;
+      if (snap() !== before) changed++;
+      spawned += g.monsters.length - n0;
     }
-    C.CORRUPT_CHANCE = c0;
-    const per = (ch) => corruptCal[ch].corrupt / Math.max(1, corruptCal[ch].monsters);
-    ok(per(C.CORRUPT_CHANCE) >= 1 && per(C.CORRUPT_CHANCE) <= 2, `長休一晚每隻附近怪物侵蝕 ${per(C.CORRUPT_CHANCE).toFixed(2)} 次（應該 1～2）`);
+    ok(nights >= 8 && changed === 0, `長休一晚地面不該變：${nights} 晚裡有 ${changed} 晚地面變了`);
+    ok(spawned === 0, `穩定值都還是正的，長休一晚不該生出新的怪物（生了 ${spawned} 隻）`);
   }
 }
 UNITS.economy30 = () => { try { testEconomy30(); } catch (e) { fail('時間與經濟測試拋出例外：' + e.stack); } };

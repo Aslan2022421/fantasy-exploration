@@ -264,7 +264,7 @@ function testWorldLevel() {
   const g = new FE.Game(31337);
   g.start();
   g.worldState = 0;
-  ok(FE.Stability.worldLevel(g) === 1 && FE.Stability.maxScope(g) === 3, `等級 1 的影響範圍上限 ${FE.Stability.maxScope(g)}`);
+  ok(FE.Stability.worldLevel(g) === 1 && Math.abs(FE.Stability.scale(g, 'CUTS') - 1) < 1e-9, `等級 1 的分界倍率 ${FE.Stability.scale(g, 'CUTS')}`);
   // 第三十二版：世界等級＝1＋長滿的圈數；一圈 4 段，長滿第 1 圈是 2 級，長到 288×288（4 圈、16 段）是 5 級，之後不再長
   const lvAt = [];
   while (g.createChunk(false) !== false) lvAt.push(FE.Stability.worldLevel(g));
@@ -274,20 +274,22 @@ function testWorldLevel() {
   g.monsters = [];
   g.worldState = 0;
   ok(FE.Stability.worldLevel(g) === 5, `長滿的世界等級 ${FE.Stability.worldLevel(g)}`);
-  ok(FE.Stability.maxScope(g) === Math.round(3 * 1.4) && Math.abs(FE.Stability.scale(g, 'CORRUPT') - 1.4) < 1e-9, '等級 5 的影響範圍上限或侵蝕頻率不對');
-  // 世界狀態的分界跟著升高：整體 BUG 值是第一個分界的 1.15 倍，在等級 1 是動盪，在等級 5（分界 ×1.4）還是安穩
+  ok(Math.abs(FE.Stability.scale(g, 'CUTS') - 1.4) < 1e-9, '等級 5 的分界倍率不對');
+  // 世界狀態的分界跟著升高：整體 BUG 值（怪物的 bug 加上全世界欠的穩定值）是第一個分界的 1.15 倍，在等級 1 是動盪，在等級 5（分界 ×1.4）還是安穩
   const cut0 = C.STATE_CUTS[0];
   const g1 = new FE.Game(1);
   g1.start();
-  g1.monsters = [{ scope: Math.round(cut0 * 1.15), x: 0, y: 0 }];
+  const owe = (game) => game.world.debt;
+  g1.monsters = [{ bug: Math.round(cut0 * 1.15) - owe(g1), x: 0, y: 0 }];
   FE.Stability.update(g1, true);
-  g.monsters = [{ scope: Math.round(cut0 * 1.15), x: 0, y: 0 }];
+  g.monsters = [{ bug: Math.round(cut0 * 1.15) - owe(g), x: 0, y: 0 }];
   g.worldState = 0;
   FE.Stability.update(g, true);
   ok(g1.worldState === 1 && g.worldState === 0, `分界：等級 1 狀態 ${g1.worldState}、等級 5 狀態 ${g.worldState}`);
-  g.monsters = [{ scope: Math.round(cut0 * 1.45), x: 0, y: 0 }];
+  g.monsters = [{ bug: Math.round(cut0 * 1.45) - owe(g), x: 0, y: 0 }];
   FE.Stability.update(g, true);
   ok(g.worldState === 1, `等級 5 整體 BUG 值是第一個分界的 1.45 倍，應該動盪，狀態 ${g.worldState}`);
+  ok(FE.Stability.total(g) === Math.round(cut0 * 1.45), `整體 BUG 值＝怪物的 bug 加全世界欠的量：${FE.Stability.total(g)}`);
   g.monsters = [];
   FE.Stability.update(g, true);
 }
@@ -299,8 +301,9 @@ function testSoldiers() {
   const ok = (cond, msg) => { soldierChecks++; if (!cond) fail('士兵 ' + msg); };
   // 種子 5150 在第二十五版城鎮多蓋盔甲匠工坊、排版改變之後，3 位士兵出城會在 1 格寬的通道卡成一列（隊長被隊友擋在後面），
   // 這個場景測的是出城清怪，所以換用 5151（士兵卡住的情形留給第三十版重寫士兵時處理）。
-  // 第三十三版之二生怪的亂數順序變了，5151 的 3 位士兵又卡在 1 格寬的通道，換用 5152（卡通道的問題還在，留給士兵重寫）
-  const g = new FE.Game(5152);
+  // 第三十三版之二生怪的亂數順序變了，5151 的 3 位士兵又卡在 1 格寬的通道，換用 5152（卡通道的問題還在，留給士兵重寫）。
+  // 第三十三版之三創世多擲了每處欠的量，亂數順序又變了：5152 的小怪物變成會再生的巨魔斷肢（走到之前就把血補滿了），換用 5153
+  const g = new FE.Game(5153);
   g.start();
   for (let i = 0; i < 12 && !g.world.villages.some((v) => v.kind === 'town'); i++) g.createChunk(false);
   const town = g.world.villages.find((v) => v.kind === 'town');
@@ -368,7 +371,7 @@ function testSoldiers() {
 
   // 陣亡的士兵：失序中不補，回到安穩才補回原本的人數；其他的走回城鎮
   C.STATE_CUTS = [1, 2];
-  g.monsters = [{ scope: 20, x: 0, y: 0 }];
+  g.monsters = [{ bug: 20, scope: 20, x: 0, y: 0 }];
   FE.Stability.update(g, true);
   const full = mine().length === quota;
   if (!full) g.refillSoldiers();
@@ -378,6 +381,7 @@ function testSoldiers() {
   ok(mine().length === quota - 1 && g.worldState === 2, `陣亡後失序中人數 ${mine().length}（應該 ${quota - 1}）`);
   C.STATE_CUTS = saved;
   g.monsters = [];
+  g.world.forEachCell((x, y) => g.world.resetStab(x, y)); // 強制失序的那幾百個動作裡，每一格都掉成了負的，先補回起始值
   FE.Stability.update(g, true);
   ok(g.worldState === 0 && mine().length === quota, `回到安穩後士兵 ${mine().length}/${quota}（狀態 ${g.worldState}）`);
   for (let i = 0; i < 200; i++) wait();
@@ -401,7 +405,12 @@ function testSoldiers() {
   }
   C.STATE_CUTS = saved;
 }
-UNITS.soldiers = () => { try { testSoldiers(); } catch (e) { fail('士兵測試拋出例外：' + e.stack); } };
+UNITS.soldiers = () => {
+  // 這項場景強制把世界推到失序、一次過幾百個動作；衰敗會在那段時間生出別的小怪物來打士兵，擾亂「公平的一戰」，所以只讓格子照常往下掉、不生怪物
+  const spawn0 = FE.Stability.spawnDecay;
+  FE.Stability.spawnDecay = () => 0;
+  try { testSoldiers(); } catch (e) { fail('士兵測試拋出例外：' + e.stack); } finally { FE.Stability.spawnDecay = spawn0; }
+};
 
 // ---- 背包、工具、採集、藥草、礦石改良、艱難選擇只罰冒險者：場景測試 ----
 let bagChecks = 0;

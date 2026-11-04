@@ -456,15 +456,6 @@
   }
   const scan = (world, r, monsters) => scanWith(world, r, monsters, (covered) => findUnreachable(world, covered, r));
 
-  // 整個世界找還沒有怪物負責的地形錯位與斷崖（侵蝕、地形重算造成的）
-  function findGlitches(world, monsters, dormant) {
-    const b = world.bounds();
-    return [].concat(
-      findTerrain(world, b, coveredBy(monsters, 'TERRAIN', dormant)),
-      findCliffs(world, b, coveredBy(monsters, 'CLIFF', dormant))
-    );
-  }
-
   // full：舊做法（整個世界走一遍、整個世界掃一遍），只給測試對照新做法用，遊戲本身不呼叫
   const full = {
     reachable: reachableFull,
@@ -473,5 +464,5 @@
       scanWith(world, r, monsters, (covered) => unreachableIn(world, covered, reachableFull(world), (fn) => world.forEachCell(fn))),
   };
 
-  FE.Checker = { scan, reachable, checkChest, checkNpc, findGlitches, full };
+  FE.Checker = { scan, reachable, checkChest, checkNpc, full };
 })();

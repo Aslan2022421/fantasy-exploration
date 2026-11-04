@@ -37,12 +37,17 @@
       name: '碎裂',
       desc: '空間碎裂時留下的殘響。',
     },
+    // 第三十三版之三：穩定值掉到負的格子生出來的怪物，沒有哪一處具體的錯要修；打倒時只把那一帶的穩定值補回起始值
+    DECAY: {
+      name: '衰敗',
+      desc: '大地一點一點失去了穩定，聚成了怪物。',
+    },
   };
 
   FE.KIND_NAMES = { attack: '一般攻擊', deep: '重擊' };
 
   // 分級（m.tier）：影響範圍 1～4 是小怪物，5 以上是中型怪物，12 以上才是大怪物（只來自世界級事件，第 2 階段才做）。
-  // 注意 m.small 不是「小怪物」，是「會追人、會合體」的旗標，只有事件與侵蝕生出的怪物有；
+  // 注意 m.small 不是「小怪物」，是「會追人、會合體」的旗標，只有衰敗的格子生出的怪物有（第三十三版之三）；
   // 創世時生出的怪物就算影響範圍只有 1，m.small 也是 false，只在自己的 B 點附近徘徊
   // 第三十三版之二：名字看數值塊（Giant Crocodile 是巨鱷）；沒有菁英數值塊、由一群裡最強的那隻升上來的菁英，名字前加「菁英」
 
@@ -100,7 +105,14 @@
     return R[Object.keys(R)[0]];
   };
   // 一隻怪物值多少 BUG 量：世界等級 1 的生命 × 一下的平均傷害（第三十三版之二，使用者同意的算法）
+  // 第三十三版之三：這個值也是怪物身上的 BUG 值（m.bug），跟格子的穩定值同一個單位（穩定值負的量就是 BUG 值）
   FE.blockValue = (b) => FE.monsterHp(b) * (avgDie(b.die) + b.dmg + (b.extraDie ? avgDie(b.extraDie) : 0));
+  // 這幾個種族裡最便宜的一隻值多少 BUG 值（小怪物、中怪物兩級，菁英不算；衰敗的格子欠的量要買得起這個才生怪物）
+  FE.cheapestValue = (races) => {
+    let best = Infinity;
+    for (const r of races) for (const k of ['small', 'mid']) if (FE.hasTier(r, k)) best = Math.min(best, FE.blockValue(FE.monsterBlock(r, k)));
+    return best === Infinity ? FE.blockValue(FE.monsterBlock('goblin', 'small')) : best;
+  };
   // 生命：跟冒險者同一套（char.js 的 maxHp）：（生命骰面數＋體質值）×1.5 無條件捨去，每多一級（生命骰多 1 顆）再加 面數÷2＋體質修正值
   FE.monsterHp = (b) => {
     const [n, f] = b.hd;
@@ -128,6 +140,7 @@
     });
     m.atk = Math.max(1, Math.round((avgDie(m.die) + (m.extraDie ? avgDie(m.extraDie) : 0) + m.dmgBonus) * FE.wlScale(m.wl, B.ATK)));
     m.maxHp = m.hp = Math.max(1, Math.round(FE.monsterHp(b) * FE.wlScale(m.wl, B.HP)));
+    m.bug = Math.round(FE.blockValue(b)); // 牠身上的 BUG 值（世界等級 1 的 blockValue 四捨五入成整數，跟格子的整數穩定值一起算；不乘世界等級的加成）；合體怪物由 merge 改成合進去的加總
     return m;
   };
   FE.hasTrait = (m, k) => !!(m && m.traits && m.traits.includes(k));
@@ -179,7 +192,7 @@
       exp: Math.round((4 + d.scope * 2) * FE.wlScale(wl, B.REWARD)), // 打倒時一次結算
       compute: FE.killCompute(tier, d.scope, wl), // 打倒時給的算力（單人份量，創世門檻也照這個加總）
       home: { x: d.x, y: d.y }, // 徘徊時繞著這一點
-      small: false,             // 會追人、會合體的旗標（事件與侵蝕生出的才是），跟 tier 的「小怪物」不同
+      small: false,             // 會追人、會合體的旗標（衰敗的格子生出的才是），跟 tier 的「小怪物」不同
       block: null,              // 目前的格擋值，第一次需要時補成上限（combat.js）
       chase: 0,                 // 還會追幾回合
       chaseSteps: 0,            // 這一趟已經追了幾步
@@ -224,8 +237,6 @@
   FE.repairBug = function (game, m, opts) {
     const w = game.world;
     if (m.members) return m.members.map((o) => FE.repairBug(game, o, opts)).join('');
-    // 修好的地形錯位與斷崖記下來，世界動盪時可能復發（stability.js）
-    if (m.type === 'TERRAIN' || m.type === 'CLIFF') FE.Stability.noteFix(game, m);
     switch (m.type) {
       case 'TERRAIN':
         // 地貌上的斷牆、立石只改生態區，不抹掉

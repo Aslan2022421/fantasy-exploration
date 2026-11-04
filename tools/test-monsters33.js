@@ -61,8 +61,9 @@ function testMonsters33() {
     ok(FE.racesOf('plain', 'mid').join() === 'bugbear' && FE.racesOf('taiga', 'small').sort().join() === 'wolf,worg' && FE.racesOf('savanna', 'mid').join() === 'boar' && FE.racesOf('marsh', 'mid').join() === 'constrictor', '補缺：平原熊地精、針葉林狼與座狼、莽原野豬、濕地蟒蛇');
     // 第三十三版之一：每個數值塊（含新種族）跟原件 data/srd-monsters.json（dd2024.fr 法文版）逐欄比對：
     // AC、生命骰（骰數扣掉多加的 up 級）、體質值、攻擊加值、傷害骰與加值、傷害種類、多擲的傷害骰；有群體戰術、易傷的要跟原件一樣
-    const SRD = require('fs').existsSync('data/srd-monsters.json') ? JSON.parse(require('fs').readFileSync('data/srd-monsters.json', 'utf8')).monsters : [];
-    ok(SRD.length >= 55, `讀到原件的數值塊 ${SRD.length} 個（要在倉庫根目錄跑）`);
+    const SRD_FILE = ROOT + '../data/srd-monsters.json'; // 不管從哪個資料夾叫測試都讀得到（ROOT 是 test-lib 算出的 js/ 資料夾）
+    const SRD = require('fs').existsSync(SRD_FILE) ? JSON.parse(require('fs').readFileSync(SRD_FILE, 'utf8')).monsters : [];
+    ok(SRD.length >= 55, `讀到原件的數值塊 ${SRD.length} 個（${SRD_FILE}）`);
     const TY = { tranchants: 'slash', perforants: 'pierce', contondants: 'blunt', tranchant: 'slash' };
     const EX = { poison: 'poison', nécrotiques: 'necrotic', froid: 'cold', foudre: 'lightning' };
     const parseSrd = (t) => {

@@ -9,6 +9,21 @@
   };
   const CODE_BIOME = Object.fromEntries(Object.entries(BIOME_CODE).map(([k, v]) => [v, k]));
 
+  // 穩定值（Int16Array）存成 base64：每塊 576 格 × 2 位元組，約 1.5K 字元；288×288 全部長滿約 220K 字元。位元組順序照機器（現行瀏覽器與 Node 都是小端）
+  function packStab(arr) {
+    const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+    let s = '';
+    for (let i = 0; i < u8.length; i += 0x2000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x2000));
+    return btoa(s);
+  }
+  function unpackStab(str, n) {
+    const bin = atob(str);
+    if (bin.length !== n * 2) throw new Error('穩定值的長度不對');
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Int16Array(u8.buffer);
+  }
+
   function serialize(game) {
     const w = game.world;
     return {
@@ -27,14 +42,12 @@
       battle: game.battle,
       worldState: game.worldState,
       soldiers: game.soldiers,
-      fixed: game.fixed,
       log: game.log.slice(0, 20),
       player: game.player,
       lastSafe: game.lastSafe,
       monsters: game.monsters,
-      flashes: game.flashes || [],
       world: {
-        // 每塊區塊各自存成幾列字串：地形字元、生態區代碼、高度
+        // 每塊區塊各自存成幾列字串：地形字元、生態區代碼、高度；穩定值是 base64
         chunks: w.chunks.map((ch) => ({
           index: ch.index,
           cx: ch.cx,
@@ -42,6 +55,7 @@
           terrain: ch.cells.map((row) => row.map((c) => c.t).join('')),
           biome: ch.cells.map((row) => row.map((c) => BIOME_CODE[c.biome] || 'p').join('')),
           height: ch.cells.map((row) => row.map((c) => c.h).join('')),
+          stab: packStab(ch.stab),
         })),
         npcs: w.npcs,
         chests: w.chests,
@@ -58,7 +72,6 @@
         remnants: w.remnants,
         campaigns: w.campaigns,
         ringsDone: w.ringsDone,
-        dormant: [...w.dormant],
       },
     };
   }
@@ -66,7 +79,7 @@
   function restore(data) {
     const game = new FE.Game(data.seed);
     game.rng.setState(data.rngState);
-    for (const k of ['turn', 'ticks', 'exp', 'level', 'creation', 'nextChunkAt', 'compute', 'nextMonsterId', 'nextGearId', 'tickAcc', 'battle', 'worldState', 'soldiers', 'fixed', 'log', 'player', 'lastSafe', 'monsters', 'flashes']) {
+    for (const k of ['turn', 'ticks', 'exp', 'level', 'creation', 'nextChunkAt', 'compute', 'nextMonsterId', 'nextGearId', 'tickAcc', 'battle', 'worldState', 'soldiers', 'log', 'player', 'lastSafe', 'monsters']) {
       game[k] = data[k];
     }
     const w = game.world;
@@ -79,6 +92,8 @@
         cy: s.cy,
         cells,
         ver: 0,
+        stab: unpackStab(s.stab, C.CHUNK_W * C.CHUNK_H),
+        debt: 0,
         x0: s.cx * C.CHUNK_W,
         y0: s.cy * C.CHUNK_H,
         x1: (s.cx + 1) * C.CHUNK_W,
@@ -93,7 +108,7 @@
     w.remnants = d.remnants || [];
     w.campaigns = d.campaigns || {};
     if (!Array.isArray(w.items)) w.items = [];
-    w.dormant = new Set(d.dormant);
+    w.recountDebt();
     return game;
   }
 

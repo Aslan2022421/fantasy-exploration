@@ -19,7 +19,7 @@
       this.items = [];          // 地上的東西（第二十八版：擲出去的武器）：{ x, y, gear }，冒險者走過去就撿回來
       this.nextId = 1;
       this.spawn = null;
-      this.dormant = new Set(); // 創世時放不下怪物的地形錯位
+      this.debt = 0;            // 全世界負的穩定值加總的絕對值（第三十三版之三：負的穩定值就是 BUG 值）；setStab 跟著增減，存檔讀回來時重算
       this.calm = [];           // 清掉怪物的地點：{ x, y, r, until }，到 until（刻）之前區內不生怪物（第三十二版）
       this.camps = [];          // 營地：{ id（帶頭那隻的群）, kind（FE.CAMPS）, x, y, origin（campaign 戰役、disorder 失序）}（第三十三版之二）
       this.campaigns = {};      // 還沒清光的戰役：段的索引 → { seg, place, day, content }（清光時寫進歷史紀錄）
@@ -113,6 +113,46 @@
       c.h = h;
       this.chunkAt(x, y).ver++;
     }
+    // ---- 穩定值（第三十三版之三）----
+    // 每格有一個穩定值，存在區塊的 ch.stab（Int16Array，一列接一列）。正的不生怪物，負的生怪物，負的量就是 BUG 值（跟 FE.blockValue 同一個單位）。
+    // 起始值看世界種子和座標（FE.stabilityAt，純函數雜訊，不碰任何亂數）；之後每小時往下掉、怪物踩過會減、修補與清掉怪物會補。
+    // ch.debt、world.debt 是負值的絕對值加總，setStab 順手維護，不用每次把全世界掃一遍
+    stab(x, y) {
+      const ch = this.chunkAt(x, y);
+      return ch ? ch.stab[(y - ch.y0) * C.CHUNK_W + (x - ch.x0)] : 0;
+    }
+    setStab(x, y, v) {
+      const ch = this.chunkAt(x, y);
+      if (!ch) return;
+      const i = (y - ch.y0) * C.CHUNK_W + (x - ch.x0);
+      v = Math.max(-C.STAB_LIMIT, Math.min(C.STAB_LIMIT, Math.round(v)));
+      const old = ch.stab[i];
+      if (old === v) return;
+      const d = Math.max(0, -v) - Math.max(0, -old);
+      ch.stab[i] = v;
+      ch.debt += d;
+      this.debt += d;
+    }
+    addStab(x, y, d) {
+      this.setStab(x, y, this.stab(x, y) + d);
+    }
+    // 欠 n 點：從 0 起算往下扣（原本的正值蓋掉），所以全世界負值的加總剛好多 n
+    addDebt(x, y, n) {
+      this.setStab(x, y, Math.min(0, this.stab(x, y)) - n);
+    }
+    // 這一格補回起始值
+    resetStab(x, y) {
+      this.setStab(x, y, FE.stabilityAt(this.seed, x, y));
+    }
+    // 重新數全世界欠多少（讀檔用）
+    recountDebt() {
+      this.debt = 0;
+      for (const ch of this.chunks) {
+        ch.debt = 0;
+        for (let i = 0; i < ch.stab.length; i++) if (ch.stab[i] < 0) ch.debt -= ch.stab[i];
+        this.debt += ch.debt;
+      }
+    }
     // 所有區塊合起來的外框（右、下不含）
     bounds() {
       const b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
@@ -195,7 +235,7 @@
       return this.villages.find((v) => v.id === id) || null;
     }
     // 聚落周圍的圈：從聚落的 mask 格子（外牆）量起，切比雪夫距離在寬度以內（含聚落本身；寬度看聚落種類）。
-    // 圈裡不生怪物、不侵蝕、不重算地形，怪物也不能踏進來。先用外接矩形加寬度快速排除，再查 mask 膨脹出來的格子
+    // 圈裡不生怪物、穩定值不往下掉，怪物也不能踏進來。先用外接矩形加寬度快速排除，再查 mask 膨脹出來的格子
     bufferWidth(v) {
       return C.SETTLE_BUFFER[v.kind] || C.SETTLE_BUFFER.village;
     }
@@ -379,7 +419,8 @@
         for (let x = rect.x0; x < rect.x1; x++) row.push({ t: '.', biome: 'plain', h: 0 });
         cells.push(row);
       }
-      const chunk = Object.assign({ index, cx, cy, cells, ver: 0 }, rect);
+      const chunk = Object.assign({ index, cx, cy, cells, ver: 0, stab: new Int16Array(C.CHUNK_W * C.CHUNK_H), debt: 0 }, rect);
+      for (let y = rect.y0; y < rect.y1; y++) for (let x = rect.x0; x < rect.x1; x++) chunk.stab[(y - rect.y0) * C.CHUNK_W + (x - rect.x0)] = FE.stabilityAt(this.seed, x, y);
       this.chunkMap.set(cx + ',' + cy, chunk);
       this.chunks.push(chunk);
       chunk.rough = paintBiomes(this, rng, rect, this.regions === 0 ? 0 : index);
@@ -388,6 +429,7 @@
 
     // 收回一個小塊（預留選址時暫時長出來、沒用到的）
     removeBlock(ch) {
+      this.debt -= ch.debt; // 暫時長出來的小塊還沒人動過穩定值，ch.debt 是 0；保險起見照扣
       this.chunkMap.delete(ch.cx + ',' + ch.cy);
       this.chunks.splice(this.chunks.indexOf(ch), 1);
       this.chunks.forEach((c, i) => { c.index = i; });
@@ -511,6 +553,15 @@
   FE.heightAt = function (seed, x, y) {
     const n = 0.7 * valueNoise(seed, x, y, 12) + 0.3 * valueNoise(seed + 7, x, y, 6);
     return Math.max(0, Math.min(C.MAX_HEIGHT, Math.floor(n * (C.MAX_HEIGHT + 1))));
+  };
+
+  // 起始穩定值（第三十三版之三）：平均 240，成片起伏在 120～360 之間。純函數雜訊（世界種子＋座標），
+  // 不從 game.rng 或生成用的亂數取數字，所以基本生成的亂數序列不受影響；大尺度（16 格）為主、小尺度（7 格）為輔，
+  // 兩層值雜訊疊起來的分佈集中在中間，乘 STAB_STRETCH 拉開後夾在範圍內，才有接近 120 與 360 的地方
+  FE.stabilityAt = function (seed, x, y) {
+    const n = 0.65 * valueNoise(seed + 303, x, y, 16) + 0.35 * valueNoise(seed + 404, x, y, 7);
+    const t = Math.max(0, Math.min(1, 0.5 + (n - 0.5) * C.STAB_STRETCH));
+    return Math.round(C.STAB_RANGE[0] + (C.STAB_RANGE[1] - C.STAB_RANGE[0]) * t);
   };
 
   // ---- 氣候與生態區：參考矮人要塞，用海拔、溫度、雨量三張圖疊起來決定 ----

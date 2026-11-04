@@ -29,7 +29,6 @@
       this.soldiers = [];    // 城鎮的士兵（role 'soldier'），不在 world.npcs 裡
       this.worldEvery = 1;   // 世界（怪物、士兵）每 10 刻走一回合，這個數字讓它再慢幾倍；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
       this.worldClock = 0;
-      this.fixed = [];       // 修好的地形錯位與斷崖，動盪時可能復發
       this.fell = false;     // 這一個動作裡冒險者倒下了
       this.talking = null;   // 對話視窗開著時，對方的 id（不進存檔）
       this.talkPage = 'main'; // 工匠的對話停在哪一層（'main'、'buy'、'buy:weapon'、'repair'⋯⋯），不進存檔
@@ -68,7 +67,7 @@
 
     // 創世時替這塊世界的每隻怪物配好「打倒時給的算力」、每個任務配好「完成時給的算力」，
     // 加總後乘 PLAYER_COMPUTE_SCALE 與 CREATION_SHARE，就是到下一塊要累積的創世力。
-    // 清光這塊世界，一定解得出下一塊；途中的移動、出手、清掉事件與侵蝕生的怪物，都會讓它更快。
+    // 清光這塊世界，一定解得出下一塊；途中的移動、出手、清掉衰敗生的怪物，都會讓它更快。
     // 新的一塊長在離冒險者最近的邊界上（第一塊在原點）
     // 第三十二版：開局是 96×96 一大塊，之後每次長一段（一圈的上下左右其中一邊，離冒險者最近的先長）；長滿了回傳 false
     createChunk(first) {
@@ -94,6 +93,7 @@
           if (free) Object.assign(m, { x: free.x, y: free.y, home: { x: free.x, y: free.y } });
         }
       }
+      if (village) this.moveBufferDebt(village);
       // 世界越亂，新的一塊越粗糙：依世界狀態額外多蓋幾塊氣候印章或高度突變（基本生成不變）
       FE.Stability.roughen(this, rect);
       const inChunk = (n) => FE.inRect(rect, n.x, n.y);
@@ -107,19 +107,15 @@
         return DIRS.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy));
       };
       const spawned = [];
-      // 沒生怪物的地形錯位與斷崖記起來（沉睡），之後檢查侵蝕時不把它當成新的
-      const sleep = (d) => { if (d.type === 'TERRAIN' || d.type === 'CLIFF') for (const [x, y] of d.cells) this.world.dormant.add(x + ',' + y); };
-      const { sites, rest } = this.pickSites(found, rect, first, landmarks || []);
-      rest.forEach(sleep);
+      // 沒挑上的地形錯位與斷崖（rest）不處理：第三十三版之三起錯的種類不決定怪物，只有挑上的地點才欠 BUG 值
+      const { sites } = this.pickSites(found, rect, first, landmarks || []);
       this.curCampaign = index; // 這一段生的怪物都記上是第幾段戰役（spawnGroup）
       for (const site of sites) {
-        // 開局最多 24 隻：名額用完了，選到的地形錯位與斷崖也先沉睡（一定要生的那幾種至少生帶頭的 1 隻）
+        // 開局最多 24 隻：名額用完了，選到的地方（一定要生的那幾種至少生帶頭的 1 隻）欠的量全部留在格子裡
         const room = first ? C.START_MONSTER_MAX - spawned.length : Infinity;
-        const group = room > 0 || site.must ? this.spawnGroup(site, canReach, first, Math.max(1, first ? Math.min(room, C.START_SITE_MAX) : room)) : [];
-        if (!group.length) {
-          sleep(site.d);
-          continue;
-        }
+        const cap = room > 0 || site.must ? Math.max(1, first ? Math.min(room, C.START_SITE_MAX) : room) : 0;
+        const group = this.spawnGroup(site, canReach, first, cap);
+        if (!group.length) continue;
         spawned.push(...group);
         if (group[0].type === 'UNREACHABLE') for (const [x, y] of group[0].cells) pending.add(x + ',' + y);
       }
@@ -565,7 +561,7 @@
     // 第三十二版（三之二）：一段就是一場戰役，裡面的怪物群是這場戰役的危害（試做：照 Dungeon World〈前置〉「一個冒險前置 2～3 個危害」，
     // 地區的樣子照《奇幻探索物語 Quest》：聚落在中間、興趣點在兩側）。開局 4 處，之後每段 2～3 處；
     // 這一段的每個興趣點各放一處（錯誤落在興趣點附近就用它，沒有就挑一處錯誤，把那一群放到興趣點上），其餘的散在這一段裡。
-    // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），其餘從地形錯位與斷崖裡隨機挑，沒挑到的沉睡
+    // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），其餘從地形錯位與斷崖裡隨機挑，沒挑到的不處理
     // （不生怪物、不算進創世門檻）。回傳 { sites: [{ d, must, at }], rest }，at 是放到興趣點上的位置
     pickSites(found, rect, first, landmarks) {
       const rng = this.rng;
@@ -587,14 +583,14 @@
       return { sites, rest: opt };
     }
 
-    // 第三十三版之二：一處的 BUG 量（影響範圍 × BUDGET_PER_SCOPE）拿去配一組怪物，也就是套皮。每隻怪物值多少 BUG 量看數值塊
-    // （FE.blockValue：生命 × 一下的平均傷害）。候選：這裡每個種族的一群小怪物、中怪物帶小怪物（熊地精在草原帶哥布林）、
+    // 第三十三版之二：一處的 BUG 量（budget）拿去配一組怪物，也就是套皮。每隻怪物值多少 BUG 量看數值塊
+    // （FE.blockValue：生命 × 一下的平均傷害）。第三十三版之三起 budget 直接是 BUG 值：創世時一處欠的量（rollDebt）、
+    // 衰敗的格子欠的量、合體的怪物身上的 bug 加總。候選：這裡每個種族的一群小怪物、中怪物帶小怪物（熊地精在草原帶哥布林）、
     // 只有中怪物的種族一群中怪物、營地（opts.camps；哥布林營地只在戰役 opts.campaign）。總值不超過 BUG 量、又夠接近最好的那幾種，
-    // 照種族的權重挑一種；錯誤程度到中怪物（影響範圍 5 以上）就先挑中怪物帶頭的。一個都放不下就生最便宜的那 1 隻。
+    // 照種族的權重挑一種；BUG 量到 MID_BUDGET（中怪物）就先挑中怪物帶頭的。一個都放不下就生最便宜的那 1 隻。
     // 回傳 { camp, list: [[種族, 數值塊], ...] }，第一隻是帶頭的
-    compose(x, y, scope, opts) {
+    compose(x, y, budget, opts) {
       const rng = this.rng;
-      const budget = scope * C.BUDGET_PER_SCOPE;
       const c = this.world.cell(x, y);
       const biome = c ? c.biome : 'grassland';
       const val = (race, key) => FE.blockValue(FE.monsterBlock(race, key));
@@ -654,7 +650,7 @@
         const one = cands.map((k) => ({ list: [k.list[0]], weight: k.weight, camp: null, value: val(k.list[0][0], k.list[0][1]) })).sort((p, q) => p.value - q.value)[0];
         return one ? { camp: null, list: one.list } : { camp: null, list: [['goblin', 'small']] };
       }
-      if (scope >= C.MID_SCOPE && ok.some((k) => k.mid || k.camp)) ok = ok.filter((k) => k.mid || k.camp);
+      if (budget >= C.MID_BUDGET && ok.some((k) => k.mid || k.camp)) ok = ok.filter((k) => k.mid || k.camp);
       const best = Math.max(...ok.map((k) => k.value));
       const pool = ok.filter((k) => k.value >= best * C.SKIN_FIT);
       let r = rng() * pool.reduce((t, k) => t + k.weight, 0);
@@ -684,16 +680,83 @@
       return { list: out, promoted: true };
     }
 
-    // 在一處錯誤生一組怪物（compose 配好的）：帶頭的那隻帶著錯誤，跟班散在帶頭那隻周圍 2～5 格（營地散得開一點）；
-    // 整群守著原地或照常徘徊。每隻的影響範圍照牠值多少 BUG 量分（經驗值、算力跟著算）。room 是這一群最多幾隻。
-    // 創世時生的都是戰役的危害，帶頭的是菁英；開局那一塊不套營地
+    // 創世時一處起始欠多少 BUG 值（第三十三版之三，使用者定的）：400～2,000（世界等級 1，用 game.rng 擲），每升一級加 10%
+    rollDebt() {
+      const base = FE.randInt(this.rng, C.SITE_DEBT[0], C.SITE_DEBT[1]);
+      return Math.round(base * FE.wlScale(FE.Stability.worldLevel(this), C.WL_BONUS.DEBT));
+    }
+
+    // 新聚落的圈伸進舊的區塊：圈裡欠的穩定值挪到圈外最近的地方（圈裡不生怪物也不掉，留著只會算進整體 BUG 值而永遠還不掉），
+    // 全世界欠的量不變。跟怪物被挪到圈外是同一個道理
+    moveBufferDebt(v) {
+      const w = this.world;
+      const B = w.bufferWidth(v);
+      let moved = 0, sx = 0, sy = 0, n = 0;
+      for (let y = v.y0 - B; y <= v.y1 + B; y++) {
+        for (let x = v.x0 - B; x <= v.x1 + B; x++) {
+          const s = w.stab(x, y);
+          if (s >= 0 || !w.inBuffer(x, y)) continue;
+          moved -= s;
+          sx += x;
+          sy += y;
+          n++;
+          w.setStab(x, y, 0);
+        }
+      }
+      if (moved > 0) this.spillDebt(Math.round(sx / n), Math.round(sy / n), moved);
+    }
+
+    // 把 n 點 BUG 值以負的穩定值留在 (x, y) 周圍的格子（能站、不在聚落圈裡），平均分攤；
+    // 周圍 3 格內不到 9 格就往外找，最遠 30 格。全世界負值的加總剛好多 n
+    spillDebt(x, y, n) {
+      n = Math.round(n);
+      if (n <= 0) return;
+      const w = this.world;
+      let cells = [];
+      for (let r = 3; r <= 30 && cells.length < 9; r++) {
+        cells = [];
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (w.passable(x + dx, y + dy) && !w.inBuffer(x + dx, y + dy)) cells.push([x + dx, y + dy]);
+          }
+        }
+      }
+      if (!cells.length) cells = [[x, y]];
+      const each = Math.floor(n / cells.length);
+      const extra = n - each * cells.length;
+      cells.forEach(([cx, cy], i) => w.addDebt(cx, cy, each + (i < extra ? 1 : 0)));
+    }
+
+    // 這裡最便宜的一隻（這一格所在的環境有哪些種族）值多少 BUG 值：衰敗的格子欠的量要買得起這個才生怪物
+    cheapestAt(x, y) {
+      return FE.cheapestValue(FE.racesAt(this.world, x, y));
+    }
+
+    // 在一處地點生一組怪物（compose 配好的）：帶頭的那隻帶著錯誤，跟班散在帶頭那隻周圍 2～5 格（營地散得開一點）；
+    // 整群守著原地或照常徘徊。每隻的影響範圍照牠值多少 BUG 量分（經驗值、算力跟著算）。room 是這一群最多幾隻（0 就一隻都不生）。
+    // 創世時生的都是戰役的危害，帶頭的是菁英；開局那一塊不套營地。
+    // 第三十三版之三：這一處起始欠 rollDebt() 那麼多，當 compose 的預算；配出的怪物各帶走 m.bug，欠的量扣掉怪物帶走的，
+    // 零頭（含被隻數上限砍掉的、菁英換下去之後超出的跟班、放不下的）以負的穩定值留在帶頭那隻周圍的格子。
+    // 守恆：這處欠的量＝怪物 bug 加總＋留在格子的。一隻都放不下、最便宜的那隻比欠的量還貴時，欠的量記成牠的值。
+    // 回傳的陣列帶 debt（這處欠的）與 left（留在格子的），測試用
     spawnGroup(site, canReach, first, room) {
       const d = site.at ? Object.assign({}, site.d, site.at) : site.d;
       if (this.isCalm(d.x, d.y)) return [];
-      const pick = this.compose(d.x, d.y, d.scope, { campaign: true, camps: !first });
+      const debt = this.rollDebt();
+      const pick = this.compose(d.x, d.y, debt, { campaign: true, camps: !first });
       const el = this.applyElite(pick.list, d.x, d.y, pick.camp);
-      const group = this.spawnList(d, el.list.slice(0, Math.max(1, room)), canReach, { camp: pick.camp, origin: 'campaign', elite: true });
+      const val = (list) => list.reduce((t, [r, k]) => t + FE.blockValue(FE.monsterBlock(r, k)), 0);
+      const list = el.list.slice(0, Math.max(0, room));
+      // 帶頭的換成菁英會比原本那隻貴一點：總值超過欠的量就從尾巴拿掉跟班（只剩帶頭的為止）
+      while (list.length > 1 && val(list) > debt) list.pop();
+      const group = list.length ? this.spawnList(d, list, canReach, { camp: pick.camp, origin: 'campaign', elite: true }) : [];
       for (const m of group) m.campaign = this.curCampaign; // 這一段戰役的危害（清光寫進歷史紀錄）
+      const placed = group.reduce((t, m) => t + m.bug, 0);
+      const owed = Math.max(debt, placed);
+      const left = owed - placed;
+      if (left > 0) this.spillDebt(group.length ? group[0].x : d.x, group.length ? group[0].y : d.y, left);
+      group.debt = owed;
+      group.left = left;
       return group;
     }
 
@@ -702,7 +765,7 @@
     spawnList(d, list, canReach, opts) {
       opts = opts || {};
       const pick = { camp: opts.camp || null };
-      const share = ([race, key]) => Math.max(1, Math.round(FE.blockValue(FE.monsterBlock(race, key)) / C.BUDGET_PER_SCOPE));
+      const share = ([race, key]) => Math.max(1, Math.round(FE.blockValue(FE.monsterBlock(race, key)) / C.REWARD_VALUE_PER_SCOPE));
       const one = (i, at) => Object.assign({}, d, at, { race: list[i][0], block: list[i][1], elite: i === 0 && !!opts.elite, scope: share(list[i]) });
       const lead = this.spawnMonster(one(0, {}), canReach);
       if (!lead) return [];
@@ -775,19 +838,28 @@
       return Math.floor((this.ticks || 0) / C.DAY_TICKS) + 1;
     }
 
-    // 這一格在不在冷卻區裡（清掉怪物後 5～7 天不生怪物）；過期的順手清掉
-    isCalm(x, y) {
+    // 還沒過期的冷卻區（過期的順手清掉）
+    activeCalm() {
       const w = this.world;
-      if (!w.calm || !w.calm.length) return false;
+      if (!w.calm || !w.calm.length) return [];
       const now = this.ticks || 0;
       w.calm = w.calm.filter((c) => c.until > now);
-      return w.calm.some((c) => Math.max(Math.abs(x - c.x), Math.abs(y - c.y)) <= c.r);
+      return w.calm;
     }
 
-    // 清掉一處怪物：那一帶記成冷卻區
+    // 這一格在不在冷卻區裡（清掉怪物後 5～7 天不生怪物、穩定值不掉）
+    isCalm(x, y) {
+      return this.activeCalm().some((c) => Math.max(Math.abs(x - c.x), Math.abs(y - c.y)) <= c.r);
+    }
+
+    // 清掉一處怪物：那一帶記成冷卻區，範圍內的格子補回起始值（第三十三版之三，使用者定的）
     calmAt(x, y) {
       const days = FE.randInt(this.rng, C.CALM_DAYS[0], C.CALM_DAYS[1]);
       this.world.calm.push({ x, y, r: C.CALM_RADIUS, until: (this.ticks || 0) + days * C.DAY_TICKS });
+      const w = this.world;
+      for (let cy = y - C.CALM_RADIUS; cy <= y + C.CALM_RADIUS; cy++) {
+        for (let cx = x - C.CALM_RADIUS; cx <= x + C.CALM_RADIUS; cx++) if (w.inBounds(cx, cy)) w.resetStab(cx, cy);
+      }
     }
 
     spawnMonster(d, canReach) {
@@ -1118,7 +1190,7 @@
       FE.Stability.stat(this).longRests++;
     }
 
-    // 怪物一定打得到：地形重算、斷崖復發這類改高度的事，可能把怪物困在四面斷崖的台子或坑裡。
+    // 怪物一定打得到：修補斷層、斷崖這類改高度的事，可能把怪物困在四面斷崖的台子或坑裡。
     // 每回合檢查，上下左右沒有一格走得過去、高度又接得上的怪物，腳下的高度改成跟旁邊最接近的那格一樣（牠滑下台子）
     unstrand() {
       const w = this.world;
@@ -2324,7 +2396,7 @@
       FE.Stability.update(this);
     }
 
-    // 創世時的中型怪物與合體生出的中型怪物（不是事件與侵蝕生的 m.small），打倒時 30% 機率多掉一件裝備，
+    // 創世時的中型怪物與合體生出的中型怪物（不是衰敗生的 m.small），打倒時 30% 機率多掉一件裝備，
     // 品質做工好～優秀（每高一級機率減半），直接放進背包
     dropGear(m) {
       if (m.tier !== 'mid' || m.small || this.rng() >= C.DROP_MID_GEAR) return;

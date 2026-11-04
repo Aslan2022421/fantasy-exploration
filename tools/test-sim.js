@@ -294,7 +294,8 @@ function botTalk(game) {
 //   steps：動作數（單人模擬）；lazy：只走路不打怪；
 //   worldEvery：世界（怪物、士兵）比時鐘再慢幾倍（四人等效是 4：機器人做 4 個動作的時間，世界才走 1 回合）；
 //   minActions／untilChunks／maxActions：四人等效用，至少 minActions 個動作而且創出 untilChunks 塊才停，最多 maxActions；
-//   scale：暫時改 PLAYER_COMPUTE_SCALE（查「四人等效」的另一種讀法用）
+//   scale：暫時改 PLAYER_COMPUTE_SCALE（查「四人等效」的另一種讀法用）；
+//   untilDays：跑到第幾天為止（每天記一列 dayRows：怪物數、整體 BUG 值、狀態）；noCreate：不創出新的世界（對照「不打怪」用，世界固定是開局的 16 塊）
 let stuckFixes = 0; // 機器人被村民夾住、等村民走開的次數
 // 第三十版：士兵跟怪物照同一個時鐘，世界每走一回合（worldTurn）士兵就做一個動作（冒險者在那一回合倒下時不做）
 const soldierCalls = { n: 0, world: 0 };
@@ -322,6 +323,7 @@ function simulate(seed, opts) {
   const verify0 = verifyReach;
   if (opts.verifyReach) verifyReach = true;
   game.worldEvery = opts.worldEvery || 1;
+  if (opts.noCreate) game.checkCreate = () => {};
   const rng = FE.makeRng(seed + 1);
   soldierCalls.n = 0;
   soldierCalls.world = 0;
@@ -399,7 +401,10 @@ function simulate(seed, opts) {
   const firstWL = [null, null, null]; // 第一次進動盪、失序時的世界等級
   const byWL = {};                    // 世界等級 → { n: 動作數, s: [安穩, 動盪, 失序] 的動作數 }
   measure.on = !lazy;
-  const stopAt = (i) => (opts.untilChunks ? i >= opts.maxActions || (i >= opts.minActions && game.world.chunks.length >= opts.untilChunks) : i >= opts.steps);
+  const dayRows = [];
+  let lastDay = 0;
+  let maxMonsters = 0;
+  const stopAt = (i) => (opts.untilDays ? game.ticks >= opts.untilDays * C.DAY_TICKS : opts.untilChunks ? i >= opts.maxActions || (i >= opts.minActions && game.world.chunks.length >= opts.untilChunks) : i >= opts.steps);
   let i = 0;
   for (; !stopAt(i); i++) {
     const p = game.player;
@@ -450,6 +455,8 @@ function simulate(seed, opts) {
     if (L > 0 && first[L] === null) { first[L] = i + 1; firstWL[L] = wl; }
     if (L > 1 && first[1] === null) { first[1] = i + 1; firstWL[1] = wl; }
     totals.push(FE.Stability.total(game));
+    maxMonsters = Math.max(maxMonsters, game.monsters.length);
+    while (Math.floor(game.ticks / C.DAY_TICKS) > lastDay) { lastDay++; dayRows.push([lastDay, game.monsters.length, FE.Stability.total(game), L, FE.Stability.stat(game).decayGroups]); }
     if (process.env.FE_TRACE && i % Number(process.env.FE_TRACE) === 0) trace.push(`${i}|h${Math.round(game.ticks / 100)}|b${game.world.chunks.length}|wl${wl}|s${L}|T${Math.round(FE.Stability.total(game))}|d${game.world.debt}|n${game.monsters.length}`);
     if (i % 50 === 0) {
       // 穩定值永遠合法：整數、在 Int16 的範圍、全世界欠的量跟逐格加總一致、每隻怪物的 bug 是正整數
@@ -540,7 +547,7 @@ function simulate(seed, opts) {
     // 第三十三版之三：結束時怪物身上的 BUG 值、格子欠的量；衰敗的小時數、從衰敗生出的群與隻數、修補力補回的穩定值
     bugEnd: game.monsters.reduce((t, m) => t + m.bug, 0), debtEnd: game.world.debt,
     decay: `${st.decayHours} 小時、生 ${st.decayGroups} 群 ${st.decayMonsters} 隻、補回 ${Math.round(st.mended)}`,
-    trace: trace.length ? trace : undefined,
+    trace: trace.length ? trace : undefined, maxMonsters, dayRows: opts.untilDays ? dayRows : undefined,
     soldiers: `出動 ${st.sorties} 次、出手 ${st.soldierAttacks}、清掉 ${st.soldierKills} 隻、陣亡 ${st.soldierDeaths}、補回 ${st.refills}`,
     // 第三十版：時間與經濟
     days: +(game.ticks / C.DAY_TICKS).toFixed(1), longRests: st.longRests, restPaid: st.restPaid, shortRests: st.shortRests,
@@ -571,3 +578,28 @@ const MAX_ACTIONS = Number(process.env.FE_MAX || 8000);
 // 防具對照組：同樣的種子、同樣的動作數，一組不穿防具、一組穿重甲（都不拿盾牌），看冒險者平均每下受到多少傷害
 const SIM_CMP_STEPS = Number(process.env.FE_CMP || 1500);
 
+
+// 第三十三版之三（二）：「不打怪」的量測。機器人只在開局的村莊休息（長休與短休輪流，不出手、不出村），跑 days 天，
+// 每天記一列：怪物數、整體 BUG 值、世界狀態、累計從衰敗生了幾群。世界固定是開局的 16 塊（沒有打怪就沒有算力創世）
+function simulateIdle(seed, cls, days) {
+  const game = new FE.Game(seed);
+  game.start({ cls, picks: BOT_PICKS[cls], body: BOT_BODY[cls], skills: FE.Char.rollSkills(cls, FE.makeRng(seed + 77)) });
+  const rows = [];
+  let lastDay = 0;
+  let maxMonsters = 0;
+  let k = 0;
+  while (game.ticks < days * C.DAY_TICKS) {
+    game.guard('bot', () => {
+      if (k++ % 2 === 0) game.rest();
+      else { game.beginAction(); game.endTurn(false, C.SHORT_REST_TICKS, { exact: true }); } // 短休：等 1 小時
+    });
+    FE.Stability.update(game);
+    maxMonsters = Math.max(maxMonsters, game.monsters.length);
+    while (Math.floor(game.ticks / C.DAY_TICKS) > lastDay) {
+      lastDay++;
+      rows.push([lastDay, game.monsters.length, FE.Stability.total(game), FE.Stability.state(game), FE.Stability.stat(game).decayGroups]);
+    }
+  }
+  const st = FE.Stability.stat(game);
+  return { idle: true, cls, seed, days, chunks: game.world.chunks.length, rows, maxMonsters, groups: st.decayGroups, spawned: st.decayMonsters, faults: game.reports.length, debtEnd: game.world.debt, bugEnd: game.monsters.reduce((t, m) => t + m.bug, 0) };
+}

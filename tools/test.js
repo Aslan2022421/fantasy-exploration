@@ -37,6 +37,9 @@ function runJob(id) {
     runGen(lo, hi);
   } else if (kind === 'sim') simResults.push(simulate(Number(b), { steps, cls: a }));
   else if (kind === 'lazy') simResults.push(simulate(SEEDS[0], { steps, lazy: true }));
+  // 第三十三版之三（二）調數字用，不在 quick／全測的工作清單裡：idle:職業:種子（不打怪，跑 FE_DAYS 天，預設 30）、ctrl:職業:種子（有打怪，但不創世，同樣天數）
+  else if (kind === 'idle') simResults.push(simulateIdle(Number(b), a, Number(process.env.FE_DAYS) || 30));
+  else if (kind === 'ctrl') simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, untilDays: Number(process.env.FE_DAYS) || 30, noCreate: true, cls: a }));
   else if (kind === 'sim4') {
     // FE_MIN：最少動作數（預設 3000，快測 2000）；調世界狀態的分界要拉長（世界等級 4 要長滿 3 圈，約 100 塊），搭配 FE_MAX 放寬上限
     simResults.push(simulate(Number(b), { worldEvery: 4, scale: 1, minActions: Number(process.env.FE_MIN) || (QUICK ? 2000 : 3000), untilChunks: QUICK ? 8 : 15, maxActions: QUICK ? 4000 : MAX_ACTIONS, verifyReach: a === BOT_CLASSES[0] && Number(b) === SEEDS[0], cls: a }));

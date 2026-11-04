@@ -130,12 +130,15 @@
     }
   }
 
-  // 每小時往下掉：安穩 2、動盪 3～6、失序 6～12（每小時擲一次，全世界同一個值）。回傳這一小時掉了多少
+  // 每小時往下掉：每一格各自有 DECAY_CELL_CHANCE 的機率會掉，掉的量安穩 2、動盪 3～6、失序 6～12（每小時擲一次，全世界同一個值）。
+  // 回傳這一小時掉的量
   function decay(game, reach) {
     const w = game.world;
     const [lo, hi] = C.STAB_DECAY[state(game)];
     const amt = lo === hi ? lo : FE.randInt(game.rng, lo, hi);
+    const chance = C.DECAY_CELL_CHANCE;
     eachLive(game, reach, false, (ch, i) => {
+      if (chance < 1 && game.rng() >= chance) return; // 每一格各自有 DECAY_CELL_CHANCE 的機率才掉
       const old = ch.stab[i];
       const v = Math.max(-C.STAB_LIMIT, old - amt);
       if (v === old) return;

@@ -486,4 +486,39 @@ function testStability33() {
     ok(!!big && g.monsters.length === 1 && big.bug === bug0 && total(g) === t0, `合體：${group.length} 隻 bug ${bug0} → ${big ? big.bug : '沒合'}，整體 ${t0} → ${total(g)}`);
   }
 }
-UNITS.stability33 = () => { try { testStability33(); } catch (e) { fail('穩定值測試拋出例外：' + e.stack); } };
+UNITS.stability33 = () => {
+  // 精確的檢查（每小時掉的量、冷卻區與聚落圈不掉）要每一格都掉，先把機率設成 1；機率本身另外在 testDecayChance 量
+  const chance0 = C.DECAY_CELL_CHANCE;
+  C.DECAY_CELL_CHANCE = 1;
+  try { testStability33(); C.DECAY_CELL_CHANCE = chance0; testDecayChance(); } catch (e) { fail('穩定值測試拋出例外：' + e.stack); } finally { C.DECAY_CELL_CHANCE = chance0; }
+};
+
+// 每小時只有少數格子往下掉：每一格各自有 DECAY_CELL_CHANCE 的機率會掉，掉的量照狀態、同一小時全世界一樣；動盪、失序的機率不另外加
+function testDecayChance() {
+  const ok = (cond, msg) => { stabChecks++; if (!cond) fail('穩定值 ' + msg); };
+  ok(C.DECAY_CELL_CHANCE > 0 && C.DECAY_CELL_CHANCE < 1, `機率設定 ${C.DECAY_CELL_CHANCE}`);
+  const g = new FE.Game(5151);
+  g.start();
+  g.monsters = [];
+  const w = g.world;
+  w.forEachCell((x, y) => w.setStab(x, y, 1000));
+  const reach = FE.Checker.reachable(w);
+  const live = [];
+  w.forEachCell((x, y) => { if (w.passable(x, y) && !w.inBuffer(x, y) && reach.at(x, y)) live.push([x, y]); });
+  for (const st of [0, 1, 2]) {
+    g.worldState = st;
+    w.forEachCell((x, y) => w.setStab(x, y, 1000));
+    const amt = FE.Stability.decay(g, reach);
+    const dropped = live.filter(([x, y]) => w.stab(x, y) !== 1000);
+    const frac = dropped.length / live.length;
+    ok(dropped.every(([x, y]) => w.stab(x, y) === 1000 - amt), `狀態 ${st}：掉的格子都掉同樣的量 ${amt}`);
+    ok(Math.abs(frac - C.DECAY_CELL_CHANCE) < 0.02, `狀態 ${st}：${live.length} 格裡掉了 ${(100 * frac).toFixed(1)}%（機率 ${C.DECAY_CELL_CHANCE}）`);
+  }
+  // 不在「活的」範圍的格子不掉
+  let rock = null;
+  w.forEachCell((x, y) => { if (!rock && !w.passable(x, y)) rock = [x, y]; });
+  w.setStab(rock[0], rock[1], 1000);
+  for (let h = 0; h < 30; h++) FE.Stability.decay(g, reach);
+  ok(w.stab(rock[0], rock[1]) === 1000, '水與巨石不掉');
+  g.worldState = 0;
+}

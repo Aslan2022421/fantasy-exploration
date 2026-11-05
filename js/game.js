@@ -362,7 +362,7 @@
     }
 
     // 委託與任務的金錢獎勵（銅）：基本數字×委託人聚落的經濟標籤倍率（荒蕪 ×0.8、貧窮 ×0.9、普通 ×1、繁盛與富裕 ×1.2）
-    // ×魅力（每點修正值 +5%）×生活水準的加成（上一次在這個聚落長休，普通 +5%、繁盛 +10%），最後才四捨五入。
+    // ×魅力（每點修正值 +5%）×生活水準的加成（上一次在這個聚落長休，普通 +5%、繁盛 +10%、富裕 +15%），最後才四捨五入。
     // q 是委託（npc.quest 或手上的 jobs），villageId 是委託人的聚落
     questPay(q, villageId) {
       const p = this.player;
@@ -1326,11 +1326,11 @@
       this.say('你睡了一覺，生命回滿。', 'good');
     }
 
-    // 長休完：生命回滿、力竭 −1，從現在起重新算「連續多久沒有長休」
-    rested() {
+    // 長休完：生命回滿、依生活水準降低力竭（免費醒來預設 −1），從現在起重新算「連續多久沒有長休」
+    rested(exhaustionDrop) {
       const p = this.player;
       p.hp = p.maxHp;
-      p.exhaust = Math.max(0, (p.exhaust || 0) - 1);
+      p.exhaust = Math.max(0, (p.exhaust || 0) - (exhaustionDrop === undefined ? 1 : exhaustionDrop));
       p.awakeAt = this.ticks;
       FE.Stability.stat(this).longRests++;
     }
@@ -1863,7 +1863,7 @@
 
     // 休息（第三十版）。旁邊有怪物時不能休息；休息一次只把修補力存起來（不進創世力）。
     // 野外短休：1 小時（100 刻，世界同步跑 10 回合），回 1d10＋體質修正值（最少 1），不花錢；途中有怪物貼上來就被打斷，沒回生命。
-    // 聚落裡長休：8 小時（800 刻，世界同步跑 80 回合），生命回滿、力竭 −1，付生活開支（見 payLiving）
+    // 聚落裡長休：8 小時（800 刻，世界同步跑 80 回合），生命回滿；力竭降低級數與修復量依生活水準，付生活開支（見 payLiving）
     // lv：在聚落住一晚選的生活水準（0 荒蕪～這個聚落的經濟等級）；沒給就照聚落的經濟、付不起就住最便宜的（機器人用）
     rest(lv) {
       if (this.adjacentMonsters().length) {
@@ -1875,10 +1875,10 @@
       const v = this.world.villageAt(p.x, p.y);
       this.earn(C.REST_COMPUTE, { repairOnly: true });
       if (v) {
-        const paid = this.payLiving(v, lv);
+        const stay = this.payLiving(v, lv);
         this.endTurn(false, C.LONG_REST_TICKS, { exact: true, sleep: true });
-        this.rested();
-        this.say(`你在${v.name}睡了一晚（${paid}），生命回滿。${p.exhaust ? `還有點累（力竭 ${p.exhaust}）。` : ''}`, 'good');
+        this.rested(C.LIVING_EXHAUSTION[stay.lv]);
+        this.say(`你在${v.name}住了一晚（${stay.text}），生命回滿，力竭降低 ${C.LIVING_EXHAUSTION[stay.lv]} 級。${p.exhaust ? `還有點累（力竭 ${p.exhaust}）。` : ''}`, 'good');
         return;
       }
       FE.Stability.stat(this).shortRests++;
@@ -1893,10 +1893,11 @@
       this.say(`你歇了一個小時，生命回復 ${got}。`, 'sys');
     }
 
-    // 長休付生活開支：荒蕪 3 銀，沒有加成；貧窮 6 銀，身上裝備的耐久回 3%；
-    // 普通 15 銀，耐久回 5%、這個聚落的委託獎勵 +5%；繁盛（與富裕）30 銀，耐久回 10%、委託獎勵 +10%。
+    // 長休付生活開支：荒蕪 1 銀、力竭 −1；貧窮 3 銀、耐久回 3%、力竭 −1；
+    // 普通 5 銀、耐久回 5%、委託獎勵 +5%、力竭 −2；繁盛 10 銀、耐久回 10%、委託獎勵 +10%、力竭 −2；
+    // 富裕 30 銀、耐久回 15%、委託獎勵 +15%、力竭 −3。
     // 第三十二版：玩家在選項視窗選生活水準（最高到這個聚落的經濟等級，付不起的不能選）；最便宜的一級永遠能選，錢不夠就付身上全部。
-    // 沒給 want（機器人）就照聚落的經濟、付不起就住最便宜的。回傳一句付了什麼
+    // 沒給 want（機器人）就照聚落的經濟、付不起就住最便宜的。回傳實際生活等級與結算文字
     payLiving(v, want) {
       const p = this.player;
       const tier = v.steading ? v.steading.prosperity : 0;
@@ -1923,7 +1924,10 @@
       this.spend(v, paid);
       const level = FE.PROSPERITY[lv];
       const head = `${level}的生活，付了 ${FE.money(paid)}`;
-      return head + (fixed ? '，身上的裝備也順手整理了一下' : '') + (bonus > 0 ? `，這裡的委託獎勵 +${Math.round(bonus * 100)}%` : '');
+      return {
+        lv,
+        text: head + (fixed ? '，身上的裝備也順手整理了一下' : '') + (bonus > 0 ? `，這裡的委託獎勵 +${Math.round(bonus * 100)}%` : ''),
+      };
     }
 
     // 開寶箱：錢拆成三種幣（總值不變，見 coins），硬幣沒有重量

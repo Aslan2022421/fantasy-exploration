@@ -96,6 +96,11 @@ function testEconomy30() {
       p.copper = 1000;
       p.hp = 1;
       p.equip.main.dur = 100;
+      p.equip.pick = FE.Gear.make('pick', 0, g.nextGearId++);
+      p.equip.pick.dur = 10;
+      p.equip.sickle = FE.Gear.make('sickle', 0, g.nextGearId++);
+      p.equip.sickle.dur = 10;
+      p.exhaust = 4;
       const wt = counter(FE.AI, 'worldTurn');
       const t0 = g.ticks;
       g.rest();
@@ -104,18 +109,21 @@ function testEconomy30() {
       tiers.push(paid);
       const rep = Math.round(200 * C.LIVING_REPAIR[tier]);
       ok(g.ticks - t0 === 800 && wt.n === 80 && p.hp === p.maxHp, `長休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、生命 ${p.hp}/${p.maxHp}`);
-      ok(paid === C.LIVING_COST[tier] * 10 && p.equip.main.dur === 100 + rep, `${FE.PROSPERITY[tier]}：付了 ${paid} 銅（應該 ${C.LIVING_COST[tier]} 銀）、長劍耐久 ${p.equip.main.dur}（應該 ${100 + rep}）`);
+      const toolRep = C.LIVING_REPAIR[tier] ? Math.max(1, Math.round(50 * C.LIVING_REPAIR[tier])) : 0;
+      ok(paid === C.LIVING_COST[tier] * 10 && p.equip.main.dur === 100 + rep && p.equip.pick.dur === 10 + toolRep && p.equip.sickle.dur === 10 + toolRep, `${FE.PROSPERITY[tier]}：付了 ${paid} 銅（應該 ${C.LIVING_COST[tier]} 銀）、長劍耐久 ${p.equip.main.dur}（應該 ${100 + rep}）、採集工具耐久 ${p.equip.pick.dur}/${p.equip.sickle.dur}`);
+      ok(p.exhaust === 4 - C.LIVING_EXHAUSTION[tier], `${FE.PROSPERITY[tier]}長休後力竭 ${p.exhaust}（應該 ${4 - C.LIVING_EXHAUSTION[tier]}）`);
       ok(tier < 2 ? !p.lodging : p.lodging && p.lodging.villageId === v.id && p.lodging.bonus === C.LIVING_QUEST[tier], `${FE.PROSPERITY[tier]} 的委託獎勵加成 ${JSON.stringify(p.lodging)}`);
     }
-    ok(tiers.join() === '30,60,150,300,300', `生活開支（銅）${tiers}`);
-    // 錢不夠：住最便宜的那一級（荒蕪的效果），付得出多少付多少（最多 3 銀）
+    ok(tiers.join() === '10,30,50,100,300', `生活開支（銅）${tiers}`);
+    // 錢不夠：降到荒蕪生活，付得出多少付多少（最多 1 銀）
     v.steading.prosperity = 2; v.econ = 50;
-    for (const [have, pay] of [[100, 30], [12, 12], [0, 0]]) {
+    for (const [have, pay] of [[40, 10], [12, 10], [0, 0]]) {
       p.copper = have;
       p.hp = 1;
       p.equip.main.dur = 100;
+      p.exhaust = 3;
       g.rest();
-      ok(have - p.copper === pay && p.equip.main.dur === 100 && !p.lodging && p.hp === p.maxHp, `普通的聚落錢只有 ${have} 銅：付了 ${have - p.copper}（應該 ${pay}），耐久 ${p.equip.main.dur}、加成 ${JSON.stringify(p.lodging)}`);
+      ok(have - p.copper === pay && p.equip.main.dur === 100 && !p.lodging && p.hp === p.maxHp && p.exhaust === 2, `普通的聚落錢只有 ${have} 銅：付了 ${have - p.copper}（應該 ${pay}），耐久 ${p.equip.main.dur}、力竭 ${p.exhaust}、加成 ${JSON.stringify(p.lodging)}`);
     }
     // 住宿加成：普通 +5% 只加在這個聚落的委託上
     p.copper = 1000;
@@ -331,11 +339,12 @@ function testEconomy30() {
     sw.dur = Math.floor(sw.max * 0.2); const n2 = FE.Gear.name(sw), w2 = FE.Gear.wearPenalty(sw);
     ok(w0 === 0 && w1 === 1 && w2 === 2 && n0 === '長劍' && n1 === 'x長劍x' && n2 === 'X長劍X', `耐久懲罰 ${w0}/${w1}/${w2}、名稱 ${n0}/${n1}/${n2}`);
     p.exhaust = 0;
-    // 長休 −1
+    // 聚落生活水準決定長休降低幾級
     g.wakeSpot();
     p.exhaust = 3; p.copper = 1000;
+    const village = g.world.villageAt(p.x, p.y);
     g.rest();
-    ok(p.exhaust === 2 && p.awakeAt === g.ticks, `長休後力竭 ${p.exhaust}（應該 2）`);
+    ok(p.exhaust === 3 - C.LIVING_EXHAUSTION[village.steading.prosperity] && p.awakeAt === g.ticks, `長休後力竭 ${p.exhaust}（聚落標籤 ${FE.PROSPERITY[village.steading.prosperity]}）`);
     // 6 級倒下：在聚落醒來，5 級再照長休 −1 → 4 級，不收錢
     const at2 = fieldSpot(g);
     Object.assign(p, { x: at2.x, y: at2.y, exhaust: 5, copper: 321 });

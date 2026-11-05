@@ -783,7 +783,7 @@
     el.innerHTML = `
       <h3 style="margin-top:0">${esc(v.name)}（${FE.SETTLE_KINDS[v.kind]}）${inside || W.villageAt(p.x, p.y) === v ? '' : `<span class="dim">　${picked ? '在地圖上點選的聚落' : '你不在這裡，這是離你最近的聚落'}，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
       <div class="row"><span>經濟</span><span>${FE.PROSPERITY[s.prosperity]}（裝備售價 ×${FE.Steading.shopFactor(v).toFixed(2)}）</span></div>
-      <div class="row"><span>住一晚</span><span>${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}（${FE.PROSPERITY[s.prosperity]}的生活${C.LIVING_REPAIR[s.prosperity] ? `，身上裝備的耐久回 ${Math.round(C.LIVING_REPAIR[s.prosperity] * 100)}%` : ''}${C.LIVING_QUEST[s.prosperity] ? `，這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[s.prosperity] * 100)}%` : ''}）</span></div>
+      <div class="row"><span>住一晚</span><span>${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}（${FE.PROSPERITY[s.prosperity]}的生活，力竭降低 ${C.LIVING_EXHAUSTION[s.prosperity]} 級${C.LIVING_REPAIR[s.prosperity] ? `，裝備耐久回 ${Math.round(C.LIVING_REPAIR[s.prosperity] * 100)}%` : ''}${C.LIVING_QUEST[s.prosperity] ? `，這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[s.prosperity] * 100)}%` : ''}）</span></div>
       <div class="row"><span>人口</span><span>${FE.POPULATION[s.population]}</span></div>
       <div class="row"><span>居民</span><span>${esc(residents(v))}</span></div>
       <div class="row"><span>由來</span><span>${esc(s.option)}；${esc(s.problem)}</span></div>
@@ -1212,9 +1212,9 @@
     const out = [];
     for (let lv = 0; lv <= k; lv++) {
       const cost = C.LIVING_COST[lv] * C.SILVER;
-      const fx = [C.LIVING_REPAIR[lv] ? `身上裝備耐久回 ${Math.round(C.LIVING_REPAIR[lv] * 100)}%` : '', C.LIVING_QUEST[lv] ? `這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[lv] * 100)}%` : ''].filter(Boolean);
+      const fx = [`力竭降低 ${C.LIVING_EXHAUSTION[lv]} 級`, C.LIVING_REPAIR[lv] ? `裝備耐久回 ${Math.round(C.LIVING_REPAIR[lv] * 100)}%` : '', C.LIVING_QUEST[lv] ? `這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[lv] * 100)}%` : ''].filter(Boolean);
       const short = p.copper < cost;
-      out.push({ id: String(lv), label: `${FE.PROSPERITY[lv]}的生活，付 ${FE.money(lv === 0 && short ? p.copper : cost)}`, desc: `生命回滿、力竭 −1${fx.length ? '；' + fx.join('、') : ''}`, note: short ? (lv === 0 ? '錢不夠，付身上全部' : '錢不夠') : '', ok: lv === 0 || !short });
+      out.push({ id: String(lv), label: `${FE.PROSPERITY[lv]}的生活，付 ${FE.money(lv === 0 && short ? p.copper : cost)}`, desc: `生命回滿${fx.length ? '；' + fx.join('、') : ''}`, note: short ? (lv === 0 ? '錢不夠，付身上全部' : '錢不夠') : '', ok: lv === 0 || !short });
     }
     out.push({ id: 'leave', label: '不住了', desc: '', note: '', ok: true });
     return { v, k, out };

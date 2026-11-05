@@ -9,7 +9,7 @@
   let game = null;
 
   // 畫面狀態（不進存檔）：開著哪個視窗（小地圖也是視窗）、地圖的版面
-  const ui = { win: null, bagDrop: false, bagOff: false, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+  const ui = { win: null, bagDrop: false, bagOff: false, shopSelection: null, shopPages: {}, shopContext: null, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
 
   // ---- 配色：Canvas 畫的顏色全部讀 css/style.css 的變數，改色只改那裡 ----
   const P = {};
@@ -644,21 +644,61 @@
     const npc = game.talking != null ? game.talkTarget(game.talking) : null;
     if (!npc) {
       game.talking = null;
+      ui.shopSelection = null;
+      ui.shopContext = null;
+      ui.shopPages = {};
       el.classList.add('hidden');
       return;
     }
     const t = game.talkOptions(npc);
+    const shop = FE.Gear.shopOf(npc, game.world.villageById(npc.villageId));
+    if (ui.shopContext !== npc.id) {
+      ui.shopContext = npc.id;
+      ui.shopSelection = null;
+      ui.shopPages = {};
+    }
+    const page = game.talkPage || 'main';
+    const trade = (o) => /^(buyItem|sellItem|repairItem|craftItem):/.test(o.id);
+    const family = ['buy', 'sell', 'repair', 'craft'].find((name) => page === name || page.startsWith(name + ':'));
+    if (shop && family && page !== 'main') ui.shopPages[family] = page;
+    if (!shop || !family || (ui.shopSelection && (ui.shopSelection.page !== page || ui.shopSelection.npcId !== npc.id))) ui.shopSelection = null;
+    const selected = ui.shopSelection && t.options.find((o) => o.id === ui.shopSelection.id);
+    if (ui.shopSelection && !selected) ui.shopSelection = null;
+    const items = shop ? t.options.map((o, i) => ({ o, i })).filter(({ o }) => trade(o)) : [];
+    const actions = shop ? t.options.map((o, i) => ({ o, i })).filter(({ o }) => !trade(o)) : t.options.map((o, i) => ({ o, i }));
+    const tabs = shop && family
+      ? `<nav class="shop-tabs" aria-label="工匠服務">${['buy', 'sell', 'repair', 'craft']
+          .map((tab) => `<button data-shop-tab="${tab}" class="${family === tab ? 'on' : ''}">${{ buy: '買', sell: '賣', repair: '修理', craft: '打造' }[tab]}</button>`)
+          .join('')}</nav>`
+      : '';
+    const grid = items.length
+      ? `<div class="shop-grid">${items
+          .map(
+            ({ o, i }) =>
+              `<button class="shop-slot${o.disabled ? ' short' : ''}" data-shop-item="${i}"><span class="shop-slot-name"><kbd>${i + 1}</kbd>${esc(o.label)}</span><span class="shop-slot-note">${esc(o.note || '')}</span></button>`
+          )
+          .join('')}</div>`
+      : '';
+    const detail = selected
+      ? `<section class="shop-detail"><h3>${esc(selected.label)}</h3><p>${esc(selected.note || '')}</p><div class="shop-detail-actions"><button data-shop-confirm ${selected.disabled ? 'disabled' : ''}>${{ buyItem: '購買', sellItem: '賣出', repairItem: '修理', craftItem: '打造' }[selected.id.split(':')[0]]}</button><button data-shop-cancel>取消</button></div></section>`
+      : '';
+    const nav = actions.length
+      ? `<div class="dlg-opts shop-nav">${actions
+          .map(
+            ({ o, i }) =>
+              `<button data-opt="${i}" ${o.disabled ? 'disabled' : ''}><kbd>${i + 1}</kbd>${esc(o.label)}${o.note ? ` <span class="dim">（${esc(o.note)}）</span>` : ''}</button>`
+          )
+          .join('')}</div>`
+      : '';
     el.classList.remove('hidden');
+    el.classList.toggle('shop-dialog', !!shop);
     el.innerHTML = `
       <div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
       <p class="dlg-text">${esc(t.text)}</p>
-      <div class="dlg-opts">${t.options
-        .map(
-          (o, i) =>
-            `<button data-opt="${i}" ${o.disabled ? 'disabled' : ''}><kbd>${i + 1}</kbd>${esc(o.label)}${o.note ? ` <span class="dim">（${esc(o.note)}）</span>` : ''}</button>`
-        )
-        .join('')}</div>
-      <p class="dim dlg-hint">按數字鍵選擇，Esc ${game.talkPage && game.talkPage !== 'main' ? '返回上一層' : '關閉'}</p>`;
+      ${tabs}
+      ${selected ? detail : grid}
+      ${nav}
+      <p class="dim dlg-hint">${selected ? 'Enter 確認，Esc 取消' : `${items.length ? '點商品查看詳情；' : ''}按數字鍵快速選擇，Esc ${game.talkPage && game.talkPage !== 'main' ? '返回上一層' : '關閉'}`}</p>`;
   }
 
   // ---- 按鍵視窗：同時只開一個 ----
@@ -1367,6 +1407,32 @@
     },
     // 有沒有跳出必須先處理的視窗（選職業、升級加點）
     modal: () => !!ui.start || !!(game && game.player && game.player.points > 0),
+    selectShopItem(i) {
+      const npc = game.talking != null ? game.talkTarget(game.talking) : null;
+      const o = npc && game.talkOptions(npc).options[i];
+      if (!o || !/^(buyItem|sellItem|repairItem|craftItem):/.test(o.id)) return;
+      ui.shopSelection = { id: o.id, page: game.talkPage, npcId: npc.id };
+      update();
+    },
+    shopSelection: () => ui.shopSelection,
+    shopConfirmIndex() {
+      if (!ui.shopSelection) return -1;
+      const npc = game.talking != null ? game.talkTarget(game.talking) : null;
+      return npc ? game.talkOptions(npc).options.findIndex((o) => o.id === ui.shopSelection.id && !o.disabled) : -1;
+    },
+    clearShopSelection() {
+      ui.shopSelection = null;
+    },
+    cancelShopItem() {
+      this.clearShopSelection();
+      update();
+    },
+    shopTab(tab) {
+      if (!['buy', 'sell', 'repair', 'craft'].includes(tab) || !game || game.talking == null) return;
+      ui.shopSelection = null;
+      game.talkPage = ui.shopPages[tab] || tab;
+      update();
+    },
     win: () => ui.win,
     bagDrop: () => ui.bagDrop,
     bagOff: () => ui.bagOff,

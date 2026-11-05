@@ -2239,7 +2239,7 @@
           const worn = p.equip.main === g || p.equip.off === g || p.equip.body === g ? '（穿著）' : '';
           return {
             id: `repairItem:${g.id}`,
-            label: `修${FE.Gear.name(g)}${worn}`,
+            label: `修${FE.Gear.name(g)}${worn}（${FE.Gear.statText(g)}）`,
             note: short > 0 ? `${FE.Gear.durText(g)}，${this.shortText(short, 0)}` : `${FE.Gear.durText(g)}，修回 ${qt.restore} 點，${FE.money(qt.cost)}`,
             disabled: short > 0,
           };
@@ -2280,7 +2280,7 @@
         const list = p.bag.filter((e) => e.id === 'gear' && S.sell.includes(FE.GEAR[e.gear.type].cat)).slice(0, MAX);
         const opts = list.map((e) => ({
           id: `sellItem:${e.gear.id}`,
-          label: `賣${FE.Gear.name(e.gear)}`,
+          label: `賣${FE.Gear.name(e.gear)}（${FE.Gear.statText(e.gear)}）`,
           note: `${FE.Gear.durText(e.gear)}，+${FE.money(FE.Gear.sellPrice(e.gear, cha))}`,
         }));
         opts.push(back);

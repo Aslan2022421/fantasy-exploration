@@ -169,6 +169,7 @@
       FE.UI.update();
       return;
     }
+    FE.UI.clearShopSelection();
     dispatch('對話', () => game.choose(npc, i));
   }
 
@@ -236,7 +237,17 @@
     }
     // 對話視窗開著：數字鍵只選選項，Esc 回上一層（工匠的對話）或關掉，方向鍵不移動，也不會出手攻擊
     if (game.talking != null) {
-      if (k === 'escape') {
+      const shopSelection = FE.UI.shopSelection();
+      if (shopSelection && k === 'escape') {
+        e.preventDefault();
+        FE.UI.cancelShopItem();
+      } else if (shopSelection && k === 'enter') {
+        e.preventDefault();
+        const i = FE.UI.shopConfirmIndex();
+        if (i >= 0) choose(i);
+      } else if (shopSelection) {
+        e.preventDefault();
+      } else if (k === 'escape') {
         e.preventDefault();
         game.talkBack();
         FE.UI.update();
@@ -333,6 +344,27 @@
   });
 
   document.getElementById('dialog').addEventListener('click', (e) => {
+    const tab = e.target.closest && e.target.closest('[data-shop-tab]');
+    if (tab) {
+      FE.UI.shopTab(tab.dataset.shopTab);
+      return;
+    }
+    const cancel = e.target.closest && e.target.closest('[data-shop-cancel]');
+    if (cancel) {
+      FE.UI.cancelShopItem();
+      return;
+    }
+    const confirm = e.target.closest && e.target.closest('[data-shop-confirm]');
+    if (confirm && !confirm.disabled) {
+      const i = FE.UI.shopConfirmIndex();
+      if (i >= 0) choose(i);
+      return;
+    }
+    const item = e.target.closest && e.target.closest('[data-shop-item]');
+    if (item) {
+      FE.UI.selectShopItem(Number(item.dataset.shopItem));
+      return;
+    }
     const b = e.target.closest && e.target.closest('[data-opt]');
     if (b && !b.disabled) choose(Number(b.dataset.opt));
   });

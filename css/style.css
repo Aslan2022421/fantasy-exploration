@@ -320,7 +320,31 @@ b { font-weight: bold; }
 .dlg-opts { display: flex; flex-direction: column; gap: 6px; }
 .dlg-opts button { text-align: left; }
 .dlg-hint { margin: 8px 0 0; font-size: 12px; }
+#dialog.shop-dialog { width: min(760px, calc(100% - 24px)); max-height: min(82vh, 760px); overflow-y: auto; }
+#dialog.shop-dialog .dlg-text { margin-bottom: 12px; }
+.shop-tabs { display: flex; gap: 6px; margin: 10px 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.shop-tabs button { flex: 1 1 0; min-height: 34px; }
+.shop-tabs button.on { border-color: var(--head); color: var(--head); background: var(--panel2); }
+.shop-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+.shop-slot { min-width: 0; min-height: 82px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 9px; text-align: left; border-color: var(--line2); background: var(--void); }
+.shop-slot:hover, .shop-slot:focus-visible { border-color: var(--head); background: var(--panel2); }
+.shop-slot.short .shop-slot-note { color: var(--bad); }
+.shop-slot-name { display: flex; align-items: flex-start; gap: 5px; font-weight: bold; color: var(--text); overflow-wrap: anywhere; }
+.shop-slot-name kbd { flex: 0 0 auto; }
+.shop-slot-note { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
+.shop-detail { margin: 12px 0; padding: 14px; border: 1px solid var(--line2); background: var(--void); }
+.shop-detail h3 { margin: 0; color: var(--head); font-size: 17px; font-weight: normal; }
+.shop-detail p { margin: 8px 0 14px; }
+.shop-detail-actions { display: flex; gap: 8px; }
+.shop-detail-actions button { min-width: 100px; }
+.shop-nav { margin-top: 10px; }
 kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; background: var(--void); border: 1px solid var(--line); font: 12px Consolas, monospace; }
+
+@media (max-width: 620px) {
+  .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shop-tabs { flex-wrap: wrap; }
+  .shop-tabs button { flex-basis: calc(50% - 6px); }
+}
 
 /* 建角畫面（全螢幕）：路徑、標題與副標、兩個框、底部提示 */
 .cc { width: 100%; height: 100%; max-width: 1100px; display: flex; flex-direction: column; }

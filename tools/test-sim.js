@@ -173,7 +173,7 @@ function botStep(game, rng, goal, lazy) {
   return game.move(dx, dy);
 }
 
-// 在工匠的對話裡找到選項 id 並選下去：從最上層一路點進買／修／打造／賣裝備和分類、品質分頁，最多三層。
+// 在工匠的對話裡找到選項 id 並選下去：從最上層進入買／修／打造／賣頁面。
 // 找到而且沒反灰才選（回傳 true）；找到但反灰回傳 false；找不到也是 false。結束時回到最上層
 function shopDo(game, npc, id) {
   const NAV = (o) => ['buy', 'repair', 'craft', 'sell'].includes(o.id) || o.id.startsWith('cat:') || o.id.startsWith('qual:') || o.id.startsWith('craftCat:') || o.id.startsWith('buyPage:');

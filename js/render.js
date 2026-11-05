@@ -9,7 +9,7 @@
   let game = null;
 
   // 畫面狀態（不進存檔）：開著哪個視窗（小地圖也是視窗）、地圖的版面
-  const ui = { win: null, bagDrop: false, bagOff: false, shopSelection: null, shopPages: {}, shopContext: null, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+  const ui = { win: null, bagIndex: null, bagDropConfirm: false, shopSelection: null, shopContext: null, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
 
   // ---- 配色：Canvas 畫的顏色全部讀 css/style.css 的變數，改色只改那裡 ----
   const P = {};
@@ -646,21 +646,19 @@
       game.talking = null;
       ui.shopSelection = null;
       ui.shopContext = null;
-      ui.shopPages = {};
       el.classList.add('hidden');
       return;
     }
-    const t = game.talkOptions(npc);
     const shop = FE.Gear.shopOf(npc, game.world.villageById(npc.villageId));
     if (ui.shopContext !== npc.id) {
       ui.shopContext = npc.id;
       ui.shopSelection = null;
-      ui.shopPages = {};
     }
+    if (shop && (!game.talkPage || game.talkPage === 'main')) game.talkPage = 'buy';
     const page = game.talkPage || 'main';
-    const trade = (o) => /^(buyItem|sellItem|repairItem|craftItem):/.test(o.id);
-    const family = ['buy', 'sell', 'repair', 'craft'].find((name) => page === name || page.startsWith(name + ':'));
-    if (shop && family && page !== 'main') ui.shopPages[family] = page;
+    const family = shop ? ['buy', 'sell', 'repair', 'craft'].find((name) => page === name) : null;
+    const t = game.talkOptions(npc);
+    const trade = (o) => /^(buyItem|sellItem|repairItem|craftItem):/.test(o.id) || o.id === 'sellOre';
     if (!shop || !family || (ui.shopSelection && (ui.shopSelection.page !== page || ui.shopSelection.npcId !== npc.id))) ui.shopSelection = null;
     const selected = ui.shopSelection && t.options.find((o) => o.id === ui.shopSelection.id);
     if (ui.shopSelection && !selected) ui.shopSelection = null;
@@ -671,18 +669,26 @@
           .map((tab) => `<button data-shop-tab="${tab}" class="${family === tab ? 'on' : ''}">${{ buy: '買', sell: '賣', repair: '修理', craft: '打造' }[tab]}</button>`)
           .join('')}</nav>`
       : '';
+    const balance = shop
+      ? `<div class="shop-balance">持有 ${FE.money(game.player.copper)}　｜　礦石 ${game.bagCount('ore')} 顆</div>`
+      : '';
     const grid = items.length
       ? `<div class="shop-grid">${items
           .map(
             ({ o, i }) =>
-              `<button class="shop-slot${o.disabled ? ' short' : ''}" data-shop-item="${i}"><span class="shop-slot-name"><kbd>${i + 1}</kbd>${esc(o.label)}</span><span class="shop-slot-note">${esc(o.note || '')}</span></button>`
+              `<button class="shop-slot${o.disabled ? ' short' : ''}${selected && selected.id === o.id ? ' selected' : ''}" data-shop-item="${i}" title="${esc(`${o.label}：${o.info || o.note || ''}`)}"><span class="shop-slot-name">${esc(o.label)}</span><span class="shop-slot-note">${esc(o.note || '')}</span></button>`
           )
           .join('')}</div>`
-      : '';
+      : family
+        ? `<p class="shop-empty">${family === 'buy' ? '目前沒有可購買的物品。' : family === 'sell' ? '沒有可出售的裝備或礦石。' : family === 'repair' ? '沒有需要修理的裝備。' : '目前沒有可打造的裝備。'}</p>`
+        : '';
     const detail = selected
-      ? `<section class="shop-detail"><h3>${esc(selected.label)}</h3><p>${esc(selected.note || '')}</p><div class="shop-detail-actions"><button data-shop-confirm ${selected.disabled ? 'disabled' : ''}>${{ buyItem: '購買', sellItem: '賣出', repairItem: '修理', craftItem: '打造' }[selected.id.split(':')[0]]}</button><button data-shop-cancel>取消</button></div></section>`
+      ? `<section class="shop-detail"><h3>${esc(selected.label)}</h3><p>${esc(selected.info || selected.note || '')}</p><div class="shop-detail-actions"><button data-shop-confirm ${selected.disabled ? 'disabled' : ''}>${selected.id === 'sellOre' ? '賣出' : { buyItem: '購買', sellItem: '賣出', repairItem: '修理', craftItem: '打造' }[selected.id.split(':')[0]]}</button><button data-shop-cancel>取消</button></div></section>`
       : '';
-    const nav = actions.length
+    const content = selected
+      ? `<div class="shop-content has-selection">${detail}${grid}</div>`
+      : `<div class="shop-content">${grid}</div>`;
+    const nav = !shop && actions.length
       ? `<div class="dlg-opts shop-nav">${actions
           .map(
             ({ o, i }) =>
@@ -692,13 +698,19 @@
       : '';
     el.classList.remove('hidden');
     el.classList.toggle('shop-dialog', !!shop);
-    el.innerHTML = `
-      <div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
-      <p class="dlg-text">${esc(t.text)}</p>
-      ${tabs}
-      ${selected ? detail : grid}
-      ${nav}
-      <p class="dim dlg-hint">${selected ? 'Enter 確認，Esc 取消' : `${items.length ? '點商品查看詳情；' : ''}按數字鍵快速選擇，Esc ${game.talkPage && game.talkPage !== 'main' ? '返回上一層' : '關閉'}`}</p>`;
+    el.innerHTML = shop
+      ? `<div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
+        <p class="dlg-text">${esc(t.text)}</p>
+        <header class="shop-head"><b>交易</b><button data-shop-close>離開</button></header>${tabs}${balance}${content}<p class="dim dlg-hint">${selected ? '確認交易或取消' : '點選商品查看資訊'}</p>`
+      : `<div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
+        <p class="dlg-text">${esc(t.text)}</p>
+        <div class="dlg-opts">${t.options
+          .map(
+            (o, i) =>
+              `<button data-opt="${i}" ${o.disabled ? 'disabled' : ''}><kbd>${i + 1}</kbd>${esc(o.label)}${o.note ? ` <span class="dim">（${esc(o.note)}）</span>` : ''}</button>`
+          )
+          .join('')}</div>
+        <p class="dim dlg-hint">按數字鍵選擇，Esc 關閉</p>`;
   }
 
   // ---- 按鍵視窗：同時只開一個 ----
@@ -779,13 +791,16 @@
       <div class="row"><span>附近的地貌</span><span>${esc(lmText)}</span></div>`;
   }
 
-  // 背包：上面是目前的負重和穿著的裝備（主手、副手、身上），下面列出每樣東西與數量，按數字選：
-  // 藥草是吃、裝備是穿上或拿起（算一個動作，換下的放回背包）；按 X 或點按鈕切到「丟掉」，選到的整疊直接消失
+  // 背包：上面是目前的負重和穿著的裝備，下面選物品後在資訊區操作
   function drawBackpack() {
     const p = game.player;
     const G = FE.Gear;
     const list = game.bagList();
-    const drop = ui.bagDrop;
+    if (ui.bagIndex != null && !list[ui.bagIndex]) {
+      ui.bagIndex = null;
+      ui.bagDropConfirm = false;
+    }
+    const selected = ui.bagIndex == null ? null : list[ui.bagIndex];
     const tier = game.loadTier();
     // 裝備欄（第三十一版）：滑鼠點一格就脫下放回背包，算一個動作
     const slot = (label, g, key, n) =>
@@ -795,19 +810,40 @@
         tier === 1 ? '　超過能背的重量：走一步要 60 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
       }</p>
       <ul class="equipped">${slot('主手', p.equip.main, 'main', 1)}${slot('副手', p.equip.off, 'off', 2)}${slot('身上', p.equip.body, 'body', 3)}</ul>
-      <p><button data-dropmode class="${drop ? 'on' : ''}">${drop ? '現在是「丟掉」：選到的整疊直接消失（按 X 切回）' : '切到「丟掉」（X）'}</button>
-      <button data-offmode class="${ui.bagOff ? 'on' : ''}">${ui.bagOff ? '現在武器放副手（雙持，按 V 切回）' : '武器改放副手（V）'}</button></p>
-      <p class="dim">雙持：副手只能放以你的體型能單手拿的武器（每把武器標了單手、雙手或拿不動）。按 1 攻擊會主手、副手各出手一次，副手那一下不加屬性修正值；副手拿非輕型武器時那一下有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
+      <p class="dim">雙持：副手只能放以你的體型能單手拿的武器。主手、副手各出手一次時，副手不加屬性修正值；副手拿非輕型武器時有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
+
+    let detail = '<p class="dim">選一件物品查看資訊與可用操作。</p>';
+    if (selected) {
+      const isGear = !!selected.gear;
+      const def = isGear ? G.def(selected.gear) : null;
+      const isTool = isGear && def.cat === 'tool';
+      const canEquip = isGear && !isTool && FE.Char.canWear(p, selected.gear) && (def.cat !== 'weapon' || FE.Char.grip(p, selected.gear) !== 'none');
+      const canOff = isGear && G.offOk(p, selected.gear);
+      const offBlocked = canOff && p.equip.main && G.twoHanded(p, p.equip.main);
+      const itemName = `${selected.name}${selected.n > 1 ? ` ×${selected.n}` : ''}`;
+      const actions = [];
+      if (isGear && canEquip) actions.push('<button data-bag-action="use">穿上或拿起</button>');
+      else if (!isGear && selected.use) actions.push('<button data-bag-action="use">使用</button>');
+      if (canOff) actions.push(`<button data-bag-action="off" ${offBlocked ? 'disabled' : ''}>拿在副手</button>`);
+      if (selected.id !== 'goods') actions.push('<button data-bag-action="drop">丟棄整疊</button>');
+      const actionMarkup = ui.bagDropConfirm
+        ? `<p>確定要丟掉「${esc(itemName)}」嗎？</p><div class="bag-actions"><button data-bag-action="confirmDrop">確認丟棄</button><button data-bag-action="cancelDrop">取消</button></div>`
+        : actions.length
+          ? `<div class="bag-actions">${actions.join('')}</div>`
+          : '';
+      const extra = isTool
+        ? '<p class="dim">工具放在背包裡，遇到對應採集點時會自動使用。</p>'
+        : selected.id === 'goods'
+          ? '<p class="dim">這是受託運送的物品，不能丟棄或直接使用。</p>'
+          : canOff && offBlocked
+            ? '<p class="dim">主手武器需要用兩隻手拿，先換下後才能把武器放在副手。</p>'
+            : '';
+      detail = `<h3>${esc(itemName)}</h3>${selected.info ? `<p>${esc(selected.info)}</p>` : ''}${extra}${actionMarkup}`;
+    }
+    $('bagDetail').innerHTML = detail;
     $('backpack').innerHTML = list.length
       ? list
-          .map((e, i) => {
-            const can = drop ? e.id !== 'goods' : e.use;
-            const act = drop ? '丟掉' : e.id === 'gear' ? (ui.bagOff && e.gear && FE.Gear.offOk(p, e.gear) ? '拿在副手' : e.grip === '拿不動' ? '拿不起來' : '穿上或拿起') : '使用';
-            const note = e.id === 'gear' && !e.use && !drop ? '放在背包裡，撞上礦脈或藥草就會用' : can ? act : '';
-            return `<li><button data-use="${i}" ${can ? '' : 'disabled'}><kbd>${i + 1}</kbd>${esc(e.name)}${e.n > 1 ? ` ×${e.n}` : ''}${
-              e.info ? ` <span class="dim">（${esc(e.info)}）</span>` : ''
-            }${note ? ` <span class="dim">【${esc(note)}】</span>` : ''}</button></li>`;
-          })
+          .map((e, i) => `<li><button data-bag-select="${i}" class="${ui.bagIndex === i ? 'selected' : ''}" aria-pressed="${ui.bagIndex === i}"><kbd>${i + 1}</kbd>${esc(e.name)}${e.n > 1 ? ` ×${e.n}` : ''}</button></li>`)
           .join('')
       : '<li class="dim">背包是空的。</li>';
   }
@@ -1410,7 +1446,7 @@
     selectShopItem(i) {
       const npc = game.talking != null ? game.talkTarget(game.talking) : null;
       const o = npc && game.talkOptions(npc).options[i];
-      if (!o || !/^(buyItem|sellItem|repairItem|craftItem):/.test(o.id)) return;
+      if (!o || (!/^(buyItem|sellItem|repairItem|craftItem):/.test(o.id) && o.id !== 'sellOre')) return;
       ui.shopSelection = { id: o.id, page: game.talkPage, npcId: npc.id };
       update();
     },
@@ -1430,23 +1466,47 @@
     shopTab(tab) {
       if (!['buy', 'sell', 'repair', 'craft'].includes(tab) || !game || game.talking == null) return;
       ui.shopSelection = null;
-      game.talkPage = ui.shopPages[tab] || tab;
+      game.talkPage = tab;
+      update();
+    },
+    shopActive() {
+      const npc = game && game.talking != null ? game.talkTarget(game.talking) : null;
+      return !!npc && !!FE.Gear.shopOf(npc, game.world.villageById(npc.villageId));
+    },
+    closeShop() {
+      if (!this.shopActive()) return;
+      game.closeTalk();
       update();
     },
     win: () => ui.win,
-    bagDrop: () => ui.bagDrop,
-    bagOff: () => ui.bagOff,
-    toggleBagOff() {
-      ui.bagOff = !ui.bagOff;
+    selectedBagIndex: () => ui.bagIndex,
+    bagDropConfirm: () => ui.bagDropConfirm,
+    selectBagItem(i) {
+      if (!Number.isInteger(i) || !game.bagList()[i]) return;
+      ui.bagIndex = i;
+      ui.bagDropConfirm = false;
       update();
     },
-    toggleBagDrop() {
-      ui.bagDrop = !ui.bagDrop;
+    askBagDrop() {
+      const e = game.bagList()[ui.bagIndex];
+      if (!e || e.id === 'goods') return;
+      ui.bagDropConfirm = true;
       update();
+    },
+    cancelBagDrop() {
+      ui.bagDropConfirm = false;
+      update();
+    },
+    clearBagSelection() {
+      ui.bagIndex = null;
+      ui.bagDropConfirm = false;
     },
     openWindow(name) {
       ui.win = name;
-      if (name === 'backpack') ui.bagDrop = ui.bagOff = false;
+      if (name === 'backpack') {
+        ui.bagIndex = null;
+        ui.bagDropConfirm = false;
+      }
       if (name === 'reports' && game.reports.length) FE.store.save('fe.reportSeen', reportId(game.reports[0]));
       update();
     },

@@ -324,9 +324,8 @@ function testGear() {
     p.copper = Math.round(550 * econ(vil)) - 9;
     open(smith);
     g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === 'buy'));
-    g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === 'cat:armor'));
     const heavyOpt = g.talkOptions(smith).options.find((o) => o.id === 'buyItem:ringmail:0');
-    ok(heavyOpt.disabled && heavyOpt.note === '還差 9 銅', `買環甲錢不夠的說明：${heavyOpt.note}`);
+    ok(heavyOpt.disabled && heavyOpt.info.includes('還差 9 銅'), `買環甲錢不夠的說明：${heavyOpt.info}`);
 
     // 賣礦石：一顆 5 銀
     p.bag = [];
@@ -387,21 +386,17 @@ function testGear() {
     sw1.dur = 100;
     p.copper = 2;
     const ro = (open(wsmith), g.talkPage = 'repair', g.talkOptions(wsmith).options.find((o) => o.id === `repairItem:${sw1.id}`));
-    ok(ro.disabled && /^耐久 100 \/ 200，還差 (\d+ 金 )?(\d+ 銀 )?\d+ 銅$|^耐久 100 \/ 200，還差 (\d+ 金 ?)?(\d+ 銀)?$/.test(ro.note), `修復錢不夠的說明：${ro.note}`);
+    ok(ro.disabled && /耐久 100 \/ 200/.test(ro.info) && ro.info.includes('還差'), `修復錢不夠的說明：${ro.info}`);
     g.talkPage = 'main';
 
     // 打造：村莊鐵匠什麼都能打（衣袍除外），城鎮武器匠只打武器、盔甲匠只打防具與盾牌
-    // 第二十九版：打造也分類（劍與刀、斧與錘、長柄與法杖、防具與盾牌），一層最多 8 項；只有一類時直接列
+    // 打造頁完整列出工匠能做的配方，不再分分類或分頁
     const craftIds = (n) => {
-      const top = optIds(n, 'craft');
-      const cats = top.filter((i) => i.startsWith('craftCat:'));
-      if (!cats.length) return top.filter((i) => i.startsWith('craftItem:')).map((i) => i.slice(10)).sort().join(',');
-      return cats.flatMap((c) => optIds(n, 'craft:' + c.slice(9)).filter((i) => i.startsWith('craftItem:')).map((i) => i.slice(10))).sort().join(',');
+      return optIds(n, 'craft').filter((i) => i.startsWith('craftItem:')).map((i) => i.slice(10)).sort().join(',');
     };
     const sorted = (s) => s.split(',').sort().join(',');
     ok(craftIds(smith) === sorted('sword,spear,shortspear,dagger,shortsword,waraxe,club,warhammer,padded,light,hide,chainshirt,ringmail,shield') && craftIds(wsmith) === sorted('sword,spear,shortspear,dagger,shortsword,waraxe,club,warhammer,greataxe,greatsword') && craftIds(armorer) === sorted('padded,light,studded,hide,chainshirt,medium,breastplate,halfplate,ringmail,heavy,splint,plate,shield'), `可打造 ${craftIds(smith)}／${craftIds(wsmith)}／${craftIds(armorer)}`);
-    ok(optIds(smith, 'craft').join() === 'craftCat:blade,craftCat:pole,craftCat:axe,craftCat:armor,back' && optIds(wsmith, 'craft').join() === 'craftCat:blade,craftCat:pole,craftCat:axe,back' && optIds(armorer, 'craft').join() === 'craftCat:armorL,craftCat:armorM,craftCat:armorH,craftCat:shieldC,back', `打造的分類 ${optIds(smith, 'craft')}／${optIds(wsmith, 'craft')}／${optIds(armorer, 'craft')}`);
-    ok([smith, wsmith, armorer].every((n) => { const cats = optIds(n, 'craft').filter((i) => i.startsWith('craftCat:')); return optIds(n, 'craft').length <= 9 && cats.every((c) => optIds(n, 'craft:' + c.slice(9)).length <= 9); }), '打造每一層該最多 9 個選項（按得到）');
+    ok([smith, wsmith, armorer].every((n) => optIds(n, 'craft').every((i) => i.startsWith('craftItem:'))), '打造頁出現分類或分頁選項');
     const need = { sword: 3, spear: 3, shortspear: 3, dagger: 3, heavy: 5, medium: 4, light: 2, shield: 2, shortsword: 3, waraxe: 3, club: 3, warhammer: 3, greataxe: 5, greatsword: 5, padded: 2, studded: 3, hide: 3, chainshirt: 4, breastplate: 5, halfplate: 5, ringmail: 5, splint: 6, plate: 7 };
     for (const [t, n] of Object.entries(need)) {
       const cq = G.craftQuote(t, vil);
@@ -411,9 +406,9 @@ function testGear() {
     p.bag = [];
     g.bagAdd('ore', 4);
     p.copper = G.craftQuote('heavy', town).fee - 2;
-    open(armorer); g.talkPage = 'craft:armorH';
+    open(armorer); g.talkPage = 'craft';
     const co = g.talkOptions(armorer).options.find((o) => o.id === 'craftItem:heavy');
-    ok(co.disabled && co.note === '還差 2 銅、1 顆礦石', `打造鎖子甲錢和礦石都不夠的說明：${co.note}`);
+    ok(co.disabled && co.info.includes('還差 2 銅、1 顆礦石'), `打造鎖子甲錢和礦石都不夠的說明：${co.info}`);
     ok(!shopDo(g, armorer, 'craftItem:heavy') && g.bagCount('ore') === 4, '不夠還是打造了');
     // 打造的品質範圍：村莊普通～精良（每高一級機率減半），城鎮做工好～優秀
     const crafted = (n, v, type, runs) => {

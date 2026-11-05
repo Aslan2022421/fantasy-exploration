@@ -256,7 +256,7 @@
 
   // ---- 商店 ----
   // 鐵匠與武器匠販售武器、彈藥、消耗品、陷阱、門鎖工具與裝備包；盔甲匠販售防具與盾牌。
-  // buy：賣的東西，分類顯示（一層最多列 8 項，所以武器分成四類）；quals：賣哪幾種品質（工具固定普通）；repair：修哪幾類（GEAR 的 cat）；craft：能打造的；sell：收哪幾類
+  // buy 依類別整理商品資料，交易介面會合併成單一清單；quals：賣哪幾種品質（工具固定普通）；repair：修哪幾類（GEAR 的 cat）；craft：能打造的；sell：收哪幾類
   const SHOPS = {
     blacksmith: {
       title: '鐵匠',
@@ -306,7 +306,7 @@
     },
   };
   const CAT_NAMES = { blade: '劍與刀', axe: '斧與錘', pole: '長柄與法杖', ranged: '遠程武器與彈藥', supplies: '藥水與投擲物', kit: '陷阱、門鎖與裝備包', armor: '防具與盾牌', armorL: '輕甲與衣袍', armorM: '中甲', armorH: '重甲', shieldC: '盾牌', tool: '工具' };
-  // 打造的東西也分類顯示（跟「買」同一套分類）：回傳 { 分類: [種類] }，沒有東西的分類不列
+  // 舊商店頁面相容用：依買賣資料的內部分類整理打造配方
   function craftCats(S) {
     const out = {};
     for (const type of S.craft) {

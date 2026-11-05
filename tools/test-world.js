@@ -50,41 +50,26 @@ function testDialogs() {
   ok(g.talkOptions(a).text.length > 0 && g.talkOptions(a).text === g.talkOptions(a).text, '閒話是空的，或同一場對話裡每次不一樣');
   ok(pick(a, 'leave').close && g.talking === null, '離開沒有關掉對話');
 
-  // 鐵匠（村莊）：最上層是買／修／打造／賣礦石／賣裝備／離開；買要先選分類；錢不夠時選項寫差多少，選了不買也不關對話；
-  // 錢夠就買，買完對話還開著、不花動作；Esc 回上一層，最上層再按才關掉
+  // 鐵匠（村莊）：最上層是買／修／打造／賣礦石／賣裝備／離開；買頁完整列出商品，選取後確認；
+  // 錢不夠時不可買，錢夠就買，買完對話還開著、不花動作
   bump(smith);
   const sv = g.world.villageById(smith.villageId);
   ok(sv.kind === 'village' && g.talkOptions(smith).role.startsWith('鐵匠・') && ['人類', '矮人', '精靈'].some((r) => g.talkOptions(smith).role.endsWith(r)), `村莊的工匠是 ${g.talkOptions(smith).role}（第三十版起寫種族）`);
   ok(ids(smith) === 'buy/repair/craft/sellOre/sell/leave', `鐵匠的選項是 ${ids(smith)}`);
   g.player.copper = 0;
   pick(smith, 'buy');
-  ok(g.talkPage === 'buy' && ids(smith) === 'cat:blade/cat:axe/cat:pole/cat:ranged/cat:supplies/cat:kit/cat:armor/cat:tool/back', `買的分類是 ${ids(smith)}`);
-  pick(smith, 'cat:blade');
-  ok(ids(smith) === 'buyItem:sword:0/buyItem:shortsword:0/buyItem:dagger:0/buyItem:scimitar:0/buyItem:rapier:0/back', `劍與刀的選項是 ${ids(smith)}`);
-  pick(smith, 'back');
-  pick(smith, 'cat:pole');
-  ok(ids(smith) === 'buyItem:spear:0/buyItem:shortspear:0/buyItem:staff:0/buyItem:javelin:0/buyItem:glaive:0/buyItem:halberd:0/buyPage:pole::1/back', `長柄與法杖第一頁的選項是 ${ids(smith)}`);
-  pick(smith, 'buyPage:pole::1');
-  ok(ids(smith) === 'buyItem:trident:0/buyItem:lance:0/buyPage:pole::0/back', `長柄與法杖第二頁的選項是 ${ids(smith)}`);
-  pick(smith, 'back');
-  pick(smith, 'back');
-  pick(smith, 'cat:ranged');
-  ok(ids(smith) === 'buyItem:bow:0/buyItem:longbow:0/buyItem:arrow:0/buyItem:sling:0/buyItem:slingBullet:0/back', `弓弩與彈藥的選項是 ${ids(smith)}`);
-  pick(smith, 'back');
-  pick(smith, 'cat:blade');
+  const buyIds = g.talkOptions(smith).options.map((o) => o.id);
+  ok(g.talkPage === 'buy' && buyIds.includes('buyItem:sword:0') && buyIds.includes('buyItem:pick:0') && !buyIds.some((id) => id.startsWith('cat:') || id.startsWith('buyPage:')), `買頁的選項 ${buyIds}`);
   const price = FE.Gear.shopPrice('sword', 0, sv);
   g.player.copper = price - 7;
   const o = g.talkOptions(smith).options[opt(smith, 'buyItem:sword:0')];
-  ok(o.disabled && o.note === '還差 7 銅', `錢不夠的說明：${o.note}`);
+  ok(o.disabled && o.info.includes('還差 7 銅'), `錢不夠的說明：${o.info}`);
   const bag0 = g.player.bag.length;
   ok(!pick(smith, 'buyItem:sword:0').close && g.talking === smith.id && g.player.bag.length === bag0 && g.player.copper === price - 7, '錢不夠時不該買到或關掉對話');
   g.player.copper = price + 5;
   const turn0 = g.turn;
   ok(!pick(smith, 'buyItem:sword:0').close && g.talking === smith.id && g.turn === turn0, '買完對話該還開著、不花動作');
   ok(g.player.copper === 5 && g.player.bag.some((e) => e.id === 'gear' && e.gear.type === 'sword' && e.gear.q === 0 && e.gear.dur === 200), `買到之後 金幣 ${g.player.copper}、背包 ${JSON.stringify(g.player.bag.map((e) => e.gear && e.gear.type))}`);
-  ok(g.talkBack() === false && g.talkPage === 'buy' && g.talking === smith.id, 'Esc 沒有回上一層（分類）');
-  ok(g.talkBack() === false && g.talkPage === 'main', 'Esc 沒有回最上層');
-  ok(g.talkBack() === true && g.talking === null, '最上層按 Esc 沒有關掉對話');
   g.player.bag = g.player.bag.filter((e) => e.id !== 'gear');
   bump(smith);
   ok(pick(smith, 'leave').close && g.talking === null, '離開沒有關掉對話');
@@ -449,12 +434,12 @@ function testBackpack() {
   // 買工具（第二十五版起是裝備物件，耐久 50）：錢不夠時選項寫差多少、選了不買；錢夠就買，已有的不再出現
   const smith = w.npcs.find((n) => n.role === 'smith');
   g.talking = smith.id;
-  const toolIds = () => { g.talkPage = 'buy:tool'; return g.talkOptions(smith).options.map((o) => o.id); };
-  const toolOpt = (id) => { g.talkPage = 'buy:tool'; return g.talkOptions(smith).options.find((o) => o.id === id); };
-  const toolPick = (id) => { g.talkPage = 'buy:tool'; return g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === id)); };
+  const toolIds = () => { g.talkPage = 'buy'; return g.talkOptions(smith).options.map((o) => o.id); };
+  const toolOpt = (id) => { g.talkPage = 'buy'; return g.talkOptions(smith).options.find((o) => o.id === id); };
+  const toolPick = (id) => { g.talkPage = 'buy'; return g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === id)); };
   const TP = C.TOOL_PRICE * C.SILVER; // 工具 20 銀＝200 銅（第三十版起用銅記帳）
   p.copper = TP - 1;
-  ok(toolOpt('buyItem:pick:0') && toolOpt('buyItem:pick:0').disabled && toolOpt('buyItem:pick:0').note.includes('還差 1 銅') && toolOpt('buyItem:sickle:0').disabled, `錢不夠時買工具的選項：${JSON.stringify(toolOpt('buyItem:pick:0'))}`);
+  ok(toolOpt('buyItem:pick:0') && toolOpt('buyItem:pick:0').disabled && toolOpt('buyItem:pick:0').info.includes('還差 1 銅') && toolOpt('buyItem:sickle:0').disabled, `錢不夠時買工具的選項：${JSON.stringify(toolOpt('buyItem:pick:0'))}`);
   toolPick('buyItem:pick:0');
   ok(!g.toolOf('pick') && p.copper === TP - 1, '錢不夠還是買到了礦鎬');
   p.copper = TP * 2 + 5;

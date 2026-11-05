@@ -425,7 +425,7 @@
       return FE.JOB_KINDS.map((k) => j[k]).filter(Boolean);
     }
 
-    // 背包視窗列的東西：{ id, name, n, use, gear, info }，按數字選第幾樣（藥草是吃，裝備是穿上或拿起，工具放著就能用）
+    // 背包視窗列的東西：{ id, name, n, use, gear, info }，點選或按數字選取後操作
     bagList() {
       return this.player.bag.map((e) => {
         if (e.id === 'gear') {
@@ -1172,7 +1172,7 @@
       if (!this.world.passable(nx, ny)) return;
       // 超過推拖上限（力量值×30 磅）：不能移動，要先丟掉東西
       if (this.loadTier() >= 2) {
-        this.say(`你背得太重了（${this.weight()} 磅，推拖上限 ${this.pushLimit()} 磅），邁不開腳步。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
+        this.say(`你背得太重了（${this.weight()} 磅，推拖上限 ${this.pushLimit()} 磅），邁不開腳步。先丟掉一些東西（按 B 打開背包，選中物品後操作）。`, 'sys');
         return;
       }
       this.beginAction();
@@ -2139,7 +2139,7 @@
     // 賣回＝半價×剩餘耐久比例；礦石一顆 5 銀；打造要礦石加原價一半的工錢，品質在聚落的範圍內隨機（每高一級機率減半）。
     // 錢一律用銅記帳（第三十版），畫面寫成「1 金 2 銀 3 銅」；在這裡買、修、打造花的錢算進這個聚落的經濟值（spend）
 
-    // 上一層：「買」只有一類東西時，那一類就是第一層，返回直接回最上層
+    // 舊商店頁面向後相容用；新版交易頁不再使用分類與分頁。
     parentPage(S, page) {
       const parts = page.split(':');
       if (parts.length >= 3) return `buy:${parts[1]}`;
@@ -2165,9 +2165,7 @@
       const S = FE.Gear.SHOPS[shopKey];
       const back = { id: 'back', label: '返回' };
       const have = `你身上有 ${FE.money(p.copper)}、${this.bagCount('ore')} 顆礦石。`;
-      const MAX = 8; // 一層最多列幾項（加上「返回」不超過 9，才按得到）
       let page = this.talkPage || 'main';
-      if (page === 'buy' && Object.keys(S.buy).length === 1) page = 'buy:' + Object.keys(S.buy)[0];
       const cha = this.chaMod(); // 魅力：買東西每點修正值 −5%，賣東西 +5%
       const price = (e) => FE.Gear.shopPrice(e.type, e.q, v, cha);
       const gname = (e) => FE.Gear.productName(e);
@@ -2195,69 +2193,44 @@
       }
 
       if (page === 'buy') {
+        const all = Object.keys(S.buy).flatMap((cat) => this.buyEntries(S, cat));
         return [
-          `要買哪一類？${have}`,
-          Object.keys(S.buy).map((cat) => ({ id: `cat:${cat}`, label: FE.Gear.CAT_NAMES[cat] })).concat([back]),
+          `你身上有 ${FE.money(p.copper)}。`,
+          all.map((e) => {
+            const pr = price(e); // 工具可以重複買，各自有耐久
+            const short = pr - p.copper;
+            const specs = e.gear ? FE.Gear.statText({ type: e.type, q: e.q }) : FE.Gear.productText(e);
+            return {
+              id: `buyItem:${e.id}:${e.q}`,
+              label: gname(e),
+              note: FE.money(pr),
+              info: `${specs}。價格 ${FE.money(pr)}${short > 0 ? `，${this.shortText(short, 0)}` : ''}`,
+              disabled: short > 0,
+            };
+          }),
         ];
       }
 
-      const m = /^buy:(\w+)(?::(\d+|all))?(?::(\d+))?$/.exec(page);
-      if (m) {
-        const cat = m[1];
-        const q = m[2] === undefined || m[2] === 'all' ? undefined : Number(m[2]);
-        const pageNo = m[3] === undefined ? 0 : Number(m[3]);
-        const all = this.buyEntries(S, cat, q);
-        // 這一類的東西太多就先選品質
-        if (q === undefined && all.length > MAX && all.some((e) => e.gear && FE.GEAR[e.type].cat !== 'tool')) {
-          return [`要哪種做工的？${have}`, S.quals.map((qq) => ({ id: `qual:${cat}:${qq}`, label: FE.QUALITIES[qq].name })).concat([back])];
-        }
-        const opts = [];
-        const pageSize = 6;
-        const shown = all.slice(pageNo * pageSize, (pageNo + 1) * pageSize);
-        for (const e of shown) {
-          const pr = price(e); // 工具可以重複買，各自有耐久
-          const short = pr - p.copper;
-          const label = `${gname(e)}（${e.gear ? FE.Gear.statText({ type: e.type, q: e.q }) : FE.Gear.productText(e)}）`;
-          opts.push({
-            id: `buyItem:${e.id}:${e.q}`,
-            label,
-            note: short > 0 ? this.shortText(short, 0) : FE.money(pr),
-            disabled: short > 0,
-          });
-        }
-        if (pageNo > 0) opts.push({ id: `buyPage:${cat}:${q === undefined ? '' : q}:${pageNo - 1}`, label: '上一頁' });
-        if ((pageNo + 1) * pageSize < all.length) opts.push({ id: `buyPage:${cat}:${q === undefined ? '' : q}:${pageNo + 1}`, label: '下一頁' });
-        opts.push(back);
-        return [`${FE.Gear.CAT_NAMES[cat]}。${have}`, opts];
-      }
-
       if (page === 'repair') {
-        const list = this.allGear().filter((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max).slice(0, MAX);
+        const list = this.allGear().filter((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max);
         const opts = list.map((g) => {
           const qt = FE.Gear.repairQuote(g, v, cha);
           const short = qt.cost - p.copper;
-          const worn = p.equip.main === g || p.equip.off === g || p.equip.body === g ? '（穿著）' : '';
           return {
             id: `repairItem:${g.id}`,
-            label: `修${FE.Gear.name(g)}${worn}（${FE.Gear.statText(g)}）`,
-            note: short > 0 ? `${FE.Gear.durText(g)}，${this.shortText(short, 0)}` : `${FE.Gear.durText(g)}，修回 ${qt.restore} 點，${FE.money(qt.cost)}`,
+            label: FE.Gear.name(g),
+            note: FE.money(qt.cost),
+            info: `${FE.Gear.statText(g)}；${FE.Gear.durText(g)}；修回 ${qt.restore} 點，費用 ${FE.money(qt.cost)}${short > 0 ? `，${this.shortText(short, 0)}` : ''}`,
             disabled: short > 0,
           };
         });
-        opts.push(back);
         const how = '我能修到完整。';
         return [list.length ? `${how}${have}` : '沒有要修的東西。', opts];
       }
 
-      if (page === 'craft' || page.startsWith('craft:')) {
-        // 打造的東西也分類（跟「買」同一套分類，一層最多 8 項）；只有一類時直接列
-        const cats = FE.Gear.craftCats(S);
-        const keys = Object.keys(cats);
-        const cat = page === 'craft' ? (keys.length === 1 ? keys[0] : null) : page.split(':')[1];
-        if (!cat || !cats[cat]) {
-          return [`要打造哪一類？${have}`, keys.map((c) => ({ id: `craftCat:${c}`, label: FE.Gear.CAT_NAMES[c] })).concat([back])];
-        }
-        const opts = cats[cat].map((type) => {
+      if (page === 'craft') {
+        const types = Object.values(FE.Gear.craftCats(S)).flat();
+        const opts = types.map((type) => {
           const qt = FE.Gear.craftQuote(type, v, cha);
           const lackOre = qt.ore - this.bagCount('ore');
           const lackGold = qt.fee - p.copper;
@@ -2265,25 +2238,28 @@
           const lo = FE.QUALITIES[qt.range[0]];
           const hi = FE.QUALITIES[qt.range[1]];
           const ql = (qq) => `${qq.sym}${qq.name}${qq.sym}`;
+          const label = FE.GEAR[type].name;
           return {
             id: `craftItem:${type}`,
-            label: `打造${FE.GEAR[type].name}（${FE.Gear.statText({ type, q: 0 })}）`,
-            note: lack || `${qt.ore} 顆礦石、${FE.money(qt.fee)}，品質${ql(lo)}～${ql(hi)}`,
+            label,
+            note: `${qt.ore} 礦石・${FE.money(qt.fee)}`,
+            info: `${FE.Gear.statText({ type, q: 0 })}；材料 ${qt.ore} 顆礦石，工錢 ${FE.money(qt.fee)}；品質 ${ql(lo)}～${ql(hi)}${lack ? `；${lack}` : ''}`,
             disabled: !!lack,
           };
         });
-        opts.push(back);
         return [`用礦石打造新的，要礦石加一半原價的工錢，做出來的品質不一定。${have}`, opts];
       }
 
       if (page === 'sell') {
-        const list = p.bag.filter((e) => e.id === 'gear' && S.sell.includes(FE.GEAR[e.gear.type].cat)).slice(0, MAX);
+        const list = p.bag.filter((e) => e.id === 'gear' && S.sell.includes(FE.GEAR[e.gear.type].cat));
         const opts = list.map((e) => ({
           id: `sellItem:${e.gear.id}`,
-          label: `賣${FE.Gear.name(e.gear)}（${FE.Gear.statText(e.gear)}）`,
-          note: `${FE.Gear.durText(e.gear)}，+${FE.money(FE.Gear.sellPrice(e.gear, cha))}`,
+          label: FE.Gear.name(e.gear),
+          note: `+${FE.money(FE.Gear.sellPrice(e.gear, cha))}`,
+          info: `${FE.Gear.statText(e.gear)}；${FE.Gear.durText(e.gear)}；售價 +${FE.money(FE.Gear.sellPrice(e.gear, cha))}`,
         }));
-        opts.push(back);
+        const ore = this.bagCount('ore');
+        if (ore) opts.push({ id: 'sellOre', label: '礦石', note: `+${FE.money(FE.Gear.orePrice(ore, cha))}`, info: `出售 ${ore} 顆礦石，可得 ${FE.money(FE.Gear.orePrice(ore, cha))}` });
         return [`背包裡的東西我照原價的一半、再看磨損收。穿在身上的要先換下來。${have}`, opts];
       }
       return ['……', [back]];
@@ -2434,7 +2410,7 @@
       }
       // 超過推拖上限：跑不動
       if (this.loadTier() >= 2) {
-        this.say(`你背得太重了（${this.weight()} / ${this.carryLimit()}），跑不動。先丟掉一些東西（按 B 打開背包，選「丟掉」）。`, 'sys');
+        this.say(`你背得太重了（${this.weight()} / ${this.carryLimit()}），跑不動。先丟掉一些東西（按 B 打開背包，選中物品後操作）。`, 'sys');
         return;
       }
       const p = this.player;

@@ -173,10 +173,29 @@
     dispatch('對話', () => game.choose(npc, i));
   }
 
-  // 背包裡選第 i 樣：平常是用（吃藥草、穿上或拿起裝備），切到「丟掉」就是丟掉
-  function useBag(i) {
-    if (FE.UI.bagDrop()) dispatch('背包：丟掉', () => game.dropItem(i));
-    else dispatch('背包', () => game.useItem(i, FE.UI.bagOff()));
+  // 背包：先選物品，再執行資訊區提供的操作
+  function bagAction(action) {
+    const i = FE.UI.selectedBagIndex();
+    if (i == null || !game.bagList()[i]) return;
+    if (action === 'drop') {
+      FE.UI.askBagDrop();
+      return;
+    }
+    if (action === 'cancelDrop') {
+      FE.UI.cancelBagDrop();
+      return;
+    }
+    if (action === 'confirmDrop') {
+      if (!FE.UI.bagDropConfirm()) return;
+      FE.UI.clearBagSelection();
+      dispatch('背包：丟棄', () => game.dropItem(i));
+      return;
+    }
+    if (action === 'use' || action === 'off') {
+      FE.UI.clearBagSelection();
+      dispatch(action === 'off' ? '背包：拿在副手' : '背包', () => game.useItem(i, action === 'off'));
+      if (game.aim) FE.UI.closeWindow();
+    }
   }
 
   function toggleWindow(name) {
@@ -235,9 +254,18 @@
       });
       return;
     }
-    // 對話視窗開著：數字鍵只選選項，Esc 回上一層（工匠的對話）或關掉，方向鍵不移動，也不會出手攻擊
+    // 對話視窗開著：工匠交易只用滑鼠選取，Enter 確認、Esc 取消或離開；其他對話沿用數字鍵
     if (game.talking != null) {
       const shopSelection = FE.UI.shopSelection();
+      if (FE.UI.shopActive()) {
+        e.preventDefault();
+        if (shopSelection && k === 'escape') FE.UI.cancelShopItem();
+        else if (shopSelection && k === 'enter') {
+          const i = FE.UI.shopConfirmIndex();
+          if (i >= 0) choose(i);
+        } else if (!shopSelection && k === 'escape') FE.UI.closeShop();
+        return;
+      }
       if (shopSelection && k === 'escape') {
         e.preventDefault();
         FE.UI.cancelShopItem();
@@ -275,7 +303,8 @@
     }
     if (k === 'escape') {
       e.preventDefault();
-      if (FE.UI.win()) FE.UI.closeWindow();
+      if (FE.UI.win() === 'backpack' && FE.UI.bagDropConfirm()) FE.UI.cancelBagDrop();
+      else if (FE.UI.win()) FE.UI.closeWindow();
       else FE.UI.openWindow('settings');
       return;
     }
@@ -290,20 +319,20 @@
       applyZoom();
       return;
     }
-    // 背包視窗開著：數字鍵選第幾樣東西（吃藥草、穿上或拿起裝備算一個動作；丟掉不算），X 切換「丟掉」
-    if (FE.UI.win() === 'backpack' && k === 'x') {
-      e.preventDefault();
-      FE.UI.toggleBagDrop();
-      return;
-    }
-    if (FE.UI.win() === 'backpack' && k === 'v') {
-      e.preventDefault();
-      FE.UI.toggleBagOff();
-      return;
-    }
+    // 背包視窗開著：數字鍵選物品，Enter 執行一般操作，Delete 丟棄並要求確認
     if (FE.UI.win() === 'backpack' && /^[1-9]$/.test(k)) {
       e.preventDefault();
-      useBag(Number(k) - 1);
+      FE.UI.selectBagItem(Number(k) - 1);
+      return;
+    }
+    if (FE.UI.win() === 'backpack' && k === 'enter') {
+      e.preventDefault();
+      bagAction(FE.UI.bagDropConfirm() ? 'confirmDrop' : 'use');
+      return;
+    }
+    if (FE.UI.win() === 'backpack' && k === 'delete') {
+      e.preventDefault();
+      bagAction('drop');
       return;
     }
     // 視窗開著時，方向鍵與戰鬥鍵都不作用
@@ -344,6 +373,11 @@
   });
 
   document.getElementById('dialog').addEventListener('click', (e) => {
+    const close = e.target.closest && e.target.closest('[data-shop-close]');
+    if (close) {
+      FE.UI.closeShop();
+      return;
+    }
     const tab = e.target.closest && e.target.closest('[data-shop-tab]');
     if (tab) {
       FE.UI.shopTab(tab.dataset.shopTab);
@@ -459,15 +493,15 @@
     if (b && ready && game.talking == null && game.player.points <= 0) toggleWindow(b.dataset.win);
   });
   document.getElementById('overlay').addEventListener('click', (e) => {
-    const use = e.target.closest && e.target.closest('[data-use]');
+    const select = e.target.closest && e.target.closest('[data-bag-select]');
+    const action = e.target.closest && e.target.closest('[data-bag-action]');
     const off = e.target.closest && e.target.closest('[data-unequip]');
     if (off && !off.disabled) {
       dispatch('脫下裝備', () => game.unequip(off.dataset.unequip));
       return;
     }
-    if (e.target.closest && e.target.closest('[data-dropmode]')) FE.UI.toggleBagDrop();
-    else if (e.target.closest && e.target.closest('[data-offmode]')) FE.UI.toggleBagOff();
-    else if (use && !use.disabled) useBag(Number(use.dataset.use));
+    if (select) FE.UI.selectBagItem(Number(select.dataset.bagSelect));
+    else if (action && !action.disabled) bagAction(action.dataset.bagAction);
     else if (e.target.id === 'overlay' || (e.target.dataset && 'close' in e.target.dataset)) FE.UI.closeWindow();
     else if (e.target.dataset && e.target.dataset.open) FE.UI.openWindow(e.target.dataset.open);
   });

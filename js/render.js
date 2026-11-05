@@ -802,14 +802,15 @@
     }
     const selected = ui.bagIndex == null ? null : list[ui.bagIndex];
     const tier = game.loadTier();
-    // 裝備欄（第三十一版）：滑鼠點一格就脫下放回背包，算一個動作
-    const slot = (label, g, key, n) =>
-      `<li><button data-unequip="${key}" ${g ? '' : 'disabled'}><span class="dim">${label}</span> ${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）【脫下】</span>` : '<span class="dim">空著</span>'}</button></li>`;
+    // 點裝備格可卸下放回背包，算一個動作；另外保留六格版面空間
+    const slot = (label, g, key) =>
+      `<li><button data-unequip="${key}" ${g ? '' : 'disabled'}><span class="dim">${label}</span><br>${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）【卸下】</span>` : '<span class="dim">空著</span>'}</button></li>`;
+    const reserve = '<li class="reserved" aria-hidden="true"></li>'.repeat(6);
     $('bagInfo').innerHTML = `
       <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
         tier === 1 ? '　超過能背的重量：走一步要 60 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
       }</p>
-      <ul class="equipped">${slot('主手', p.equip.main, 'main', 1)}${slot('副手', p.equip.off, 'off', 2)}${slot('身上', p.equip.body, 'body', 3)}</ul>
+      <ul class="equipped">${slot('主手', p.equip.main, 'main', 1)}${slot('副手', p.equip.off, 'off', 2)}${slot('身上', p.equip.body, 'body', 3)}${slot('礦鎬', p.equip.pick, 'pick', 4)}${slot('鐮刀', p.equip.sickle, 'sickle', 5)}${reserve}</ul>
       <p class="dim">雙持：副手只能放以你的體型能單手拿的武器。主手、副手各出手一次時，副手不加屬性修正值；副手拿非輕型武器時有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
 
     let detail = '<p class="dim">選一件物品查看資訊與可用操作。</p>';
@@ -822,7 +823,8 @@
       const offBlocked = canOff && p.equip.main && G.twoHanded(p, p.equip.main);
       const itemName = `${selected.name}${selected.n > 1 ? ` ×${selected.n}` : ''}`;
       const actions = [];
-      if (isGear && canEquip) actions.push('<button data-bag-action="use">穿上或拿起</button>');
+      if (isTool) actions.push('<button data-bag-action="use">裝備採集工具</button>');
+      else if (isGear && canEquip) actions.push('<button data-bag-action="use">穿上或拿起</button>');
       else if (!isGear && selected.use) actions.push('<button data-bag-action="use">使用</button>');
       if (canOff) actions.push(`<button data-bag-action="off" ${offBlocked ? 'disabled' : ''}>拿在副手</button>`);
       if (selected.id !== 'goods') actions.push('<button data-bag-action="drop">丟棄整疊</button>');
@@ -832,7 +834,7 @@
           ? `<div class="bag-actions">${actions.join('')}</div>`
           : '';
       const extra = isTool
-        ? '<p class="dim">工具放在背包裡，遇到對應採集點時會自動使用。</p>'
+        ? '<p class="dim">裝進對應的採集裝備欄後，才能用來採集；同類工具會換回背包。</p>'
         : selected.id === 'goods'
           ? '<p class="dim">這是受託運送的物品，不能丟棄或直接使用。</p>'
           : canOff && offBlocked

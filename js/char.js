@@ -391,7 +391,7 @@
       points: 0,
       hp: 1,
       maxHp: 1,
-      equip: { main: null, off: null, body: null },
+      equip: { main: null, off: null, body: null, pick: null, sickle: null },
       block: null,         // 目前的格擋值，第一次需要時補成盾牌的格擋值上限（combat.js）
       copper: 0,           // 身上的錢（第三十版起用銅記帳，1 金＝10 銀＝100 銅；畫面寫 FE.money）
       jobs: {},            // 手上的委託（第三十版）：清除 hunt、送貨 deliver、採藥 herb、採礦 ore 每種最多一個；送貨的物品放在背包裡

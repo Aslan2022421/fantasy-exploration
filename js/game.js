@@ -311,19 +311,17 @@
       return e.q;
     }
 
-    // 背包裡有沒有這種工具（礦鎬、鐮刀），有就回傳要用的那一把：工具可以有好幾把，各自有耐久，先用耐久最低的，壞了換下一把
+    // 只有裝在對應採集裝備欄的工具才會生效
     toolOf(type) {
-      let best = null;
-      for (const e of this.player.bag) {
-        if (e.id === 'gear' && e.gear.type === type && (!best || e.gear.dur < best.dur)) best = e.gear;
-      }
-      return best;
+      const slot = { pick: 'pick', sickle: 'sickle' }[type];
+      const g = slot && this.player.equip[slot];
+      return g && g.type === type ? g : null;
     }
 
     // 這件裝備從身上或背包拿掉（壞掉、賣掉時用）
     removeGear(g) {
       const p = this.player;
-      for (const slot of ['main', 'off', 'body']) {
+      for (const slot of ['main', 'off', 'body', 'pick', 'sickle']) {
         if (p.equip[slot] === g) {
           p.equip[slot] = null;
           if (slot === 'off') p.block = null;
@@ -475,7 +473,18 @@
       const g = entry.gear;
       const d = FE.Gear.def(g);
       if (d.cat === 'tool') {
-        this.say(`${FE.Gear.name(g)}是工具，放在背包裡，撞上${d.name === '礦鎬' ? '礦脈' : '藥草'}就會用。`, 'sys');
+        const slot = { pick: 'pick', sickle: 'sickle' }[g.type];
+        if (!slot) {
+          this.say(`${FE.Gear.name(g)}不能裝備。`, 'sys');
+          return;
+        }
+        this.beginAction();
+        p.bag = p.bag.filter((e) => e !== entry);
+        const old = p.equip[slot];
+        p.equip[slot] = g;
+        if (old) this.bagAddGear(old);
+        this.say(`你把${FE.Gear.name(g)}裝進採集裝備欄。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}`, 'good');
+        this.endTurn(false);
         return;
       }
       if (!FE.Char.canWear(p, g)) {
@@ -630,7 +639,7 @@
     }
 
     // ---- 採集點 ----
-    // 礦脈在礦坑的空地上，藥草長在三種森林裡。都可以走過去；拿著對的工具撞上去就採（像撞上村民開對話），
+    // 礦脈在礦坑的空地上，藥草長在三種森林裡。都可以走過去；裝備對的工具後，撞上去就採（像撞上村民開對話），
     // 採一次算一個動作，得到 1～2 份，跟移動一樣產生算力；採完那一格變回普通地面，2000 刻後長回來
 
     // 這一格長著的採集點（採完還沒長回來的不算）
@@ -1163,7 +1172,7 @@
         this.openTalk(npc);
         return;
       }
-      // 採集點：拿著對的工具撞上去就採，不移動；沒有工具就照常走過去
+      // 採集點：裝備對的工具後撞上去就採，不移動；沒有工具就照常走過去
       const node = this.nodeAt(nx, ny);
       if (node && this.toolOf(FE.NODES[node.kind].tool)) {
         this.gather(node);
@@ -1707,7 +1716,7 @@
       this.say(text || `${FE.SPELLS[w.id].name}的效果結束了。`, 'sys');
     }
 
-    // 脫下裝備（第三十一版）：主手、副手、身上的那一件放回背包，算一個動作（跟穿上一樣）
+    // 脫下裝備：裝備欄中的物品放回背包，算一個動作（跟穿上一樣）
     unequip(slot) {
       const p = this.player;
       const g = p.equip[slot];

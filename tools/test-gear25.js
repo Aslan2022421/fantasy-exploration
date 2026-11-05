@@ -589,16 +589,17 @@ function testGear() {
     const turn1 = g.turn;
     g.useItem(p.bag.findIndex((e) => e.gear === sh2));
     ok(p.equip.off === null && g.turn === turn1, '拿著弓箭不該能拿盾牌');
-    // 工具放在背包裡就會用，選它是提示，不花動作
+    // 採集工具必須裝備後才會用；裝備算一個動作
     const pick = G.make('pick', 0, g.nextGearId++);
     g.bagAddGear(pick);
+    const toolTurn = g.turn;
     g.useItem(p.bag.findIndex((e) => e.gear === pick));
-    ok(g.turn === turn1 && p.bag.some((e) => e.gear === pick), '選工具不該花動作或把它穿走');
+    ok(p.equip.pick === pick && !p.bag.some((e) => e.gear === pick) && g.toolOf('pick') === pick && g.turn === toolTurn + 1, '裝備礦鎬後才生效，並花一個動作');
     // 丟掉：整疊消失，不算動作
     g.bagAdd('herb', 4);
     const hi = p.bag.findIndex((e) => e.id === 'herb');
     g.dropItem(hi);
-    ok(g.bagCount('herb') === 0 && g.turn === turn1, '丟掉藥草整疊都該消失、不算動作');
+    ok(g.bagCount('herb') === 0 && g.turn === toolTurn + 1, '丟掉藥草整疊都該消失、不算動作');
     // 存檔讀回來：裝備、耐久、背包裡的裝備、下一件裝備的編號
     p.equip.main.dur = 123;
     p.equip.body.warned = true;
@@ -607,8 +608,15 @@ function testGear() {
     ok(!!back && !!back.game, '存檔讀不回來');
     if (back && back.game) {
       const q = back.game.player;
-      ok(q.equip.main.type === 'bow' && q.equip.main.dur === 123 && q.equip.body.type === 'medium' && q.equip.body.q === 4 && q.equip.body.warned === true && q.bag.filter((e) => e.id === 'gear').length === p.bag.filter((e) => e.id === 'gear').length && back.game.nextGearId === g.nextGearId, '存檔裡的裝備沒有完整讀回來');
+      ok(q.equip.main.type === 'bow' && q.equip.main.dur === 123 && q.equip.body.type === 'medium' && q.equip.body.q === 4 && q.equip.body.warned === true && q.equip.pick.type === 'pick' && q.bag.filter((e) => e.id === 'gear').length === p.bag.filter((e) => e.id === 'gear').length && back.game.nextGearId === g.nextGearId, '存檔裡的主手、身上與採集裝備沒有完整讀回來');
       ok(back.game.weight() === g.weight(), '讀回來的負重不一樣');
+      const legacy = FE.store.load('fe.save', null);
+      legacy.data.player.bag.push({ id: 'gear', name: G.name(p.equip.pick), n: 1, gear: legacy.data.player.equip.pick });
+      delete legacy.data.player.equip.pick;
+      delete legacy.data.player.equip.sickle;
+      FE.store.save('fe.save', legacy);
+      const migrated = FE.Save.load();
+      ok(!!migrated && migrated.game.toolOf('pick') && !migrated.game.player.bag.some((e) => e.id === 'gear' && e.gear.type === 'pick'), '舊存檔的礦鎬遷移到裝備欄，不再留一份在背包');
     }
   }
 

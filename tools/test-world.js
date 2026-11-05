@@ -444,21 +444,43 @@ function testBackpack() {
   ok(!g.toolOf('pick') && p.copper === TP - 1, '錢不夠還是買到了礦鎬');
   p.copper = TP * 2 + 5;
   toolPick('buyItem:pick:0');
-  ok(!!g.toolOf('pick') && g.toolOf('pick').dur === 50 && p.copper === TP + 5 && toolIds().includes('buyItem:pick:0') && toolIds().includes('buyItem:sickle:0'), `買礦鎬之後 ${toolIds()}，錢 ${p.copper}（買過的工具選項該還在）`);
+  ok(!g.toolOf('pick') && p.bag.some((e) => e.id === 'gear' && e.gear.type === 'pick') && p.copper === TP + 5 && toolIds().includes('buyItem:pick:0') && toolIds().includes('buyItem:sickle:0'), `買礦鎬之後 ${toolIds()}，錢 ${p.copper}（買過的工具選項該還在；背包工具尚未生效）`);
   toolPick('buyItem:sickle:0');
-  ok(!!g.toolOf('sickle') && p.copper === 5 && toolIds().includes('buyItem:sickle:0'), `買鐮刀之後 ${toolIds()}，錢 ${p.copper}`);
-  // 工具可以重複買，每一把各自有耐久；採集用耐久最低的那一把，壞了換下一把
+  ok(!g.toolOf('sickle') && p.bag.some((e) => e.id === 'gear' && e.gear.type === 'sickle') && p.copper === 5 && toolIds().includes('buyItem:sickle:0'), `買鐮刀之後 ${toolIds()}，錢 ${p.copper}`);
+  // 工具必須裝進對應欄位才會生效
+  g.talking = null;
+  const firstPick = p.bag.find((e) => e.id === 'gear' && e.gear.type === 'pick');
+  const firstSickle = p.bag.find((e) => e.id === 'gear' && e.gear.type === 'sickle');
+  g.equipItem(firstPick);
+  g.equipItem(firstSickle);
+  ok(g.toolOf('pick') === firstPick.gear && g.toolOf('sickle') === firstSickle.gear && !p.bag.includes(firstPick) && !p.bag.includes(firstSickle), '礦鎬與鐮刀裝進各自採集欄後才生效');
+  // 工具可以重複買，但一次只能使用裝備欄裡的那一把；壞掉後不會自動換用背包裡的工具
   p.copper = 1000;
+  g.talking = smith.id;
   toolPick('buyItem:pick:0');
   g.talkPage = 'main';
+  g.talking = null;
   const picks = () => p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').map((e) => e.gear);
-  ok(picks().length === 2 && p.copper === 1000 - TP, `礦鎬該有 2 把（${picks().length}）`);
-  picks()[0].dur = 30;
-  ok(g.toolOf('pick') === picks()[0], '採集該先用耐久最低的那一把');
-  picks()[0].dur = 1;
-  const worn = picks()[0];
+  ok(picks().length === 1 && p.copper === 1000 - TP, `背包裡該有 1 把備用礦鎬（${picks().length}）`);
+  const weight = g.weight();
+  p.equip.pick = null;
+  ok(Math.abs(weight - g.weight() - FE.GEAR.pick.weight) < 1e-9, '裝備中的礦鎬重量有計入負重');
+  p.equip.pick = firstPick.gear;
+  p.equip.pick.dur = 1;
+  const worn = p.equip.pick;
   FE.Gear.wear(g, worn);
-  ok(picks().length === 1 && g.toolOf('pick') === picks()[0] && g.toolOf('pick').dur === 50, '壞了的礦鎬該消失，換用下一把');
+  ok(!p.equip.pick && picks().length === 1 && !g.toolOf('pick'), '裝備中的礦鎬壞掉後清空裝備欄，不自動使用備用工具');
+  const sparePick = p.bag.find((e) => e.id === 'gear' && e.gear.type === 'pick');
+  g.equipItem(sparePick);
+  ok(g.toolOf('pick') === sparePick.gear, '備用礦鎬重新裝備後才生效');
+  const replacement = FE.Gear.make('pick', 0, g.nextGearId++);
+  g.bagAddGear(replacement);
+  g.equipItem(p.bag.find((e) => e.gear === replacement));
+  ok(p.equip.pick === replacement && p.bag.some((e) => e.gear === sparePick.gear), '換裝礦鎬時原工具回到背包');
+  g.unequip('sickle');
+  ok(!g.toolOf('sickle') && p.bag.some((e) => e.gear === firstSickle.gear), '卸下鐮刀後不再採集，且放回背包');
+  g.equipItem(p.bag.find((e) => e.gear === firstSickle.gear));
+  ok(g.toolOf('sickle') === firstSickle.gear, '鐮刀重新裝備後恢復採集');
 
   // 採集：沒工具時照常走過去、訊息寫需要什麼；有工具時撞上去就採，不移動，得到 1～2 份，算一個動作、產生跟移動一樣的算力；
   // 採完那一格變回普通地面，2000 刻後長回來
@@ -472,21 +494,21 @@ function testBackpack() {
     if (!node) continue;
     const [dx, dy] = besides(node);
     // 沒有工具
-    const tool = p.bag.find((e) => e.id === 'gear' && e.gear.type === def.tool);
-    p.bag = p.bag.filter((e) => e !== tool);
+    const tool = p.equip[def.tool];
+    p.equip[def.tool] = null;
     p.x = node.x + dx; p.y = node.y + dy;
     g.move(-dx, -dy);
     const said = g.log.slice(0, 5).find((l) => l.text.includes(`需要${toolName}`));
     ok(p.x === node.x && p.y === node.y && !!said && !g.bagCount(def.item), `沒有${toolName}時：位置 (${p.x},${p.y})、訊息「${g.log.slice(0, 3).map((l) => l.text).join('／')}」`);
     // 有工具
-    p.bag.push(tool);
+    p.equip[def.tool] = tool;
     p.x = node.x + dx; p.y = node.y + dy;
     const t0 = g.turn, c0 = g.creation, n0 = g.bagCount(def.item), steps0 = p.steps;
     g.move(-dx, -dy);
     const got = g.bagCount(def.item) - n0;
     ok(p.x === node.x + dx && p.y === node.y + dy && got >= 1 && got <= 2 && g.turn === t0 + 1 && p.steps === steps0, `有${toolName}時：得到 ${got} 份、回合 ${g.turn - t0}、位置 (${p.x},${p.y})`);
     ok(Math.abs(g.creation - c0 - C.COMPUTE_PER_GATHER * S) < 1e-9 && C.COMPUTE_PER_GATHER === 0.15, `採集的創世力 ${g.creation - c0}`);
-    ok(tool.gear.dur === 49, `採一次工具該磨損 1 點（耐久 ${tool.gear.dur}）`);
+    ok(tool.dur === 49, `採一次工具該磨損 1 點（耐久 ${tool.dur}）`);
     ok(!g.nodeAt(node.x, node.y) && node.regrowAt > g.ticks - 50, `${def.name}採完沒有變回普通地面`);
     // 採完的那一格走得過去，不會再採
     const n1 = g.bagCount(def.item);
@@ -503,6 +525,17 @@ function testBackpack() {
     g.ticks = node.regrowAt;
     ok(g.nodeAt(node.x, node.y) === node && node.regrowAt - C.REGROW_TICKS <= node.regrowAt, `${def.name}到了 2000 刻沒有長回來`);
   }
+  // 舊存檔沒有採集欄位時，將原本背包裡耐久最低的工具遷移進對應裝備欄
+  const legacy = FE.store.load('fe.save', null);
+  for (const slot of ['pick', 'sickle']) {
+    const tool = legacy.data.player.equip[slot];
+    if (tool) legacy.data.player.bag.push({ id: 'gear', name: FE.Gear.name(tool), n: 1, gear: tool });
+    delete legacy.data.player.equip[slot];
+  }
+  FE.store.save('fe.save', legacy);
+  const migrated = FE.Save.load();
+  const equippedIds = migrated && migrated.game ? ['pick', 'sickle'].map((type) => migrated.game.toolOf(type)).filter(Boolean).map((tool) => tool.id) : [];
+  ok(!!migrated && !!migrated.game && migrated.game.toolOf('pick') && migrated.game.toolOf('sickle') && !migrated.game.player.bag.some((e) => e.id === 'gear' && equippedIds.includes(e.gear.id)), '舊存檔的背包工具遷移至採集裝備欄，沒有遺失或重複');
 
   // 吃藥草：回生命上限的 25%（無條件進位），算一個動作，戰鬥中也能吃；滿血不吃
   p.bag = p.bag.filter((e) => e.id !== 'herb');

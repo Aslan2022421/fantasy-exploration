@@ -41,6 +41,11 @@ function botGear(game) {
     }
     game.dropItem(i);
   }
+  const toolEntry = p.bag.find((e) => e.id === 'gear' && ['pick', 'sickle'].includes(e.gear.type) && !game.toolOf(e.gear.type));
+  if (toolEntry) {
+    game.equipItem(toolEntry);
+    return true;
+  }
   const i = p.bag.findIndex((e) => {
     if (e.id !== 'gear') return false;
     const s = slotOf(e.gear);

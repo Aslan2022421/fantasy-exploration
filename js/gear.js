@@ -96,7 +96,7 @@
   }
 
   // ---- 冒險者的裝備數字 ----
-  const equipped = (p) => [p.equip.main, p.equip.off, p.equip.body].filter(Boolean);
+  const equipped = (p) => [p.equip.main, p.equip.off, p.equip.body, p.equip.pick, p.equip.sickle].filter(Boolean);
   // 掉落、寶箱的訊息用：箭矢是「一捆箭矢」，其他是「一件 X」
   const lootName = (g) => (def(g).cat === 'ammo' ? `一捆 ${def(g).bundle} 支的${name(g)}` : `一件${name(g)}`);
   // 武器的傷害寫法：「1d8」

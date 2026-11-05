@@ -85,6 +85,19 @@
     for (const k of ['turn', 'ticks', 'exp', 'level', 'creation', 'nextChunkAt', 'compute', 'nextMonsterId', 'nextGearId', 'tickAcc', 'battle', 'worldState', 'soldiers', 'log', 'player', 'lastSafe', 'monsters']) {
       game[k] = data[k];
     }
+    const p = game.player;
+    const oldEquip = p.equip || {};
+    p.equip = Object.assign({ main: null, off: null, body: null, pick: null, sickle: null }, oldEquip);
+    p.bag = p.bag || [];
+    for (const [type, slot] of [['pick', 'pick'], ['sickle', 'sickle']]) {
+      if (Object.prototype.hasOwnProperty.call(oldEquip, slot)) continue;
+      const entry = p.bag
+        .filter((e) => e.id === 'gear' && e.gear.type === type)
+        .sort((a, b) => a.gear.dur - b.gear.dur)[0];
+      if (!entry) continue;
+      p.equip[slot] = entry.gear;
+      p.bag = p.bag.filter((e) => e !== entry);
+    }
     const w = game.world;
     const d = data.world;
     for (const s of d.chunks) {

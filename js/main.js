@@ -495,9 +495,9 @@
   document.getElementById('overlay').addEventListener('click', (e) => {
     const select = e.target.closest && e.target.closest('[data-bag-select]');
     const action = e.target.closest && e.target.closest('[data-bag-action]');
-    const off = e.target.closest && e.target.closest('[data-unequip]');
-    if (off && !off.disabled) {
-      dispatch('脫下裝備', () => game.unequip(off.dataset.unequip));
+    const unequip = e.target.closest && e.target.closest('[data-unequip]');
+    if (unequip && !unequip.disabled) {
+      dispatch('卸下裝備', () => game.unequip(unequip.dataset.unequip));
       return;
     }
     if (select) FE.UI.selectBagItem(Number(select.dataset.bagSelect));

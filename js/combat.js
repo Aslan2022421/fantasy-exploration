@@ -6,7 +6,7 @@
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const isPlayer = (game, o) => o === game.player;
   const isSoldier = (o) => !!o && o.role === 'soldier';
-  const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const dist = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); // 第三十五版之四：八方向，斜走一步算 1 格
   const HITS = ['crit', 'hit', 'hard']; // d20 判定「命中」的三段（被閃開也算命中，只是吃一半傷害）
 
   // 防禦數字：冒險者看身上的防具（閃避）和副手的盾牌（格擋機率與格擋值，沒拿盾牌是 0，見 gear.js 的 playerDefense），
@@ -72,9 +72,9 @@
     return sum;
   }
 
-  // 貼在旁邊，而且中間不是斷崖，才打得到
+  // 貼在旁邊，而且中間不是斷崖，才打得到；斜向相鄰也算貼身（第三十五版之四）
   function adjacent(game, a, b) {
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1 && game.world.heightOk(a.x, a.y, b.x, b.y);
+    return dist(a, b) === 1 && game.world.heightOk(a.x, a.y, b.x, b.y);
   }
 
   // 視線（冒險者遠程、怪物看冒險者共用）：沿直線看過去，中間的地形擋多少（見 SIGHT_BLOCK）累積起來。
@@ -343,7 +343,7 @@
 
     // 訊息：一次攻擊一行。士兵與怪物互打時，只有離冒險者在視野內才寫，免得訊息洗版
     const p = game.player;
-    const near = (o) => Math.abs(o.x - p.x) + Math.abs(o.y - p.y) <= C.SIGHT;
+    const near = (o) => dist(o, p) <= C.SIGHT; // 八方向（第三十五版之四）
     if (aP || dP || near(A) || near(D)) {
       const aName = aP ? '你' : aS ? '士兵' : A.name;
       const dName = dP ? '你' : dS ? '士兵' : D.name;

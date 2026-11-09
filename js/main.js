@@ -59,7 +59,10 @@
 
   // ---- 滑鼠自動行走（第三十一版）：左鍵點地圖上的一格，照最短路一步一步走過去；按空白鍵（或任何鍵）停下 ----
   // 點的是村民、工匠或士兵：走到他旁邊再開對話。途中看到新的怪物、有怪物貼上來、開了視窗或對話，就停下
+  // 第三十五版之三：左鍵改成兩段式。點一次只把路線畫出來（虛線、目的地框與浮動的「幾步・約幾刻」），
+  // 再點同一格或按空白鍵才出發；點別格換路線，按其他鍵、開視窗、對話、瞄準都會把路線收掉
   let walk = null;
+  let route = null; // 畫出來、還沒出發的路線：{ path, npc, tx, ty, steps, ticks }
   const WALK_MS = 90;
   const blockedAt = (x, y) => game.monsterAt(x, y) || game.world.npcAt(x, y) || game.soldierAt(x, y);
   // 從冒險者走到 (tx, ty) 的路（不含起點）；goalAdj 時走到它旁邊就算到。只走能走、高度接得上、沒人擋的格子，最多搜 4000 格
@@ -69,7 +72,8 @@
     const key = (x, y) => x + ',' + y;
     const prev = new Map([[key(p.x, p.y), null]]);
     const q = [[p.x, p.y]];
-    const done = (x, y) => (goalAdj ? Math.abs(x - tx) + Math.abs(y - ty) === 1 && W.heightOk(x, y, tx, ty) : x === tx && y === ty);
+    // 第三十五版之四：八方向尋路；goalAdj 時走到斜向相鄰也算到了
+    const done = (x, y) => (goalAdj ? Math.max(Math.abs(x - tx), Math.abs(y - ty)) === 1 && W.heightOk(x, y, tx, ty) : x === tx && y === ty);
     for (let h = 0; h < q.length && q.length < 4000; h++) {
       const [x, y] = q[h];
       if (done(x, y)) {
@@ -77,10 +81,10 @@
         for (let k = key(x, y); prev.get(k); k = prev.get(k)) path.unshift(k.split(',').map(Number));
         return path;
       }
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (const [dx, dy] of FE.DIRS8) {
         const nx = x + dx;
         const ny = y + dy;
-        if (prev.has(key(nx, ny)) || !W.inBounds(nx, ny) || !W.passable(nx, ny) || !W.heightOk(x, y, nx, ny) || blockedAt(nx, ny)) continue;
+        if (prev.has(key(nx, ny)) || !W.inBounds(nx, ny) || !W.canStep(x, y, nx, ny) || blockedAt(nx, ny)) continue; // 八方向＋斜走規則（第三十五版之四）
         prev.set(key(nx, ny), key(x, y));
         q.push([nx, ny]);
       }
@@ -97,15 +101,58 @@
       FE.UI.update();
     }
   }
-  function walkTo(tx, ty, npc) {
+  // 這條路大約走幾刻：照 move 與 endTurn 的算法加起來（超重、力量不到防具需求、被扭曲的地面、身上的防具、力竭、失序）
+  // 被扭曲的地面就是斷崖與地面錯位那幾隻怪物占的格子，先收成一份查表，畫路線時不用一格一格找
+  function pathTicks(path) {
+    const p = game.player;
+    const cfg = FE.CONFIG;
+    const base = FE.Gear.loadTier(p) >= 1 ? cfg.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(cfg.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
+    const tired = FE.Char.exhaustMoveMul(p);
+    const extra = FE.Gear.extraTicks(p);
+    const chaos = FE.Stability.state(game) === 2 ? cfg.CHAOS_TIME : 1;
+    const hard = new Set();
+    for (const m of game.monsters) {
+      if (m.type !== 'TERRAIN' && m.type !== 'CLIFF') continue;
+      for (const [x, y] of m.cells) hard.add(x + ',' + y);
+      for (const o of m.members || []) for (const [x, y] of o.cells) hard.add(x + ',' + y);
+    }
+    let total = 0;
+    for (const [x, y] of path) total += (Math.round((hard.has(x + ',' + y) ? Math.max(cfg.TICKS_HARD, base) : base) * tired) + extra) * chaos;
+    return total;
+  }
+  // 把路線收掉（出發前改做別的事都用得到）；回傳 true 表示本來有路線
+  function clearRoute() {
+    if (!route) return false;
+    route = null;
+    FE.UI.setRoute(null);
+    return true;
+  }
+  function cancelRoute() {
+    if (clearRoute()) FE.UI.update();
+  }
+  // 第一段：算出最短路，畫出來，先不走
+  function showRoute(tx, ty, npc) {
     stopWalk();
     const path = findPath(tx, ty, !!npc);
     if (!path) {
+      clearRoute();
       game.say('走不到那裡。', 'sys');
       FE.UI.update();
       return;
     }
-    walk = { path, npc, seen: seenMonsters(), timer: null };
+    route = { path, npc, tx, ty, steps: path.length, ticks: pathTicks(path) };
+    FE.UI.setRoute(route);
+    FE.UI.update();
+  }
+  // 第二段：從畫好的路線出發（空白鍵或再點同一格）
+  function startRoute() {
+    if (!route) return;
+    const r = route;
+    clearRoute();
+    startWalk(r.path, r.npc);
+  }
+  function startWalk(path, npc) {
+    walk = { path: path.slice(), npc, seen: seenMonsters(), timer: null };
     const step = () => {
       if (!walk || game.talking != null || FE.UI.win() || game.player.points > 0) return stopWalk();
       if (!walk.path.length) {
@@ -125,6 +172,18 @@
     };
     walk.timer = setInterval(step, WALK_MS);
     step();
+  }
+  // 直接出發（查看視窗的「走過去對話」用，不經過路線預覽）
+  function walkTo(tx, ty, npc) {
+    stopWalk();
+    clearRoute();
+    const path = findPath(tx, ty, !!npc);
+    if (!path) {
+      game.say('走不到那裡。', 'sys');
+      FE.UI.update();
+      return;
+    }
+    startWalk(path, npc);
   }
 
   // 選了招式清單的第 i 項：要瞄準的進入瞄準（F 或 Enter 出手），其他的直接施放
@@ -156,6 +215,8 @@
     arrowup: [0, -1], arrowdown: [0, 1], arrowleft: [-1, 0], arrowright: [1, 0],
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
   };
+  // 第三十五版之四：斜走的四個鍵。Q／E／Z／C 剛好在 WASD 的四個斜角，要加 Shift 才算斜走（不然 Q、C 還是開委託與角色）
+  const DIAG = { q: [-1, -1], e: [1, -1], z: [-1, 1], c: [1, 1] };
   // 1 攻擊、2 重擊、3 撤退、4 治療（牧師、聖騎士）、5 盾擊（戰士）、6 撤離、7 閃避、F 遠程（射擊、投擲、施法、神聖之光：先進入瞄準）、T 投擲（任何武器）
   const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', f: 'fire', t: 'throw' }; // 第三十一版：撤退與撤離合併成 3 逃跑，主動閃避拿掉
   // 按鍵視窗：同時只開一個
@@ -199,6 +260,7 @@
   }
 
   function toggleWindow(name) {
+    cancelRoute();
     if (FE.UI.win() === name) FE.UI.closeWindow();
     else FE.UI.openWindow(name);
   }
@@ -210,6 +272,15 @@
     if (!ready) {
       if (FE.UI.startKey(k)) e.preventDefault();
       return;
+    }
+    // 畫好的路線還沒出發：空白鍵直接出發（村民、工匠就是走過去開對話）；其他鍵把路線收掉，照那個鍵本來的功能走
+    if (route) {
+      if (k === ' ') {
+        e.preventDefault();
+        startRoute();
+        return;
+      }
+      cancelRoute();
     }
     // 自動行走中：空白鍵（或任何鍵）停下
     if (walk) {
@@ -306,6 +377,13 @@
       if (FE.UI.win() === 'backpack' && FE.UI.bagDropConfirm()) FE.UI.cancelBagDrop();
       else if (FE.UI.win()) FE.UI.closeWindow();
       else FE.UI.openWindow('settings');
+      return;
+    }
+    // 第三十五版之四：Shift＋Q／E／Z／C 斜走（要放在開視窗之前，不然 Q、C 會被當成委託與角色）
+    if (e.shiftKey && DIAG[k]) {
+      e.preventDefault();
+      cancelRoute();
+      dispatch('移動', () => game.move(DIAG[k][0], DIAG[k][1], { noTalk: true }));
       return;
     }
     if (WINDOW_KEYS[k]) {
@@ -414,6 +492,7 @@
     const b = e.target.closest && e.target.closest('[data-act]');
     const act = b && b.dataset.act;
     if (!act || b.disabled || !ready || game.talking != null || FE.UI.win()) return;
+    cancelRoute(); // 從快捷列出手也算不走路了
     if (act === 'fire' && !game.aim && game.spellsOf().length) {
       FE.UI.openSpells();
       return;
@@ -435,6 +514,7 @@
     e.preventDefault();
     if (!ready || game.talking != null || game.player.points > 0) return;
     const c = FE.UI.cellAt(e.clientX, e.clientY);
+    cancelRoute();
     if (c) FE.UI.look(c.x, c.y);
   });
   document.getElementById('map').addEventListener('click', (e) => {
@@ -445,6 +525,7 @@
     const n = game.world.npcAt(c.x, c.y) || game.soldierAt(c.x, c.y);
     // 瞄準中（按了 F 或選了要瞄準的招）：點射程內的怪物就對牠出手，點別的地方取消瞄準
     if (game.aim) {
+      cancelRoute();
       const i = m ? game.aim.ids.indexOf(m.id) : -1;
       if (i >= 0) {
         game.aim.i = i;
@@ -455,12 +536,21 @@
       }
       return;
     }
+    if (walk) stopWalk();
+    const same = !!(route && route.tx === c.x && route.ty === c.y);
     if (m) {
-      stopWalk();
+      // 點怪物只是設成目標（不出手、不算動作），順手把路線收掉
+      cancelRoute();
       game.battle.targetId = m.id;
       FE.UI.update();
-    } else if (n) walkTo(n.x, n.y, n);
-    else if (c.x !== game.player.x || c.y !== game.player.y) walkTo(c.x, c.y, null);
+    } else if (n) {
+      // 村民、工匠、士兵：第一段畫路線，點同一個人第二段才走過去開對話
+      if (same) startRoute();
+      else showRoute(n.x, n.y, n);
+    } else if (c.x !== game.player.x || c.y !== game.player.y) {
+      if (same) startRoute();
+      else showRoute(c.x, c.y, null);
+    } else cancelRoute(); // 點自己腳下：收掉路線
   });
   // 查看視窗裡的按鈕：對話（走過去）、設成目標
   document.getElementById('win-look').addEventListener('click', (e) => {

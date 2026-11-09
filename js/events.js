@@ -4,7 +4,7 @@
 (function () {
   const C = FE.CONFIG;
 
-  const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const dist = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); // 八方向（第三十五版之四）
 
   // 離村莊邊緣幾步
   const boxDist = (v, m) => Math.max(v.x0 - m.x, 0, m.x - v.x1) + Math.max(v.y0 - m.y, 0, m.y - v.y1);

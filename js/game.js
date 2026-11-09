@@ -130,7 +130,7 @@
       const pending = new Set();
       const canReach = (x, y) => {
         if (reach.at(x, y) || pending.has(x + ',' + y)) return true;
-        return DIRS.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy));
+        return FE.DIRS8.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy)); // 八方向（第三十五版之四）
       };
       const spawned = [];
       // 檢查器找到的地形錯位與斷崖（rest）不處理：第三十三版之三起錯的種類不決定怪物，只有挑上的地點才欠 BUG 值
@@ -1138,6 +1138,11 @@
         this.say('這裡是斷崖，太陡了過不去。', 'sys');
         return;
       }
+      // 第三十五版之四：斜走不能穿過兩側都擋住的牆角，也不能跨過斷崖邊
+      if (dx && dy && !this.world.diagOk(p.x, p.y, nx, ny)) {
+        this.say('那個斜角過不去。', 'sys');
+        return;
+      }
       if (this.world.isLocked(nx, ny)) {
         this.say('門上了鎖，得先打開才能通過。', 'sys');
         return;
@@ -1340,7 +1345,7 @@
     unstrand() {
       const w = this.world;
       for (const m of this.monsters) {
-        const near = DIRS.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(([x, y]) => w.passable(x, y));
+        const near = FE.DIRS8.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(([x, y]) => w.passable(x, y)); // 八方向（第三十五版之四）
         if (!near.length || near.some(([x, y]) => w.heightOk(m.x, m.y, x, y))) continue;
         const h = w.cell(m.x, m.y).h;
         const [nx, ny] = near.sort((a, b) => Math.abs(w.cell(a[0], a[1]).h - h) - Math.abs(w.cell(b[0], b[1]).h - h))[0];
@@ -2400,11 +2405,11 @@
         const near = this.monsters.length ? Math.min(...this.monsters.map((o) => Math.max(Math.abs(o.x - x), Math.abs(o.y - y)))) : 99;
         if (d >= 2 && near >= 2 && !w.chestAt(x, y) && (!best || near > best.near || (near === best.near && d < best.d))) best = { x, y, d, near };
         if (d >= steps) continue;
-        for (const [dx, dy] of DIRS) {
+        for (const [dx, dy] of FE.DIRS8) {
           const nx = x + dx;
           const ny = y + dy;
           const k = nx + ',' + ny;
-          if (dist.has(k) || !w.canStep(x, y, nx, ny) || this.monsterAt(nx, ny) || w.npcAt(nx, ny) || this.soldierAt(nx, ny)) continue;
+          if (dist.has(k) || !w.canStep(x, y, nx, ny) || this.monsterAt(nx, ny) || w.npcAt(nx, ny) || this.soldierAt(nx, ny)) continue; // 八方向（第三十五版之四）
           dist.set(k, d + 1);
           q.push([nx, ny]);
         }

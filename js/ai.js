@@ -1,10 +1,11 @@
 // 怪物行動：冒險者每做一個動作，所有怪物各做一件事（移動一步或攻擊）。
 // 所有怪物在自己的 B 點附近徘徊；會追人的怪物（m.small）看得到冒險者就追；貼在冒險者旁邊的怪物不管追不追人，在自己的回合攻擊（圍攻）；
 // 怪物進不了聚落和它周圍那一圈；怪物每走進一格，那一格的穩定值減 STAB_STEP（第三十三版之三，侵蝕拿掉了）。
+// 第三十五版之四：怪物、村民、士兵改八方向移動。
 (function () {
   const C = FE.CONFIG;
-  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const DIRS8 = FE.DIRS8; // 第三十五版之四：八方向移動
+  const dist = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); // 八方向：斜走一步也算 1 格
 
   // 怪物能踏上的格子；聚落和它周圍那一圈是安全區，怪物進不去（追到圈邊就停）
   function free(game, x, y) {
@@ -35,11 +36,11 @@
         }
         return step ? step.split(',').map(Number) : null;
       }
-      for (const [dx, dy] of DIRS) {
+      for (const [dx, dy] of DIRS8) {
         const nx = x + dx;
         const ny = y + dy;
         const nk = nx + ',' + ny;
-        if (prev.has(nk) || !free(game, nx, ny) || !game.world.heightOk(x, y, nx, ny)) continue;
+        if (prev.has(nk) || !free(game, nx, ny) || !game.world.canStep(x, y, nx, ny)) continue; // 八方向+斜走規則（第三十五版之四）
         prev.set(nk, x + ',' + y);
         q.push([nx, ny]);
       }
@@ -47,7 +48,7 @@
     return null;
   }
 
-  // 貼在旁邊，而且中間不是斷崖，才算纏得上
+  // 貼在旁邊，而且中間不是斷崖，才算纏得上：斜走一步也是貼身（第三十五版之四）
   function touching(game, m, p) {
     return dist(m, p) === 1 && game.world.heightOk(m.x, m.y, p.x, p.y);
   }
@@ -91,9 +92,8 @@
   }
 
   function wander(game, m) {
-    if (game.rng() >= C.WANDER_CHANCE) return;
-    const options = DIRS.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(
-      ([x, y]) => free(game, x, y) && game.world.heightOk(m.x, m.y, x, y) && dist({ x, y }, m.home) <= (m.guard ? 1 : C.WANDER_LEASH) // 守著原地的群只在 1 格內走動
+    if (game.rng() >= C.WANDER_CHANCE) return;      const options = DIRS8.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(
+      ([x, y]) => free(game, x, y) && game.world.canStep(m.x, m.y, x, y) && dist({ x, y }, m.home) <= (m.guard ? 1 : C.WANDER_LEASH) // 八方向，使用斜走規則（第三十五版之四）
     );
     if (!options.length) return;
     const [x, y] = FE.pick(game.rng, options);
@@ -179,11 +179,9 @@
     big.members = group;
     game.monsters.push(big);
     game.say(`${group.length} 隻怪物沒有清掉，合成了一隻${big.name}！`, 'bug');
-  }
-
-  // ---- 怪物的特性（第三十三版，照 SRD 5.2.1；群體戰術與易傷在 combat.js）----
+  } /* ---- 怪物的特性（第三十三版，照 SRD 5.2.1；群體戰術與易傷在 combat.js）----
   // 再生（沼澤巨魔，SRD 的 Troll 15 點、Troll Limb 5 點）：每回合開頭回 regen 點生命；上一次被火或酸打到（m.noRegen）這一回合不回。
-  // SRD 裡生命歸零還要「回合開頭沒有再生」才死，這一版照舊歸零就倒下
+  // SRD 裡生命歸零還要「回合開頭沒有再生」才死，這一版照舊歸零就倒下 */
   function regenerate(game, m) {
     if (!m.regen) return;
     if (m.noRegen) {
@@ -311,7 +309,7 @@
         else if (game.rng() < 0.2) n.mode = 'out'; // 路被堵住，先在外面走走
         continue;
       }
-      const options = DIRS.map(([dx, dy]) => [n.x + dx, n.y + dy]).filter(([x, y]) => open(n.x, n.y, x, y));
+      const options = DIRS8.map(([dx, dy]) => [n.x + dx, n.y + dy]).filter(([x, y]) => open(n.x, n.y, x, y)); // 八方向（第三十五版之四）
       if (options.length) [n.x, n.y] = FE.pick(game.rng, options);
       if (n.home && game.rng() < C.NPC_HOME_CHANCE) n.mode = 'home';
     }
@@ -332,11 +330,11 @@
         }
         return step ? step.split(',').map(Number) : null;
       }
-      for (const [dx, dy] of DIRS) {
+      for (const [dx, dy] of DIRS8) {
         const nx = x + dx;
         const ny = y + dy;
         const nk = nx + ',' + ny;
-        if (prev.has(nk) || !open(x, y, nx, ny)) continue;
+        if (prev.has(nk) || !open(x, y, nx, ny)) continue; // 八方向（第三十五版之四）
         prev.set(nk, x + ',' + y);
         q.push([nx, ny]);
       }
@@ -370,11 +368,11 @@
     const mates = new Set(game.soldiers.map((s) => k(s.x, s.y)));
     // 創世時的怪物、合體怪物不歸士兵打，牠們旁邊的格子也不走（不然路過就被打倒）
     const danger = new Set();
-    for (const m of game.monsters) if (!m.small) for (const [dx, dy] of DIRS) danger.add(k(m.x + dx, m.y + dy));
+    for (const m of game.monsters) if (!m.small) for (const [dx, dy] of DIRS8) danger.add(k(m.x + dx, m.y + dy)); // 八方向（第三十五版之四）
     const open = (x, y) => w.passable(x, y) && !occ.has(k(x, y)) && !inBuilding(w, x, y) && !danger.has(k(x, y));
     const free = (x, y) => open(x, y) && !mates.has(k(x, y));
 
-    // 走到 goal(x, y) 成立的格子的最短路的第一步
+    // 走到 goal(x, y) 成立的格子的最短路的第一步（第三十五版之四：八方向尋路）
     const stepToward = (s, goal) => {
       const prev = new Map([[k(s.x, s.y), null]]);
       const q = [[s.x, s.y]];
@@ -389,11 +387,11 @@
           }
           return step ? step.split(',').map(Number) : null;
         }
-        for (const [dx, dy] of DIRS) {
+        for (const [dx, dy] of DIRS8) {
           const nx = x + dx;
           const ny = y + dy;
           const nk = k(nx, ny);
-          if (prev.has(nk) || !(h === 0 ? free(nx, ny) : open(nx, ny)) || !w.heightOk(x, y, nx, ny)) continue;
+          if (prev.has(nk) || !(h === 0 ? free(nx, ny) : open(nx, ny)) || !w.canStep(x, y, nx, ny)) continue; // 八方向+斜走規則
           prev.set(nk, k(x, y));
           q.push([nx, ny]);
         }
@@ -440,7 +438,7 @@
         } else {
           if (s === lead) s.wait = 0;
           const at = new Set(target ? [k(target.x, target.y)] : []);
-          const goal = (x, y) => DIRS.some(([dx, dy]) => at.has(k(x + dx, y + dy)) && w.heightOk(x, y, x + dx, y + dy));
+          const goal = (x, y) =>          DIRS8.some(([dx, dy]) => at.has(k(x + dx, y + dy)) && w.canStep(x, y, x + dx, y + dy)) // 八方向+斜走規則（第三十五版之四）;
           const step = target ? stepToward(s, goal) : null;
           if (step) moveTo(s, step[0], step[1]);
           else {
@@ -449,7 +447,7 @@
               const back = stepToward(s, (x, y) => w.inBuffer(x, y));
               if (back) moveTo(s, back[0], back[1]);
             } else if (game.rng() < C.SOLDIER_WANDER) {
-              const opts = DIRS.map(([dx, dy]) => [s.x + dx, s.y + dy]).filter(([x, y]) => free(x, y) && w.heightOk(s.x, s.y, x, y) && w.inBuffer(x, y));
+              const opts = DIRS8.map(([dx, dy]) => [s.x + dx, s.y + dy]).filter(([x, y]) => free(x, y) && w.canStep(s.x, s.y, x, y) && w.inBuffer(x, y)); // 八方向+斜走規則（第三十五版之四）
               if (opts.length) {
                 const [x, y] = FE.pick(game.rng, opts);
                 moveTo(s, x, y);
@@ -463,7 +461,7 @@
         if (back) moveTo(s, back[0], back[1]);
       } else if (game.rng() < C.SOLDIER_WANDER) {
         // 在城鎮裡室外走動，不出城鎮
-        const opts = DIRS.map(([dx, dy]) => [s.x + dx, s.y + dy]).filter(([x, y]) => home(x, y) && free(x, y) && w.heightOk(s.x, s.y, x, y));
+        const opts = DIRS8.map(([dx, dy]) => [s.x + dx, s.y + dy]).filter(([x, y]) => home(x, y) && free(x, y) && w.canStep(s.x, s.y, x, y)); // 八方向+斜走規則（第三十五版之四）
         if (opts.length) {
           const [x, y] = FE.pick(game.rng, opts);
           moveTo(s, x, y);
@@ -476,5 +474,6 @@
     }
   }
 
-  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free, regenerate, nimbleHide };
+  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free, regenerate, nimbleHide, stepToward, DIRS8 };
 })();
+

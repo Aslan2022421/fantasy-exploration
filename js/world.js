@@ -2,7 +2,8 @@
 // 寶箱金幣公式會算出負數或 NaN。這些錯交給檢查器去抓，抓到的就變成 BUG 怪。
 (function () {
   const C = FE.CONFIG;
-  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]]; // 創世用（聚落的出入口照東、西、南、北的順序）
+  const DIRS8 = FE.DIRS8; // 第三十五版之四：走路與尋路改成八個方向
 
   // 世界是二維的區塊格：每塊 CHUNK_W × CHUNK_H 格，用區塊座標（可以是負的）找。
   // 新的一塊接在已有區塊的上下左右，所以世界不一定是方的，區塊之間可能有還沒創出來的空缺。
@@ -213,9 +214,18 @@
       const b = this.cell(x1, y1);
       return !!a && !!b && Math.abs(a.h - b.h) <= 1;
     }
-    // 能不能從 (x0, y0) 走一步到 (x1, y1)：目的地能站，而且不是斷崖
+    // 斜走一步的規則（第三十五版之四）：兩側都擋住（牆角）不能斜著穿過去，也不能跨過斷崖邊（走得過去的那一側高度要接得上）
+    diagOk(x0, y0, x1, y1) {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      if (!dx || !dy) return true; // 直走
+      if (!this.heightOk(x0, y0, x1, y1)) return false; // 斜著跨過斷崖
+      const side = (ox, oy) => this.passable(ox, oy) && this.heightOk(x0, y0, ox, oy) && this.heightOk(ox, oy, x1, y1);
+      return side(x0 + dx, y0) || side(x0, y0 + dy);
+    }
+    // 能不能從 (x0, y0) 走一步到 (x1, y1)：目的地能站、不是斷崖，斜走還要過得了牆角
     canStep(x0, y0, x1, y1) {
-      return this.passable(x1, y1) && this.heightOk(x0, y0, x1, y1);
+      return this.passable(x1, y1) && this.heightOk(x0, y0, x1, y1) && this.diagOk(x0, y0, x1, y1);
     }
     npcAt(x, y) {
       return this.npcs.find((n) => n.x === x && n.y === y) || null;
@@ -309,7 +319,7 @@
         const [x, y] = q[h];
         const d = dist.get(x + ',' + y);
         if (limit !== undefined && d >= limit) continue;
-        for (const [dx, dy] of DIRS) {
+        for (const [dx, dy] of DIRS8) {
           const nx = x + dx;
           const ny = y + dy;
           const k = nx + ',' + ny;
@@ -341,7 +351,7 @@
         if (d >= limit) continue;
         const x = b.x0 + (i % W);
         const y = b.y0 + Math.floor(i / W);
-        for (const [dx, dy] of DIRS) {
+        for (const [dx, dy] of DIRS8) {
           const nx = x + dx;
           const ny = y + dy;
           if (nx < b.x0 || nx >= b.x1 || ny < b.y0 || ny >= b.y1) continue;
@@ -358,7 +368,7 @@
     // 第二十五版起不再把世界一格一格全走一遍：先用 Checker.reachable 的連通塊看兩點走不走得到（走不到直接估），
     // 走得到再用 A*（直線距離當估價）找最短路，步數跟原本一格一格走的結果一樣
     pathDistance(a, b) {
-      const est = () => Math.round((Math.abs(a.x - b.x) + Math.abs(a.y - b.y)) * 1.5);
+      const est = () => Math.round(Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)) * 1.5);
       if (!this.passable(a.x, a.y) || !this.passable(b.x, b.y)) return est();
       if (a.x === b.x && a.y === b.y) return 0;
       const reach = FE.Checker.reachable(this);
@@ -373,7 +383,7 @@
       const OFF = 1048576;
       const MUL = 2097152;
       const key = (x, y) => (x + OFF) * MUL + (y + OFF);
-      const h = (x, y) => Math.abs(x - b.x) + Math.abs(y - b.y);
+      const h = (x, y) => Math.max(Math.abs(x - b.x), Math.abs(y - b.y));
       const best = new Map([[key(a.x, a.y), 0]]);
       const heap = [[h(a.x, a.y), 0, a.x, a.y]];
       const push = (it) => {
@@ -408,7 +418,7 @@
         const [, g, x, y] = pop();
         if (x === b.x && y === b.y) return g;
         if (g > best.get(key(x, y))) continue;
-        for (const [dx, dy] of DIRS) {
+        for (const [dx, dy] of DIRS8) {
           const nx = x + dx;
           const ny = y + dy;
           if (!this.canStep(x, y, nx, ny)) continue;
@@ -540,8 +550,9 @@
       // 第三十四版：這一圈輪到這一邊時留一處隘口（堡壘守的隘口已經跟堡壘一起放了）；聚落的出口確認走得出去（被擋就鋪路打通）
       if (plan && !(village && (village.kind === 'fort' || village.kind === 'fortress'))) placePass(this, rng, seg);
       if (village) openExits(this, village);
-      // 先前的段放在預留小塊上的採集點，可能被這一段的聚落蓋到：落進聚落或已經不能走的收掉
-      this.nodes = this.nodes.filter((n) => this.passable(n.x, n.y) && !this.inVillage(n.x, n.y));
+      // 先前的段放在預留小塊上的採集點，可能被這一段的聚落蓋到、或被新地形（湖）圍住：落進聚落、不能走、或從出生點走不到的收掉（第三十五版之四：八方向走法的可達性）
+      const reach = FE.Checker.reachable(this);
+      this.nodes = this.nodes.filter((n) => this.passable(n.x, n.y) && !this.inVillage(n.x, n.y) && reach.at(n.x, n.y));
       // 採集點先放，寶箱再避開礦脈放進地貌裡
       placeNodes(this, rng, rect, landmarks);
       for (const lm of landmarks) placeChests(this, rng, lm);

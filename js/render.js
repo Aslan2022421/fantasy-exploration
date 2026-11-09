@@ -9,7 +9,7 @@
   let game = null;
 
   // 畫面狀態（不進存檔）：開著哪個視窗（小地圖也是視窗）、地圖的版面
-  const ui = { win: null, bagIndex: null, bagDropConfirm: false, shopSelection: null, shopContext: null, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+  const ui = { win: null, bagIndex: null, bagDropConfirm: false, shopSelection: null, shopContext: null, route: null, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
 
   // ---- 配色：Canvas 畫的顏色全部讀 css/style.css 的變數，改色只改那裡 ----
   const P = {};
@@ -17,7 +17,7 @@
     't-plain', 't-grass', 't-forest', 't-snow', 't-sand', 't-mount', 't-water', 't-rock', 't-stonewall', 't-woodwall', 't-house', 't-road', 't-market', 't-temple', 't-door', 't-bed', 't-furniture', 't-ruin', 't-relic',
     'void', 'hp', 'hp-mid', 'hp-low', 'bug', 'good', 'bad', 'world',
     'map-node-ore', 'map-node-herb', 'map-chest', 'map-item', 'map-ol-aim', 'map-aim-area', 'map-npc', 'map-smith', 'map-armorer', 'map-soldier', 'map-player-fg', 'map-player-bg',
-    'map-mon-fg', 'map-mon-bg', 'map-mid-fg', 'map-mid-bg', 'map-boss-bg', 'map-glitch-fg', 'map-glitch-bg', 'map-ol-target', 'map-ol-hunt', 'map-ol-chase',
+    'map-mon-fg', 'map-mon-bg', 'map-mid-fg', 'map-mid-bg', 'map-boss-bg', 'map-glitch-fg', 'map-glitch-bg', 'map-ol-target', 'map-ol-hunt', 'map-ol-chase', 'map-walk', 'map-walk-bg',
     'map-h0', 'map-h1', 'map-h2', 'map-h3', 'map-h4', 'map-village', 'map-town', 'map-indoor', 'map-road', 'map-quest', 'map-recipient',
     'm-plain', 'm-grassland', 'm-shrubland', 'm-forest', 'm-taiga', 'm-tundra', 'm-glacier', 'm-jungle', 'm-savanna', 'm-desert', 'm-marsh', 'm-swamp', 'm-mountain', 'm-lake', 'm-rock',
     'm-stonewall', 'm-woodwall', 'm-building', 'm-village', 'm-town', 'm-relic', 'm-mon', 'm-boss', 'm-view', 'm-slot',
@@ -275,6 +275,52 @@
         ctx.globalAlpha = 1;
       }
     }
+    // 第三十五版之三：滑鼠點出來、還沒出發的路線，畫在格子上面
+    if (ui.route && ui.route.path.length) drawRoute(ctx, camX, camY);
+  }
+
+  // 路線預覽（第三十五版之三）：從冒險者連到目的地的虛線、目的地框，旁邊浮著「幾步・約幾刻」
+  function drawRoute(ctx, camX, camY) {
+    const r = ui.route;
+    const S = ui.cell;
+    const p = game.player;
+    const cx = (x) => Math.round(ui.ox + (x - camX + 0.5) * S);
+    const cy = (y) => Math.round(ui.oy + (y - camY + 0.5) * S);
+    const [dx, dy] = r.path[r.path.length - 1];
+    ctx.save();
+    ctx.strokeStyle = P['map-walk'];
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(1, Math.round(S * 0.09));
+    ctx.setLineDash([Math.max(3, Math.round(S * 0.22)), Math.max(2, Math.round(S * 0.16))]);
+    ctx.beginPath();
+    ctx.moveTo(cx(p.x), cy(p.y));
+    for (const [x, y] of r.path) ctx.lineTo(cx(x), cy(y));
+    ctx.stroke();
+    // 目的地那一格框起來
+    ctx.setLineDash([]);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(Math.round(ui.ox + (dx - camX) * S) + 1, Math.round(ui.oy + (dy - camY) * S) + 1, S - 2, S - 2);
+    ctx.restore();
+    // 浮動的步數與刻數：放在目的地那一格上方，上方放不下就換到下面，左右與上下都不超出地圖
+    const text = `${r.steps} 步・約 ${r.ticks} 刻`;
+    const fs = Math.max(11, Math.min(16, Math.round(S * 0.6)));
+    ctx.font = `${fs}px "Microsoft JhengHei", "Noto Sans TC", sans-serif`;
+    const bw = ctx.measureText(text).width + 10;
+    const bh = fs + 10;
+    let bx = cx(dx) - bw / 2;
+    let by = Math.round(ui.oy + (dy - camY) * S) - bh - 3;
+    if (by < ui.oy) by = Math.round(ui.oy + (dy - camY + 1) * S) + 3;
+    bx = clamp(bx, 2, Math.max(2, ui.w - bw - 2));
+    by = clamp(by, 2, Math.max(2, ui.h - bh - 2));
+    ctx.fillStyle = P['map-walk-bg'];
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = P['map-walk'];
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    ctx.fillStyle = P['map-walk'];
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, bx + bw / 2, by + bh / 2 + 0.5);
   }
 
   // 小地圖（M 開的視窗）：冒險者附近 MINIMAP_W×MINIMAP_H 格，一格畫成 S×S 像素；白框是主畫面看得到的範圍
@@ -545,7 +591,7 @@
       let aim = '';
       if (game.aim && m === game.aimTarget()) {
         const r = game.rangedMode(true);
-        const d = Math.abs(m.x - p.x) + Math.abs(m.y - p.y);
+        const d = Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)); // 八方向：斜的算 1 格（第三十五版之四）
         const far = r && d > r.range[0];
         aim = `<span class="aim">瞄準（${game.aim.i + 1}/${game.aim.ids.length}）距離 ${d} 格${far ? '，超出正常射程（劣勢）' : ''}${game.adjacentMonsters().length ? '，貼著怪物（劣勢）' : ''}：Tab 換目標，F 或 Enter 出手，Esc 取消</span>`;
       }
@@ -1362,6 +1408,7 @@
       window.addEventListener('resize', relayout);
       if (!ui.mapBound) { bindMap(); ui.mapBound = true; } // 地圖的滑鼠提示與點選聚落（開新世界時不重綁）
       ui.mapSel = null;
+      ui.route = null; // 第三十五版之三：路線預覽不跨世界留著
       setInterval(drawMap, C.GLITCH_MS);
       update();
     },
@@ -1388,6 +1435,10 @@
     },
     spellAt: (i) => spellMenu()[i] || null,
     cellAt,
+    // 第三十五版之三：滑鼠點出來、還沒出發的路線（null 收掉）；只記狀態，重畫由呼叫端負責
+    setRoute(r) {
+      ui.route = r;
+    },
     // 滑鼠右鍵查看那一格（開查看視窗）
     look(x, y) {
       ui.look = { x, y };

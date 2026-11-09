@@ -2,7 +2,7 @@
 // x, y 是怪物站的位置（B 點），cells 是受影響的格子，scope 是影響範圍。
 (function () {
   const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const DIRS8 = DIRS4.concat([[1, 1], [1, -1], [-1, 1], [-1, -1]]);
+  const DIRS8 = FE.DIRS8; // 第三十五版之四：走得到的區域照八方向算（實際走路就是八方向）
   const key = (x, y) => x + ',' + y;
   const unkey = (k) => k.split(',').map(Number);
 
@@ -101,7 +101,7 @@
       seen.add(key(s.x, s.y));
       for (let h = 0; h < q.length; h++) {
         const [x, y] = q[h];
-        for (const [dx, dy] of DIRS4) {
+        for (const [dx, dy] of DIRS8) {
           const nx = x + dx;
           const ny = y + dy;
           const nk = key(nx, ny);
@@ -146,6 +146,18 @@
         stack[sp++] = k;
       }
     };
+    // 第三十五版之四：走路是八方向，連通塊也要算斜的。斜走一樣不能穿牆角（兩邊都過不去就不能斜穿）；
+    // 區塊外的格子看不到，當成過得去（寧可多算走得通，也不要多生出斷層）
+    const at = (x, y) => (x < 0 || x >= W || y < 0 || y >= H ? -1 : y * W + x);
+    const sideOk = (j, k) => k < 0 || (pass[k] && Math.abs(hgt[j] - hgt[k]) <= 1);
+    const pushDiag = (j, k, a, b) => {
+      if (k < 0 || !pass[k] || label[k] >= 0 || Math.abs(hgt[j] - hgt[k]) > 1) return;
+      const okA = sideOk(j, a) && (a < 0 || Math.abs(hgt[a] - hgt[k]) <= 1);
+      const okB = sideOk(j, b) && (b < 0 || Math.abs(hgt[b] - hgt[k]) <= 1);
+      if (!okA && !okB) return;
+      label[k] = count;
+      stack[sp++] = k;
+    };
     for (let i = 0; i < n; i++) {
       if (!pass[i] || label[i] >= 0) continue;
       label[i] = count;
@@ -153,10 +165,15 @@
       while (sp) {
         const j = stack[--sp];
         const x = j % W;
+        const y = (j / W) | 0;
         if (x < W - 1) push(j, j + 1);
         if (x > 0) push(j, j - 1);
         if (j + W < n) push(j, j + W);
         if (j - W >= 0) push(j, j - W);
+        pushDiag(j, at(x + 1, y + 1), at(x + 1, y), at(x, y + 1));
+        pushDiag(j, at(x + 1, y - 1), at(x + 1, y), at(x, y - 1));
+        pushDiag(j, at(x - 1, y + 1), at(x - 1, y), at(x, y + 1));
+        pushDiag(j, at(x - 1, y - 1), at(x - 1, y), at(x, y - 1));
       }
       count++;
     }
@@ -297,7 +314,7 @@
       while (stack.length) {
         const [cx, cy] = stack.pop();
         cells.push([cx, cy]);
-        for (const [dx, dy] of DIRS4) {
+        for (const [dx, dy] of DIRS8) {
           const nx = cx + dx;
           const ny = cy + dy;
           const nk = key(nx, ny);

@@ -175,10 +175,10 @@ function testCombat28() {
     let ev = events(() => { for (let i = 0; i < 40; i++) { m.x = p.x + 2; m.y = p.y; g.battle.targetId = null; g.act('attack'); } });
     const pe = ev.filter((e) => e.by === 'player');
     ok(pe.length === 40 && pe.every((e) => e.d === m) && !pe.some((e) => e.countered) && !ev.some((e) => e.counter), `長槍打 2 格外：出手 ${pe.length} 次、被反擊 ${pe.filter((e) => e.countered).length} 次`);
-    const blocker = mon(g, p.x + 1, p.y + 1); // 斜前方：不在中間、也沒貼著冒險者，不擋
+    const blocker = mon(g, p.x + 1, p.y + 1); // 第三十五版之四：斜走一步也算貼身，現在斜的會變成旁邊的目標
     m.x = p.x + 2; m.y = p.y;
     ev = events(() => { g.battle.targetId = null; g.act('attack'); });
-    ok(ev.some((e) => e.by === 'player' && e.d === m), '斜的怪物不擋觸及');
+    ok(ev.some((e) => e.by === 'player' && e.d === blocker), '斜的怪物現在算貼身被打到，觸及就不會用');
     g.monsters = g.monsters.filter((o) => o !== blocker);
     g.world.setCell(p.x + 1, p.y, '#', 'plain');
     const t0 = g.turn;

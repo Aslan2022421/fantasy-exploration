@@ -746,17 +746,17 @@
     el.classList.toggle('shop-dialog', !!shop);
     el.innerHTML = shop
       ? `<div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
-        <p class="dlg-text">${esc(t.text)}</p>
-        <header class="shop-head"><b>交易</b><button data-shop-close>離開</button></header>${tabs}${balance}${content}<p class="dim dlg-hint">${selected ? '確認交易或取消' : '點選商品查看資訊'}</p>`
+        <div class="dlg-body"><p class="dlg-text">${esc(t.text)}</p>
+        <header class="shop-head"><b>交易</b><button data-shop-close>離開</button></header>${tabs}${balance}${content}<p class="dim dlg-hint">${selected ? '確認交易或取消' : '點選商品查看資訊'}</p></div>`
       : `<div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
-        <p class="dlg-text">${esc(t.text)}</p>
+        <div class="dlg-body"><p class="dlg-text">${esc(t.text)}</p>
         <div class="dlg-opts">${t.options
           .map(
             (o, i) =>
               `<button data-opt="${i}" ${o.disabled ? 'disabled' : ''}><kbd>${i + 1}</kbd>${esc(o.label)}${o.note ? ` <span class="dim">（${esc(o.note)}）</span>` : ''}</button>`
           )
           .join('')}</div>
-        <p class="dim dlg-hint">按數字鍵選擇，Esc 關閉</p>`;
+        <p class="dim dlg-hint">按數字鍵選擇，Esc 關閉</p></div>`;
   }
 
   // ---- 按鍵視窗：同時只開一個 ----
@@ -1234,7 +1234,7 @@
   // 升級加點：還有沒分配的屬性點就跳出來，選一項還沒到上限的屬性加 1 點（按 1～6 或點一下）
   function drawLevelUp() {
     const p = game.player;
-    $('modalBody').className = 'win';
+    $('modalBody').className = 'win win-small'; // 小視窗，固定大小（第三十六版前整理）
     $('modal').classList.remove('full');
     $('modalBody').innerHTML = `
       <h2>升到 Lv${game.level}　<span class="dim">選一項屬性加 1 點${p.points > 1 ? `（還有 ${p.points} 點）` : ''}</span></h2>
@@ -1268,7 +1268,7 @@
   function drawRestAsk() {
     const p = game.player;
     const { v, k, out } = restOptions();
-    $('modalBody').className = 'win';
+    $('modalBody').className = 'win win-small'; // 小視窗，固定大小（第三十六版前整理）
     $('modal').classList.remove('full');
     $('modalBody').innerHTML = `
       <h2>住一晚（8 小時）</h2>
@@ -1292,7 +1292,7 @@
     return out;
   }
   function drawSpellMenu() {
-    $('modalBody').className = 'win';
+    $('modalBody').className = 'win win-small'; // 小視窗，固定大小（第三十六版前整理）
     $('modal').classList.remove('full');
     $('modalBody').innerHTML = `<h2>施法 <span class="dim">（F）</span></h2><div class="winbody"><div class="dlg-opts">${spellMenu().map((o, i) => `<button data-spell="${o.id}" ${o.ok ? '' : 'disabled'}><kbd>${i + 1}</kbd><b>${esc(o.label)}</b>${o.note ? `　<span class="dim">${esc(o.note)}</span>` : ''}<br><span class="dim">${esc(o.desc)}</span></button>`).join('')}</div><p class="dim dlg-hint">按數字選，Esc 取消</p></div>`;
   }

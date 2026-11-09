@@ -233,14 +233,17 @@ b { font-weight: bold; }
 .log-npc { color: var(--npc); }
 .log-sys { color: var(--dim); }
 
-/* ---- 同一套框線：標題嵌在框線上。視窗、對話、建角都用 ---- */
+/* ---- 同一套框線：標題嵌在框線上。視窗、對話、建角都用 ----
+   第三十六版前整理：互動視窗一律固定大小（不再跟著字數變大變小），內容多了在框裡捲動。
+   三種大小：一般視窗（背包、角色、地圖、委託、歷史、圖例、設定⋯⋯）860×640；必須先處理的小視窗（升級加點、住一晚、施法）520×440；
+   對話 520×420、工匠交易 900×640。畫面比這個小時縮到畫面裡 */
 .win {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(720px, 100%);
-  max-height: calc(100vh - 48px);
-  max-height: calc(100dvh - 48px);
+  width: min(860px, 100%);
+  height: min(640px, calc(100vh - 48px));
+  height: min(640px, calc(100dvh - 48px));
   background: var(--panel);
   border: 1px solid var(--line2);
 }
@@ -271,8 +274,12 @@ b { font-weight: bold; }
   border: 0;
 }
 .win > .x:hover { color: var(--head); }
+.win.win-small { width: min(520px, 100%); height: min(440px, calc(100vh - 48px)); height: min(440px, calc(100dvh - 48px)); }
 .winbody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 20px 16px 14px; }
 .win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--head); }
+.help p { margin: 10px 0 2px; }
+.help ul { margin: 0 0 4px; padding-left: 1.3em; line-height: 1.6; }
+.help li { margin: 2px 0; }
 .win p { margin: 6px 0; }
 .frame { position: relative; min-height: 0; background: var(--panel); border: 1px solid var(--line2); }
 .frame > .fb { height: 100%; overflow: auto; padding: 20px 16px 12px; }
@@ -310,7 +317,10 @@ b { font-weight: bold; }
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(440px, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  width: min(520px, calc(100% - 24px));
+  height: min(420px, calc(100% - 24px));
   padding: 22px 16px 12px;
   background: var(--panel);
   border: 1px solid var(--line2);
@@ -322,7 +332,8 @@ b { font-weight: bold; }
 .dlg-opts { display: flex; flex-direction: column; gap: 6px; }
 .dlg-opts button { text-align: left; }
 .dlg-hint { margin: 8px 0 0; font-size: 12px; }
-#dialog.shop-dialog { width: min(900px, calc(100% - 24px)); max-height: min(82vh, 760px); overflow-y: auto; }
+.dlg-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+#dialog.shop-dialog { width: min(900px, calc(100% - 24px)); height: min(640px, calc(100% - 24px)); }
 .shop-dialog .dlg-head { position: static; margin-bottom: 4px; padding: 0; background: transparent; }
 .shop-dialog .dlg-text { margin-bottom: 8px; }
 .shop-head { display: flex; align-items: center; justify-content: space-between; color: var(--head); }
@@ -506,7 +517,8 @@ input {
   #place { display: none; }
   #lowrow { justify-content: center; }
   .bar { width: 70px; }
-  .win { max-height: calc(100dvh - 40px); }
+  .win { height: min(640px, calc(100dvh - 40px)); }
+  .win.win-small { height: min(440px, calc(100dvh - 40px)); }
   .winbody { padding: 18px 10px 10px; }
   .cc h1 { font-size: 22px; }
   .cc-cols { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }

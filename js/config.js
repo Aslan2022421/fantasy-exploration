@@ -341,6 +341,7 @@ FE.CONFIG = {
   // 士兵（城鎮、堡壘、城市、要塞有，村莊沒有；role 'soldier'）：第三十六版之一起是六個職業的角色套版（FE.TEMPLATE_PICKS、char.js 的 makeLevelChar），
   // 等級＝1＋（世界等級－1）×2，屬性、技能、裝備照競技場的套版，不再特別弱化；士兵自己不升級
   SOLDIER_COUNT: { town: 3, fort: 3, city: 6, fortress: 6 }, // 每個聚落固定幾位士兵（使用者定的：城鎮、堡壘各 3 位，城市、要塞各 6 位）
+  SOLDIER_SKILL_CAP: { town: 5, fort: 5, city: 10, fortress: 10 }, // 士兵隨機 5 項技能，每項 1 級到這個等級（使用者定的；char.js 的 soldierSkills）
   SOLDIER_LEVEL_PER_WL: 2,                // 世界等級每多 1，士兵等級加幾（使用者定的）
   SOLDIER_REFILL: [0.1, 0.25, 0.5, 0.75, 1], // 缺額時每天補 1 位的機率，照聚落的人口標籤（大舉遷出、縮減、穩定、成長、急速發展；使用者定的）
   SOLDIER_WANDER: 0.5,                    // 在城鎮裡每個動作走一步的機率（不然站著）

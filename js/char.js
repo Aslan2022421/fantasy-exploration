@@ -498,11 +498,36 @@
     if (c.spell) p.skills.staff = lvOf('main');
     return p;
   }
-  // 建一個職業套版的角色（還沒放上地圖）：起始裝備與種族照 FE.TEMPLATE_PICKS、FE.TEMPLATE_BODY，再套上等級與世界等級
-  function makeLevelChar(game, clsKey, level, wl, name) {
+  // 士兵的技能（第三十六版之一，使用者定的）：隨機 5 項，每項 1 級到 cap 級（城鎮、堡壘 5，城市、要塞 10，FE.CONFIG.SOLDIER_SKILL_CAP）。
+  // 一定含主手武器的技能與身上防具的技能（衣袍沒有），其餘照建角的抽法：本職業的池子加權 FE.SKILL_ROLL.classWeight 倍；等級在 1～cap 平均擲（Claude 定的）
+  function soldierSkills(p, cap, rng) {
+    const c = cls(p);
+    const mine = new Set((c.pool || []).flatMap((t) => (t === 'melee' ? FE.MELEE_SKILLS : [t])));
+    const ids = [];
+    const w = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
+    if (w && w.skill) ids.push(w.skill);
+    const aid = armorSkillId(p);
+    if (aid && !ids.includes(aid)) ids.push(aid);
+    while (ids.length < FE.SKILL_ROLL.slots) {
+      const cand = Object.keys(FE.SKILLS).filter((k) => !ids.includes(k));
+      const wt = cand.map((k) => (mine.has(k) ? FE.SKILL_ROLL.classWeight : 1));
+      let r = rng() * wt.reduce((a, b) => a + b, 0);
+      let k = cand[cand.length - 1];
+      for (let i = 0; i < cand.length; i++) if ((r -= wt[i]) < 0) { k = cand[i]; break; }
+      ids.push(k);
+    }
+    p.skills = freshSkills();
+    for (const k of ids) p.skills[k] = { lv: FE.randInt(rng, 1, Math.max(1, cap)), n: 0 };
+    return p;
+  }
+  // 建一個職業套版的角色（還沒放上地圖）：起始裝備與種族照 FE.TEMPLATE_PICKS、FE.TEMPLATE_BODY，再套上等級與世界等級。
+  // opts.skillCap 有給（士兵）：技能改成隨機 5 項、1～skillCap 級（soldierSkills，用 opts.rng）；沒給（競技場）照累計經驗換算
+  function makeLevelChar(game, clsKey, level, wl, name, opts) {
     const picks = validPicks(clsKey, FE.TEMPLATE_PICKS[clsKey]) ? FE.TEMPLATE_PICKS[clsKey] : defaultPicks(clsKey); // 場景檢查換掉職業定義時，套版的挑法不一定合法
     const p = create(game, clsKey, picks, name || '', FE.TEMPLATE_BODY[clsKey], null);
-    return applyTemplate(p, level, wl);
+    applyTemplate(p, level, wl);
+    if (opts && opts.skillCap) soldierSkills(p, opts.skillCap, opts.rng || game.rng);
+    return p;
   }
   // 隊友升級：升到 level 級（p.lv），新到的屬性點照 autoPoints 分配，生命上限照公式重算、多出來的部分同時補到目前的生命。回傳生命上限多了幾點
   function levelUpTo(p, level) {
@@ -520,7 +545,7 @@
   }
 
   FE.Char = {
-    skillLevelFor, autoPoints, applyTemplate, makeLevelChar, levelUpTo,
+    skillLevelFor, autoPoints, applyTemplate, makeLevelChar, levelUpTo, soldierSkills,
     mod, attrMod, cls, maxHp, carryLimit, pushLimit, moveTicks, exhaustMoveMul,
     sizeOf, grip, GRIP_NAMES, canWieldType,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,

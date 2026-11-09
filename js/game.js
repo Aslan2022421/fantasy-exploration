@@ -333,6 +333,8 @@
       if (!this.canRecruit(s)) return null;
       const lv = Math.max(1, this.level - 1);
       const m = FE.Char.makeLevelChar(this, s.cls, lv, FE.Stability.worldLevel(this), s.name);
+      // 技能沿用他當士兵時的那 5 項與等級（第三十六版之一，使用者定的），之後照用照練
+      m.skills = JSON.parse(JSON.stringify(s.skills));
       Object.assign(m, { id: s.id, role: 'mate', villageId: s.villageId, x: s.x, y: s.y, race: s.race });
       this.soldiers = this.soldiers.filter((o) => o !== s);
       this.mates.push(m);
@@ -420,7 +422,7 @@
       const clsKey = FE.pick(this.rng, Object.keys(FE.TEMPLATE_PICKS).filter((k) => FE.CLASSES[k]));
       let name = FE.pickName(w, this.rng);
       for (let t = 0; t < 8 && this.soldiers.concat(this.mates).some((o) => o.name === name); t++) name = FE.pickName(w, this.rng);
-      const s = FE.Char.makeLevelChar(this, clsKey, FE.soldierLevel(wl), wl, name);
+      const s = FE.Char.makeLevelChar(this, clsKey, FE.soldierLevel(wl), wl, name, { skillCap: C.SOLDIER_SKILL_CAP[v.kind] || 5, rng: this.rng });
       Object.assign(s, { id: w.nextId++, role: 'soldier', villageId: v.id, x: at[0], y: at[1], wl, in: true, cls: clsKey });
       this.soldiers.push(s);
       return s;

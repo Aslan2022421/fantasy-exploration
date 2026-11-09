@@ -146,7 +146,16 @@ function testParty36() {
     // 屬性、技能、裝備跟 makeLevelChar 同一套
     const s0 = made[0];
     const twin = Ch.makeLevelChar(g, s0.cls, 7, 4, 'x');
-    ok(JSON.stringify(twin.attr) === JSON.stringify(s0.attr) && JSON.stringify(twin.skills) === JSON.stringify(s0.skills) && twin.maxHp === s0.maxHp && twin.equip.main.type === s0.equip.main.type, '士兵的屬性、技能、裝備照 makeLevelChar 那一套');
+    ok(JSON.stringify(twin.attr) === JSON.stringify(s0.attr) && twin.maxHp === s0.maxHp && twin.equip.main.type === s0.equip.main.type, '士兵的屬性、裝備照 makeLevelChar 那一套');
+    // 技能（使用者定的）：隨機 5 項、每項至少 1 級、城鎮最高 5 級，一定含主手武器的技能
+    const has = (s) => Object.keys(s.skills).filter((k) => s.skills[k].lv > 0);
+    ok(made.every((s) => has(s).length === 5 && has(s).every((k) => s.skills[k].lv >= 1 && s.skills[k].lv <= 5) && s.skills[FE.GEAR[s.equip.main.type].skill].lv >= 1), '士兵的技能：隨機 5 項、1～5 級（城鎮）、含主手武器的技能');
+    ok(made.some((s) => has(s).some((k) => s.skills[k].lv === 5)) && made.some((s) => has(s).some((k) => s.skills[k].lv === 1)), '士兵的技能等級在 1～5 之間都擲得到');
+    v.kind = 'city';
+    const cityS = g.spawnSoldier(v, [v.cx, v.cy]);
+    g.soldiers = g.soldiers.filter((o) => o !== cityS);
+    v.kind = 'town';
+    ok(has(cityS).length === 5 && has(cityS).every((k) => cityS.skills[k].lv >= 1 && cityS.skills[k].lv <= 10) && C.SOLDIER_SKILL_CAP.city === 10 && C.SOLDIER_SKILL_CAP.fortress === 10 && C.SOLDIER_SKILL_CAP.fort === 5, '城市、要塞的士兵技能最高 10 級，堡壘 5 級');
     // 士兵出手、挨打照冒險者那一套：怪物打士兵，AC 看防具與敏捷；士兵自己不練技能
     const sol = made.find((s) => s.cls === 'warrior');
     Object.assign(sol, { x: c.x + 4, y: c.y }); // 聚落外的空地（聚落裡不能動手）
@@ -239,8 +248,10 @@ function testParty36() {
       // 等級最少 1
       g.level = 1;
       const s2 = g.soldiers[0];
+      const s2skills = JSON.stringify(s2.skills);
       const m2 = g.recruit(s2);
       ok(m2 && m2.lv === 1, `冒險者 1 級時隊友 ${m2 && m2.lv} 級（最少 1）`);
+      ok(m2 && JSON.stringify(m2.skills) === s2skills && m2.skills !== s2.skills, '招募的隊友沿用他當士兵時的技能（複製一份，不共用）');
       // 上限 3 位
       const s3 = g.soldiers[0];
       g.recruit(s3);

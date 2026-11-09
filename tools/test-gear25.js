@@ -416,7 +416,7 @@ function testGear() {
   }
 
   // 6. 負重（第二十九版，《D&D》2024 的磅數）：能背＝力量值×15 磅，推拖上限＝力量值×30 磅，範圍內沒有減值；
-  //    超過能背：移動一步 60 刻；超過推拖上限：不能移動、不能撤退（還能丟東西、出手）；拿掉原本兩段超重的出手減值與多花的刻
+  //    超過能背：移動一步 36 刻；超過推拖上限：不能移動、不能撤退（還能丟東西、出手）；拿掉原本兩段超重的出手減值與多花的刻
   {
     const g = newGame(16);
     const p = g.player;
@@ -443,15 +443,15 @@ function testGear() {
     g.bagAdd('ore', 14);
     g.bagAdd('herb', 14);
     ok(g.weight() === 150 && g.loadTier() === 0, `礦石 14＋藥草 14 共 3＋140＋7＝${g.weight()}`);
-    // 第一段：走一步 60 刻（其他動作照常 10 刻）
+    // 第一段：走一步 36 刻（其他動作照常 6 刻）
     setOre(160);
     const side = DIRS.find(([dx, dy]) => g.world.canStep(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy) && !g.nodeAt(p.x + dx, p.y + dy));
     const t0 = g.ticks, x0 = p.x, y0 = p.y;
     g.move(side[0], side[1]);
-    ok(g.ticks - t0 === 60 && (p.x !== x0 || p.y !== y0), `超過能背走一步花 ${g.ticks - t0} 刻（應該 60）`);
+    ok(g.ticks - t0 === 36 && (p.x !== x0 || p.y !== y0), `超過能背走一步花 ${g.ticks - t0} 刻（應該 36）`);
     const t1 = g.ticks;
     g.beginAction(); g.endTurn(false); // 一般的動作（第三十一版起沒有主動閃避，直接過一個動作）
-    ok(g.ticks - t1 === 10, `超過能背其他動作還是 ${g.ticks - t1} 刻（應該 10）`);
+    ok(g.ticks - t1 === 6, `超過能背其他動作還是 ${g.ticks - t1} 刻（應該 6）`);
     p.equip.main = G.make('sword', 3, g.nextGearId++);
     ok(G.hitMod(p) === 3, `超重第一段、優秀劍的出手加減 ${G.hitMod(p)}（應該 +3，沒有減值）`);
     p.equip.main = G.make('sword', 0, g.nextGearId++);
@@ -491,7 +491,7 @@ function testGear() {
     ok(p.bag.some((e) => e.id === 'goods') && g.log[0].text.includes('不能丟'), '送貨的東西被丟掉了');
   }
 
-  // 7. 防具多花的刻真的讓怪物多動（刻數累積，湊滿 10 刻才多動一次）
+  // 7. 防具多花的刻真的讓怪物多動（刻數累積，湊滿 6 刻才多動一次）
   {
     const countTurns = (body, actions) => {
       const g = newGame(17);
@@ -508,10 +508,10 @@ function testGear() {
     const heavy = countTurns('heavy', 20);
     const medium = countTurns('medium', 20);
     const light = countTurns('light', 20);
-    ok(none.turns === 20 && none.ticks === 200, `沒防具 20 個動作 怪物動 ${none.turns} 次、${none.ticks} 刻`);
-    ok(heavy.ticks === 240 && heavy.turns === 24, `重甲 20 個動作 ${heavy.ticks} 刻、怪物動 ${heavy.turns} 次（應該 240 刻、24 次）`);
-    ok(medium.ticks === 220 && medium.turns === 22, `中甲 20 個動作 ${medium.ticks} 刻、怪物動 ${medium.turns} 次（應該 220 刻、22 次）`);
-    ok(light.turns === 20 && light.ticks === 200, `輕甲不該多花刻（${light.ticks} 刻）`);
+    ok(none.turns === 20 && none.ticks === 120, `沒防具 20 個動作 怪物動 ${none.turns} 次、${none.ticks} 刻`);
+    ok(heavy.ticks === 160 && heavy.turns === 26, `重甲 20 個動作 ${heavy.ticks} 刻、怪物動 ${heavy.turns} 次（應該 160 刻、26 次）`);
+    ok(medium.ticks === 140 && medium.turns === 23, `中甲 20 個動作 ${medium.ticks} 刻、怪物動 ${medium.turns} 次（應該 140 刻、23 次）`);
+    ok(light.turns === 20 && light.ticks === 120, `輕甲不該多花刻（${light.ticks} 刻）`);
   }
 
   // 8. 穿上、丟掉、弓箭佔兩手、存檔

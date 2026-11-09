@@ -186,7 +186,7 @@
     const worn = equipped(p).reduce((s, g) => s + def(g).weight * (g === p.equip.body ? FE.Char.armorWeightMul(p) : 1), 0);
     return round2(worn + p.bag.reduce((s, e) => s + itemWeight(e), 0));
   }
-  // 0 沒超重（範圍內沒有任何減值）；1 超過能背（力量值×15 磅）：移動一步 60 刻；2 超過推拖上限（力量值×30 磅）：不能移動（還能丟東西）
+  // 0 沒超重（範圍內沒有任何減值）；1 超過能背（力量值×15 磅）：移動一步 36 刻；2 超過推拖上限（力量值×30 磅）：不能移動（還能丟東西）
   function loadTier(p) {
     const w = weightOf(p);
     return w <= FE.Char.carryLimit(p) ? 0 : w <= FE.Char.pushLimit(p) ? 1 : 2;

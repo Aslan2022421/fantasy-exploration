@@ -21,7 +21,7 @@
   // 負重（第二十九版，《D&D》2024 的磅數）：能背＝力量值×15 磅，推拖上限＝力量值×30 磅
   const carryLimit = (p) => p.attr.str * C.CARRY_PER_STR;
   const pushLimit = (p) => p.attr.str * C.PUSH_PER_STR;
-  // 走一步花幾刻：基本 10 刻減敏捷修正值，最少 8 刻（超重、被扭曲的地面另外算，見 game.js 的 move）
+  // 走一步花幾刻：基本 6 刻減敏捷修正值，最少 5 刻（超重、被扭曲的地面另外算，見 game.js 的 move）
   const moveTicks = (p) => Math.max(C.MOVE_TICKS_MIN, C.TICKS_MOVE - attrMod(p, 'dex'));
   // 力竭讓走一步的刻放大幾倍：速度 30 呎每級少 5 呎，刻數照比例放大（1 級 ×1.2、2 級 ×1.5、3 級 ×2、4 級 ×3、5 級 ×6）
   const exhaustMoveMul = (p) => {

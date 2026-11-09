@@ -29,13 +29,13 @@
       this.aim = null;       // 按 F 瞄準時：{ mode, ids 看得到的怪物（近的在前）, i 目前選的 }（不進存檔）
       this.worldState = 0;   // 世界狀態：0 安穩、1 動盪、2 失序（stability.js）；世界等級另外算，見 FE.Stability.worldLevel
       this.soldiers = [];    // 城鎮的士兵（role 'soldier'），不在 world.npcs 裡
-      this.worldEvery = 1;   // 世界（怪物、士兵）每 10 刻走一回合，這個數字讓它再慢幾倍；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
+      this.worldEvery = 1;   // 世界（怪物、士兵）每 6 刻走一回合，這個數字讓它再慢幾倍；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
       this.worldClock = 0;
       this.fell = false;     // 這一個動作裡冒險者倒下了
       this.talking = null;   // 對話視窗開著時，對方的 id（不進存檔）
       this.talkPage = 'main'; // 工匠的對話停在哪一層（'main'、'buy'、'buy:weapon'、'repair'⋯⋯），不進存檔
       this.nextGearId = 1;   // 下一件裝備的編號
-      this.tickAcc = 0;      // 還沒湊滿 10 刻的零頭（怪物每 10 刻行動一次）
+      this.tickAcc = 0;      // 還沒湊滿 6 刻的零頭（怪物每 6 刻行動一次）
       this.player = null;
       this.history = FE.store.load('fe.history', []);
       this.reports = FE.store.load('fe.reports', []);
@@ -1216,8 +1216,8 @@
         if (FE.Checker.checkChest(chest)) this.say('寶箱被怪物的力量封住了，打不開。', 'sys');
         else this.openChest(chest);
       }
-      // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻
-      // 力量不到身上防具的需求：一步 15 刻（跟超重取大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
+      // 走一步花幾刻：6 刻減敏捷修正值（最少 5）；背超過能背的重量一步 36 刻
+      // 力量不到身上防具的需求：一步 9 刻（跟超重取大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
       const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
       const tired = (t) => Math.round(t * FE.Char.exhaustMoveMul(p));
       this.endTurn(true, tired(base));
@@ -1226,7 +1226,7 @@
     // 冒險者做完一個動作：每個動作都附帶一點虛擬的修補力；移動才累積步數與算力。
     // 時間用「刻」算（參考矮人要塞）：動作花幾刻，失序時每個動作的刻加倍。花掉的刻交給 advance 讓世界照時鐘跑。
     // opts.exact：刻數照給的（休息用：不加防具多花的刻、失序不加倍）；opts.sleep：長休中（不累積力竭）；
-    // opts.interrupt()：每 10 刻問一次，回傳 true 就停（野外短休被怪物打斷）。回傳實際花了幾刻
+    // opts.interrupt()：每 6 刻問一次，回傳 true 就停（野外短休被怪物打斷）。回傳實際花了幾刻
     endTurn(moved, ticks, opts) {
       opts = opts || {};
       const p = this.player;
@@ -1250,7 +1250,7 @@
       return spent;
     }
 
-    // 時間往前走 t 刻（第三十版的時鐘，一次走 10 刻）：怪物與士兵每 10 刻各動一次（刻數累積起來，湊滿 10 刻就多動一次，
+    // 時間往前走 t 刻（第三十版的時鐘，一次走 6 刻）：怪物與士兵每 6 刻各動一次（刻數累積起來，湊滿 6 刻就多動一次，
     // 防具多花的刻真的讓世界多動）；每過 100 刻演算一次事件；每過一天（2,400 刻）聚落的經濟值照附近的怪物扣；
     // 連續一整天沒有長休，力竭 +1。平常 worldEvery 是 1；測試的「四人等效」模擬用 4，世界慢四倍。
     // interrupt() 回傳 true、或冒險者倒下了就停，回傳實際走了幾刻
@@ -1289,7 +1289,7 @@
       return done;
     }
 
-    // 一個動作的收尾：倒下的醒來也算一次長休（世界跑 80 回合、不收錢）；力竭到 6 級也倒下，在最近的聚落醒來，
+    // 一個動作的收尾：倒下的醒來也算一次長休（世界跑 800 刻、不收錢）；力竭到 6 級也倒下，在最近的聚落醒來，
     // 降到 5 級再照長休 −1。最後量一次世界狀態
     afterTurn() {
       const p = this.player;
@@ -1309,7 +1309,7 @@
       FE.Stability.update(this);
     }
 
-    // 不收錢的長休（倒下、力竭倒下後醒來）：世界同步跑 80 回合，生命回滿、力竭 −1，沒有生活水準的效果
+    // 不收錢的長休（倒下、力竭倒下後醒來）：世界同步跑 800 刻，生命回滿、力竭 −1，沒有生活水準的效果
     sleepFree() {
       this.sleeping = true;
       this.advance(C.LONG_REST_TICKS);
@@ -1363,7 +1363,7 @@
       // 副手那一下不加屬性修正值（負的照扣）。重擊只用主手。目標在第一下倒下（或冒險者倒下）就不出第二下
       const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
       const dual = kind === 'attack' && !!off && !!main && !(extra && extra.reach);
-      // 攻擊動作的刻：輕型 8、一般 10、重型 12，減敏捷修正值（最少 6）；雙持時副手那把沒有迅切（短刀以外、或還沒解鎖）就多 5 刻
+      // 攻擊動作的刻：輕型 5、一般 6、重型 7，減敏捷修正值（最少 4）；雙持時副手那把沒有迅切（短刀以外、或還沒解鎖）就多 3 刻
       const nick = dual && FE.Char.mastery(p, off) === 'nick';
       const ticks = FE.Char.attackTicks(p, main) + (dual && !nick ? C.DUAL_TICKS : 0);
       // 牧師：每個動作第一下命中時，目標多受 1d8 神聖傷害（雙持只算第一下命中的）
@@ -1850,8 +1850,8 @@
     }
 
     // 休息（第三十版）。旁邊有怪物時不能休息；休息一次只把修補力存起來（不進創世力）。
-    // 野外短休：1 小時（100 刻，世界同步跑 10 回合），回 1d10＋體質修正值（最少 1），不花錢；途中有怪物貼上來就被打斷，沒回生命。
-    // 聚落裡長休：8 小時（800 刻，世界同步跑 80 回合），生命回滿；力竭降低級數與修復量依生活水準，付生活開支（見 payLiving）
+    // 野外短休：1 小時（100 刻，世界同步跑 100 刻），回 1d10＋體質修正值（最少 1），不花錢；途中有怪物貼上來就被打斷，沒回生命。
+    // 聚落裡長休：8 小時（800 刻，世界同步跑 800 刻），生命回滿；力竭降低級數與修復量依生活水準，付生活開支（見 payLiving）
     // lv：在聚落住一晚選的生活水準（0 荒蕪～這個聚落的經濟等級）；沒給就照聚落的經濟、付不起就住最便宜的（機器人用）
     rest(lv) {
       if (this.adjacentMonsters().length) {
@@ -2480,7 +2480,7 @@
     }
 
     // 倒下後在離倒下的地方最近的聚落（村莊或城鎮，不看神聖與否）醒來，沒有聚落才回出生點。
-    // 醒來也算一次長休（世界跑 80 回合、不收錢），在這個動作收尾時做（afterTurn）
+    // 醒來也算一次長休（世界跑 800 刻、不收錢），在這個動作收尾時做（afterTurn）
     die(m) {
       this.fell = true;
       this.battle.targetId = null;

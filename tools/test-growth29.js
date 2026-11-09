@@ -155,15 +155,15 @@ function testGrowth29() {
     ok(g4.player.size === 84700 && g4.player.equip.off && g4.player.equip.off.type === 'shield', '84,700 的人類單手拿長槍，可以配盾');
   }
 
-  // 6. 敏捷：移動刻數＝10 減敏捷修正值，最少 8
+  // 6. 敏捷：移動刻數＝6 減敏捷修正值，最少 5（第三十六版之一，原本 10、最少 8）
   {
     const g = arena('warrior', 9101);
     const p = g.player;
     let dir = 1;
     const dt = (dex) => { p.attr.dex = dex; const t0 = g.ticks; g.move(dir, 0); dir = -dir; return g.ticks - t0; }; // 左右來回走，免得走出整平的範圍
-    ok(dt(10) === 10 && dt(8) === 11 && dt(12) === 9 && dt(14) === 8 && dt(16) === 8 && dt(18) === 8 && dt(6) === 12, `走一步的刻數：敏捷 10→${dt(10)}、8→${dt(8)}、12→${dt(12)}、14→${dt(14)}、18→${dt(18)}`);
-    ok(Ch.moveTicks({ attr: { dex: 16 } }) === 8 && Ch.moveTicks({ attr: { dex: 11 } }) === 10, 'Char.moveTicks');
-    // 怪物每 10 刻動一次：走 5 步（敏捷 14，每步 8 刻）怪物動 4 次
+    ok(dt(10) === 6 && dt(8) === 7 && dt(12) === 5 && dt(14) === 5 && dt(16) === 5 && dt(18) === 5 && dt(6) === 8, `走一步的刻數：敏捷 10→${dt(10)}、8→${dt(8)}、12→${dt(12)}、14→${dt(14)}、18→${dt(18)}`);
+    ok(Ch.moveTicks({ attr: { dex: 16 } }) === 5 && Ch.moveTicks({ attr: { dex: 11 } }) === 6, 'Char.moveTicks');
+    // 怪物每 6 刻動一次：走 5 步（敏捷 14，每步 5 刻）怪物動 4 次
     p.attr.dex = 14;
     let turns = 0;
     const w0 = FE.AI.worldTurn;
@@ -172,7 +172,7 @@ function testGrowth29() {
     g.tickAcc = 0;
     for (let i = 0; i < 5; i++) g.move(i % 2 ? -1 : 1, 0);
     FE.AI.worldTurn = w0;
-    ok(turns === 4, `敏捷 14 走 5 步（40 刻）怪物動 ${turns} 次（應該 4）`);
+    ok(turns === 4, `敏捷 14 走 5 步（25 刻）怪物動 ${turns} 次（應該 4）`);
   }
 
   // 7. 體質：受到的物理傷害在防具減完之後再減（體質修正值÷2，捨去），至少吃 1 點
@@ -252,7 +252,12 @@ function testGrowth29() {
     ok(prof('greatsword').heavy && prof('greataxe').heavy && !prof('waraxe').heavy, '力量 8：巨劍、巨斧有劣勢');
     p.attr.str = 13;
     ok(!prof('greatsword').heavy && !prof('greataxe').heavy, '力量 13：巨劍、巨斧沒有劣勢');
-    ok(FE.GEAR.shortsword.light && !FE.GEAR.whip.light && Ch.attackTicks(p, gear('shortsword')) === 6 && Ch.attackTicks(p, gear('whip')) === 7 && Ch.attackTicks(p, gear('greataxe')) === 9, '短劍輕型（8 刻減敏捷，最少 6）；鞭子一般（10 刻減敏捷＝7）；巨斧重型（12 刻減敏捷＝9）');
+    {
+      const dex0 = p.attr.dex;
+      p.attr.dex = 10; // 修正值 0，才量得出三類武器的差別（敏捷 16 都壓到最少 4 刻）
+      ok(FE.GEAR.shortsword.light && !FE.GEAR.whip.light && Ch.attackTicks(p, gear('shortsword')) === 5 && Ch.attackTicks(p, gear('whip')) === 6 && Ch.attackTicks(p, gear('greataxe')) === 7, '短劍輕型（5 刻）；鞭子一般（6 刻）；巨斧重型（7 刻）');
+      p.attr.dex = dex0;
+    }
     // 特質標籤
     ok(G.statText(gear('crossbow')).includes('裝填') && G.statText(gear('crossbow')).includes('雙手') && G.statText(gear('crossbow')).includes('弩矢') && G.statText(gear('whip')).includes('觸及') && G.statText(gear('waraxe')).includes('可雙手'), `輕弩寫了裝填、雙手、弩矢：${G.statText(gear('crossbow'))}`);
     ok(FE.MASTERIES.cleave.name === '順劈' && FE.MASTERIES.graze.name === '擦掠' && FE.MASTERIES.slow.name === '緩速', '新精通的名字');
@@ -388,7 +393,7 @@ function testGrowth29() {
     ok(miss(ev).every((e) => e.dmg === 0), '長劍沒有擦掠');
   }
 
-  // 12. 緩速（鞭子、輕弩）：命中且造成傷害後，目標下一次移動多花 10 刻
+  // 12. 緩速（鞭子、輕弩）：命中且造成傷害後，目標下一次移動多花 6 刻
   {
     const g = arena('warrior', 9108);
     const p = g.player;

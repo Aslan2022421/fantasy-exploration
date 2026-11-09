@@ -58,7 +58,7 @@ FE.CONFIG = {
   ATTR_CAP: 18,         // 屬性加點的上限
   LEVEL_POINTS: 1,      // 升到加點的那幾級時可以加幾點屬性
   LEVEL_POINT_AT: [4, 8, 12, 16, 19], // 只有升到這幾級才加 1 點屬性（《D&D》），其他等級升級只加生命
-  MOVE_TICKS_MIN: 8,    // 敏捷讓移動變快，一步最少幾刻（第二十九版）
+  MOVE_TICKS_MIN: 5,    // 敏捷讓移動變快，一步最少幾刻（第二十九版；第三十六版之一 8→5，走一格 10→6 刻，所有刻數 ×0.6）
   CHA_PRICE: 0.05,      // 魅力每點修正值：向工匠買東西（含修復費、打造工錢）−5%，賣東西 +5%，委託與任務的金幣獎勵 +5%
   // 技能照 Dwarf Fortress（第二十九版）：升到第 N 級要 400＋100N 點經驗，等級沒有上限，15 級以上都是傳奇
   SKILL_NEED_BASE: 400, // 升到第 N 級要 SKILL_NEED_BASE＋SKILL_NEED_STEP×N 點經驗（1 級要 500）
@@ -85,7 +85,7 @@ FE.CONFIG = {
   // （第三十三版起敏捷不再加閃避，改加 AC，照 SRD 5.2.1 的防具表）
   MEDIUM_DEX_CAP: 2,
   BASE_AC: 10,          // 沒穿防具（衣袍也算）的 AC＝10＋敏捷修正值（第三十三版）
-  STR_REQ_TICKS: 15,    // 力量不到防具的需求，走一步花幾刻（跟被扭曲的地面、超重取最大的）
+  STR_REQ_TICKS: 9,    // 力量不到防具的需求，走一步花幾刻（跟被扭曲的地面、超重取最大的）
   THROW_RANGE: [4, 12], // 投擲的正常射程與最遠射程（所有武器一律，再加感知修正值）
   THROW_JUNK_DIE: [1, 4], // 丟沒有投擲特質的武器：臨時武器的傷害骰（鈍擊，加力量修正值）；弓、輕弩只有 1 點
   BURN_TURNS: 3, // 鍊金術士之火命中後，怪物再燃燒幾次行動
@@ -172,11 +172,11 @@ FE.CONFIG = {
   NPC_HOME_CHANCE: 0.1,                   // 在外面走動的村民，每走一步有多少機率起身回家
   NPC_LEAVE_CHANCE: 0.15,                 // 在家的村民，每次輪到時有多少機率出門
 
-  // 時鐘（第三十版）：一刻＝36 秒，一小時＝100 刻，一天＝2,400 刻；怪物、士兵、事件都照這個時鐘（怪物與士兵每 10 刻動一次，事件每 100 刻一次）
+  // 時鐘（第三十版）：一刻＝36 秒，一小時＝100 刻，一天＝2,400 刻；怪物、士兵、事件都照這個時鐘（所有人（冒險者、怪物、士兵、村民、隊友）走一格 6 刻（第三十六版之一，原本 10 刻），事件每 100 刻一次）
   HOUR_TICKS: 100,
   DAY_TICKS: 2400,
   // 休息（第三十版）：野外短休 1 小時，回 1d10＋體質修正值，不花錢；聚落裡長休 8 小時，生命回滿，付生活開支。
-  // 休息時世界同步跑（短休 10 回合、長休 80 回合）；短休途中有怪物貼上來就被打斷，沒回生命
+  // 休息時世界同步跑（短休約 17 回合、長休約 133 回合）；短休途中有怪物貼上來就被打斷，沒回生命
   SHORT_REST_TICKS: 100,
   LONG_REST_TICKS: 800,
   SHORT_REST_DIE: [1, 10],
@@ -210,8 +210,8 @@ FE.CONFIG = {
   SIGHT_WIS_STEP: 0.5,                    // 感知修正值每 +1，視線門檻加多少（多看穿一棵樹；沒有上限，第三十三版之一）
   SIGHT_LIMIT_MIN: 0.5,                   // 視線門檻最低多少（感知修正值 −1 以下：一棵樹就擋住）
 
-  // 時間（參考矮人要塞的刻）：每個動作花幾刻，怪物每 10 刻行動一次
-  TICKS_MOVE: 10,                         // 一般地形走一格
+  // 時間（參考矮人要塞的刻）：每個動作花幾刻，怪物每 6 刻行動一次（第三十六版之一，原本 10 刻；世界的回合間隔就是這個數）
+  TICKS_MOVE: 6,                         // 一般地形走一格
   // 畫面縮放：地圖滿版，縮放改的是每格的像素大小，格數跟著視窗大小與格子大小變（格子越小、看得越多）。
   // 短邊至少 17 格＝四個方向各看 8 格，跟小怪物的視野一樣遠，不讓怪物在畫面外就看到你
   CELL_SIZES: [14, 18, 22, 26, 32, 40], // 每格的像素大小（縮放的檔位）
@@ -257,10 +257,10 @@ FE.CONFIG = {
   TOPPLE_BASE: 0.3,                       // 失衡：命中後讓目標倒地的機率＝這個數＋那次出手用的屬性修正值×TOPPLE_PER
   TOPPLE_PER: 0.05,
   PUSH_DIST: 2,                           // 推擊：命中後把目標直線推離幾格（擋住就停，大型怪物推不動）
-  ATTACK_TICKS: { light: 8, normal: 10, heavy: 12 }, // 攻擊動作花幾刻（輕型、一般、重型武器），再減敏捷修正值
-  ATTACK_TICKS_MIN: 6,                    // 攻擊動作最少幾刻（防具與超重多花的刻另外疊加）
-  DUAL_TICKS: 5,                          // 雙持的動作沒有迅切時多花幾刻
-  SLOW_TURNS: 1,                          // 緩速：命中且造成傷害後，目標下一次移動多花 10 刻＝怪物 10 刻動一次，所以牠下一次移動晚一回合
+  ATTACK_TICKS: { light: 5, normal: 6, heavy: 7 }, // 攻擊動作花幾刻（輕型、一般、重型武器），再減敏捷修正值（第三十六版之一，原本 8／10／12）
+  ATTACK_TICKS_MIN: 4,                    // 攻擊動作最少幾刻（防具與超重多花的刻另外疊加）
+  DUAL_TICKS: 3,                          // 雙持的動作沒有迅切時多花幾刻（原本 5）
+  SLOW_TURNS: 1,                          // 緩速：命中且造成傷害後，目標下一次移動多花 6 刻＝怪物 6 刻動一次，所以牠下一次移動晚一回合
   DEEP_COOLDOWN: 3,                       // 重擊用完冷卻幾回合
   BASH_DIE: [1, 4],                       // 戰士盾擊的傷害骰（鈍擊，加力量修正值）
   OFF_CLUMSY_DIE: [1, 4],                 // 副手拿非輕型武器時那一下的傷害骰（另外有劣勢）；之後定好單手雙手或有雙持技能再放回
@@ -323,10 +323,10 @@ FE.CONFIG = {
 
   // 裝備與物品（第二十五版）。裝備的數字（攻擊力、減傷、重量、價錢、耐久）見下面的 FE.GEAR，品質見 FE.QUALITIES
   // 負重（第二十九版，《D&D》2024 的磅數）：能背＝力量值×15 磅，推拖上限＝力量值×30 磅，範圍內沒有減值；
-  // 超過能背：移動一步 60 刻；超過推拖上限：不能移動（還能丟東西）
+  // 超過能背：移動一步 36 刻；超過推拖上限：不能移動（還能丟東西）
   CARRY_PER_STR: 15,
   PUSH_PER_STR: 30,
-  OVER_MOVE_TICKS: 60,
+  OVER_MOVE_TICKS: 36,
   ORE_PRICE: 5,                           // 礦石賣給工匠，一顆多少銀
   REPAIR_RATE: 1,                         // 修復費＝修回耐久佔上限的比例×原價×這個數×經濟倍率（至少 1）
   SELL_RATE: 0.5,                         // 賣回裝備＝原價（含品質）×這個數×剩餘耐久比例
@@ -535,8 +535,8 @@ FE.MONSTER_BLOCKS = {
     mid: { srd: 'Minotaur Skeleton', name: '牛頭人骷髏', ac: 12, hd: [6, 10], con: 15, hit: 6, die: [2, 10], dmg: 4, type: 'blunt', traits: [], vuln: ['blunt'] }, // Slam
   },
   troll: {
-    small: { srd: 'Troll Limb', name: '巨魔斷肢', ac: 13, hd: [4, 6], con: 10, hit: 6, die: [2, 4], dmg: 4, type: 'slash', traits: [], regen: 5 }, // Rend
-    midElite: { srd: 'Troll', name: '沼澤巨魔', ac: 15, hd: [9, 10], con: 20, hit: 7, die: [2, 6], dmg: 4, type: 'slash', traits: [], regen: 15 }, // Rend
+    small: { srd: 'Troll Limb', name: '巨魔斷肢', ac: 13, hd: [4, 6], con: 10, hit: 6, die: [2, 4], dmg: 4, type: 'slash', traits: [], regen: 2 }, // Rend（再生 5→2，第三十六版之一 Claude 定的：每回合 6 刻，跟著時鐘下修）
+    midElite: { srd: 'Troll', name: '沼澤巨魔', ac: 15, hd: [9, 10], con: 20, hit: 7, die: [2, 6], dmg: 4, type: 'slash', traits: [], regen: 6 }, // Rend（再生 15→6，第三十六版之一 Claude 定的）
   },
   kobold: {
     small: { srd: 'Kobold Warrior', name: '狗頭人', ac: 14, hd: [3, 6], con: 9, hit: 4, die: [1, 4], dmg: 2, type: 'pierce', traits: ['pack'] }, // Dagger
@@ -809,7 +809,7 @@ FE.GEAR = {
   bullet: { cat: 'ammo', name: '子彈', weight: 1, price: 5, bundle: 10, sold: true, drop: false },
   needle: { cat: 'ammo', name: '吹箭針', weight: 1, price: 2, bundle: 50, sold: true, drop: false },
   // 防具（第二十九版追加）：cls 類別（light 輕甲、medium 中甲、heavy 重甲、none 無甲＝衣袍）決定敏捷加不加閃避、多花幾刻、練哪一項穿甲技能；
-  // str 力量需求（力量不到，走一步 15 刻）；stealth 隱匿劣勢（只建標籤，潛行第 3 階段才做）；desc 遊戲裡的一句說明。
+  // str 力量需求（力量不到，走一步 9 刻）；stealth 隱匿劣勢（只建標籤，潛行第 3 階段才做）；desc 遊戲裡的一句說明。
   // 內部 id：light＝皮甲、medium＝鱗甲、heavy＝鎖子甲（原本的輕甲、中甲、重甲改名）
   padded: { cat: 'armor', ac: 11, cls: 'light', name: '布甲', phys: 0, magic: 1, ticks: 0, weight: 8, price: 22, ore: 2, stealth: true, desc: '縫了棉絮的布衣，擋不了刀劍，勉強隔一點魔力。', dur: 150, sold: true, drop: true },
   light: { cat: 'armor', ac: 11, cls: 'light', name: '皮甲', phys: 0, magic: 1, ticks: 0, weight: 10, price: 32, ore: 2, desc: '鞣過的皮革，輕便，動作不受拘束。', dur: 150, sold: true, drop: true },
@@ -843,7 +843,7 @@ FE.MASTERIES = {
   nick: { name: '迅切', desc: '雙持的動作不多花時間' },
   cleave: { name: '順劈', desc: '命中後可以順手打目標旁邊、也在你身邊的另一隻怪物，這一下不加屬性修正值；一個動作最多一次' },
   graze: { name: '擦掠', desc: '沒命中時照樣造成等於屬性修正值的傷害（修正值是正數才有）' },
-  slow: { name: '緩速', desc: '命中且造成傷害後，目標下一次移動多花 10 刻' },
+  slow: { name: '緩速', desc: '命中且造成傷害後，目標下一次移動多花 6 刻' },
 };
 FE.MASTERY_SKILL = 5;
 // 採集點：都可以走過去；裝備對的工具後撞上去就採，採完變回普通地面，REGROW_TICKS 刻後長回來

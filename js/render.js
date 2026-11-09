@@ -854,10 +854,10 @@
     const reserve = '<li class="reserved" aria-hidden="true"></li>'.repeat(6);
     $('bagInfo').innerHTML = `
       <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
-        tier === 1 ? '　超過能背的重量：走一步要 60 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
+        tier === 1 ? '　超過能背的重量：走一步要 36 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
       }</p>
       <ul class="equipped">${slot('主手', p.equip.main, 'main', 1)}${slot('副手', p.equip.off, 'off', 2)}${slot('身上', p.equip.body, 'body', 3)}${slot('礦鎬', p.equip.pick, 'pick', 4)}${slot('鐮刀', p.equip.sickle, 'sickle', 5)}${reserve}</ul>
-      <p class="dim">雙持：副手只能放以你的體型能單手拿的武器。主手、副手各出手一次時，副手不加屬性修正值；副手拿非輕型武器時有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
+      <p class="dim">雙持：副手只能放以你的體型能單手拿的武器。主手、副手各出手一次時，副手不加屬性修正值；副手拿非輕型武器時有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 3 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
 
     let detail = '<p class="dim">選一件物品查看資訊與可用操作。</p>';
     if (selected) {

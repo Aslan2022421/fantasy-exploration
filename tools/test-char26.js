@@ -680,15 +680,15 @@ function testCharacter() {
       g.endTurn(false);
       return g.ticks - t0;
     };
-    ok(ticksOf('medium', 0) === 11 && ticksOf('medium', 4) === 11 && ticksOf('medium', 5) === 10 && ticksOf('medium', 20) === 10, '中甲：0～4 級多 1 刻，5 級起不多花');
-    ok(ticksOf('heavy', 0) === 12 && ticksOf('heavy', 4) === 12 && ticksOf('heavy', 5) === 11 && ticksOf('heavy', 9) === 11 && ticksOf('heavy', 10) === 10 && ticksOf('heavy', 20) === 10, '重甲：0～4 級多 2 刻、5～9 級多 1 刻、10 級起不多花');
-    ok(ticksOf('light', 0) === 10, '輕甲不多花刻');
-    ok(ticksOf('hide', 0) === 11 && ticksOf('hide', 5) === 10 && ticksOf('ringmail', 0) === 12 && ticksOf('ringmail', 10) === 10, '厚皮甲照中甲、環甲照重甲算多花的刻');
+    ok(ticksOf('medium', 0) === 7 && ticksOf('medium', 4) === 7 && ticksOf('medium', 5) === 6 && ticksOf('medium', 20) === 6, '中甲：0～4 級多 1 刻，5 級起不多花');
+    ok(ticksOf('heavy', 0) === 8 && ticksOf('heavy', 4) === 8 && ticksOf('heavy', 5) === 7 && ticksOf('heavy', 9) === 7 && ticksOf('heavy', 10) === 6 && ticksOf('heavy', 20) === 6, '重甲：0～4 級多 2 刻、5～9 級多 1 刻、10 級起不多花');
+    ok(ticksOf('light', 0) === 6, '輕甲不多花刻');
+    ok(ticksOf('hide', 0) === 7 && ticksOf('hide', 5) === 6 && ticksOf('ringmail', 0) === 8 && ticksOf('ringmail', 10) === 6, '厚皮甲照中甲、環甲照重甲算多花的刻');
     // 一種穿甲技能的等級不影響另一種：中甲 20 級穿重甲照樣多 2 刻
     p.equip.body = G.make('heavy', 0, 93);
     p.skills.medium = { lv: 20, n: 0 };
     p.skills.heavy = { lv: 0, n: 0 };
-    { const t0 = g.ticks || 0; g.endTurn(false); ok(g.ticks - t0 === 12, `中甲 20 級穿重甲該多 2 刻：${g.ticks - t0}`); }
+    { const t0 = g.ticks || 0; g.endTurn(false); ok(g.ticks - t0 === 8, `中甲 20 級穿重甲該多 2 刻：${g.ticks - t0}`); }
     p.skills.medium = { lv: 0, n: 0 };
     p.skills.dodge = { lv: 0, n: 0 };
     ok(near(G.playerDefense(p).dodge, C.PLAYER_DODGE) && (p.skills.heavy.lv = 15, near(G.playerDefense(p).dodge, C.PLAYER_DODGE)), '重甲不加也不扣敏捷的閃避（穿甲技能不影響）');

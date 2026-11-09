@@ -516,7 +516,7 @@ function testCombat28() {
     ok(P.g.turn === t1, '不是戰士不能盾擊');
   }
 
-  // 12. 速度：攻擊動作輕型 8、一般 10、重型 12，減敏捷修正值，最少 6；防具多花的刻照舊疊加；移動 10 刻
+  // 12. 速度：攻擊動作輕型 5、一般 6、重型 7，減敏捷修正值，最少 4；防具多花的刻照舊疊加；移動 6 刻（第三十六版之一，原本 8／10／12、最少 6、移動 10）
   {
     const A = arena(296, 'warrior', ['sword', 'herb', 'gold']);
     const { g, p } = A;
@@ -528,18 +528,18 @@ function testCombat28() {
     p.attr.dex = 13; // +1
     const tw = {};
     for (const t of ['dagger', 'sword', 'spear']) { p.equip.main = G.make(t, 0, g.nextGearId++); p.equip.main.dur = 1e6; tw[t] = dt(hit); }
-    ok(tw.dagger === 7 && tw.sword === 9 && tw.spear === 11, `敏捷 13 的攻擊刻：短刀 ${tw.dagger}、長劍 ${tw.sword}、長槍 ${tw.spear}`);
+    ok(tw.dagger === 4 && tw.sword === 5 && tw.spear === 6, `敏捷 13 的攻擊刻：短刀 ${tw.dagger}、長劍 ${tw.sword}、長槍 ${tw.spear}`);
     p.attr.dex = 18; // +4
     p.equip.main = G.make('dagger', 0, g.nextGearId++);
-    ok(dt(hit) === 6, '最少 6 刻');
+    ok(dt(hit) === 4, '最少 4 刻');
     p.attr.dex = 6; // -2
     p.equip.main = G.make('sword', 0, g.nextGearId++);
-    ok(dt(hit) === 12, '敏捷 -2 的長劍 12 刻');
+    ok(dt(hit) === 8, '敏捷 -2 的長劍 8 刻');
     p.equip.body = G.make('heavy', 0, g.nextGearId++);
-    ok(dt(hit) === 14, '重甲再多 2 刻');
+    ok(dt(hit) === 10, '重甲再多 2 刻');
     p.equip.body = null;
     g.monsters = [];
-    ok(dt(() => g.move(1, 0)) === 12, '移動 10 刻減敏捷修正值（敏捷 6 是 -2，所以 12 刻）');
+    ok(dt(() => g.move(1, 0)) === 8, '移動 6 刻減敏捷修正值（敏捷 6 是 -2，所以 8 刻）');
   }
 
   // 13. 法師的範圍魔攻：打目標與周圍 1 格（智力 +3 起 2 格）所有怪物，每隻各擲命中（加智力），1d6＋智力 魔法；法杖只磨一次、技能只練一次
@@ -787,20 +787,20 @@ function testCombat28() {
       ok(w.items.length === 0 && (p.equip.main === sword || p.bag.some((e) => e.gear === sword)), '走過去把丟出去的武器撿回來');
     }
 
-    // 護甲（第二十九版再追加）：力量不到需求走一步 15 刻、潛行劣勢只是標記、各店賣的防具
+    // 護甲（第二十九版再追加）：力量不到需求走一步 9 刻、潛行劣勢只是標記、各店賣的防具
     {
       const { g, p } = arena(442, 'warrior', ['sword', 'shield', 'herb']);
       p.skills = Ch.freshSkills();
       p.attr.dex = 10;
       const stepTicks = () => { const t0 = g.ticks; g.move(1, 0); return g.ticks - t0; };
       const walk = (type, str) => { p.equip.body = G.make(type, 0, g.nextGearId++); p.attr.str = str; return stepTicks(); };
-      ok(walk('heavy', 12) === 15 + 2 && walk('heavy', 13) === 10 + 2, `鎖子甲要力量 13：不夠走一步 15 刻（加防具多花的 2 刻），夠了 10 刻：${walk('heavy', 12)}／${walk('heavy', 13)}`);
-      ok(walk('splint', 14) === 15 + 2 && walk('splint', 15) === 10 + 2 && walk('plate', 14) === 15 + 2 && walk('plate', 15) === 10 + 2, '條板甲、全身板甲要力量 15');
-      ok(walk('ringmail', 8) === 10 + 2 && walk('medium', 8) === 10 + 1 && walk('light', 8) === 10, '環甲、中甲、輕甲沒有力量需求');
+      ok(walk('heavy', 12) === 9 + 2 && walk('heavy', 13) === 6 + 2, `鎖子甲要力量 13：不夠走一步 9 刻（加防具多花的 2 刻），夠了 6 刻：${walk('heavy', 12)}／${walk('heavy', 13)}`);
+      ok(walk('splint', 14) === 9 + 2 && walk('splint', 15) === 6 + 2 && walk('plate', 14) === 9 + 2 && walk('plate', 15) === 6 + 2, '條板甲、全身板甲要力量 15');
+      ok(walk('ringmail', 8) === 6 + 2 && walk('medium', 8) === 6 + 1 && walk('light', 8) === 6, '環甲、中甲、輕甲沒有力量需求');
       p.attr.str = 12;
       p.equip.body = G.make('heavy', 0, g.nextGearId++);
-      p.attr.dex = 18; // 敏捷高走路只要 6 刻，力量不夠還是 15 刻（取較大的）
-      ok(stepTicks() === 15 + 2, '力量不夠的 15 刻跟敏捷的步數取較大的');
+      p.attr.dex = 18; // 敏捷高走路只要 5 刻，力量不夠還是 9 刻（取較大的）
+      ok(stepTicks() === 9 + 2, '力量不夠的 9 刻跟敏捷的步數取較大的');
       const stealth = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && FE.GEAR[k].stealth).sort().join();
       ok(stealth === 'halfplate,heavy,medium,padded,plate,ringmail,splint', `潛行劣勢的防具：${stealth}`);
       // 描述：每件防具一句說明，戰鬥數字不受標記影響

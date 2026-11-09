@@ -329,7 +329,7 @@
         const n = push(game, A, D, C.PUSH_DIST);
         if (n > 0) effects.push(`牠被推開了 ${n} 格`);
       } else if (mastery === 'slow' && dmg > 0) {
-        // 緩速：命中且造成傷害後，目標下一次移動多花 10 刻（怪物 10 刻動一次，所以牠下一次移動晚一回合，見 ai.js）
+        // 緩速：命中且造成傷害後，目標下一次移動多花 6 刻（怪物 6 刻動一次，所以牠下一次移動晚一回合，見 ai.js）
         D.slowed = C.SLOW_TURNS;
         effects.push('牠的腳步慢了下來');
       }

@@ -581,7 +581,7 @@ function testGrowth29() {
     const t0 = g.ticks;
     const ev = events(() => g.flee());
     const far = Math.min(...g.monsters.map((m) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y))));
-    const moved = Math.abs(p.x - x0) + Math.abs(p.y - y0);
+    const moved = Math.max(Math.abs(p.x - x0), Math.abs(p.y - y0)); // 第三十五版之四：八方向，斜走一步算 1 格
     ok(far >= 2 && moved >= 2 && moved <= 2 && g.battle.targetId === null, `逃跑成功：離怪物 ${far} 格、走 ${moved} 格（敏捷 10 最多 2 格）`);
     ok(!ev.some((e) => e.cling || e.opportunity), '逃跑時不會被趁機攻擊');
     ok(g.ticks - t0 >= 2 * FE.Char.moveTicks(p), `逃跑花的刻照走的格數：${g.ticks - t0}`);

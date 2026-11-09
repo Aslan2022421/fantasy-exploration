@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 global.require = require; // 載進來的檔不是模組，借用這支的 require
-for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30', 'test-skills31', 'test-monsters33', 'test-stability33', 'test-terrain34']) {
+for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-gear35', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30', 'test-skills31', 'test-monsters33', 'test-stability33', 'test-terrain34']) {
   vm.runInThisContext(fs.readFileSync(path.join(__dirname, f + '.js'), 'utf8'), { filename: path.join(__dirname, f + '.js') });
 }
 
@@ -102,7 +102,7 @@ function mergeState(part) {
 function buildJobs() {
   const jobs = [];
   const add = (id, w) => jobs.push({ id, w });
-  const units = ['gear', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'stability33', 'terrain34', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
+  const units = ['gear', 'gear35', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'stability33', 'terrain34', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
   if (MODE === 'arena') {
     for (const cls of BOT_CLASSES) add('arena:' + cls, 30);
     return jobs;

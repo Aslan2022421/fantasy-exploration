@@ -6,7 +6,7 @@
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const isPlayer = (game, o) => o === game.player;
   const isSoldier = (o) => !!o && o.role === 'soldier';
-  const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const dist = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); // 第三十五版之四：八方向，斜走一步算 1 格
   const HITS = ['crit', 'hit', 'hard']; // d20 判定「命中」的三段（被閃開也算命中，只是吃一半傷害）
 
   // 防禦數字：冒險者看身上的防具（閃避）和副手的盾牌（格擋機率與格擋值，沒拿盾牌是 0，見 gear.js 的 playerDefense），
@@ -56,6 +56,7 @@
     const r = game.rng;
     if (isPlayer(game, A) && opts && opts.counter) return FE.Gear.counterDamage(A) * times;
     if (isPlayer(game, A)) {
+      if (prof.fixedDamage != null) return prof.fixedDamage;
       const raw = prof.die ? FE.rollDice(r, prof.die, times) : C.BARE_DMG * times;
       return Math.max(1, raw + prof.dmg);
     }
@@ -71,9 +72,9 @@
     return sum;
   }
 
-  // 貼在旁邊，而且中間不是斷崖，才打得到
+  // 貼在旁邊，而且中間不是斷崖，才打得到；斜向相鄰也算貼身（第三十五版之四）
   function adjacent(game, a, b) {
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1 && game.world.heightOk(a.x, a.y, b.x, b.y);
+    return dist(a, b) === 1 && game.world.heightOk(a.x, a.y, b.x, b.y);
   }
 
   // 視線（冒險者遠程、怪物看冒險者共用）：沿直線看過去，中間的地形擋多少（見 SIGHT_BLOCK）累積起來。
@@ -153,10 +154,10 @@
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
     const mode = aP ? opts.mode || 'melee' : null;
-    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'spell' || mode === 'light' || !!(FE.SPELLS[mode] && FE.SPELLS[mode].aim);
+    const ranged = mode === 'shoot' || mode === 'throw' || mode === 'item' || mode === 'spell' || mode === 'light' || !!(FE.SPELLS[mode] && FE.SPELLS[mode].aim);
     // 冒險者這一下用的武器（反擊用主手）與算法；先記下，免得這一下把武器磨壞了找不到
     const wpn = aP ? (opts.counter ? A.equip.main : opts.weapon !== undefined ? opts.weapon : A.equip.main) : null;
-    const prof = aP ? FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
+    const prof = aP ? opts.item ? FE.Char.itemProfile(A, opts.item) : FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
     if (prof && opts.ammoQ !== undefined) prof.pierce = FE.QUALITIES[opts.ammoQ].pierce; // 射出去的箭：穿甲看箭矢的品質
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值；
@@ -307,7 +308,7 @@
         }
       } else {
         D.hp = Math.max(0, D.hp - dmg);
-        // 再生（沼澤巨魔）：被火或酸打到，下一回合不回（REGEN_STOP；目前遊戲裡還沒有火與酸的傷害）
+        // 再生（沼澤巨魔）：被火或酸打到，下一回合不回（REGEN_STOP）
         if (D.regen && C.REGEN_STOP.includes(hitType)) D.noRegen = true;
         if (D.hp <= 0 && game.monsters.includes(D)) {
           killed = true;
@@ -342,15 +343,16 @@
 
     // 訊息：一次攻擊一行。士兵與怪物互打時，只有離冒險者在視野內才寫，免得訊息洗版
     const p = game.player;
-    const near = (o) => Math.abs(o.x - p.x) + Math.abs(o.y - p.y) <= C.SIGHT;
+    const near = (o) => dist(o, p) <= C.SIGHT; // 八方向（第三十五版之四）
     if (aP || dP || near(A) || near(D)) {
       const aName = aP ? '你' : aS ? '士兵' : A.name;
       const dName = dP ? '你' : dS ? '士兵' : D.name;
       const pD = dP ? '你' : dS ? '他' : '牠';
       const wName = wpn ? FE.Gear.name(wpn) : '';
       const heads = {
-        shoot: `你朝${dName}射了一箭`,
+        shoot: `你用${wpn ? FE.GEAR[wpn.type].name : '武器'}射向${dName}`,
         throw: `你把${wName}擲向${dName}`,
+        item: `你把${opts.item ? opts.item.name : '物品'}擲向${dName}`,
         spell: `魔力炸開，波及${dName}`,
         light: `你放出神聖之光，照向${dName}`,
         bash: `你用盾牌撞向${dName}`,

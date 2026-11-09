@@ -175,10 +175,10 @@ function testCombat28() {
     let ev = events(() => { for (let i = 0; i < 40; i++) { m.x = p.x + 2; m.y = p.y; g.battle.targetId = null; g.act('attack'); } });
     const pe = ev.filter((e) => e.by === 'player');
     ok(pe.length === 40 && pe.every((e) => e.d === m) && !pe.some((e) => e.countered) && !ev.some((e) => e.counter), `長槍打 2 格外：出手 ${pe.length} 次、被反擊 ${pe.filter((e) => e.countered).length} 次`);
-    const blocker = mon(g, p.x + 1, p.y + 1); // 斜前方：不在中間、也沒貼著冒險者，不擋
+    const blocker = mon(g, p.x + 1, p.y + 1); // 第三十五版之四：斜走一步也算貼身，現在斜的會變成旁邊的目標
     m.x = p.x + 2; m.y = p.y;
     ev = events(() => { g.battle.targetId = null; g.act('attack'); });
-    ok(ev.some((e) => e.by === 'player' && e.d === m), '斜的怪物不擋觸及');
+    ok(ev.some((e) => e.by === 'player' && e.d === blocker), '斜的怪物現在算貼身被打到，觸及就不會用');
     g.monsters = g.monsters.filter((o) => o !== blocker);
     g.world.setCell(p.x + 1, p.y, '#', 'plain');
     const t0 = g.turn;
@@ -618,11 +618,11 @@ function testCombat28() {
     const combos = (arr, k) => (k === 0 ? [[]] : arr.flatMap((x, i) => combos(arr.slice(i + 1), k - 1).map((r) => [x].concat(r))));
     const product = (lists) => lists.reduce((acc, l) => acc.flatMap((a) => l.map((x) => a.concat(x))), [[]]);
     // 第三十一版：每個職業都從全部武器與防具挑（主手、身上、副手），補給挑藥草或 20 銀；不再有固定給的裝備
-    const weapons = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon');
+    const weapons = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon' && FE.GEAR[k].sold);
     const armors = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && FE.GEAR[k].sold);
     for (const cls of Object.keys(FE.CLASSES)) {
       const gs = FE.startGroups(cls);
-      ok(FE.CLASSES[cls].fixed.length === 0 && gs.length === 4 && gs[0].of.slice().sort().join() === weapons.slice().sort().join() && gs[1].of.slice().sort().join() === armors.slice().sort().join() && gs[2].of.join() === 'shield,nooff' && gs[3].of.join() === 'herb,gold', `${cls} 的起始挑法：${gs.map((g) => g.of.length)}`);
+      ok(FE.CLASSES[cls].fixed.length === 0 && gs.length === 4 && gs[0].of.slice().sort().join() === weapons.slice().sort().join() && gs[1].of.slice().sort().join() === armors.slice().sort().join() && gs[2].of.join() === 'shield,nooff' && gs[3].of.join() === 'herb,gold,pack_gathering,pack_supply,pack_archer,pack_thrower', `${cls} 的起始挑法：${gs.map((g) => g.of.length)}`);
       for (const picks of [['sword', 'medium', 'shield', 'herb'], ['dagger', 'robe', 'nooff', 'gold'], ['bow', 'light', 'nooff', 'herb']]) {
         const g = new FE.Game(430);
         g.start({ cls, picks });
@@ -807,15 +807,14 @@ function testCombat28() {
       ok(Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && k !== 'mrobe' && k !== 'robe').every((k) => FE.GEAR[k].desc && FE.GEAR[k].desc.length > 8 && !/D&D|龍與地下城/.test(FE.GEAR[k].desc)), '每件防具都有一句遊戲內的說明');
       // 商店
       const S = G.SHOPS;
-      const armorBuy = (s) => Object.values(S[s].buy).flat().filter((t) => FE.GEAR[t].cat === 'armor' && t !== 'robe' && t !== 'mrobe').sort().join();
+      const armorBuy = (s) => Object.values(S[s].buy).flat().filter((t) => FE.GEAR[t] && FE.GEAR[t].cat === 'armor' && t !== 'robe' && t !== 'mrobe').sort().join();
       ok(armorBuy('blacksmith') === 'chainshirt,hide,light,padded,ringmail', `村莊鐵匠賣的防具：${armorBuy('blacksmith')}`);
       ok(Object.values(S.blacksmith.buy).flat().includes('shield') && S.blacksmith.craft.includes('shield'), '村莊鐵匠賣盾牌');
       const allArmor = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && k !== 'robe' && k !== 'mrobe').sort().join();
       ok(armorBuy('armorer') === allArmor && S.armorer.craft.slice().sort().join() === (allArmor + ',shield').split(',').sort().join(), `城鎮盔甲匠什麼防具都賣、都能打造：${armorBuy('armorer')}`);
-      ok(!Object.values(S.weaponsmith.buy).flat().some((t) => FE.GEAR[t].cat === 'armor'), '城鎮武器匠不賣防具');
+      ok(!Object.values(S.weaponsmith.buy).flat().some((t) => FE.GEAR[t] && FE.GEAR[t].cat === 'armor'), '城鎮武器匠不賣防具');
     }
     useClasses('legacy');
   }
 }
 UNITS.combat28 = () => { try { testCombat28(); } catch (e) { fail('戰鬥測試拋出例外：' + e.stack); } };
-

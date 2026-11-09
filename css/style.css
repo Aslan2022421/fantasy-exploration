@@ -67,6 +67,8 @@
   --map-ol-chase: #d4bd7a;
   --map-ol-aim: #7fd0d8;       /* 按 F 瞄準中的怪物 */
   --map-aim-area: #24464a;     /* 範圍魔攻會波及的格子 */
+  --map-walk: #8fd8a8;         /* 滑鼠點出來的路線（虛線、目的地框與步數） */
+  --map-walk-bg: #0d2b26;      /* 步數那個小方塊的底色 */
   /* 地圖底色（越高越亮）、聚落、室內、小路、有委託、收貨人 */
   --map-h0: #081b1d;
   --map-h1: #0b2426;
@@ -320,7 +322,39 @@ b { font-weight: bold; }
 .dlg-opts { display: flex; flex-direction: column; gap: 6px; }
 .dlg-opts button { text-align: left; }
 .dlg-hint { margin: 8px 0 0; font-size: 12px; }
+#dialog.shop-dialog { width: min(900px, calc(100% - 24px)); max-height: min(82vh, 760px); overflow-y: auto; }
+.shop-dialog .dlg-head { position: static; margin-bottom: 4px; padding: 0; background: transparent; }
+.shop-dialog .dlg-text { margin-bottom: 8px; }
+.shop-head { display: flex; align-items: center; justify-content: space-between; color: var(--head); }
+.shop-head button { color: var(--text); }
+.shop-balance { margin-top: 6px; color: var(--dim); font-size: 13px; }
+.shop-tabs { display: flex; gap: 6px; margin: 8px 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.shop-tabs button { flex: 1 1 0; min-height: 34px; }
+.shop-tabs button.on { border-color: var(--head); color: var(--head); background: var(--panel2); }
+.shop-content { min-width: 0; margin: 6px 0; }
+.shop-content.has-selection { display: grid; grid-template-columns: minmax(190px, 30%) minmax(0, 1fr); align-items: start; gap: 8px; }
+.shop-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; margin: 0; }
+.shop-content.has-selection .shop-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.shop-slot { min-width: 0; min-height: 34px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 2px 4px; text-align: left; border-color: var(--line2); background: var(--void); }
+.shop-slot:hover, .shop-slot:focus-visible, .shop-slot.selected { border-color: var(--head); background: var(--panel2); }
+.shop-slot.short .shop-slot-note { color: var(--bad); }
+.shop-slot-name { width: 100%; font-size: 12px; font-weight: bold; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-slot-note { max-width: 100%; color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-empty { margin: 18px 0; color: var(--dim); }
+.shop-detail { margin: 6px 0; padding: 8px; border: 1px solid var(--line2); background: var(--void); }
+.shop-detail h3 { margin: 0; color: var(--head); font-size: 14px; font-weight: normal; }
+.shop-detail p { margin: 5px 0 8px; font-size: 12px; }
+.shop-detail-actions { display: flex; gap: 8px; }
+.shop-detail-actions button { min-width: 76px; min-height: 30px; padding: 4px 8px; }
+.shop-nav { margin-top: 10px; }
 kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px; text-align: center; background: var(--void); border: 1px solid var(--line); font: 12px Consolas, monospace; }
+
+@media (max-width: 620px) {
+  .shop-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shop-content.has-selection { grid-template-columns: minmax(0, 1fr); }
+  .shop-content.has-selection .shop-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shop-tabs button { padding: 6px 4px; }
+}
 
 /* 建角畫面（全螢幕）：路徑、標題與副標、兩個框、底部提示 */
 .cc { width: 100%; height: 100%; max-width: 1100px; display: flex; flex-direction: column; }
@@ -349,9 +383,20 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px
 .logall { list-style: none; padding: 0; }
 .bag { list-style: none; padding: 0; }
 .bag button { width: 100%; text-align: left; }
+.bag button.selected { border-color: var(--head); background: var(--panel2); }
 .bag kbd { margin-right: 6px; color: var(--dim); }
+.bag-layout { display: grid; grid-template-columns: minmax(190px, 38%) minmax(0, 1fr); align-items: start; gap: 10px; }
+.bag-detail { min-width: 0; min-height: 100px; padding: 8px; border: 1px solid var(--line2); background: var(--void); }
+.bag-detail h3 { margin: 0; color: var(--head); font-size: 15px; font-weight: normal; }
+.bag-detail p { margin: 6px 0; line-height: 1.5; }
+.bag-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.bag-actions button { min-height: 30px; padding: 4px 8px; }
+@media (max-width: 620px) { .bag-layout { grid-template-columns: minmax(0, 1fr); } }
 #bagInfo p { margin: 4px 0; }
-#bagInfo .equipped { list-style: none; padding: 0; margin: 4px 0 8px; }
+#bagInfo .equipped { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; list-style: none; padding: 0; margin: 4px 0 8px; }
+#bagInfo .equipped li { min-width: 0; margin: 0; }
+#bagInfo .equipped button { width: 100%; min-height: 46px; padding: 4px; text-align: left; font-size: 12px; overflow-wrap: anywhere; }
+#bagInfo .equipped .reserved { visibility: hidden; min-height: 46px; }
 #bagInfo button.on { border-color: var(--bad); color: var(--bad); }
 #reports pre { margin: 4px 0; white-space: pre-wrap; color: var(--dim); font-size: 12px; }
 ul.tags { list-style: none; margin: 6px 0; padding: 0; font-size: 13px; }

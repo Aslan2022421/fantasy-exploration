@@ -142,17 +142,29 @@ function testExits34() {
 }
 
 // ---- 堡壘、要塞、城市（照圖樣蓋的聚落）與堡壘廢墟 ----
-// 世界種子 158380 長滿 288×288（出生點不動）時有城市、要塞與堡壘廢墟（第三十四版量到的；規則改了沒有就要換種子）
+// 第三十五版之四：八方向的可達性與間距讓城市、要塞更難同時落在同一個世界，
+// 改成「城市看種子 158380（有城市與兩處堡壘廢墟）、要塞看種子 31676（有要塞與堡壘廢墟）」各查一次
+const SETTLE_SEEDS = [158380, 31676];
 function testSettle34() {
   const ok = (cond, msg) => { terrainChecks++; if (!cond) fail('堡壘與城市 ' + msg); };
-  const g = new FE.Game(158380);
+  let sawCity = 0;
+  let sawFortress = 0;
+  for (const s of SETTLE_SEEDS) settleWorld34(s, ok, (kind) => { if (kind === 'city') sawCity++; if (kind === 'fortress') sawFortress++; });
+  ok(sawCity >= 1, '試過的種子裡沒有城市');
+  ok(sawFortress >= 1, '試過的種子裡沒有要塞');
+}
+
+// 查一個世界裡照圖樣蓋的聚落（城市、要塞、堡壘）與堡壘廢墟；saw(kind) 記看到哪幾種
+function settleWorld34(seed, ok, saw) {
+  const g = new FE.Game(seed);
   g.start();
   g.checkCreate = () => {};
   for (let i = 0; i < 16; i++) g.createChunk(false);
   const w = g.world;
   const kinds = (k) => w.villages.filter((v) => v.kind === k);
-  ok(kinds('city').length >= 1 && kinds('fortress').length >= 1, `種子 158380 沒有城市或要塞（城市 ${kinds('city').length}、要塞 ${kinds('fortress').length}），要換種子`);
-  ok(w.landmarks.some((l) => l.kind === 'fort'), '種子 158380 沒有堡壘廢墟，要換種子');
+  if (!kinds('city').length && !kinds('fortress').length) return; // 這個種子沒有圖樣聚落，另一邊會查
+  for (const v of w.villages) saw(v.kind);
+  ok(w.landmarks.some((l) => l.kind === 'fort'), `種子 ${seed} 沒有堡壘廢墟`);
   const n0 = problems.length;
   for (const v of w.villages) if (v.kind === 'city' || v.kind === 'fort' || v.kind === 'fortress') checkPlan(g, v, '場景');
   terrainChecks += w.villages.length;

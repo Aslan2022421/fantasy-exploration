@@ -215,8 +215,52 @@
     arrowup: [0, -1], arrowdown: [0, 1], arrowleft: [-1, 0], arrowright: [1, 0],
     w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
   };
-  // 第三十五版之四：斜走的四個鍵。Q／E／Z／C 剛好在 WASD 的四個斜角，要加 Shift 才算斜走（不然 Q、C 還是開委託與角色）
-  const DIAG = { q: [-1, -1], e: [1, -1], z: [-1, 1], c: [1, 1] };
+  // 第三十五版之四點一：斜走改成同時按兩個方向鍵（W＋D、↑＋→⋯⋯），或數字鍵盤的 7、9、1、3（8、2、4、6 是上下左右，NumLock 開關都一樣）；
+  // 拿掉第三十五版之四的 Shift＋Q／E／Z／C。先按下的方向鍵等 CHORD_MS 看第二個鍵來不來，來了就斜走一步；兩個鍵一起按住連發時一直斜走
+  const NUMPAD = { Numpad7: [-1, -1], Numpad8: [0, -1], Numpad9: [1, -1], Numpad4: [-1, 0], Numpad6: [1, 0], Numpad1: [-1, 1], Numpad2: [0, 1], Numpad3: [1, 1] };
+  const CHORD_MS = 60;
+  const held = new Set(); // 按住中的方向鍵（DIRS 的鍵名）
+  let chord = null;       // 先按下的方向鍵在等第二個鍵：{ timer, dir }
+  // 按住的方向鍵合起來的方向（相反的兩個鍵互相抵消）
+  const heldDir = () => {
+    let dx = 0;
+    let dy = 0;
+    for (const h of held) {
+      dx += DIRS[h][0];
+      dy += DIRS[h][1];
+    }
+    return [Math.sign(dx), Math.sign(dy)];
+  };
+  const step = ([dx, dy]) => {
+    if (dx || dy) dispatch('移動', () => game.move(dx, dy, { noTalk: true }));
+  };
+  function dirKey(e, k) {
+    held.add(k);
+    const [dx, dy] = heldDir();
+    if (chord) {
+      // 第二個鍵在等待時間內來了：照兩個鍵合起來的方向走一步
+      clearTimeout(chord.timer);
+      chord = null;
+      step(dx || dy ? [dx, dy] : DIRS[k]);
+      return;
+    }
+    // 按住連發，或另一個方向鍵早就按住了：照合起來的方向馬上走
+    if (e.repeat || (dx && dy)) {
+      step(dx || dy ? [dx, dy] : DIRS[k]);
+      return;
+    }
+    const dir = DIRS[k];
+    chord = {
+      dir,
+      timer: setTimeout(() => {
+        chord = null;
+        const [hx, hy] = heldDir();
+        step(hx || hy ? [hx, hy] : dir); // 很快就放開了的話，照原本那個鍵走
+      }, CHORD_MS),
+    };
+  }
+  document.addEventListener('keyup', (e) => held.delete(e.key.toLowerCase()));
+  window.addEventListener('blur', () => held.clear());
   // 1 攻擊、2 重擊、3 撤退、4 治療（牧師、聖騎士）、5 盾擊（戰士）、6 撤離、7 閃避、F 遠程（射擊、投擲、施法、神聖之光：先進入瞄準）、T 投擲（任何武器）
   const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', f: 'fire', t: 'throw' }; // 第三十一版：撤退與撤離合併成 3 逃跑，主動閃避拿掉
   // 按鍵視窗：同時只開一個
@@ -379,13 +423,6 @@
       else FE.UI.openWindow('settings');
       return;
     }
-    // 第三十五版之四：Shift＋Q／E／Z／C 斜走（要放在開視窗之前，不然 Q、C 會被當成委託與角色）
-    if (e.shiftKey && DIAG[k]) {
-      e.preventDefault();
-      cancelRoute();
-      dispatch('移動', () => game.move(DIAG[k][0], DIAG[k][1], { noTalk: true }));
-      return;
-    }
     if (WINDOW_KEYS[k]) {
       e.preventDefault();
       toggleWindow(WINDOW_KEYS[k]);
@@ -415,6 +452,12 @@
     }
     // 視窗開著時，方向鍵與戰鬥鍵都不作用
     if (FE.UI.win()) return;
+    // 數字鍵盤走八方向（看 e.code，放在戰鬥鍵之前，不然 NumLock 開著時 1、3 會被當成攻擊、逃跑）
+    if (NUMPAD[e.code]) {
+      e.preventDefault();
+      step(NUMPAD[e.code]);
+      return;
+    }
     if (ACTS[k]) {
       e.preventDefault();
       // F 只是進入瞄準，不算動作、不存檔
@@ -430,7 +473,7 @@
       dispatch('戰鬥：' + ACTS[k], () => game.act(ACTS[k]));
     } else if (DIRS[k]) {
       e.preventDefault();
-      dispatch('移動', () => game.move(DIRS[k][0], DIRS[k][1], { noTalk: true }));
+      dirKey(e, k);
     } else if (k === 'r') {
       e.preventDefault();
       if (!FE.UI.askRest()) dispatch('休息', () => game.rest());

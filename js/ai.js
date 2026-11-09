@@ -92,7 +92,8 @@
   }
 
   function wander(game, m) {
-    if (game.rng() >= C.WANDER_CHANCE) return;      const options = DIRS8.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(
+    if (game.rng() >= C.WANDER_CHANCE) return;
+    const options = DIRS8.map(([dx, dy]) => [m.x + dx, m.y + dy]).filter(
       ([x, y]) => free(game, x, y) && game.world.canStep(m.x, m.y, x, y) && dist({ x, y }, m.home) <= (m.guard ? 1 : C.WANDER_LEASH) // 八方向，使用斜走規則（第三十五版之四）
     );
     if (!options.length) return;
@@ -179,9 +180,11 @@
     big.members = group;
     game.monsters.push(big);
     game.say(`${group.length} 隻怪物沒有清掉，合成了一隻${big.name}！`, 'bug');
-  } /* ---- 怪物的特性（第三十三版，照 SRD 5.2.1；群體戰術與易傷在 combat.js）----
+  }
+
+  // ---- 怪物的特性（第三十三版，照 SRD 5.2.1；群體戰術與易傷在 combat.js）----
   // 再生（沼澤巨魔，SRD 的 Troll 15 點、Troll Limb 5 點）：每回合開頭回 regen 點生命；上一次被火或酸打到（m.noRegen）這一回合不回。
-  // SRD 裡生命歸零還要「回合開頭沒有再生」才死，這一版照舊歸零就倒下 */
+  // SRD 裡生命歸零還要「回合開頭沒有再生」才死，這一版照舊歸零就倒下
   function regenerate(game, m) {
     if (!m.regen) return;
     if (m.noRegen) {
@@ -438,7 +441,7 @@
         } else {
           if (s === lead) s.wait = 0;
           const at = new Set(target ? [k(target.x, target.y)] : []);
-          const goal = (x, y) =>          DIRS8.some(([dx, dy]) => at.has(k(x + dx, y + dy)) && w.canStep(x, y, x + dx, y + dy)) // 八方向+斜走規則（第三十五版之四）;
+          const goal = (x, y) => DIRS8.some(([dx, dy]) => at.has(k(x + dx, y + dy)) && w.canStep(x, y, x + dx, y + dy)); // 八方向＋斜走規則（第三十五版之四）
           const step = target ? stepToward(s, goal) : null;
           if (step) moveTo(s, step[0], step[1]);
           else {
@@ -476,4 +479,3 @@
 
   FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free, regenerate, nimbleHide, stepToward, DIRS8 };
 })();
-

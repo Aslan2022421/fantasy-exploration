@@ -198,7 +198,7 @@ function testCreation() {
       // 清掉之後那一帶 5～7 天不生怪物：還沒全倒時沒有冷卻區，全倒後有；5 天內生不出來，7 天後生得出來
       const last = gr[gr.length - 1];
       const hx = last.home.x, hy = last.home.y;
-      const d = { type: 'TERRAIN', x: hx, y: hy, cells: [], scope: 2, data: {} };
+      const d = { type: 'DECAY', x: hx, y: hy, cells: [], scope: 2, data: {} };
       ok(g.world.calm.length === 1 && g.isCalm(hx, hy) && !g.spawnMonster(d), `seed${seed} 清掉之後冷卻區沒記下來，或區內還生得出怪物`);
       const until = g.world.calm[0].until - g.ticks;
       ok(until >= 5 * C.DAY_TICKS && until <= 7 * C.DAY_TICKS, `seed${seed} 冷卻 ${until} 刻，不在 5～7 天之間`);
@@ -236,7 +236,7 @@ let wlChecks = 0;
 function testWorldLevel() {
   const ok = (cond, msg) => { wlChecks++; if (!cond) fail('世界等級 ' + msg); };
   ok(C.MERGE_RATIO === 1.5, '合體門檻基準不是 1.5');
-  const mk = (wl, scope, type) => FE.makeMonster({ type: type || 'TERRAIN', x: 0, y: 0, cells: [], scope }, 1, wl);
+  const mk = (wl, scope, type) => FE.makeMonster({ type: type || 'DECAY', x: 0, y: 0, cells: [], scope }, 1, wl);
   const a = mk(1, 4);
   const b = mk(4, 4);
   // 第三十三版：攻擊力是一下的平均傷害（傷害骰的平均＋傷害加值）乘世界等級的加成；AC 與攻擊加值不隨世界等級變
@@ -319,7 +319,7 @@ function testSoldiers() {
     .sort((a, b) => Math.abs(a[0] - town.cx) + Math.abs(a[1] - town.cy) - (Math.abs(b[0] - town.cx) + Math.abs(b[1] - town.cy)));
   ok(cand.length > 20, '城鎮外面找不到放怪物的地方');
   const put = ([x, y], small) => {
-    const m = g.spawnMonster({ type: 'TERRAIN', x, y, cells: [[x, y]], scope: 2, data: {} }, null);
+    const m = g.spawnMonster({ type: 'DECAY', x, y, cells: [[x, y]], scope: 2, data: {} }, null);
     m.small = small;
     return m;
   };
@@ -552,7 +552,7 @@ function testBackpack() {
   // 戰鬥中：旁邊有怪物也能吃
   const side = DIRS.find(([dx, dy]) => w.canStep(p.x, p.y, p.x + dx, p.y + dy) && !w.npcAt(p.x + dx, p.y + dy) && !g.nodeAt(p.x + dx, p.y + dy));
   if (side && !w.inVillage(p.x, p.y)) {
-    const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + side[0], y: p.y + side[1], cells: [], scope: 1, data: {} }, null);
+    const m = g.spawnMonster({ type: 'DECAY', x: p.x + side[0], y: p.y + side[1], cells: [], scope: 1, data: {} }, null);
     Object.assign(m, { x: p.x + side[0], y: p.y + side[1], home: { x: p.x + side[0], y: p.y + side[1] }, atk: 0, die: null }); // die: null：照固定的攻擊力算傷害（第三十三版起怪物用 SRD 的傷害骰）
     p.hp = 5;
     t0 = g.turn;

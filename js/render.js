@@ -582,7 +582,7 @@
     return game.aimTarget() || game.targetMonster() || game.reachTarget() || game.monsters.find((m) => m.id === game.battle.targetId) || null;
   }
 
-  // 目標那一行：目前的目標（名字、血條、生命，後面是狀態、體型、異常、抗性）；瞄準中多寫距離與按鍵；沒有就寫「無」
+  // 目標那一行：目前的目標（名字、血條、生命，後面是狀態與體型）；瞄準中多寫距離與按鍵；沒有就寫「無」
   function drawTarget() {
     const p = game.player;
     const m = focusMonster();

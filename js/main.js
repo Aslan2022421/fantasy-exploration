@@ -101,8 +101,7 @@
       FE.UI.update();
     }
   }
-  // 這條路大約走幾刻：照 move 與 endTurn 的算法加起來（超重、力量不到防具需求、被扭曲的地面、身上的防具、力竭、失序）
-  // 被扭曲的地面就是斷崖與地面錯位那幾隻怪物占的格子，先收成一份查表，畫路線時不用一格一格找
+  // 這條路大約走幾刻：照 move 與 endTurn 的算法加起來（超重、力量不到防具需求、身上的防具、力竭、失序）
   function pathTicks(path) {
     const p = game.player;
     const cfg = FE.CONFIG;
@@ -110,15 +109,7 @@
     const tired = FE.Char.exhaustMoveMul(p);
     const extra = FE.Gear.extraTicks(p);
     const chaos = FE.Stability.state(game) === 2 ? cfg.CHAOS_TIME : 1;
-    const hard = new Set();
-    for (const m of game.monsters) {
-      if (m.type !== 'TERRAIN' && m.type !== 'CLIFF') continue;
-      for (const [x, y] of m.cells) hard.add(x + ',' + y);
-      for (const o of m.members || []) for (const [x, y] of o.cells) hard.add(x + ',' + y);
-    }
-    let total = 0;
-    for (const [x, y] of path) total += (Math.round((hard.has(x + ',' + y) ? Math.max(cfg.TICKS_HARD, base) : base) * tired) + extra) * chaos;
-    return total;
+    return path.length * (Math.round(base * tired) + extra) * chaos;
   }
   // 把路線收掉（出發前改做別的事都用得到）；回傳 true 表示本來有路線
   function clearRoute() {

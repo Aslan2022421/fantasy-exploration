@@ -201,7 +201,6 @@
     let dmg = 0;
     let dodged = false;
     let crit = false;
-    let resisted = false;
     let absorbed = 0;
     let reduced = 0;
     let holy = 0;
@@ -243,15 +242,10 @@
         crit = roll.key === 'crit';
         dmg = baseDamage(game, A, prof, deep * (crit ? 2 : 1), opts, advState); // 沒閃開：暴擊時傷害骰擲兩次加總
       }
-      // 易傷（第三十三版，骷髏怕鈍擊）：暴擊之後、抗性之前，這種傷害加倍
+      // 易傷（第三十三版，骷髏怕鈍擊）：暴擊之後、格擋之前，這種傷害加倍
       if (dmg > 0 && !dP && !dS && D.vuln && D.vuln.includes(hitType)) {
         dmg *= 2;
         vulnerable = true;
-      }
-      // 抗性在暴擊之後、格擋之前減半（冒險者打怪物時）
-      if (aP && dmg > 0 && FE.isResisted(D, kind, prof.clear)) {
-        dmg = half(dmg);
-        resisted = true;
       }
       // 格擋：成功就用格擋值吸收傷害
       if (dmg > 0 && dd.blockMax > 0 && r() < dd.block) {
@@ -386,7 +380,6 @@
         let tail = dmg > 0 ? `造成 ${dmg} 點傷害` : absorbed > 0 ? '傷害全被擋下' : '沒有造成傷害';
         if (holy > 0) tail += `（其中 ${holy} 點是神聖之力）`;
         if (vulnerable) tail += '（正中弱點，傷害加倍）';
-        if (resisted) tail += '（有抗性，傷害減半）';
         if (absorbed > 0 && dmg > 0) tail += `（${pD}格擋，擋下 ${absorbed} 點）`;
         if (reduced > 0) tail += `（護甲擋下 ${reduced} 點）`;
         if (conCut > 0) tail += `（你硬挺過去，又少受 ${conCut} 點）`;
@@ -404,7 +397,7 @@
     const forced = countered && aP && roll.key === 'hard' && !opts.noForced;
     if (FE.Combat.hook) {
       FE.Combat.hook({
-        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, resisted, vulnerable, advWhy: adv.slice(), ac, reduced, conCut, grazed, dmg, holy,
+        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, vulnerable, advWhy: adv.slice(), ac, reduced, conCut, grazed, dmg, holy,
         dmgType, mastery: mastery && hitKey && alive ? mastery : null, effects, weapon: wpn, off: !!opts.off,
         counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D,
       });

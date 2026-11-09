@@ -170,7 +170,7 @@ function testCombat28() {
     const A = arena(284, 'warrior', ['spear', 'herb', 'gold']);
     const { g, p } = A;
     const m = mon(g, p.x + 2, p.y);
-    m.type = 'TERRAIN'; // 反擊機率 10%，貼著才會反擊
+    m.type = 'DECAY'; // 反擊機率 10%，貼著才會反擊
     // 推擊會把牠推開，每次出手前放回 2 格外
     let ev = events(() => { for (let i = 0; i < 40; i++) { m.x = p.x + 2; m.y = p.y; g.battle.targetId = null; g.act('attack'); } });
     const pe = ev.filter((e) => e.by === 'player');

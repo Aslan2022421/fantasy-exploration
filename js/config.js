@@ -48,10 +48,7 @@ FE.CONFIG = {
   SETTLE_BUFFER: { village: 8, town: 12, fort: 12, fortress: 14, city: 16 }, // 聚落周圍那一圈的寬度（從外牆量起）；堡壘跟城鎮一樣 12（第三十四版，Claude 定的）
   VIEW_W: 21,           // 畫面一次顯示幾格寬（奇數，冒險者才會剛好在正中央）；由 render.js 依視窗大小與縮放算出來
   VIEW_H: 21,           // 畫面一次顯示幾格高（奇數）
-  MINIMAP_W: 128,       // 小地圖顯示冒險者附近幾格寬
-  MINIMAP_H: 96,        // 小地圖顯示冒險者附近幾格高
   MID_SCOPE: 5,         // 影響範圍 1～4 是小怪物，5 以上是中型怪物（創世時的大錯、合體生出的都是）
-  BOSS_SCOPE: 12,       // 影響範圍 12 以上才算大型怪物；大怪物只來自世界級事件，留到第 2 階段，這一版不會生出來
   // 升級的累計經驗值（第二十九版，《D&D》第五版經驗表 ÷10）：LEVEL_EXP[n] 是升到第 n 級要的累計經驗值，最高 20 級
   LEVEL_EXP: [0, 0, 30, 90, 270, 650, 1400, 2300, 3400, 4800, 6400, 8500, 10000, 12000, 14000, 16500, 19500, 22500, 26500, 30500, 35500],
   LEVEL_MAX: 20,        // 角色等級上限（技能等級沒有上限）
@@ -215,7 +212,6 @@ FE.CONFIG = {
 
   // 時間（參考矮人要塞的刻）：每個動作花幾刻，怪物每 10 刻行動一次
   TICKS_MOVE: 10,                         // 一般地形走一格
-  TICKS_HARD: 30,                         // 被怪物的異常扭曲過的地面走一格（怪物多動兩次）
   // 畫面縮放：地圖滿版，縮放改的是每格的像素大小，格數跟著視窗大小與格子大小變（格子越小、看得越多）。
   // 短邊至少 17 格＝四個方向各看 8 格，跟小怪物的視野一樣遠，不讓怪物在畫面外就看到你
   CELL_SIZES: [14, 18, 22, 26, 32, 40], // 每格的像素大小（縮放的檔位）
@@ -283,7 +279,6 @@ FE.CONFIG = {
   // 單位同 FE.blockValue）；兩個分界把世界分成安穩、動盪、失序三級。以下陣列依序是安穩、動盪、失序
   STATE_CUTS: [140000, 4500000],        // 整體 BUG 值達到第一個數字進入動盪，達到第二個進入失序（世界等級 1 的值，每級再加一成）。第三十三版之三（三）依「不打怪」與四人等效模擬重量（DECAY_CELL_CHANCE 0.1、DECAY_GROUP_RATE 0.005）：不打怪第 10～15 天進動盪、30 天內不失序；四人等效戰士、法師各 3 個種子 11000 個動作，第一次動盪在世界等級 2～3、第一次失序都在世界等級 5（世界長滿之後），動盪佔 39%～54% 的時間（見 design/bugs.md「世界狀態」）
   STATE_HYST: 0.9,                        // 退回上一級要低於分界的幾成（免得在分界上來回跳、訊息洗版）
-  STATE_ROUGH: [0, 0, 0],                 // 創出新的一塊之後，額外多蓋幾塊氣候印章或高度突變（第三十四版：拿掉，原本 0、2、4）
   STATE_MERGE: [1, 0.8, 0.6],             // 合體門檻倍率
   STATE_COMPUTE: [1, 0.75, 0.5],          // 累積修補力的倍率（吃算力，事件變少；創世力不受影響）
   // 穩定值（第三十三版之三，使用者定的數字）：每格一個，正的不生怪物，負的生怪物。起始平均 240、成片起伏在 120～360（FE.stabilityAt）
@@ -304,9 +299,8 @@ FE.CONFIG = {
   REPAIR_RANGE: 24,                       // 修補力補冒險者幾步以內最負的格子
   CHAOS_TIME: 2,                          // 失序時，冒險者每個動作花的刻是平常的幾倍（怪物跟著多動，士兵仍只動一次）
 
-  // 世界等級（隱藏，不顯示給玩家）：＝1＋floor((創出的塊數－1)／CHUNKS_PER_WORLD_LEVEL)。
+  // 世界等級（隱藏，不顯示給玩家）：＝1＋長滿的圈數（第三十二版起，stability.js 的 worldLevel）。
   // 每升一級（以等級 1 為基準，線性加上去）：下面每一項加上對應的比例或數值
-  CHUNKS_PER_WORLD_LEVEL: 2,             // 每創出幾塊世界，世界等級加一（規格預設 3；調成 2，失序才落在世界等級 4～5 左右）
   WL_BONUS: {
     HP: 0.3,        // 怪物血量（第二十四版 0.1→0.2；第二十六版以戰士校準再加到 0.3：技能與加點讓傷害成長，小怪物約 3 下、中型怪物約 6 下打倒，見 design/bugs.md「世界等級」）
     ATK: 0.1,       // 怪物攻擊力
@@ -374,8 +368,6 @@ FE.clockText = (ticks) => {
   const t = Math.max(0, ticks || 0);
   return `第 ${Math.floor(t / C.DAY_TICKS) + 1} 天 ${Math.floor((t % C.DAY_TICKS) / C.HOUR_TICKS)} 時`;
 };
-// 世界裡有 n 塊區塊時的世界等級（創出的塊數算新生的那一塊）
-FE.worldLevelFor = (n) => 1 + Math.floor((Math.max(1, n) - 1) / FE.CONFIG.CHUNKS_PER_WORLD_LEVEL);
 
 // 地形：字元 → 名稱、能不能走、畫面樣式。顏色另外跟著生態區走（style.css 的 b-*）。
 // 字元參考矮人要塞用的 CP437 字元表：▲ 是坡（矮人要塞的 ramp），♣ 闊葉樹、↑ 針葉樹、≈ 水。
@@ -432,19 +424,19 @@ FE.TERRAIN = {
 };
 
 // 生態區：參考矮人要塞，由海拔、溫度、雨量決定（world.js 的 classify）。
-// paint 決定每格畫成什麼地形字元；rocks 是巨石（擋路）的比例；cold／hot 用來判斷冷熱直接相鄰的錯。
+// paint 決定每格畫成什麼地形字元；rocks 是巨石（擋路）的比例（第三十四版起 ROCKS_MUL 0，不放巨石）。
 // hit 是冒險者站在這裡出手時擲骰的加減值：開闊的地方看得清楚好出手，樹林、泥沼礙手礙腳。
 FE.BIOMES = {
   plain:     { name: '整平的空地', paint: () => '.', rocks: 0, hit: 1 },
   grassland: { name: '草原', paint: (r) => (r() < 0.6 ? '"' : '.'), rocks: 0.02, hit: 2 },
   shrubland: { name: '灌木地', paint: (r) => { const n = r(); return n < 0.5 ? ',' : n < 0.8 ? '"' : '.'; }, rocks: 0.03, hit: 0 },
   forest:    { name: '溫帶森林', paint: (r) => (r() < 0.55 ? '♣' : '"'), rocks: 0.03, hit: -2 },
-  taiga:     { name: '針葉林', paint: (r) => (r() < 0.55 ? '↑' : '.'), rocks: 0.04, cold: true, hit: -2 },
-  tundra:    { name: '苔原', paint: (r) => (r() < 0.7 ? '.' : ','), rocks: 0.04, cold: true, hit: 1 },
-  glacier:   { name: '冰川', paint: () => '*', rocks: 0, cold: true, hit: -1 },
-  jungle:    { name: '熱帶雨林', paint: (r) => (r() < 0.65 ? '♠' : '"'), rocks: 0.02, hot: true, hit: -3 },
-  savanna:   { name: '莽原', paint: (r) => { const n = r(); return n < 0.45 ? ',' : n < 0.92 ? '.' : 'Γ'; }, rocks: 0.02, hot: true, hit: 2 },
-  desert:    { name: '沙漠', paint: (r) => (r() < 0.9 ? ':' : '.'), rocks: 0.04, hot: true, hit: 1 },
+  taiga:     { name: '針葉林', paint: (r) => (r() < 0.55 ? '↑' : '.'), rocks: 0.04, hit: -2 },
+  tundra:    { name: '苔原', paint: (r) => (r() < 0.7 ? '.' : ','), rocks: 0.04, hit: 1 },
+  glacier:   { name: '冰川', paint: () => '*', rocks: 0, hit: -1 },
+  jungle:    { name: '熱帶雨林', paint: (r) => (r() < 0.65 ? '♠' : '"'), rocks: 0.02, hit: -3 },
+  savanna:   { name: '莽原', paint: (r) => { const n = r(); return n < 0.45 ? ',' : n < 0.92 ? '.' : 'Γ'; }, rocks: 0.02, hit: 2 },
+  desert:    { name: '沙漠', paint: (r) => (r() < 0.9 ? ':' : '.'), rocks: 0.04, hit: 1 },
   marsh:     { name: '沼澤', paint: (r) => (r() < 0.5 ? ';' : '"'), rocks: 0, hit: -2 },
   swamp:     { name: '濕地', paint: (r) => (r() < 0.45 ? ';' : '♠'), rocks: 0, hit: -3 },
   mountain:  { name: '山地', paint: (r, h) => (h >= 4 || r() < 0.5 ? '▲' : '.'), rocks: 0.08, hit: -1 },
@@ -653,9 +645,6 @@ Object.assign(FE.CONFIG, {
   START_MONSTER_MAX: 24,   // 開局最多 24 隻
   // 之後每段 2～3 處（試做：照 Dungeon World〈前置〉「一個冒險前置有 2～3 個危害」，一段就是一場戰役；原本照面積 1～3 處）
   SITE_COUNT: [2, 3],
-  GROUP_STRAGGLER: 0.15,   // 15% 只有落單的 1 隻
-  GROUP_NEST: 0.1,         // 10% 是大窩，隻數 ×1.5
-  GROUP_NEST_MUL: 1.5,
   GROUP_SPREAD: [2, 5],    // 跟班散在帶頭那隻周圍 2～5 格
   CAMP_SPREAD: [1, 7],     // 營地的跟班散在帶頭那隻周圍 1～7 格（Claude 定的）
   // 第三十三版之三起，一處的 BUG 量不再看影響範圍，是創世時擲的 SITE_DEBT 或衰敗的格子欠的量（game.compose 的預算直接給 BUG 量）。
@@ -708,13 +697,6 @@ FE.raceAt = (world, x, y, rng, tier) => pickRace(FE.racesAt(world, x, y, tier), 
 FE.pickRace = pickRace;
 FE.CONFIG.UNDEAD_RADIUS = 6; // 遺跡、墓地往外幾格算「附近」（提議）
 
-// 冷的生態區跟熱的直接相鄰，就是「氣候算錯了」的地形錯位
-FE.isClimateConflict = (a, b) => {
-  const A = FE.BIOMES[a] || {};
-  const B = FE.BIOMES[b] || {};
-  return (A.cold && B.hot) || (A.hot && B.cold);
-};
-
 // 擲 d20 的五段結果（參考《奇幻探索物語》，判定流程見 combat.js）。第三十三版改成 AC 制：
 // 擲出的點數到暴擊門檻（平常 20）一定暴擊、擲出 1 一定失手（失手後防守方還要擲閃避）；
 // 其他看 d20＋加值比對方 AC 高多少，由高往低比對：高 HARD_MARGIN（5）以上命中、0～4 勉強命中（冒險者出手時對方必定反擊，見 combat.js）、
@@ -734,7 +716,6 @@ FE.TOWN_NAMES = ['銀橋城', '石冠城', '白塔城', '風語城', '金麥城'
 FE.SETTLE_KINDS = { village: '村莊', town: '城鎮', city: '城市', fort: '堡壘', fortress: '要塞' };
 FE.CITY_NAMES = ['王冠城', '雙塔城', '金穗城', '曙光城', '海風城', '銀鷹城']; // 第三十四版：城市（Claude 暫定的名字）
 FE.FORT_NAMES = ['鷹巢堡', '石喉堡', '風口堡', '鐵閘堡', '狼牙堡', '霧關堡', '雪脊堡', '赤岩堡']; // 堡壘
-FE.FORTRESS_NAMES = ['雙關要塞', '龍脊要塞', '北境要塞', '黑石要塞']; // 要塞
 FE.VILLAGE_NAMES = ['石橋村', '鐵杉村', '白霧村', '灰岩村', '長風村', '柳溪村', '赤土村', '雲杉村', '青苔村', '銅鈴村'];
 FE.NAMES = ['艾德', '蜜拉', '洛恩', '希雅', '巴頓', '妮可', '托爾', '葵', '歐文', '莉絲', '加隆', '芙蘭', '塞斯', '茉莉', '雷恩', '朵拉'];
 // 背包裡疊放的東西：use 是能直接使用的；weight 是一份的重量，單位磅（有 bundle 的是一捆的重量）；送貨物品另外用 id 'goods'、名字照委託（重量 5）。

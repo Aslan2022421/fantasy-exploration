@@ -120,8 +120,6 @@
         }
       }
       if (village) this.moveBufferDebt(village);
-      // 世界越亂，新的一塊越粗糙：依世界狀態額外多蓋幾塊氣候印章或高度突變（基本生成不變）
-      FE.Stability.roughen(this, rect);
       const inChunk = (n) => FE.inRect(rect, n.x, n.y);
       const found = FE.Checker.scan(this.world, rect, this.monsters);
       // 斷層蟲先放，牠負責的區域打通後就走得到，區域裡的怪物和村民才算碰得到
@@ -133,7 +131,6 @@
         return FE.DIRS8.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy)); // 八方向（第三十五版之四）
       };
       const spawned = [];
-      // 檢查器找到的地形錯位與斷崖（rest）不處理：第三十三版之三起錯的種類不決定怪物，只有挑上的地點才欠 BUG 值
       // 怪物遮蔽時不生怪物（一定要生的也不生；創世門檻只剩任務）
       const { sites } = this.veil ? { sites: [] } : this.pickSites(found, rect, first, landmarks || []);
       this.curCampaign = index; // 這一段生的怪物都記上是第幾段戰役（spawnGroup）
@@ -687,13 +684,11 @@
     // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），算進處數。
     // 第三十四版（使用者定的）：其餘的地點不再從檢查器找到的地形錯位與斷崖裡挑（地形改成全是坡、拿掉印章之後幾乎沒有），
     // 改在這一段裡挑「從出生點走得到、不在聚落周圍那一圈裡」的格子（type 'DECAY'：沒有哪一處具體的錯要修，清光時補回那一帶的穩定值）；
-    // 這一段的每個興趣點各放一處（附近已經有一定要生的就不再放，沒有就放在興趣點上）。檢查器找到的地形錯位與斷崖不處理
-    // （不生怪物、不算進創世門檻、不欠 BUG 值）。回傳 { sites: [{ d, must, at }], rest }，at 是放到興趣點上的位置
+    // 這一段的每個興趣點各放一處（附近已經有一定要生的就不再放，沒有就放在興趣點上）。回傳 { sites: [{ d, must, at }] }，at 是放到興趣點上的位置
     pickSites(found, rect, first, landmarks) {
       const rng = this.rng;
       const w = this.world;
-      const sites = found.filter((d) => d.type !== 'TERRAIN' && d.type !== 'CLIFF').map((d) => ({ d, must: true }));
-      const rest = found.filter((d) => d.type === 'TERRAIN' || d.type === 'CLIFF');
+      const sites = found.map((d) => ({ d, must: true }));
       const n = first ? C.START_SITES : FE.randInt(rng, C.SITE_COUNT[0], C.SITE_COUNT[1]);
       const near = (l, d) => d.x >= l.x0 - 3 && d.x <= l.x1 + 3 && d.y >= l.y0 - 3 && d.y <= l.y1 + 3;
       const reach = FE.Checker.reachable(w);
@@ -720,7 +715,7 @@
         if (!d) break;
         sites.push({ d });
       }
-      return { sites, rest };
+      return { sites };
     }
 
     // 第三十三版之二：一處的 BUG 量（budget）拿去配一組怪物，也就是套皮。每隻怪物值多少 BUG 量看數值塊
@@ -1221,17 +1216,11 @@
         if (FE.Checker.checkChest(chest)) this.say('寶箱被怪物的力量封住了，打不開。', 'sys');
         else this.openChest(chest);
       }
-      // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻；被扭曲過的地面一步 30 刻（取較大的）
-      // 力量不到身上防具的需求：一步 15 刻（跟超重、被扭曲的地面取最大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
+      // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻
+      // 力量不到身上防具的需求：一步 15 刻（跟超重取大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
       const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
       const tired = (t) => Math.round(t * FE.Char.exhaustMoveMul(p));
-      if (this.isHardGround(nx, ny)) {
-        const t = tired(Math.max(C.TICKS_HARD, base));
-        this.say(`這裡的地面被異常扭曲過，很難走，這一步花了 ${t} 刻。`, 'sys');
-        this.endTurn(true, t);
-      } else {
-        this.endTurn(true, tired(base));
-      }
+      this.endTurn(true, tired(base));
     }
 
     // 冒險者做完一個動作：每個動作都附帶一點虛擬的修補力；移動才累積步數與算力。
@@ -1858,12 +1847,6 @@
       this.earn(C.COMPUTE_PER_ATTACK);
       FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'bash' });
       this.endTurn(false, FE.Char.attackTicks(p, null));
-    }
-
-    // 被怪物的異常扭曲過的地面（氣候錯位、斷崖影響的格子）很難走
-    isHardGround(x, y) {
-      const hit = (m) => (m.type === 'TERRAIN' || m.type === 'CLIFF') && m.cells.some(([cx, cy]) => cx === x && cy === y);
-      return this.monsters.some((m) => hit(m) || (m.members && m.members.some(hit)));
     }
 
     // 休息（第三十版）。旁邊有怪物時不能休息；休息一次只把修補力存起來（不進創世力）。

@@ -96,43 +96,12 @@ function testGear() {
     ok(G.extraTicks(q) === 0, '輕甲不該多花刻');
   }
 
-  // 2. 清除等級與抗性門檻：狂亂、虛影從清除等級 1 起不再減半，斷層從清除等級 2 起；其他沒有抗性
-  {
-    const mk = (type) => FE.makeMonster({ type, x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
-    // 第三十三版之二：異常種類不再給怪物抗性
-    for (const t of Object.keys(FE.BUG_TYPES)) ok(!FE.isResisted(mk(t), 'attack', 0) && !FE.isResisted(mk(t), 'deep', 0), `${t} 不該有抗性`);
-    // 真的出手：主手武器品質 0 打狂亂會減半，品質 1 起不會；斷層要品質 2
-    const g = newGame(13);
-    const p = g.player;
-    const px = p.x, py = p.y;
-    const arena = (type) => {
-      const m = FE.dressMonster(FE.makeMonster({ type, x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 900, 1), g.world);
-      m.home = { x: px + 1, y: py };
-      m.maxHp = m.hp = 1e9;
-      g.monsters = [m];
-      return m;
-    };
-    let resisted = 0;
-    FE.Combat.hook = (e) => { if (e.resisted) resisted++; };
-    const run = (type, q) => {
-      const m = arena(type);
-      p.equip.main = G.make('sword', q, g.nextGearId++);
-      p.equip.main.dur = p.equip.main.max = 1e9;
-      p.hp = p.maxHp = 1e9;
-      resisted = 0;
-      for (let i = 0; i < 300; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
-      return resisted;
-    };
-    ok(run('VALUE', 0) === 0 && run('UNREACHABLE', 0) === 0 && run('TERRAIN', 0) === 0, '第三十三版之二：異常種類不再給怪物抗性，實際出手也不該減半');
-    FE.Combat.hook = hook0;
-  }
-
   // 3. 防具減傷：固定扣點，扣完至少吃 1 點；魔法減傷本版用不到（怪物都是物攻）
   {
     const g = newGame(14);
     const p = g.player;
     const px = p.x, py = p.y;
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 901, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 901, 1), g.world);
     Object.assign(m, { home: { x: px + 1, y: py }, atk: 3, die: null, maxHp: 1e9, hp: 1e9 }); // die: null：照固定的攻擊力算傷害（第三十三版起怪物用 SRD 的傷害骰）
     g.monsters = [m];
     const sample = (body, n) => {
@@ -211,7 +180,7 @@ function testGear() {
     ok(ax.warned === false, '修好之後該能再提醒');
     // 實際打鬥：出手一次磨武器一次、格擋成功一次磨盾牌、護甲減傷有作用一次磨身上防具
     const px = p.x, py = p.y;
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 902, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 902, 1), g.world);
     Object.assign(m, { home: { x: px + 1, y: py }, atk: 5, maxHp: 1e9, hp: 1e9 });
     g.monsters = [m];
     p.equip.main = G.make('sword', 0, g.nextGearId++);
@@ -491,7 +460,7 @@ function testGear() {
     const px = p.x, py = p.y, turn0 = g.turn, tk0 = g.ticks;
     g.move(-side[0], -side[1]);
     ok(p.x === px && p.y === py && g.turn === turn0 && g.ticks === tk0 && g.log[0].text.includes('丟掉'), `超重太多還是走動了或沒提示（${g.log[0].text}）`);
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: px + side[0], y: py + side[1], cells: [], scope: 2, data: {} }, 903, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: px + side[0], y: py + side[1], cells: [], scope: 2, data: {} }, 903, 1), g.world);
     Object.assign(m, { home: { x: m.x, y: m.y }, atk: 0, maxHp: 1e6, hp: 1e6 });
     g.monsters = [m];
     g.flee();
@@ -624,7 +593,7 @@ function testGear() {
   {
     const g = newGame(19);
     const p = g.player;
-    const mid = () => { const m = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 6 }, 1, 1); return m; };
+    const mid = () => { const m = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 6 }, 1, 1); return m; };
     // 箭矢掉一捆，疊進背包的箭矢裡（當成 { type: 'arrow', q } 算）
     const bagGear = () => p.bag.filter((e) => e.id === 'gear' || e.id === 'arrow' || e.id === 'bolt').map((e) => (e.id === 'arrow' || e.id === 'bolt' ? { type: e.id, q: e.q, n: e.n } : e.gear));
     // 創世時的中型怪物（small=false）與合體怪物（small=false、有 members）都會掉；事件生的 small、小怪物不掉
@@ -648,7 +617,7 @@ function testGear() {
       ok(arrows && arrows.n === 20 && arrows.q >= 1 && arrows.q <= 3 && g.log.some((l) => l.text.includes('一捆 20 支的')), `掉落的箭矢該是一捆 20 支：${JSON.stringify(arrows)}`);
     }
     const small = mid(); small.small = true;
-    const tiny = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
+    const tiny = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
     let extra = 0;
     for (let i = 0; i < 1000; i++) { p.bag = []; g.dropGear(small); g.dropGear(tiny); extra += bagGear().length; }
     ok(extra === 0, `事件生的中型怪物或小怪物不該掉裝備（掉了 ${extra} 件）`);
@@ -705,7 +674,7 @@ function testGear() {
       p.skills = JSON.parse(q.skills);
       p.attr.dex = q.dex;
     }
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 904, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 904, 1), g.world);
     Object.assign(m, { home: { x: m.x, y: m.y }, atk: 1, maxHp: 1e9, hp: 1e9 });
     g.monsters = [m];
     let counters = 0;
@@ -741,7 +710,7 @@ function testGear() {
   {
     const g = newGame(21);
     const p = g.player;
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 905, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 905, 1), g.world);
     Object.assign(m, { home: { x: m.x, y: m.y }, atk: 3 });
     g.monsters = [m];
     const before = { turn: g.turn, ticks: g.ticks, creation: g.creation, compute: g.compute, hp: m.hp, php: p.hp, x: p.x, y: p.y, dur: p.equip.main.dur, mx: m.x, my: m.y };
@@ -776,7 +745,7 @@ function testGear() {
     ok(!!spot, '找不到 8×5 的空地'); // 第三十二版：加寬一格，往後退到第 4 步還在空地裡
     if (spot) {
       const mk = (id, x, y) => {
-        const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x, y, cells: [[x, y]], scope: 2, data: {} }, id, 1), w);
+        const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x, y, cells: [[x, y]], scope: 2, data: {} }, id, 1), w);
         Object.assign(m, { home: { x, y }, atk: 3, maxHp: 1e9, hp: 1e9 });
         return m;
       };
@@ -875,8 +844,8 @@ function testGear() {
       }
       return out;
     };
-    const mid = FE.makeMonster({ type: 'TERRAIN', x: g.player.x + 3, y: g.player.y, cells: [], scope: 6 }, 1, 1);
-    const small = FE.makeMonster({ type: 'TERRAIN', x: g.player.x + 3, y: g.player.y, cells: [], scope: 2 }, 2, 1);
+    const mid = FE.makeMonster({ type: 'DECAY', x: g.player.x + 3, y: g.player.y, cells: [], scope: 6 }, 1, 1);
+    const small = FE.makeMonster({ type: 'DECAY', x: g.player.x + 3, y: g.player.y, cells: [], scope: 2 }, 2, 1);
     small.small = true;
     const dm = drop(mid, 300);
     const ds = drop(small, 600);
@@ -912,7 +881,7 @@ function testGear() {
       if (spot || Math.abs(x - p.x) + Math.abs(y - p.y) < 4 || w.inBuffer(x, y) || !w.passable(x, y)) return;
       if ([[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => w.passable(x + dx, y + dy))) spot = { x, y };
     });
-    const m = g.spawnMonster({ type: 'TERRAIN', x: spot.x, y: spot.y, cells: [], scope: 2, data: {} }, null);
+    const m = g.spawnMonster({ type: 'DECAY', x: spot.x, y: spot.y, cells: [], scope: 2, data: {} }, null);
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) w.setHeight(m.x + dx, m.y + dy, 0);
     w.setHeight(m.x, m.y, 2);
     g.unstrand();

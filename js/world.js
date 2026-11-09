@@ -688,9 +688,6 @@
     return rain < 0.36 ? 'desert' : rain < 0.5 ? 'savanna' : 'jungle';
   }
 
-  const STAMP_BIOMES = ['tundra', 'taiga', 'desert', 'savanna', 'jungle', 'grassland', 'forest', 'shrubland'];
-  FE.STAMP_BIOMES = STAMP_BIOMES;
-
   // 生成器刻意粗糙：每塊世界的溫度帶一點偏差，四邊的接縫處偶爾冷熱直接相鄰。
   // 第三十四版：拿掉隨手蓋的氣候印章與高度突變（斷崖的來源）；rough 只剩溫度偏差
   function paintBiomes(world, rng, r, index) {

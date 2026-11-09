@@ -205,7 +205,7 @@
 | `js/char.js` | 角色（第二十六版）：修正值、生命上限的公式、起始裝備的挑法檢查、建立冒險者；第二十八版的出手算法（`profile`：傷害骰、屬性、技能、重型、暴擊門檻、精通）、射程（`range`）、攻擊速度（`attackTicks`）；第二十九版：能背與推拖上限（`carryLimit`、`pushLimit`）、走一步幾刻（`moveTicks`）、武器怎麼拿（`grip`：單手、雙手、拿不動）、技能經驗（`useSkill`、智力倍率 `expFactor`）與穿甲效果（`armorWeightMul`）、體質減傷（`conCut`）、體型與種族 |
 | `js/gear.js` | 裝備物件、品質與名字、價錢與修復費（含魅力）、重量與負重、磨損、隨機品質與掉落、工匠的貨色（`SHOPS`，武器分四類、打造也分類 `craftCats`）、第三十五版的武器、彈藥、遊戲版裝備包與消耗品商品；冒險者的裝備數字（出手加減、AC `playerAC`、閃避、格擋、傷害寫法 `dmgText`）、武器說明（骰子、特質、精通）、副手放不放得上（`offOk`） |
 | `js/combat.js` | 攻防判定 `resolveAttack`（冒險者、怪物、士兵共用；AC、優勢與劣勢、傷害骰、暴擊、易傷、抗性、格擋、照傷害種類的減傷 `reduction`、神聖、精通、推擊、反擊）；遠程視線；第三十五版消耗品傷害與燃燒 |
-| `js/stability.js` | 整體 BUG 值、世界狀態、世界等級與加成倍率、新世界的額外粗糙、每小時的穩定值：往下掉（`decay`）、從負格子生怪物（`spawnDecay`，每小時能生幾群看 `groupCap`）、修補力補格子（`mend`） |
+| `js/stability.js` | 整體 BUG 值、世界狀態、世界等級與加成倍率、每小時的穩定值：往下掉（`decay`）、從負格子生怪物（`spawnDecay`，每小時能生幾群看 `groupCap`）、修補力補格子（`mend`） |
 | `js/events.js` | 每小時的流程（格子往下掉、從負格子生怪物、委託事件含採藥採礦委託 `gatherQuest`、修補力補格子） |
 | `js/ai.js` | 怪物徘徊、視線、追擊、圍攻、踩過的格子減穩定值、合體、再生（`regenerate`）、靈巧脫身（`nimbleHide`）、踩中陷阱；士兵的行動（`soldierTurn`） |
 | `js/game.js` | 第三十版：時鐘、休息、錢與聚落經濟、四種委託；遠程與彈藥回收（`rangedMode`、`fireAt`、`recoverArrows`）、觸及（`reachTarget`）、治療（`heal`）、盾擊（`bash`）、移動、工匠對話、背包與物品使用（`useItem`）、工具與採集、回合與戰鬥動作、升級、算力與創世、士兵、裝備掉落；第三十五版：彈藥消耗、藥水與投擲物、陷阱、門鎖與開鎖工具 |

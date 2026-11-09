@@ -50,7 +50,7 @@ function testGear35() {
   p.x = spot.x;
   p.y = spot.y;
   const makeTarget = (id, x, race) => {
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x, y: spot.y, cells: [[x, spot.y]], scope: 2, data: {} }, id, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x, y: spot.y, cells: [[x, spot.y]], scope: 2, data: {} }, id, 1), g.world);
     Object.assign(m, { race: race || m.race, maxHp: 10000, hp: 10000, ac: 1 });
     g.monsters = [m];
     return m;

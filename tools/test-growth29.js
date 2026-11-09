@@ -155,7 +155,7 @@ function testGrowth29() {
     ok(g4.player.size === 84700 && g4.player.equip.off && g4.player.equip.off.type === 'shield', '84,700 的人類單手拿長槍，可以配盾');
   }
 
-  // 6. 敏捷：移動刻數＝10 減敏捷修正值，最少 8（被扭曲的地面還是 30）
+  // 6. 敏捷：移動刻數＝10 減敏捷修正值，最少 8
   {
     const g = arena('warrior', 9101);
     const p = g.player;

@@ -28,7 +28,7 @@ function testMonsters33() {
   };
   // 指定種族與分級的怪物（不看環境）
   const mon = (g, x, y, race, tier, type) => {
-    const m = FE.makeMonster({ type: type || 'TERRAIN', x, y, cells: [], scope: tier === 'mid' ? 6 : 2, data: {}, race: race || 'goblin' }, g.nextMonsterId++, 1);
+    const m = FE.makeMonster({ type: type || 'DECAY', x, y, cells: [], scope: tier === 'mid' ? 6 : 2, data: {}, race: race || 'goblin' }, g.nextMonsterId++, 1);
     Object.assign(m, { home: { x, y } });
     g.monsters.push(m);
     return m;
@@ -99,12 +99,12 @@ function testMonsters33() {
     for (const r of Object.values(FE.MONSTER_BLOCKS)) for (const b of Object.values(r)) ok(b.ac >= 5 && b.hd[0] >= 1 && b.die[0] >= 1 && Number.isInteger(b.hit) && FE.DMG_TYPES[b.type] && FE.monsterHp(b) > 0, `${b.srd} 的欄位不齊`);
     // 套到怪物身上：AC、攻擊加值、傷害、生命乘異常倍率與世界等級加成
     const g = mk(3301);
-    const t = mon(g, 0, 0, 'troll', 'mid', 'CLIFF');
+    const t = mon(g, 0, 0, 'troll', 'mid', 'DECAY');
     ok(t.ac === 15 && t.toHit === 7 && t.die.join() === '2,6' && t.dmgBonus === 4 && t.regen === 15 && t.maxHp === 125 && t.hp === t.maxHp, `沼澤巨魔（斷崖）：AC ${t.ac}、+${t.toHit}、${t.die}+${t.dmgBonus}、生命 ${t.maxHp}`);
     const k = FE.makeMonster({ type: 'UNREACHABLE', x: 0, y: 0, cells: [], scope: 2, race: 'kobold' }, 1, 4);
     ok(k.maxHp === Math.round(26 * (1 + 3 * C.WL_BONUS.HP)) && k.dmgBonus === 2 && k.ac === 14, `狗頭人（斷層、世界等級 4；第三十三版之二異常不改數值）：生命 ${k.maxHp}、傷害加值 ${k.dmgBonus}`);
     // 看環境換種族：數值塊跟著換
-    const m = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 2 }, 2, 1);
+    const m = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 2 }, 2, 1);
     m.race = 'skeleton';
     FE.statMonster(m);
     ok(m.ac === 14 && m.toHit === 5 && m.vuln.join() === 'blunt' && m.maxHp === 40, `換成骷髏：AC ${m.ac}、生命 ${m.maxHp}`);

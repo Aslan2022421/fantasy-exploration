@@ -1,7 +1,7 @@
 // 世界狀態：整體 BUG 值＝整個世界還沒修好的量（第三十三版之三）＝所有怪物的 bug（牠的 blockValue，合體怪物是合進去的加總）
 // ＋全世界負的穩定值的絕對值加總（world.debt）。每格有一個穩定值，正的不生怪物，負的生怪物，負的量就是 BUG 值，單位同 FE.blockValue。
 // 兩個分界（config.js 的 STATE_CUTS，乘上世界等級的加成）把世界分成安穩、動盪、失序三級，沒有崩塌。
-// 狀態越差：每小時格子往下掉得越快（STAB_DECAY）、新世界越粗糙、更容易合體；動盪起修補力被吃掉；
+// 狀態越差：每小時格子往下掉得越快（STAB_DECAY）、更容易合體；動盪起修補力被吃掉；
 // 失序時冒險者每個動作花兩倍的刻，城鎮的士兵出城清掉衰敗生的小怪物（ai.js 的 soldierTurn）。
 // 世界狀態（game.worldState：0 安穩、1 動盪、2 失序）跟世界等級（隱藏，worldLevel(game)）是兩回事：
 // 世界等級＝1＋長滿的圈數，每升一級怪物變強、創世時一處欠的量變多、狀態的分界變高。
@@ -12,7 +12,7 @@
   const C = FE.CONFIG;
   const NAMES = ['安穩', '動盪', '失序'];
   const MSG = {
-    up1: '世界開始動盪，地面上的異常越積越多。',
+    up1: '世界開始動盪，各地越來越不穩，怪物越聚越多。',
     up2: '世界失序了！時間彷彿被拖慢，你每動一下，怪物都多動一次。',
     soldiers: '城鎮的士兵出動了，去清掃野外的怪物。',
     down1: '世界稍微穩了下來，但仍然動盪。',
@@ -60,41 +60,6 @@
       }
     }
     if (state(game) === 0) game.refillSoldiers();
-  }
-
-  // ---- 新世界的粗糙程度 ----
-  // 每塊區塊的亂數只看世界種子和區塊座標，基本生成不變；創出新的一塊之後，另外依世界狀態用 game.rng 多蓋幾塊氣候印章或高度突變
-  // （不落在聚落周圍的圈和地貌）。這是「依世界狀態額外加的粗糙」，沒有這些的世界跟同一個種子的基本樣子一樣
-  function roughen(game, rect) {
-    const w = game.world;
-    const n = C.STATE_ROUGH[state(game)];
-    let made = 0;
-    for (let i = 0; i < n; i++) {
-      for (let tries = 0; tries < 30; tries++) {
-        const cx = FE.randInt(game.rng, rect.x0 + 2, rect.x1 - 3);
-        const cy = FE.randInt(game.rng, rect.y0 + 2, rect.y1 - 3);
-        if (w.inBuffer(cx, cy) || w.landmarkAt(cx, cy) || !w.passable(cx, cy)) continue;
-        const stamp = game.rng() < 0.5;
-        const biome = FE.pick(game.rng, FE.STAMP_BIOMES);
-        const dh = game.rng() < 0.5 ? 2 : -2;
-        const r = stamp ? 1.5 + game.rng() * 2 : 0.8 + game.rng() * 1.2;
-        for (let y = Math.floor(cy - r); y <= cy + r; y++) {
-          for (let x = Math.floor(cx - r); x <= cx + r; x++) {
-            if (!FE.inRect(rect, x, y) || (x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
-            if (w.inBuffer(x, y) || w.landmarkAt(x, y) || !w.passable(x, y)) continue;
-            const c = w.cell(x, y);
-            if (stamp) {
-              if (c.biome !== 'lake' && c.h < 3) w.setCell(x, y, FE.BIOMES[biome].paint(game.rng, c.h), biome);
-            } else {
-              w.setHeight(x, y, Math.max(0, Math.min(C.MAX_HEIGHT, c.h + dh)));
-            }
-          }
-        }
-        made++;
-        break;
-      }
-    }
-    return made;
   }
 
   // ---- 穩定值：每小時往下掉、生怪物、修補 ----
@@ -327,5 +292,5 @@
     return healed;
   }
 
-  FE.Stability = { names: NAMES, state, worldLevel, scale, total, update, mult, roughen, decay, groupCap, spawnDecay, mend, stat };
+  FE.Stability = { names: NAMES, state, worldLevel, scale, total, update, mult, decay, groupCap, spawnDecay, mend, stat };
 })();

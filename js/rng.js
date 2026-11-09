@@ -45,18 +45,6 @@ FE.randInt = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
 
 FE.pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
 
-// table 的每一項要有 weight，回傳被抽中的 key
-FE.pickWeighted = function (rng, table) {
-  const keys = Object.keys(table);
-  const total = keys.reduce((s, k) => s + table[k].weight, 0);
-  let r = rng() * total;
-  for (const k of keys) {
-    r -= table[k].weight;
-    if (r < 0) return k;
-  }
-  return keys[keys.length - 1];
-};
-
 FE.fill = (template, vars) => template.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : ''));
 
 FE.nowTaipei = () => new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });

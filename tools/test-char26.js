@@ -193,7 +193,7 @@ function testCharacter() {
   {
     const g = mk(30, 'warrior', ['sword', 'herb', 'gold']);
     const p = g.player;
-    const m = arena(g, 'CLIFF');
+    const m = arena(g, 'DECAY');
     m.type = 'RUNTIME'; // 碎裂：沒有閃避、格擋、抗性
     const range = (n, kind) => {
       const seen = [];
@@ -822,7 +822,7 @@ function testCharacter() {
     // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手觸發過，副手擲出 6～10 只算命中；主手沒觸發，副手照常觸發
     {
       const { g, p, m } = setup();
-      m.type = 'CLIFF'; // 沒有自己的反擊機率，反擊只可能來自必定反擊
+      m.type = 'DECAY'; // 沒有自己的反擊機率，反擊只可能來自必定反擊
       m.ac = 10 + G.hitMod(p); // 讓擲 0～4 落在勉強命中（第三十三版之一有熟練加值後勉強命中變少，量不到兩下都勉強命中）
       p.equip.off = G.make('dagger', 0, g.nextGearId++);
       let ev = [];

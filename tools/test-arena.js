@@ -74,7 +74,7 @@ function arenaGame(cls, level, wl, seed) {
   game.defeat = (m) => { game.monsters = game.monsters.filter((o) => o !== m); if (game.battle.targetId === m.id) game.battle.targetId = null; };
   return game;
 }
-const ARENA_TYPES = process.env.FE_ARENA_TYPES ? process.env.FE_ARENA_TYPES.split(',') : ['TERRAIN', 'UNREACHABLE', 'VALUE', 'REFERENCE', 'CLIFF']; // 各種異常輪流，不含碎裂；FE_ARENA_TYPES 可以指定只量哪幾種（查哪一種異常拖慢下數用）
+const ARENA_TYPES = ['DECAY']; // 第三十六版前整理：錯的種類不再影響怪物怎麼打，競技場一律用衰敗
 const ARENA_SCOPE = { small: [2, 4], mid: [6, 10] };
 // 第三十三版起種族決定數值塊：競技場一律用同一個種族（預設哥布林，整平的空地本來就是哥布林；FE_ARENA_RACE 可以指定別的種族）。
 // 原本看腳下的生態區，對打途中怪物侵蝕地面（苔原、沙漠）之後，後面生的怪物會變成雪怪、骷髏

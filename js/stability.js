@@ -48,7 +48,7 @@
     return lv;
   }
 
-  // 重新量整體 BUG 值，狀態變了就在訊息框寫一行（quiet 時不寫）；回到安穩時補回陣亡的士兵
+  // 重新量整體 BUG 值，狀態變了就在訊息框寫一行（quiet 時不寫）
   function update(game, quiet) {
     const was = state(game);
     const now = stateFor(total(game), was, scale(game, 'CUTS'));
@@ -59,7 +59,6 @@
         if (now === 2 && game.soldiers && game.soldiers.length) game.say(MSG.soldiers, 'world');
       }
     }
-    if (state(game) === 0) game.refillSoldiers();
   }
 
   // ---- 穩定值：每小時往下掉、生怪物、修補 ----
@@ -201,6 +200,8 @@
     const taken = new Set();
     for (const m of game.monsters) taken.add(m.x + ',' + m.y);
     for (const s of game.soldiers) taken.add(s.x + ',' + s.y);
+    for (const c of game.mates) taken.add(c.x + ',' + c.y);
+    if (game.hero) taken.add(game.hero.x + ',' + game.hero.y);
     for (const n of w.npcs) taken.add(n.x + ',' + n.y);
     for (const c of w.chests) taken.add(c.x + ',' + c.y);
     taken.add(p.x + ',' + p.y);

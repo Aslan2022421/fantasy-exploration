@@ -42,7 +42,7 @@
     }
     playlog.push({
       t: game.turn, k: game.ticks || 0, a: label, x: p.x, y: p.y, hp: p.hp, mhp: p.maxHp, lv: game.level, exp: game.exp,
-      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.attackText(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: p.copper, ex: p.exhaust, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
+      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.attackText(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: game.hero.copper, ex: p.exhaust, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
       m: msgs.reverse(),
     });
     if (playlog.length > PLAYLOG_MAX) playlog = playlog.slice(-PLAYLOG_MAX);
@@ -145,7 +145,7 @@
   function startWalk(path, npc) {
     walk = { path: path.slice(), npc, seen: seenMonsters(), timer: null };
     const step = () => {
-      if (!walk || game.talking != null || FE.UI.win() || game.player.points > 0) return stopWalk();
+      if (!walk || game.talking != null || FE.UI.win() || game.hero.points > 0) return stopWalk();
       if (!walk.path.length) {
         const n = walk.npc;
         stopWalk();
@@ -294,6 +294,18 @@
     }
   }
 
+  // 換人操作（Tab 或點隊員欄）：i 沒給就換下一位；換了不花時間，存一次檔
+  function switchParty(i) {
+    stopWalk();
+    clearRoute();
+    if (game.cycleControl(i)) FE.Save.save(game);
+    FE.UI.update();
+  }
+  document.getElementById('party').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-party]');
+    if (b && ready && game.talking == null && !FE.UI.win() && !game.aim) switchParty(Number(b.dataset.party));
+  });
+
   function toggleWindow(name) {
     cancelRoute();
     if (FE.UI.win() === name) FE.UI.closeWindow();
@@ -324,7 +336,7 @@
       return;
     }
     // 升級加點視窗開著：只能按 1～6 選屬性，其他鍵都不作用
-    if (game.player.points > 0) {
+    if (game.hero.points > 0) {
       e.preventDefault();
       if (/^[1-6]$/.test(k)) dispatch('升級加點', () => game.spendPoint(FE.ATTRS[Number(k) - 1].key));
       return;
@@ -405,6 +417,12 @@
         game.aimCancel();
         FE.UI.update();
       }
+      return;
+    }
+    // Tab：換下一位操作（冒險者 → 隊友 1 → 隊友 2 → ⋯⋯ → 冒險者；第三十六版之一）。不花時間；視窗開著時不作用
+    if (k === 'tab') {
+      e.preventDefault();
+      if (!FE.UI.win()) switchParty();
       return;
     }
     if (k === 'escape') {
@@ -520,7 +538,7 @@
     // 右下角的視窗按鈕：背包、角色、地圖
     const wb = e.target.closest && e.target.closest('[data-win]');
     if (wb) {
-      if (ready && game.talking == null && game.player.points <= 0) toggleWindow(wb.dataset.win);
+      if (ready && game.talking == null && game.hero.points <= 0) toggleWindow(wb.dataset.win);
       return;
     }
     const b = e.target.closest && e.target.closest('[data-act]');
@@ -546,13 +564,13 @@
   // 地圖上的滑鼠（第三十一版）：右鍵查看那一格；左鍵點怪物把牠設成目標（不出手、不算動作，同撞上去）
   document.getElementById('map').addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (!ready || game.talking != null || game.player.points > 0) return;
+    if (!ready || game.talking != null || game.hero.points > 0) return;
     const c = FE.UI.cellAt(e.clientX, e.clientY);
     cancelRoute();
     if (c) FE.UI.look(c.x, c.y);
   });
   document.getElementById('map').addEventListener('click', (e) => {
-    if (!ready || game.talking != null || FE.UI.win() || game.player.points > 0) return;
+    if (!ready || game.talking != null || FE.UI.win() || game.hero.points > 0) return;
     const c = FE.UI.cellAt(e.clientX, e.clientY);
     if (!c) return;
     const m = game.monsterAt(c.x, c.y);
@@ -614,7 +632,7 @@
   // 視窗：右上角的圖示列開關各視窗；設定裡也有各視窗的按鈕；點視窗外面或「Esc 關閉」關掉
   document.getElementById('iconbar').addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-win]');
-    if (b && ready && game.talking == null && game.player.points <= 0) toggleWindow(b.dataset.win);
+    if (b && ready && game.talking == null && game.hero.points <= 0) toggleWindow(b.dataset.win);
   });
   document.getElementById('overlay').addEventListener('click', (e) => {
     const select = e.target.closest && e.target.closest('[data-bag-select]');
@@ -632,7 +650,7 @@
 
   document.getElementById('playerName').addEventListener('change', (e) => {
     const name = e.target.value.trim() || '冒險者';
-    game.player.name = name;
+    game.hero.name = name;
     FE.store.save('fe.name', name);
     FE.Save.save(game);
     FE.UI.update();

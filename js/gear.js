@@ -57,13 +57,15 @@
   const sellPrice = (g, cha) => Math.max(1, Math.round(value(g) * C.SILVER * C.SELL_RATE * (g.dur / g.max) * sellFactor(cha)));
   // 礦石賣給工匠：一顆 5 銀×魅力
   const orePrice = (n, cha) => Math.round(n * C.ORE_PRICE * C.SILVER * sellFactor(cha));
+  // 藥草賣給商人：一份 1 銀×魅力
+  const herbPrice = (n, cha) => Math.round(n * C.HERB_PRICE * C.SILVER * sellFactor(cha));
 
   // 修復：鐵匠、武器匠、盔甲匠都修到完整（REPAIR_ALL 設成 false 就只修回損失的一半）。回傳 { restore: 修回幾點耐久, cost: 費用（銅） }；耐久已滿 restore 是 0。
   // 費用＝修回的比例×原價×經濟倍率×魅力（至少 1 銅）；工具不看經濟
   function repairQuote(g, v, cha) {
     const missing = g.max - g.dur;
     if (missing <= 0) return { restore: 0, cost: 0 };
-    const all = FE.Steading.townish(v) ? C.REPAIR_ALL.town : C.REPAIR_ALL.village; // 城市照城鎮（第三十四版）
+    const all = FE.Steading.shopTown(v) ? C.REPAIR_ALL.town : C.REPAIR_ALL.village; // 城市、堡壘、要塞照城鎮（第三十四版、第三十六版之一）
     const restore = all ? missing : Math.ceil(missing / 2);
     const econ = def(g).cat === 'tool' ? 1 : FE.Steading.shopFactor(v);
     return { restore, cost: Math.max(1, Math.round((restore / g.max) * value(g) * C.SILVER * C.REPAIR_RATE * econ * buyFactor(cha))) };
@@ -72,7 +74,7 @@
   // 打造：礦石數、工錢（銅；原價一半，乘聚落經濟與魅力）、品質範圍（村莊鐵匠普通～精良，城鎮做工好～優秀）
   function craftQuote(type, v, cha) {
     const d = G[type];
-    const kind = FE.Steading.townish(v) ? 'town' : 'village';
+    const kind = FE.Steading.shopTown(v) ? 'town' : 'village';
     return { ore: d.ore, fee: Math.round(d.price * C.SILVER * C.CRAFT_FEE_RATE * FE.Steading.shopFactor(v) * buyFactor(cha)), range: C.CRAFT_RANGE[kind] };
   }
 
@@ -255,7 +257,7 @@
   }
 
   // ---- 商店 ----
-  // 鐵匠與武器匠販售武器、彈藥、消耗品、陷阱、門鎖工具與裝備包；盔甲匠販售防具與盾牌。
+  // 鐵匠與武器匠販售武器、彈藥、礦鎬與鐮刀；盔甲匠販售防具與盾牌；商人販售消耗品、陷阱、門鎖工具與裝備包（第三十六版之一）。
   // buy 依類別整理商品資料，交易介面會合併成單一清單；quals：賣哪幾種品質（工具固定普通）；repair：修哪幾類（GEAR 的 cat）；craft：能打造的；sell：收哪幾類
   const SHOPS = {
     blacksmith: {
@@ -265,8 +267,6 @@
         axe: ['waraxe', 'club', 'warhammer', 'handaxe', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul'],
         pole: ['spear', 'shortspear', 'staff', 'javelin', 'glaive', 'halberd', 'trident', 'lance'],
         ranged: ['bow', 'longbow', 'arrow', 'sling', 'slingBullet'],
-        supplies: ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil'],
-        kit: ['caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'],
         armor: ['padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield'],
         tool: ['pick', 'sickle'],
       },
@@ -282,8 +282,6 @@
         axe: ['waraxe', 'greataxe', 'handaxe', 'club', 'warhammer', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul'],
         pole: ['spear', 'shortspear', 'staff', 'whip', 'javelin', 'glaive', 'halberd', 'trident', 'lance'],
         ranged: ['bow', 'longbow', 'crossbow', 'handcrossbow', 'heavycrossbow', 'sling', 'arrow', 'bolt', 'slingBullet', 'musket', 'pistol', 'blowgun', 'bullet', 'needle'],
-        supplies: ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil'],
-        kit: ['caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'],
         tool: ['pick', 'sickle'],
       },
       quals: [0, 1],
@@ -305,6 +303,19 @@
       sell: ['armor', 'shield'],
     },
   };
+  // 商人（第三十六版之一，每個聚落一位）：消耗品、陷阱、開鎖工具、裝備包原本放在鐵匠與武器匠那裡，搬到這裡；沒有修理與打造，只收購藥草
+  SHOPS.merchant = {
+    title: '商人',
+    buy: {
+      supplies: ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil'],
+      kit: ['caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'],
+    },
+    quals: [0],
+    repair: [],
+    craft: [],
+    sell: [],
+    tabs: ['buy', 'sell'],
+  };
   const CAT_NAMES = { blade: '劍與刀', axe: '斧與錘', pole: '長柄與法杖', ranged: '遠程武器與彈藥', supplies: '藥水與投擲物', kit: '陷阱、門鎖與裝備包', armor: '防具與盾牌', armorL: '輕甲與衣袍', armorM: '中甲', armorH: '重甲', shieldC: '盾牌', tool: '工具' };
   // 舊商店頁面相容用：依買賣資料的內部分類整理打造配方
   function craftCats(S) {
@@ -315,14 +326,15 @@
     }
     return out;
   }
-  // 工匠是哪一種店：村莊的 smith 是鐵匠，城鎮的 smith 是武器匠，armorer 是盔甲匠；不是工匠回傳 null
+  // 工匠是哪一種店：村莊的 smith 是鐵匠，城鎮、城市、堡壘、要塞的 smith 是武器匠，armorer 是盔甲匠，merchant 是商人；不是店家回傳 null
   function shopOf(npc, v) {
     if (!npc) return null;
     if (npc.role === 'armorer') return 'armorer';
-    if (npc.role === 'smith') return FE.Steading.townish(v) ? 'weaponsmith' : 'blacksmith';
+    if (npc.role === 'merchant') return 'merchant';
+    if (npc.role === 'smith') return FE.Steading.shopTown(v) ? 'weaponsmith' : 'blacksmith';
     return null;
   }
-  const isShopkeeper = (n) => !!n && (n.role === 'smith' || n.role === 'armorer');
+  const isShopkeeper = (n) => !!n && (n.role === 'smith' || n.role === 'armorer' || n.role === 'merchant');
   // 能不能放副手（雙持）：武器、不是弓和弩，而且冒險者的體型能單手拿（第二十九版）
   const offOk = (p, g) => !!g && def(g).cat === 'weapon' && !def(g).ammo && FE.Char.grip(p, g) === 'one';
 
@@ -354,7 +366,7 @@
   }
 
   FE.Gear = {
-    def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
+    def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, herbPrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
     equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerAC, playerDefense, counterChance, counterDamage, wearTier, wearPenalty,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText,
     SHOPS, CAT_NAMES, craftCats, shopOf, isShopkeeper, offOk, shopEntries, productName, productText,

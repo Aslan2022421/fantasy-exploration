@@ -236,7 +236,7 @@ function compareReach(world, r, monsters, res) {
 // 量測：on 時才記（機器人模擬）；cond 是對照組的名字（'none' 沒有防具、'heavy' 穿重甲），armorCmp[cond] = 怪物出手打冒險者的次數與總傷害
 // （第二十九版起，打倒怪物要幾下和各職業被打一下的傷害改在競技場量，見 runArena，不再從世界模擬統計）
 const measure = { on: false, cond: null, armorCmp: {} };
-const combat = { player: {}, monster: {}, soldier: {}, reduced: 0, soldierHits: 0, onSoldier: 0, dodged: 0, blocked: 0, resisted: 0, crit: 0, counters: 0, opportunity: 0, opportunityHit: 0, chain: 0, negative: 0, events: 0, pdmg: 0, mdmg: 0, pn: 0, mn: 0 };
+const combat = { player: {}, monster: {}, soldier: {}, mate: {}, reduced: 0, soldierHits: 0, onSoldier: 0, dodged: 0, blocked: 0, resisted: 0, crit: 0, counters: 0, opportunity: 0, opportunityHit: 0, chain: 0, negative: 0, events: 0, pdmg: 0, mdmg: 0, pn: 0, mn: 0 };
 FE.Combat.hook = (e) => {
   combat.events++;
   const t = combat[e.by];
@@ -253,22 +253,18 @@ FE.Combat.hook = (e) => {
   if (e.by === 'player') { combat.pdmg += e.dmg; combat.pn++; } else if (e.by === 'monster') { combat.mdmg += e.dmg; combat.mn++; }
   if (e.reduced > 0) combat.reduced++;
   // 對照組：怪物出手打冒險者，每一下受到的傷害
-  if (measure.on && measure.cond && e.by === 'monster' && e.d && e.d.equip) {
+  if (measure.on && measure.cond && e.by === 'monster' && e.d && e.d.equip && !e.d.role) { // 冒險者（士兵、隊友有 role）
     const r = measure.armorCmp[measure.cond] || (measure.armorCmp[measure.cond] = { n: 0, dmg: 0, hit: 0 });
     r.n++;
     r.dmg += e.dmg;
     if (e.dmg > 0) r.hit++;
   }
-  // 士兵：只打事件與侵蝕生的小怪物（m.small），從不碰創世時的怪物；不反擊；怪物打士兵也走同一套判定
+  // 士兵：只打事件與侵蝕生的小怪物（m.small），從不碰創世時的怪物（被打時照冒險者那一套可以反擊，第三十六版之一）；怪物打士兵也走同一套判定
   if (e.by === 'soldier') {
     combat.soldierHits++;
-    if (!e.d.small || e.d.role === 'soldier') fail(`士兵攻擊了不該碰的對象：${e.d.name}（small=${e.d.small}）`);
-    if (e.counter) fail('士兵反擊了');
+    if (!e.counter && (!e.d.small || e.d.role === 'soldier')) fail(`士兵攻擊了不該碰的對象：${e.d.name}（small=${e.d.small}）`);
   }
-  if (e.d && e.d.role === 'soldier') {
-    combat.onSoldier++;
-    if (e.countered) fail('士兵被打時觸發了他的反擊');
-  }
+  if (e.d && e.d.role === 'soldier') combat.onSoldier++;
 };
 
 

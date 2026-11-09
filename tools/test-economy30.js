@@ -309,7 +309,8 @@ function testEconomy30() {
       const g = new FE.Game(4000 + s);
       g.start();
       for (let k = 0; k < 3; k++) g.createChunk(false);
-      for (const o of g.world.npcs.concat(g.soldiers)) { cnt[o.race]++; n++; }
+      for (const o of g.world.npcs) { cnt[o.race]++; n++; } // 士兵與隊友的種族照職業套版（第三十六版之一），不在這個比例裡
+      for (const o of g.soldiers) if (!o.race || !FE.PLAYER_RACES[o.race]) fail('時間與經濟 士兵沒有種族');
     }
     ok(n > 200 && Object.values(cnt).reduce((a, b) => a + b, 0) === n, `每個人都該有種族（${n} 人：${JSON.stringify(cnt)}）`);
     ok(Math.abs(cnt.human / n - 0.7) < 0.07 && Math.abs(cnt.dwarf / n - 0.15) < 0.05 && Math.abs(cnt.elf / n - 0.15) < 0.05, `種族比例 人類 ${(cnt.human / n).toFixed(2)}、矮人 ${(cnt.dwarf / n).toFixed(2)}、精靈 ${(cnt.elf / n).toFixed(2)}`);

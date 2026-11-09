@@ -1,26 +1,30 @@
-// 攻防判定：冒險者、怪物與士兵共用同一套流程（使用者給的流程圖：命中→失手→閃避→暴擊→格擋→反擊）。
+// 攻防判定：冒險者、隊友、士兵與怪物共用同一套流程（使用者給的流程圖：命中→失手→閃避→暴擊→格擋→反擊）。
+// 第三十六版之一：冒險者、隊友、士兵都是有裝備欄的「角色」（isChar），出手與挨打照冒險者那一套（AC、熟練加值、武器骰、防具減傷）；
+// 訊息裡的「你」只指玩家操作的那一位（you）；技能只有冒險者與隊友練（士兵不升級），磨損只算冒險者的裝備。
 // 第二十八版：傷害改用骰子、優勢與劣勢、傷害種類、精通、遠程與範圍攻擊（射程、視線）。
 // 遊戲內的文字一律叫「怪物」；訊息只寫擲骰結果與看得到的後果。
 (function () {
   const C = FE.CONFIG;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const isPlayer = (game, o) => o === game.player;
+  const isChar = (o) => !!o && !!o.equip;
   const isSoldier = (o) => !!o && o.role === 'soldier';
+  // 玩家操作的那一位（訊息寫「你」）：隊友或冒險者自動行動的那一下不算（game.autoAct）
+  const isYou = (game, o) => o === game.player && !game.autoAct;
+  const trains = (o) => isChar(o) && !isSoldier(o); // 練技能：冒險者、隊友
   const dist = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); // 第三十五版之四：八方向，斜走一步算 1 格
   const HITS = ['crit', 'hit', 'hard']; // d20 判定「命中」的三段（被閃開也算命中，只是吃一半傷害）
 
-  // 防禦數字：冒險者看身上的防具（閃避）和副手的盾牌（格擋機率與格擋值，沒拿盾牌是 0，見 gear.js 的 playerDefense），
-  // 怪物看世界等級（bugs.js 的 monsterDef；防禦主要是數值塊的 AC），士兵閃避、格擋、反擊都是 0
+  // 防禦數字：角色（冒險者、隊友、士兵）看身上的防具（閃避）和副手的盾牌（格擋機率與格擋值，沒拿盾牌是 0，見 gear.js 的 playerDefense），
+  // 怪物看世界等級（bugs.js 的 monsterDef；防禦主要是數值塊的 AC）
   function defense(game, o) {
-    if (isPlayer(game, o)) return FE.Gear.playerDefense(o);
-    if (isSoldier(o)) return { dodge: 0, counter: 0, block: 0, blockMax: 0 };
+    if (isChar(o)) return FE.Gear.playerDefense(o);
     return FE.monsterDef(o);
   }
 
-  // AC（第三十三版）：冒險者看身上的防具、敏捷與盾牌（gear.js 的 playerAC），再加法術的加護（魔法防禦、神聖加護、守護，game.wardAC）；
-  // 怪物看 SRD 數值塊（bugs.js 的 statMonster），士兵照小怪物（soldierStats）；沒有的當 10
+  // AC（第三十三版）：角色看身上的防具、敏捷與盾牌（gear.js 的 playerAC），再加法術的加護（魔法防禦、神聖加護、守護，game.wardAC）；
+  // 怪物看 SRD 數值塊（bugs.js 的 statMonster）；沒有的當 10
   function acOf(game, o) {
-    if (isPlayer(game, o)) return FE.Gear.playerAC(o) + (game.wardAC ? game.wardAC() : 0);
+    if (isChar(o)) return FE.Gear.playerAC(o) + (game.wardAC ? game.wardAC(o) : 0);
     return o.ac != null ? o.ac : C.BASE_AC;
   }
 
@@ -34,11 +38,11 @@
     if (d.blockMax > 0) o.block = Math.min(d.blockMax, currentBlock(o, d.blockMax) + d.blockMax * C.BLOCK_REGEN);
   }
 
-  // 傷害種類對防守方減傷的影響（只有冒險者有防具；怪物和士兵目前沒有減傷，到第三十一版才有）。
+  // 傷害種類對防守方減傷的影響（只有角色有防具；怪物沒有減傷）。
   // type：slash 揮砍（打中甲、重甲時多擋 1 點）、pierce 穿刺（無視 pierce 比例的物理減傷，無條件捨去）、
   // blunt 鈍擊（無視一半物理減傷，無條件進位）、magic／holy 只看魔法減傷；沒給（怪物的攻擊）照一般物理減傷。回傳要扣幾點
   function reduction(game, D, type, pierce) {
-    if (!isPlayer(game, D)) return 0;
+    if (!isChar(D)) return 0;
     if (type === 'magic' || type === 'holy') return FE.Gear.magicReduce(D);
     const phys = FE.Gear.physReduce(D);
     if (type === 'slash') return phys + (D.equip.body && (FE.GEAR[D.equip.body.type].cls === 'medium' || FE.GEAR[D.equip.body.type].cls === 'heavy') ? 1 : 0);
@@ -48,14 +52,14 @@
   }
 
   // 傷害（還沒算閃避、抗性、格擋、減傷）。times 是傷害骰擲幾次：暴擊、重擊各讓次數加倍。
-  // 冒險者：骰子＋傷害加值（見 char.js 的 profile），徒手固定 BARE_DMG，最少 1；冒險者的反擊是固定值（gear.js 的 counterDamage，暴擊算兩次）。
-  // 怪物與士兵（第三十三版）：照 SRD 數值塊的傷害骰（暴擊時骰子擲兩次）＋傷害加值，有優勢時再加 advDie（哥布林的彎刀），
+  // 角色：骰子＋傷害加值（見 char.js 的 profile），徒手固定 BARE_DMG，最少 1；角色的反擊是固定值（gear.js 的 counterDamage，暴擊算兩次）。
+  // 怪物（第三十三版）：照 SRD 數值塊的傷害骰（暴擊時骰子擲兩次）＋傷害加值，有優勢時再加 advDie（哥布林的彎刀），
   // 再乘世界等級的攻擊加成、四捨五入，至少 1；狂亂把這個數字變成 0～兩倍之間忽高忽低。
   // 沒有傷害骰的（場景檢查直接設 m.atk、m.die = null）照第三十二版的攻擊力算：攻擊力 ±1，狂亂 0～兩倍，暴擊時擲兩次加總
   function baseDamage(game, A, prof, times, opts, adv) {
     const r = game.rng;
-    if (isPlayer(game, A) && opts && opts.counter) return FE.Gear.counterDamage(A) * times;
-    if (isPlayer(game, A)) {
+    if (isChar(A) && opts && opts.counter) return FE.Gear.counterDamage(A) * times;
+    if (isChar(A)) {
       if (prof.fixedDamage != null) return prof.fixedDamage;
       const raw = prof.die ? FE.rollDice(r, prof.die, times) : C.BARE_DMG * times;
       return Math.max(1, raw + prof.dmg);
@@ -117,7 +121,7 @@
     return dist(p, m) <= range[1] && lineClear(game.world, p, m, FE.Char.attrMod(p, 'wis'));
   }
 
-  // 推擊：把目標從攻擊方直線推開最多 n 格，下一格走不過去（擋路的地形、斷崖、別的怪物、村民、士兵、寶箱、聚落周圍的圈）就停。回傳推了幾格
+  // 推擊：把目標從攻擊方直線推開最多 n 格，下一格走不過去（擋路的地形、斷崖、別的怪物、村民、士兵、隊友、寶箱、聚落周圍的圈）就停。回傳推了幾格
   function push(game, A, D, n) {
     const sx = Math.sign(D.x - A.x);
     const sy = Math.sign(D.y - A.y);
@@ -134,8 +138,8 @@
     return moved;
   }
 
-  // A 對 D 出手一次。kind 是 'attack' 或 'deep'（重擊）。攻擊方與防守方可以是冒險者、怪物、士兵（怪物與士兵互打）。
-  // opts（冒險者出手時）：
+  // A 對 D 出手一次。kind 是 'attack' 或 'deep'（重擊）。攻擊方與防守方可以是冒險者、隊友、士兵、怪物。
+  // opts（角色出手時）：mode 等只有角色看；
   //   mode：melee（近戰，預設；觸及也是）、shoot（弓箭）、throw（投擲）、spell（法師的範圍魔攻）、bash（戰士盾擊）
   //   weapon：這一下用的武器（雙持時副手的短刀；null 是徒手；沒給就是主手）、off：雙持時副手那一下（傷害不加正的屬性修正值）
   //   range：遠程的 [正常射程, 最遠射程]、ammoQ：射出去的箭的品質（穿甲看它）
@@ -143,14 +147,18 @@
   //   noWear／noTrain：範圍魔攻的第二隻以後不再磨損法杖、不再練技能（一個動作只算一次）
   //   cleave：順劈（巨斧）的第二隻：不加屬性修正值，也不再磨損、練技能
   // opts.noCounter：這一下不觸發反擊（反擊本身、趁機攻擊）；opts.counter／opts.opportunity 只影響訊息與統計。
-  // 傷害、倒下（怪物走 game.defeat、冒險者走 game.die、士兵走 game.soldierDown）都在這裡處理；回傳這一下的結果。
+  // 傷害、倒下（怪物走 game.defeat、冒險者走 game.die、隊友走 game.mateDown、士兵走 game.soldierDown）都在這裡處理；回傳這一下的結果。
   function resolveAttack(game, A, D, kind, opts) {
     opts = opts || {};
     const r = game.rng;
-    const aP = isPlayer(game, A);
+    const aP = isChar(A);     // 攻擊方是角色（用角色的算法）
     const aS = isSoldier(A);
-    const dP = isPlayer(game, D);
+    const dP = isChar(D);
     const dS = isSoldier(D);
+    const aY = isYou(game, A); // 攻擊方是玩家操作的那一位（訊息寫「你」、勉強命中才會被必定反擊）
+    const dY = isYou(game, D);
+    const hero = game.hero || game.player;
+    const nameOf = (o, y) => (y ? '你' : isSoldier(o) ? `士兵${o.name}` : isChar(o) ? o.name : o.name);
     const cA = game.world.cell(A.x, A.y);
     const cD = game.world.cell(D.x, D.y);
     const mode = aP ? opts.mode || 'melee' : null;
@@ -161,7 +169,7 @@
     if (prof && opts.ammoQ !== undefined) prof.pierce = FE.QUALITIES[opts.ammoQ].pierce; // 射出去的箭：穿甲看箭矢的品質
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值；
-    // 怪物與士兵加自己的攻擊加值（SRD 數值塊，第三十三版）。d20＋加值到對方的 AC 才命中（acOf；法術的加護算在 AC 裡）
+    // 怪物加自己的攻擊加值（SRD 數值塊，第三十三版）。d20＋加值到對方的 AC 才命中（acOf；法術的加護算在 AC 裡）
     // 力竭（第三十版）：冒險者出手的 d20 每級 −2
     let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + prof.hit - C.EXHAUST_D20 * (A.exhaust || 0) : A.toHit || 0;
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
@@ -175,11 +183,11 @@
     if (prof && prof.heavy && !opts.counter) dis.push('重型');
     if (prof && prof.offClumsy) dis.push('副手不順手');
     if (aP && ranged && opts.range && dist(A, D) > opts.range[0]) dis.push('超出正常射程');
-    if (aP && ranged && game.adjacentMonsters().length) dis.push('貼著怪物');
-    // 怪物的特性（第三十三版，照 SRD 5.2.1）：
+    if (aP && ranged && game.adjacentMonsters(A).length) dis.push('貼著怪物');
+    // 怪物的特性（第三十三版，照 SRD 5.2.1）：（冒險者、隊友、士兵不是怪物，沒有）
     //   群體戰術：目標旁邊（八個方向貼著，SRD 的 5 呎）有這隻以外的怪物同伴，出手有優勢
     //   靈巧脫身：哥布林貼上來時躲進死角（ai.js 的 nimbleHide），藏著的下一次出手有優勢（用掉就沒了）
-    const isMon = !aP && !aS;
+    const isMon = !aP;
     if (isMon && FE.hasTrait(A, 'pack') && game.monsters.some((o) => o !== A && o.hp > 0 && Math.max(Math.abs(o.x - D.x), Math.abs(o.y - D.y)) === 1)) adv.push('群體戰術');
     if (isMon && A.hidden && !opts.cling) adv.push('靈巧脫身');
     const advState = adv.length && dis.length ? 0 : adv.length ? 1 : dis.length ? -1 : 0;
@@ -243,7 +251,7 @@
         dmg = baseDamage(game, A, prof, deep * (crit ? 2 : 1), opts, advState); // 沒閃開：暴擊時傷害骰擲兩次加總
       }
       // 易傷（第三十三版，骷髏怕鈍擊）：暴擊之後、格擋之前，這種傷害加倍
-      if (dmg > 0 && !dP && !dS && D.vuln && D.vuln.includes(hitType)) {
+      if (dmg > 0 && !dP && D.vuln && D.vuln.includes(hitType)) {
         dmg *= 2;
         vulnerable = true;
       }
@@ -270,19 +278,19 @@
     }
 
     // 磨損：冒險者出手一次磨這一下用的武器一次（盾擊磨盾牌），格擋成功一次磨盾牌一次，挨打時防具減傷有作用一次磨身上防具一次
-    // （每次磨損的機率＝1÷品質價值倍率，見 gear.js 的 wear）
+    // （每次磨損的機率＝1÷品質價值倍率，見 gear.js 的 wear）。只算冒險者本人的裝備，隊友與士兵的裝備不磨損
     const armorId = dP ? FE.Char.armorSkillId(D) : null; // 防具磨壞前先記下穿的是哪一類
-    const wornOut = aP && !opts.noWear ? (mode === 'bash' ? FE.Gear.shieldOf(A) : wpn) : null;
+    const wornOut = A === hero && !opts.noWear ? (mode === 'bash' ? FE.Gear.shieldOf(A) : wpn) : null;
     if (wornOut) FE.Gear.wear(game, wornOut);
-    if (dP && absorbed > 0 && FE.Gear.shieldOf(D)) FE.Gear.wear(game, FE.Gear.shieldOf(D));
-    if (dP && reduced > 0 && D.equip.body) FE.Gear.wear(game, D.equip.body);
+    if (D === hero && absorbed > 0 && FE.Gear.shieldOf(D)) FE.Gear.wear(game, FE.Gear.shieldOf(D));
+    if (D === hero && reduced > 0 && D.equip.body) FE.Gear.wear(game, D.equip.body);
     // 技能用了就成長：武器出手一次（打中沒打中都算；遠程另外算射擊）、閃開一次、格擋成功一次各練一次；反擊、盾擊、徒手不練
     // 第二十九版：出手命中 10 點經驗、沒命中 5 點；閃開一次、格擋成功一次、穿著防具被打中而且防具擋下了傷害各 10 點（再乘智力的倍率）
-    if (aP && !opts.counter && !opts.noTrain) for (const s of prof.skills) FE.Char.useSkill(game, s, hitKey ? C.SKILL_EXP_HIT : C.SKILL_EXP_MISS);
-    if (dP && dodged) FE.Char.useSkill(game, 'dodge', C.SKILL_EXP_DODGE);
-    if (dP && dmg > 0 && game.wardHit) game.wardHit(); // 守護：被打中幾次就結束
-    if (dP && absorbed > 0) FE.Char.useSkill(game, 'shield', C.SKILL_EXP_BLOCK);
-    if (dP && reduced > 0 && armorId) FE.Char.useSkill(game, armorId, C.SKILL_EXP_ARMOR); // 穿哪一類就練哪一項（輕甲、中甲、重甲）
+    if (trains(A) && !opts.counter && !opts.noTrain) for (const s of prof.skills) FE.Char.useSkill(game, s, hitKey ? C.SKILL_EXP_HIT : C.SKILL_EXP_MISS, A);
+    if (trains(D) && dodged) FE.Char.useSkill(game, 'dodge', C.SKILL_EXP_DODGE, D);
+    if (dP && dmg > 0 && game.wardHit) game.wardHit(D); // 守護：被打中幾次就結束
+    if (trains(D) && absorbed > 0) FE.Char.useSkill(game, 'shield', C.SKILL_EXP_BLOCK, D);
+    if (trains(D) && reduced > 0 && armorId) FE.Char.useSkill(game, armorId, C.SKILL_EXP_ARMOR, D); // 穿哪一類就練哪一項（輕甲、中甲、重甲）
 
     // 傷害與倒下：倒下的處理（經驗值、修好地形、醒來）等這一下的訊息寫完才做，訊息才會先寫打了多少、再寫倒下
     let killed = false;
@@ -292,13 +300,7 @@
         D.hp -= dmg;
         if (D.hp <= 0) {
           killed = true;
-          fall = () => game.die(A);
-        }
-      } else if (dS) {
-        D.hp -= dmg;
-        if (D.hp <= 0) {
-          killed = true;
-          fall = () => game.soldierDown(D, A);
+          fall = D === hero ? () => game.die(A) : dS ? () => game.soldierDown(D, A) : () => game.mateDown(D, A);
         }
       } else {
         D.hp = Math.max(0, D.hp - dmg);
@@ -306,16 +308,16 @@
         if (D.regen && C.REGEN_STOP.includes(hitType)) D.noRegen = true;
         if (D.hp <= 0 && game.monsters.includes(D)) {
           killed = true;
-          fall = () => game.defeat(D, aS ? A : null); // 士兵打倒的怪物，冒險者不拿經驗值也不拿算力
+          fall = () => game.defeat(D, aS ? A : null); // 士兵打倒的怪物，冒險者不拿經驗值也不拿算力（隊友打倒的照冒險者打倒的算）
         }
       }
     }
-    const alive = !killed && (dP || (dS ? game.soldiers.includes(D) : game.monsters.includes(D)));
+    const alive = !killed && (dP ? game.isAlive(D) : game.monsters.includes(D));
 
     // 精通：冒險者這一下命中、目標還活著時才有效果（怪物沒有精通）
     const effects = [];
     const mastery = aP && !opts.counter ? prof.mastery : null;
-    if (mastery && hitKey && alive && !dP && !dS) {
+    if (mastery && hitKey && alive && !dP) {
       if (mastery === 'sap') {
         D.sapped = true;
         effects.push('牠被削弱了，下一次出手有劣勢');
@@ -335,39 +337,47 @@
       }
     }
 
-    // 訊息：一次攻擊一行。士兵與怪物互打時，只有離冒險者在視野內才寫，免得訊息洗版
+    // 訊息：一次攻擊一行。隊友、士兵與怪物互打時，只有離玩家操作的那一位在視野內才寫，免得訊息洗版
     const p = game.player;
     const near = (o) => dist(o, p) <= C.SIGHT; // 八方向（第三十五版之四）
-    if (aP || dP || near(A) || near(D)) {
-      const aName = aP ? '你' : aS ? '士兵' : A.name;
-      const dName = dP ? '你' : dS ? '士兵' : D.name;
-      const pD = dP ? '你' : dS ? '他' : '牠';
+    if (aY || dY || near(A) || near(D)) {
+      const aName = nameOf(A, aY);
+      const dName = nameOf(D, dY);
+      const pD = dY ? '你' : dP ? '他' : '牠';
       const wName = wpn ? FE.Gear.name(wpn) : '';
-      const heads = {
+      const heads = aY ? {
         shoot: `你用${wpn ? FE.GEAR[wpn.type].name : '武器'}射向${dName}`,
         throw: `你把${wName}擲向${dName}`,
         item: `你把${opts.item ? opts.item.name : '物品'}擲向${dName}`,
         spell: `魔力炸開，波及${dName}`,
         light: `你放出神聖之光，照向${dName}`,
         bash: `你用盾牌撞向${dName}`,
+      } : {
+        shoot: `${aName}用${wpn ? FE.GEAR[wpn.type].name : '武器'}射向${dName}`,
+        throw: `${aName}把${wName}擲向${dName}`,
+        spell: `${aName}的魔力炸開，波及${dName}`,
+        light: `${aName}放出神聖之光，照向${dName}`,
+        bash: `${aName}用盾牌撞向${dName}`,
       };
+      heads.bolt = aY ? `你射出魔力，打向${dName}` : `${aName}射出魔力，打向${dName}`;
+      heads.holy = aY ? `你放出神聖之光，照向${dName}` : `${aName}放出神聖之光，照向${dName}`;
       const head = opts.counter
         ? `${aName}反擊`
         : opts.opportunity
-          ? `${aName}趁你轉身出手`
+          ? `${aName}趁${dY ? '你' : dName}轉身出手`
           : aP
-            ? heads[mode] || (kind === 'deep' ? `你對${dName}使出重擊` : opts.cleave ? `你順勢劈向${dName}` : opts.off ? `你用副手攻擊${dName}` : `你攻擊${dName}`)
+            ? heads[mode] || (aY ? (kind === 'deep' ? `你對${dName}使出重擊` : opts.cleave ? `你順勢劈向${dName}` : opts.off ? `你用副手攻擊${dName}` : `你攻擊${dName}`) : `${aName}攻擊${dName}`)
             : `${aName}攻擊${dName}`;
       // 勉強命中（比 AC 高不到 5）的「對方必定反擊」只罰冒險者：怪物與士兵勉強命中只寫「勉強命中」
       // 反擊與趁機攻擊本身不能再被反擊，也只寫「勉強命中」；遠程打不貼著的目標也不會被反擊
-      const rollName = roll.key === 'hard' && (!aP || opts.counter || opts.opportunity || opts.noForced || !adjacent(game, A, D)) ? '勉強命中' : roll.name;
+      const rollName = roll.key === 'hard' && (!aY || opts.counter || opts.opportunity || opts.noForced || !adjacent(game, A, D)) ? '勉強命中' : roll.name;
       const advTxt = roll.adv ? `${roll.adv > 0 ? '優勢' : '劣勢'}：${roll.dice.join('、')}，` : adv.length && dis.length ? '優勢與劣勢抵消，' : '';
       // 優勢的來源寫在前面（群體戰術、靈巧脫身這類只有怪物有的，玩家才看得懂為什麼）
       const why = roll.adv > 0 && adv.length ? `${adv.join('、')}，` : '';
       const tag = `（${why}${advTxt}擲出 ${roll.n}${mod ? (mod > 0 ? '+' : '') + mod : ''} 對 AC ${roll.ac == null ? ac : roll.ac}：${rollName}）`;
       let text;
       if (opts.cling) {
-        text = `${aName}緊緊纏著你，趁你${opts.clingWord || '移開'}出手，${dodged ? '被你閃開了' : `造成 ${dmg} 點傷害${reduced > 0 ? `（護甲擋下 ${reduced} 點）` : ''}${conCut > 0 ? `（你硬挺過去，又少受 ${conCut} 點）` : ''}`}。`;
+        text = `${aName}緊緊纏著${dY ? '你' : dName}，趁${dY ? '你' : pD}${opts.clingWord || '移開'}出手，${dodged ? `被${dY ? '你' : pD}閃開了` : `造成 ${dmg} 點傷害${reduced > 0 ? `（護甲擋下 ${reduced} 點）` : ''}${conCut > 0 ? `（${dY ? '你' : pD}硬挺過去，又少受 ${conCut} 點）` : ''}`}。`;
       } else if (roll.key === 'miss') {
         text = grazed ? `${head}${tag}，沒有打中，但擦傷了${pD}，造成 ${dmg} 點傷害。` : `${head}${tag}，沒有打中。`;
       } else {
@@ -382,7 +392,7 @@
         if (vulnerable) tail += '（正中弱點，傷害加倍）';
         if (absorbed > 0 && dmg > 0) tail += `（${pD}格擋，擋下 ${absorbed} 點）`;
         if (reduced > 0) tail += `（護甲擋下 ${reduced} 點）`;
-        if (conCut > 0) tail += `（你硬挺過去，又少受 ${conCut} 點）`;
+        if (conCut > 0) tail += `（${pD}硬挺過去，又少受 ${conCut} 點）`;
         text = `${head}${tag}，${parts.concat(tail, effects).join('，')}。`;
       }
       game.say(text, dmg > 0 ? (aP ? 'good' : dP ? 'bad' : 'sys') : 'sys');
@@ -390,14 +400,14 @@
     if (fall) fall();
 
     // 6. 反擊：防守方還活著、還貼著，冒險者出手擲出 6～10 時怪物必定反擊，不然擲反擊機率；反擊只能一次，反擊打出的那一下不能再被反擊。
-    // 「必定反擊」只罰冒險者：怪物與士兵擲出 6～10 只是命中，對方照自己的反擊機率擲。士兵不反擊（反擊機率 0）
+    // 「必定反擊」只罰玩家操作的那一位：怪物、士兵與自動行動的隊友擲出 6～10 只是命中，對方照自己的反擊機率擲
     let countered = false;
-    if (alive && !dS && !opts.noCounter && adjacent(game, A, D) && ((aP && roll.key === 'hard' && !opts.noForced) || r() < dd.counter)) countered = true;
+    if (alive && !opts.noCounter && adjacent(game, A, D) && ((aY && roll.key === 'hard' && !opts.noForced) || r() < dd.counter)) countered = true;
     // 必定反擊（擲出 6～10）是不是這一下觸發的；雙持時主手已經觸發就不再觸發第二次（opts.noForced）
-    const forced = countered && aP && roll.key === 'hard' && !opts.noForced;
+    const forced = countered && aY && roll.key === 'hard' && !opts.noForced;
     if (FE.Combat.hook) {
       FE.Combat.hook({
-        by: aP ? 'player' : aS ? 'soldier' : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, vulnerable, advWhy: adv.slice(), ac, reduced, conCut, grazed, dmg, holy,
+        by: aS ? 'soldier' : aP ? (A === hero ? 'player' : 'mate') : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, vulnerable, advWhy: adv.slice(), ac, reduced, conCut, grazed, dmg, holy,
         dmgType, mastery: mastery && hitKey && alive ? mastery : null, effects, weapon: wpn, off: !!opts.off,
         counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D,
       });

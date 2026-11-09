@@ -110,6 +110,8 @@
 
   // 城市照城鎮的規則、堡壘與要塞照村莊的規則（第三十四版，Claude 定的）
   const townish = (v) => !!v && (v.kind === 'town' || v.kind === 'city');
+  // 工匠分工：城鎮、城市、堡壘、要塞是武器匠加盔甲匠（沒有鐵匠），村莊是鐵匠（第三十六版之一：堡壘、要塞原本不算 townish，錯成只有鐵匠）
+  const shopTown = (v) => !!v && (v.kind === 'town' || v.kind === 'city' || v.kind === 'fort' || v.kind === 'fortress');
   function roll(world, rng, v) {
     const town = townish(v);
     const s = { prosperity: town ? 2 : 1, population: 2, tags: [], option: null, problem: null };
@@ -1052,6 +1054,6 @@
 
   FE.Steading = {
     roll, relOk, layout, has, villagerCount, shopFactor, rewardFactor, econ, econTier, addEcon, questEcon, isHoly, related, describe, tagText, placeLandmark,
-    roomAt, canWalk, freeHome, siteScore, exitViable, landmarkKind, NEUTRAL_LANDMARKS, townish, furnish, BUILDINGS,
+    roomAt, canWalk, freeHome, siteScore, exitViable, landmarkKind, NEUTRAL_LANDMARKS, townish, shopTown, furnish, BUILDINGS,
   };
 })();

@@ -2,6 +2,7 @@
 // 所有怪物在自己的 B 點附近徘徊；會追人的怪物（m.small）看得到冒險者就追；貼在冒險者旁邊的怪物不管追不追人，在自己的回合攻擊（圍攻）；
 // 怪物進不了聚落和它周圍那一圈；怪物每走進一格，那一格的穩定值減 STAB_STEP（第三十三版之三，侵蝕拿掉了）。
 // 第三十五版之四：怪物、村民、士兵改八方向移動。
+// 第三十六版之一：士兵是職業角色（出手照冒險者那一套，charAttack）；隊友與沒被操作的冒險者自動行動（partyTurn）；怪物也打隊友。
 (function () {
   const C = FE.CONFIG;
   const DIRS8 = FE.DIRS8; // 第三十五版之四：八方向移動
@@ -211,6 +212,8 @@
   function worldTurn(game) {
     const p = game.player;
     const safe = game.world.inVillage(p.x, p.y);
+    // 玩家操作的那一位以外的隊員（隊友、沒被操作的冒險者）與士兵：怪物貼著他們也會打
+    const others = () => game.party().filter((c) => c !== p).concat(game.soldiers).filter((c) => game.isAlive(c));
     const before = new Map(game.monsters.map((m) => [m, m.x + ',' + m.y])); // 靈巧脫身看這一回合有沒有移動
     for (const m of game.monsters.slice()) {
       if (!game.monsters.includes(m)) continue; // 被反擊打倒了
@@ -236,7 +239,8 @@
         continue;
       }
       // 緩速（鞭子、輕弩的精通）：下一次移動多花 6 刻，怪物 6 刻動一次，所以這一回合牠要移動的話就停在原地（攻擊不受影響）
-      const soldierNear = game.soldiers.length > 0 && game.soldiers.some((s) => touching(game, m, s));
+      const allies = others();
+      const soldierNear = allies.some((s) => touching(game, m, s));
       if (m.slowed > 0 && !soldierNear) {
         m.slowed--;
         continue;
@@ -257,11 +261,12 @@
         }
         continue;
       }
-      // 貼著士兵的怪物也會攻擊（士兵算防守方，閃避格擋都是 0）；同時貼著幾位就打血量最少的
-      if (game.soldiers.length) {
-        const near = game.soldiers.filter((s) => touching(game, m, s)).sort((a, b) => a.hp - b.hp)[0];
+      // 貼著士兵、隊友的怪物也會攻擊（照角色挨打的算法）；同時貼著幾位就打血量最少的
+      if (allies.length) {
+        const near = allies.filter((s) => touching(game, m, s)).sort((a, b) => a.hp - b.hp)[0];
         if (near) {
           FE.Combat.resolveAttack(game, m, near, 'attack');
+          if (game.fell) return; // 沒被操作的冒險者被打倒了，已經回到醒來的地方
           continue;
         }
       }
@@ -367,7 +372,7 @@
     for (const m of game.monsters) occ.add(k(m.x, m.y));
     for (const n of w.npcs) occ.add(k(n.x, n.y));
     for (const c of w.chests) occ.add(k(c.x, c.y));
-    occ.add(k(game.player.x, game.player.y));
+    for (const c of game.party()) occ.add(k(c.x, c.y));
     const mates = new Set(game.soldiers.map((s) => k(s.x, s.y)));
     // 創世時的怪物、合體怪物不歸士兵打，牠們旁邊的格子也不走（不然路過就被打倒）
     const danger = new Set();
@@ -413,6 +418,7 @@
     for (const s of game.soldiers.slice()) {
       if (!game.soldiers.includes(s)) continue;
       st.soldierActs++;
+      FE.Combat.regenBlock(game, s);
       const v = w.villageById(s.villageId);
       if (!v) continue;
       const home = (x, y) => w.villageAt(x, y) === v;
@@ -432,7 +438,7 @@
         const target = prey.slice().sort((a, b) => Math.abs(a.x - v.cx) + Math.abs(a.y - v.cy) - (Math.abs(b.x - v.cx) + Math.abs(b.y - v.cy)))[0];
         if (adj) {
           st.soldierAttacks++;
-          FE.Combat.resolveAttack(game, s, adj, 'attack');
+          charAttack(game, s, adj);
         } else if (s !== lead && target && !near(s, lead)) {
           const step = stepToward(s, (x, y) => Math.abs(x - lead.x) + Math.abs(y - lead.y) <= 1);
           if (step) moveTo(s, step[0], step[1]);
@@ -477,5 +483,119 @@
     }
   }
 
-  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, touching, free, regenerate, nimbleHide, stepToward, DIRS8 };
+  // ---- 角色（士兵、隊友）出手與隊友的自動行為（第三十六版之一）----
+  // 角色打一隻怪物：拿弓箭而且目標在射程內看得到就射（士兵的箭用不完）；隊友法師、牧師放魔法攻擊、神聖攻擊；其他近戰（要貼著）。
+  // 借用玩家出手的程式（game.strike、game.fireAt，asActor 把 player 暫時換成他、訊息改寫名字）；回傳有沒有出手
+  function charAttack(game, ch, m) {
+    return game.asActor(ch, () => {
+      const soldier = ch.role === 'soldier';
+      const w = ch.equip.main;
+      const d = w && FE.GEAR[w.type];
+      if (soldier && d && d.ammo) {
+        const e = ch.bag.find((x) => x.id === d.ammo);
+        if (e) e.n = Math.max(e.n, 5);
+        else ch.bag.push({ id: d.ammo, name: FE.Gear.name({ type: d.ammo, q: 0 }), n: 5, q: 0 });
+      }
+      const cls = FE.Char.cls(ch);
+      // 法師放魔法攻擊（bolt）、牧師放神聖攻擊（holy）；士兵一律用普通攻擊
+      const kind = soldier ? 'shoot' : cls.spell ? 'bolt' : cls.light ? 'holy' : 'shoot';
+      const rm = game.rangedMode(true, kind);
+      const ok = rm && (rm.mode === 'shoot' || (!soldier && (FE.SPELLS[rm.mode] || rm.mode === 'spell' || rm.mode === 'light')));
+      if (ok && FE.Combat.canShoot(game, ch, m, rm.range)) {
+        if (game.fireAt(m, rm.mode === 'shoot' ? 'shoot' : rm.mode)) return true;
+      }
+      if (FE.Combat.adjacent(game, ch, m)) {
+        game.strike('attack', m);
+        return true;
+      }
+      return false;
+    });
+  }
+
+  // 隊友與沒被操作的冒險者走路用的最短路第一步：能走、沒有人與怪物擋著、不進建築、不踩寶箱（隊友不開寶箱），可以穿過聚落周圍的圈
+  function partyStep(game, ch, goal) {
+    const w = game.world;
+    const free = (x, y) => w.passable(x, y) && !game.monsterAt(x, y) && !w.npcAt(x, y) && !w.chestAt(x, y) && !game.isPlayerAt(x, y) && !game.soldierAt(x, y) && !inBuilding(w, x, y);
+    const prev = new Map([[ch.x + ',' + ch.y, null]]);
+    const q = [[ch.x, ch.y]];
+    for (let h = 0; h < q.length && h < 1500; h++) {
+      const [x, y] = q[h];
+      if (h > 0 && goal(x, y)) {
+        let key = x + ',' + y;
+        let step = null;
+        while (prev.get(key) !== null) {
+          step = key;
+          key = prev.get(key);
+        }
+        return step ? step.split(',').map(Number) : null;
+      }
+      for (const [dx, dy] of DIRS8) {
+        const nx = x + dx;
+        const ny = y + dy;
+        const nk = nx + ',' + ny;
+        if (prev.has(nk) || !free(nx, ny) || !w.canStep(x, y, nx, ny)) continue;
+        prev.set(nk, x + ',' + y);
+        q.push([nx, ny]);
+      }
+    }
+    return null;
+  }
+
+  // 牧師隊友治療身邊（2 格內）生命最低的隊員（包括自己），1d8＋感知修正值，冷卻 HEAL_COOLDOWN 回合
+  function mateHeal(game, ch) {
+    const cd = ch.cd;
+    if (!FE.Char.cls(ch).heal || cd.healCd > 0) return false;
+    const hurt = game.party().filter((c) => c.hp > 0 && c.hp < c.maxHp * C.MATE_HEAL_BELOW && dist(ch, c) <= 2).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+    if (!hurt) return false;
+    cd.healCd = C.HEAL_COOLDOWN;
+    const got = Math.min(hurt.maxHp - hurt.hp, Math.max(1, FE.rollDice(game.rng, C.HEAL_DIE, 1) + FE.Char.attrMod(ch, FE.Char.cls(ch).healAttr || 'cha')));
+    hurt.hp += got;
+    game.say(`${ch.name}低聲祈禱，${hurt === game.player ? '你' : hurt === ch ? '自己' : hurt.name}的傷口癒合了，生命回復 ${got}。`, 'good');
+    return true;
+  }
+
+  // 隊友與沒被操作的冒險者，每個世界回合各做一件事（跟怪物、士兵同一個時鐘）：牧師先治療；看到敵對的怪物（8 格內、看得到、離操作的那位不太遠）就打——
+  // 近戰貼上去、遠程站著射；沒有怪物就跟在操作的那位身邊 2～3 格內（找得到路就走過去）。不進建築、不進聚落裡動手
+  function partyTurn(game) {
+    if (!game.mates.length) return;
+    const w = game.world;
+    const leader = game.player;
+    const actors = game.party().filter((c) => c !== leader);
+    for (const ch of actors) {
+      if (game.fell) return;
+      if (!game.isAlive(ch) || ch.hp <= 0) continue;
+      const cd = ch.cd || (ch.cd = { cooldown: 0, healCd: 0, spellCd: {} });
+      if (cd.cooldown > 0) cd.cooldown--;
+      if (cd.healCd > 0) cd.healCd--;
+      for (const id of Object.keys(cd.spellCd)) if (cd.spellCd[id] > 0) cd.spellCd[id]--;
+      FE.Combat.regenBlock(game, ch);
+      if (mateHeal(game, ch)) continue;
+      if (!w.inVillage(ch.x, ch.y)) {
+        const foes = game.monsters.filter((m) => dist(ch, m) <= C.MATE_SIGHT && (dist(leader, m) <= C.MATE_LEASH || dist(ch, m) <= 1) && FE.Combat.lineClear(w, ch, m, 0));
+        if (foes.length) {
+          foes.sort((a, b) => dist(ch, a) - dist(ch, b) || a.hp - b.hp);
+          const adj = foes.filter((m) => FE.Combat.adjacent(game, ch, m)).sort((a, b) => (a.id === game.battle.targetId ? -1 : b.id === game.battle.targetId ? 1 : a.hp - b.hp))[0];
+          if (charAttack(game, ch, adj || foes[0])) continue;
+          // 打不到：往最近的怪物靠過去（貼到旁邊）
+          const t = foes[0];
+          const s = partyStep(game, ch, (x, y) => Math.max(Math.abs(x - t.x), Math.abs(y - t.y)) === 1 && w.heightOk(x, y, t.x, t.y));
+          if (s) {
+            ch.x = s[0];
+            ch.y = s[1];
+            continue;
+          }
+        }
+      }
+      // 沒有怪物：跟在操作的那位身邊
+      if (dist(ch, leader) > C.MATE_FOLLOW) {
+        const s = partyStep(game, ch, (x, y) => Math.max(Math.abs(x - leader.x), Math.abs(y - leader.y)) <= C.MATE_FOLLOW - 1);
+        if (s) {
+          ch.x = s[0];
+          ch.y = s[1];
+        }
+      }
+    }
+  }
+
+  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, partyTurn, charAttack, partyStep, touching, free, regenerate, nimbleHide, stepToward, DIRS8 };
 })();

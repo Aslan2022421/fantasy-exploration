@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fantasy Exploration</title>
-  <link rel="stylesheet" href="css/style.css?v=41">
+  <link rel="stylesheet" href="css/style.css?v=42">
 </head>
 <body>
   <!-- 版面參考 Caves of Qud 的文字模式：上方一行狀態＋右上圖示列＋生命與經驗兩條長條；
@@ -67,6 +67,7 @@
       </div>
 
       <aside id="side">
+        <div id="party" class="hidden" aria-label="隊員"></div>
         <ol id="log"></ol>
       </aside>
     </div>
@@ -86,7 +87,7 @@
     <section id="win-legend" class="win hidden">
       <h2>圖例 <span class="dim">（L）</span></h2><button class="x" data-close>Esc 關閉</button>
       <div class="winbody"><div class="legend">
-        <div class="row"><span><b class="player">@</b> 冒險者</span><span><b class="npc">&amp;</b> 村民</span><span><b class="npc smith">&amp;</b> 鐵匠（城鎮裡是武器匠）</span><span><b class="npc armorer">&amp;</b> 盔甲匠（城鎮才有）</span><span><b class="npc soldier">&amp;</b> 士兵（城鎮才有）</span><span><b class="chest">$</b> 寶箱</span><span><b class="node-ore">☼</b> 礦脈（礦坑裡，要礦鎬）</span><span><b class="node-herb">♥</b> 藥草（森林裡，要鐮刀）</span><span><b class="item">)</b> 地上的武器（擲出去的，走過去撿回來）</span></div>
+        <div class="row"><span><b class="player">@</b> 冒險者</span><span><b class="npc">&amp;</b> 村民</span><span><b class="npc smith">&amp;</b> 鐵匠（村莊；城鎮、堡壘等是武器匠）</span><span><b class="npc armorer">&amp;</b> 盔甲匠（城鎮、堡壘等才有）</span><span><b class="npc merchant">&amp;</b> 商人（每個聚落一位）</span><span><b class="npc soldier">&amp;</b> 士兵（城鎮、堡壘等才有）</span><span><b class="player mate">@</b> 隊友（Tab 換人操作）</span><span><b class="chest">$</b> 寶箱</span><span><b class="node-ore">☼</b> 礦脈（礦坑裡，要礦鎬）</span><span><b class="node-herb">♥</b> 藥草（森林裡，要鐮刀）</span><span><b class="item">)</b> 地上的武器（擲出去的，走過去撿回來）</span></div>
         <div class="row"><span><b class="npc has-quest">&amp;</b> 有委託</span><span><b class="npc recipient">&amp;</b> 你要找的人</span><span><b class="t-plain village">.</b> 村莊（安全區）</span><span><b class="t-plain town">.</b> 大城鎮、城市（安全區，世界長大後才會出現）</span></div>
         <p>地形字元參考矮人要塞的字元表。<b>擋路的只有</b> <b class="t-water">≈</b> 水和 <b class="t-mount">█</b> 山壁（村莊背後、隘口兩側），其他都能走（地貌裡的 <b class="t-rock">∞</b> 倒下的石柱也擋路）。地面全是緩坡，越高的地方底色越亮。括號裡是站在那裡出手時擲骰的加減。</p>
         <div class="row"><span><b class="t-grass">"</b> 草原（+2）</span><span><b class="t-grass">,</b> 灌木地（0）</span><span><b class="t-forest">♣</b> 溫帶森林（-2）</span><span><b class="t-forest">↑</b> 針葉林（-2）</span></div>
@@ -242,22 +243,22 @@
   </div>
 
   <!-- ?v= 只是為了讓瀏覽器丟掉換伺服器之前的舊快取 -->
-  <script src="js/config.js?v=41"></script>
-  <script src="js/rng.js?v=41"></script>
-  <script src="js/world.js?v=41"></script>
-  <script src="js/checker.js?v=41"></script>
-  <script src="js/bugs.js?v=41"></script>
-  <script src="js/steading.js?v=41"></script>
-  <script src="js/plans.js?v=41"></script>
-  <script src="js/char.js?v=41"></script>
-  <script src="js/gear.js?v=41"></script>
-  <script src="js/combat.js?v=41"></script>
-  <script src="js/stability.js?v=41"></script>
-  <script src="js/events.js?v=41"></script>
-  <script src="js/ai.js?v=41"></script>
-  <script src="js/game.js?v=41"></script>
-  <script src="js/save.js?v=41"></script>
-  <script src="js/render.js?v=41"></script>
-  <script src="js/main.js?v=41"></script>
+  <script src="js/config.js?v=42"></script>
+  <script src="js/rng.js?v=42"></script>
+  <script src="js/world.js?v=42"></script>
+  <script src="js/checker.js?v=42"></script>
+  <script src="js/bugs.js?v=42"></script>
+  <script src="js/steading.js?v=42"></script>
+  <script src="js/plans.js?v=42"></script>
+  <script src="js/char.js?v=42"></script>
+  <script src="js/gear.js?v=42"></script>
+  <script src="js/combat.js?v=42"></script>
+  <script src="js/stability.js?v=42"></script>
+  <script src="js/events.js?v=42"></script>
+  <script src="js/ai.js?v=42"></script>
+  <script src="js/game.js?v=42"></script>
+  <script src="js/save.js?v=42"></script>
+  <script src="js/render.js?v=42"></script>
+  <script src="js/main.js?v=42"></script>
 </body>
 </html>

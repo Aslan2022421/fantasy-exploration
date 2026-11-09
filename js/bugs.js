@@ -64,18 +64,6 @@
     return Math.round(base * FE.wlScale(wl, C.WL_BONUS.REWARD) * 10) / 10;
   };
 
-  // 士兵的數值：以同世界等級、影響範圍 2 的小怪物（哥布林，SRD 的 Goblin Warrior）為準，血量 ×0.9、傷害加值 －1、攻擊力 －1（至少 1）；
-  // AC、攻擊加值、傷害骰跟牠一樣（第三十三版），沒有怪物的特性；不升級
-  FE.soldierStats = (wl) => {
-    const C = FE.CONFIG;
-    const base = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: C.SOLDIER_BASE_SCOPE }, 0, wl);
-    const maxHp = Math.max(1, Math.round(base.maxHp * C.SOLDIER_HP_MUL));
-    return {
-      maxHp, hp: maxHp, atk: Math.max(1, base.atk - C.SOLDIER_ATK_MINUS),
-      ac: base.ac, toHit: base.toHit, die: base.die.slice(), dmgBonus: base.dmgBonus - C.SOLDIER_ATK_MINUS, dmgType: base.dmgType,
-    };
-  };
-
   // 傷害骰的平均（顯示攻擊力、合體的難度評級與 BUG 量用）
   const avgDie = (die) => (die[0] * (die[1] + 1)) / 2;
 
@@ -197,7 +185,8 @@
     // 村莊住滿了就不放，改由現有的村民接手，不然事件一直補人，村莊會擠滿
     const cap = v.kind === 'city' ? 2 * FE.CONFIG.TOWN_MAX_NPC : v.kind === 'town' ? FE.CONFIG.TOWN_MAX_NPC : FE.CONFIG.VILLAGE_MAX_NPC; // 城市是兩座城鎮（第三十四版）
     if (w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n)).length >= cap) return null;
-    // 每個村民有自己的家：沒有空床也不放
+    // 每個村民有自己的家：沒有空床也不放；人口裡沒有名字的人用完了也不放（第三十六版之一）
+    if (game.unnamed && game.unnamed(v) < 1) return null;
     const h = FE.Steading.freeHome(w, game.rng, v);
     if (!h) return null;
     const open = (x, y) =>

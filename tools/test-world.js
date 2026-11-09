@@ -300,13 +300,15 @@ function testSoldiers() {
   const mine = () => g.soldiers.filter((s) => s.villageId === town.id);
   const quota = g.soldierQuota(town);
   ok(mine().length === quota && quota === 3, `城鎮的士兵 ${mine().length} 位，應該固定是 3（quota ${quota}）`);
+  // 第三十六版之一：士兵是職業角色（有裝備欄、技能、等級＝1＋（世界等級－1）×2），不再用怪物的數值塊
+  ok(mine().every((s) => s.equip && s.skills && s.attr && FE.CLASSES[s.cls] && s.lv === FE.soldierLevel(FE.Stability.worldLevel(g)) && !s.die && !s.toHit), '士兵不是職業角色');
   g.checkCreate = () => {};
   g.monsters = [];
   g.player.x = town.cx;
   g.player.y = town.cy;
   g.player.hp = g.player.maxHp;
   const stat = FE.Stability.stat(g);
-  // 等一個動作（10 刻，世界與士兵走一回合）；第三十版起休息是 1 小時以上，改用「閃避」
+  // 等一個動作（6 刻，世界與士兵走一回合）；第三十版起休息是 1 小時以上，改用「閃避」
   const wait = () => { g.player.awakeAt = g.ticks; g.beginAction(); g.endTurn(false); };
 
   // 安穩：士兵在城鎮裡室外走動，不出城鎮
@@ -351,26 +353,29 @@ function testSoldiers() {
   C.STATE_CUTS = [0.5, 1];
   FE.Stability.update(g, true);
   g.soldiers = g.soldiers.filter((o) => o.villageId !== town.id); // 換一隊滿血、站在城鎮裡的士兵
-  g.refillSoldiers();
+  town.steading.population = 4; // 急速發展：缺額每天一定補 1 位
+  for (let d = 0; d < quota; d++) g.refillSoldier(town);
   let rounds = 0;
   for (; rounds < 300 && g.monsters.includes(fair) && mine().length; rounds++) wait();
   console.log(`士兵公平一戰：${mine().length ? '' : '全隊陣亡，'}${g.monsters.includes(fair) ? '沒打倒' : '打倒了'}（${rounds} 回合，士兵 ${quota} 位，小怪物血量 ${fair.maxHp}）`);
 
-  // 陣亡的士兵：失序中不補，回到安穩才補回原本的人數；其他的走回城鎮
-  C.STATE_CUTS = [1, 2];
-  g.monsters = [{ bug: 20, scope: 20, x: 0, y: 0 }];
-  FE.Stability.update(g, true);
-  const full = mine().length === quota;
-  if (!full) g.refillSoldiers();
-  const victim = mine()[0];
-  g.soldierDown(victim, null);
-  FE.Stability.update(g, true);
-  ok(mine().length === quota - 1 && g.worldState === 2, `陣亡後失序中人數 ${mine().length}（應該 ${quota - 1}）`);
+  // 陣亡的士兵：死了就是死了，寫進歷史紀錄，聚落人口 −1；補員不看世界狀態，每天擲一次（機率照人口標籤），成功就從人口補 1 位新的人
   C.STATE_CUTS = saved;
   g.monsters = [];
   g.world.forEachCell((x, y) => g.world.resetStab(x, y)); // 強制失序的那幾百個動作裡，每一格都掉成了負的，先補回起始值
   FE.Stability.update(g, true);
-  ok(g.worldState === 0 && mine().length === quota, `回到安穩後士兵 ${mine().length}/${quota}（狀態 ${g.worldState}）`);
+  town.steading.population = 2;
+  const pop0 = g.initPop(town);
+  const victim = mine()[0];
+  g.soldierDown(victim, null);
+  ok(mine().length === quota - 1, `陣亡後人數 ${mine().length}（應該 ${quota - 1}）`);
+  ok(g.history[0] && g.history[0].kind === 'death' && g.history[0].name === victim.name && g.history[0].role === '士兵' && g.history[0].village.includes(town.name), '士兵陣亡沒有寫進歷史紀錄');
+  ok(town.pop === pop0 - 1, `士兵陣亡人口該 −1：${pop0} → ${town.pop}`);
+  // 補員：大舉遷出（10%）幾乎補不到，急速發展（100%）一天就補回來；補進來的是新的人
+  town.steading.population = 4;
+  const before = mine().map((s) => s.name);
+  g.refillSoldier(town);
+  ok(mine().length === quota && mine().some((s) => !before.includes(s.name)), '急速發展的聚落一天內沒有補回士兵');
   for (let i = 0; i < 200; i++) wait();
   ok(mine().every((s) => w.villageAt(s.x, s.y) === town), '回到安穩後士兵沒有走回城鎮');
 
@@ -386,7 +391,7 @@ function testSoldiers() {
     g.guard('test', () => g.move(-side[0], -side[1]));
     ok(g.talking === s.id && g.turn === turn0 + 1, '撞上士兵沒有打開對話（算一個動作）');
     const t = g.talkOptions(g.talkTarget(g.talking));
-    ok(t.role === `士兵・${FE.PLAYER_RACES[s.race].name}` && t.options.length === 1 && t.options[0].id === 'leave' && t.text.length > 0, `士兵的對話內容不對：${t.role}／${t.options.map((o) => o.id)}`);
+    ok(t.role === `士兵（${FE.CLASSES[s.cls].name}）・${FE.PLAYER_RACES[s.race].name}` && t.options.length === 1 && t.options[0].id === 'leave' && t.text.length > 0, `士兵的對話內容不對：${t.role}／${t.options.map((o) => o.id)}`);
     g.choose(g.talkTarget(g.talking), 0);
     ok(g.talking === null, '離開沒有關掉士兵的對話');
   }

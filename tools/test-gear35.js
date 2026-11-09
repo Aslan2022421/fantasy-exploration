@@ -20,7 +20,7 @@ function testGear35() {
   FE.MASTERY_SKILL = oldMastery;
 
   const village = g.world.villages.find((v) => v.kind === 'village');
-  const smith = g.world.npcs.find((n) => n.villageId === village.id && n.role === 'smith');
+  const smith = g.world.npcs.find((n) => n.villageId === village.id && n.role === 'merchant'); // 補給包在商人那裡（第三十六版之一）
   const p = g.player;
   p.copper = 100000;
   const packPrice = FE.Gear.shopPrice('pack_supply', 0, village, g.chaMod());

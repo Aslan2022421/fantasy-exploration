@@ -938,10 +938,15 @@
     const folk = world.npcs.filter((n) => n.villageId === f.id);
     for (const n of folk) n.home = null;
     for (const n of folk) {
-      if (n.role === 'smith') {
-        const si = f.buildings.findIndex((b) => b.kind === 'smithy');
+      if (n.role === 'smith' || n.role === 'armorer') {
+        const si = f.buildings.findIndex((b) => b.kind === (n.role === 'smith' ? 'smithy' : 'armory'));
         const [sx, sy] = si >= 0 ? f.buildings[si].spots[0] : [f.cx, f.cy];
         Object.assign(n, { x: sx, y: sy, home: si >= 0 ? { b: si } : null });
+        continue;
+      }
+      if (n.role === 'merchant') {
+        const ms = merchantSpot(world, f);
+        Object.assign(n, { x: ms.x, y: ms.y, home: ms.b >= 0 ? { b: ms.b } : null });
         continue;
       }
       const h = FE.Steading.freeHome(world, rng, f);
@@ -1195,17 +1200,72 @@
     };
   };
 
+  // 商人（第三十六版之一，每個聚落一位）站的地方：有市場就在市場裡（挑離門最近的一格空地板），沒有市場就在一間民房裡（挑空地板最多的那間，
+  // 站在門內那一格以外的地方，免得擋住住戶回家）；都沒有就站在廣場中央旁邊一格。不用亂數（不動世界生成的亂數序列）。回傳 { x, y, b }，b 是建築編號（沒有是 -1）
+  function merchantSpot(world, v) {
+    const bs = v.buildings || [];
+    const floor = (i) => {
+      const b = bs[i];
+      const out = [];
+      for (let y = b.y0; y <= b.y1; y++) {
+        for (let x = b.x0; x <= b.x1; x++) {
+          const c = world.cell(x, y);
+          if (FE.Steading.roomAt(v, x, y) !== i || !c || c.t !== '.' || world.npcAt(x, y)) continue;
+          if (b.spots && b.spots.some(([sx, sy]) => sx === x && sy === y)) continue;
+          out.push([x, y]);
+        }
+      }
+      const door = b.doors && b.doors[0];
+      if (door) out.sort((p, q) => Math.abs(p[0] - door[0]) + Math.abs(p[1] - door[1]) - (Math.abs(q[0] - door[0]) + Math.abs(q[1] - door[1])));
+      return out;
+    };
+    const mi = bs.findIndex((b, i) => b.kind === 'market' && floor(i).length);
+    if (mi >= 0) {
+      const [x, y] = floor(mi)[0];
+      return { x, y, b: mi };
+    }
+    // 沒有市場：民房；堡壘與要塞沒有民房，住人的建築是兵營（big）
+    let best = -1;
+    for (const kind of ['house', 'big']) {
+      bs.forEach((b, i) => {
+        const n = b.kind === kind ? floor(i).length : 0;
+        if (n && (best < 0 || n > floor(best).length)) best = i;
+      });
+      if (best >= 0) break;
+    }
+    if (best >= 0) {
+      const [x, y] = floor(best)[0];
+      return { x, y, b: best };
+    }
+    return { x: v.cx + 1, y: v.cy + 1, b: -1 };
+  }
+
+  // 不動生成亂數的取名（商人用）：照世界種子與編號的雜湊挑一個還沒用過的名字
+  function pickNameHash(world, key) {
+    const used = new Set(world.npcs.map((n) => n.name));
+    const free = FE.NAMES.filter((n) => !used.has(n));
+    const list = free.length ? free : FE.NAMES;
+    return list[Math.floor(hash(world.seed ^ 0x7f4a7c15, key, 4242) * list.length)];
+  }
+
   function placeNpcs(world, rng, v) {
-    // 鐵匠（城鎮裡叫武器匠）固定站在工坊裡、貼著門內那一格；萬一沒蓋成工坊，站在廣場中央。
-    // 城鎮另有盔甲匠，站在盔甲匠工坊裡（沒蓋成就站在廣場中央旁邊一格，不跟武器匠重疊）
+    // 鐵匠（城鎮、城市、堡壘、要塞裡叫武器匠）固定站在工坊裡、貼著門內那一格；萬一沒蓋成工坊，站在廣場中央。
+    // 城鎮、城市、堡壘、要塞另有盔甲匠，站在盔甲匠工坊裡（沒蓋成就站在廣場中央旁邊一格，不跟武器匠重疊）
     const si = (v.buildings || []).findIndex((b) => b.kind === 'smithy');
     const [sx, sy] = si >= 0 ? v.buildings[si].spots[0] : [v.cx, v.cy];
     world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'smith', villageId: v.id, x: sx, y: sy, quest: null, home: si >= 0 ? { b: si } : null });
-    if (FE.Steading.townish(v)) {
+    if (FE.Steading.shopTown(v)) {
       const ai = (v.buildings || []).findIndex((b) => b.kind === 'armory');
       const [ax, ay] = ai >= 0 ? v.buildings[ai].spots[0] : [v.cx + 1, v.cy];
-      world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'armorer', villageId: v.id, x: ax, y: ay, quest: null, home: ai >= 0 ? { b: ai } : null });
+      // 堡壘、要塞的盔甲匠取名不用生成的亂數（不動這些世界原本的亂數序列，使用者看過的種子才不會變樣）
+      const aid = world.nextId++;
+      const aname = v.kind === 'fort' || v.kind === 'fortress' ? pickNameHash(world, aid) : pickName(world, rng);
+      world.npcs.push({ id: aid, name: aname, role: 'armorer', villageId: v.id, x: ax, y: ay, quest: null, home: ai >= 0 ? { b: ai } : null });
     }
+    // 商人：每個聚落一位，站在市場或一間民房裡，不走動、不給委託
+    const ms = merchantSpot(world, v);
+    const mid = world.nextId++;
+    world.npcs.push({ id: mid, name: pickNameHash(world, mid), role: 'merchant', villageId: v.id, x: ms.x, y: ms.y, quest: null, home: ms.b >= 0 ? { b: ms.b } : null });
 
     const candidates = [];
     // 村民不超過實際蓋出來的床位（民房沒蓋齊時人就少一點，不會有人沒有家）

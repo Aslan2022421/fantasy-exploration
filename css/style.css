@@ -53,6 +53,8 @@
   --map-smith: #7fb0cf;
   --map-armorer: #d09a60;
   --map-soldier: #aab8b6;
+  --map-merchant: #e0a8ff;
+  --map-mate-fg: #7fe0a0;
   --map-player-fg: #f6f3de;
   --map-player-bg: #3d8b8f;
   --map-mon-fg: #1b0d0b;       /* 小怪物 */
@@ -472,6 +474,21 @@ input {
 .npc.smith { color: var(--map-smith); }
 .npc.armorer { color: var(--map-armorer); }
 .npc.soldier { color: var(--map-soldier); }
+.npc.merchant { color: var(--map-merchant); }
+.player.mate { color: var(--map-mate-fg); }
+
+/* 隊員欄（第三十六版之一）：右側訊息欄上方，每位隊員一行，正在操作的那位標亮，點一下換人 */
+#party { flex: none; padding: 6px 8px 4px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+#party.hidden { display: none; }
+#party .pm { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 3px 6px; font-size: 12px; line-height: 1.35; background: transparent; border: 1px solid var(--line); border-radius: 3px; color: inherit; cursor: pointer; }
+#party .pm.on { border-color: var(--map-mate-fg); background: rgba(127, 224, 160, 0.12); }
+#party .pm-name { font-weight: bold; }
+#party .pm-cls { grid-column: 2; grid-row: 1; opacity: 0.8; }
+#party .pm-bar { grid-column: 1; grid-row: 2; height: 6px; background: rgba(255, 255, 255, 0.12); border-radius: 3px; overflow: hidden; }
+#party .pm-bar i { display: block; height: 100%; background: var(--hp, #6cc070); }
+#party .pm-bar.mid i { background: var(--hp-mid, #d8b040); }
+#party .pm-bar.low i { background: var(--hp-low, #d85050); }
+#party .pm-hp { grid-column: 2; grid-row: 2; opacity: 0.8; }
 .village { background: var(--map-village); }
 .legend b.town { background: var(--map-town); }
 .chest { color: var(--map-chest); font-weight: bold; }

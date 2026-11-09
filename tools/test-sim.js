@@ -62,26 +62,11 @@ function botGear(game) {
   return false;
 }
 
-// 機器人開新世界時挑的起始裝備（選項 id）：戰士長劍、盾牌、2 份藥草；遊俠弓箭（附 20 支箭）；法師法杖、2 份藥草；牧師中甲、長劍、2 份藥草
-const BOT_PICKS = {
-  // 第三十一版：起始裝備從全部武器與防具挑（主手、身上、副手、補給各一組）
-  warrior: ['sword', 'medium', 'shield', 'herb'],
-  ranger: ['bow', 'light', 'nooff', 'herb'],
-  mage: ['staff', 'robe', 'nooff', 'herb'],
-  priest: ['club', 'medium', 'shield', 'herb'],
-  paladin: ['sword', 'heavy', 'shield', 'herb'],
-  barbarian: ['greataxe', 'light', 'nooff', 'herb'], // 不能穿中甲、重甲
-};
+// 機器人開新世界時挑的起始裝備（選項 id）與種族：第三十六版之一搬進遊戲（config.js 的 FE.TEMPLATE_PICKS、FE.TEMPLATE_BODY，士兵與隊友的職業套版也用）；
+// 戰士長劍、鱗甲、盾牌、藥草；遊俠弓箭（附 20 支箭）、皮甲；法師法杖、衣袍；牧師硬頭錘、鱗甲、盾牌；聖騎士長劍、鎖子甲、盾牌；野蠻人巨斧、皮甲
+const BOT_PICKS = FE.TEMPLATE_PICKS;
 const BOT_CLASSES = Object.keys(BOT_PICKS);
-// 機器人照職業挑種族（第二十九版）：戰士、牧師矮人（體質 +2），遊俠精靈（敏捷 +2），法師人類（兩點都加智力）；身高、體格都取普通（4、4）
-const BOT_BODY = {
-  warrior: { race: 'dwarf', bonus: {}, height: 4, build: 4 },
-  ranger: { race: 'elf', bonus: {}, height: 4, build: 4 },
-  mage: { race: 'human', bonus: { int: 2 }, height: 4, build: 4 },
-  priest: { race: 'dwarf', bonus: {}, height: 4, build: 4 },
-  paladin: { race: 'dwarf', bonus: {}, height: 4, build: 4 },
-  barbarian: { race: 'human', bonus: { str: 2 }, height: 4, build: 4 }, // 70,000 的人類拿得起巨斧（雙手）
-};
+const BOT_BODY = FE.TEMPLATE_BODY;
 
 // 機器人升級加點：照職業的主屬性（戰士力量、遊俠敏捷、法師智力、牧師感知）和體質輪流加，一個加到 18 就改加另一個，兩個都滿了加別的。
 // 輪到誰看已經花掉幾點（現在六項屬性的總和減去起始的總和）：偶數點加主屬性，奇數點加體質
@@ -501,7 +486,7 @@ function simulate(seed, opts) {
       console.log(`  [診斷 seed${seed} 第${i}步] 塊 ${game.world.chunks.length} 等級 ${wl} 狀態 ${L} 總 ${FE.Stability.total(game)}（格子欠 ${game.world.debt}）｜創世怪 ${ms.filter((m) => !m.small && !m.members).length} 隻 ${sum(ms.filter((m) => !m.small && !m.members))}｜追人怪 ${ms.filter((m) => m.small).length} 隻 ${sum(ms.filter((m) => m.small))}｜合體 ${ms.filter((m) => m.members).length} 隻 ${sum(ms.filter((m) => m.members))}｜修補力 ${game.compute.toFixed(0)} 創世力 ${game.creation.toFixed(0)}/${game.nextChunkAt.toFixed(0)}`);
     }
 
-    // 士兵：從不進建築；只在失序時出城（回到動盪或安穩後走回來）；陣亡後要等回到安穩才補回
+    // 士兵：從不進建築；只在失序時出城（回到動盪或安穩後走回來）；陣亡後每天擲一次補員
     const disorderNow = stateBefore === 2 || L === 2;
     for (const s of game.soldiers) {
       const v = game.world.villageById(s.villageId);
@@ -516,13 +501,13 @@ function simulate(seed, opts) {
       }
       if (!inside) sinfo.set(s.id, true); else sinfo.delete(s.id);
     }
+    // 補員（第三十六版之一）：缺額每天擲一次補 1 位，人數不超過名額，一次最多多 1 位
     for (const v of game.world.villages) {
-      if (v.kind !== 'town') continue;
+      if (!C.SOLDIER_COUNT[v.kind]) continue;
       const n = game.soldiers.filter((s) => s.villageId === v.id).length;
-      const quota = C.SOLDIER_PER_TOWN;
+      const quota = C.SOLDIER_COUNT[v.kind];
       const prev = townCount.get(v.id);
-      if (prev !== undefined && n > prev && (L !== 0 || n !== quota)) fail(`模擬 seed${seed} 第${i}步 ${v.name} 士兵補回的時機不對（狀態 ${L}，${prev}→${n}，應有 ${quota}）`);
-      if (L === 0 && n < quota) fail(`模擬 seed${seed} 第${i}步 世界安穩了 ${v.name} 還沒補回士兵 ${n}/${quota}`);
+      if (n > quota || (prev !== undefined && n > prev + 1)) fail(`模擬 seed${seed} 第${i}步 ${v.name} 士兵補回的時機不對（${prev}→${n}，名額 ${quota}）`);
       townCount.set(v.id, n);
     }
   }

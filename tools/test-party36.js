@@ -347,6 +347,10 @@ function testParty36() {
       const m = mon(g, c.x + 5, c.y);
       const evs = [];
       FE.Combat.hook = (e) => { if (e.by === 'mate') evs.push(e); };
+      // 第三十六版之四：看到但沒跟隊伍交戰、也不是冒險者目標的怪物，隊友不去打
+      g.advance(6 * 20);
+      ok(evs.length === 0 && dist(warrior, m) > 1, `隊友不主動衝去打沒交戰的怪物（出手 ${evs.length} 下，離怪物 ${dist(warrior, m)} 格）`);
+      g.battle.targetId = m.id; // 冒險者把牠設成目標：隊友一起打
       const exp0 = g.exp, cr0 = g.creation;
       m.exp = 7;
       g.advance(6 * 60);
@@ -361,8 +365,11 @@ function testParty36() {
       const m = mon(g, c.x + 4, c.y + 1);
       const arrows0 = ranger.bag.find((e) => e.id === 'arrow').n;
       const hero0 = g.hero.bag.length;
+      g.battle.targetId = m.id; // 第三十六版之四：冒險者的目標才射（或貼著隊伍的怪物）
+      const rx = ranger.x, ry = ranger.y;
       g.advance(6 * 8);
-      ok(m.hp < m.maxHp && ranger.bag.find((e) => e.id === 'arrow').n < arrows0 && dist(ranger, m) >= 2, `遠程隊友站開射：怪物 ${m.hp}/${m.maxHp}、箭 ${ranger.bag.find((e) => e.id === 'arrow').n}、距離 ${dist(ranger, m)}`);
+      // 怪物被射之後會朝冒險者走過來，最後可能貼著隊伍；要看的是隊友自己沒走過去、一直用射的
+      ok(m.hp < m.maxHp && ranger.bag.find((e) => e.id === 'arrow').n < arrows0 && ranger.x === rx && ranger.y === ry, `遠程隊友站著射：怪物 ${m.hp}/${m.maxHp}、箭 ${ranger.bag.find((e) => e.id === 'arrow').n}、隊友沒移動`);
       ok(g.hero.bag.length === hero0, '隊友用自己背包的箭，不動冒險者的');
     }
     {
@@ -384,6 +391,27 @@ function testParty36() {
       warrior.x = c.x + 1;
       g.advance(6 * 4);
       ok(warrior.hp < 60, `怪物打隊友：生命 ${warrior.hp}/60`);
+    }
+
+    // 4c2. 第三十六版之四：士兵、隊友照自己的刻數行動（走一步＝moveTicks＋防具多花的刻，出手＝attackTicks＋防具；失序 ×2）
+    {
+      const { g, c } = field(36012);
+      const hv = addMate(g, 'paladin', c.x + 1, c.y); // 聖騎士：重甲
+      const cost0 = FE.AI.actCost(g, hv, 'move');
+      ok(cost0 === FE.Char.moveTicks(hv) + FE.Gear.extraTicks(hv) && FE.Gear.extraTicks(hv) > 0, `重甲隊友走一步 ${cost0} 刻（${FE.Char.moveTicks(hv)}＋防具 ${FE.Gear.extraTicks(hv)}）`);
+      const st0 = FE.Stability.state;
+      FE.Stability.state = () => 2;
+      const cost2 = FE.AI.actCost(g, hv, 'move');
+      ok(cost2 === cost0 * C.CHAOS_TIME, `失序時 ×${C.CHAOS_TIME}：${cost2} 刻`);
+      // 一直有事做時，平均每個動作花的刻接近 cost：跑 600 個世界回合（3,600 刻）數動了幾次
+      const probe = { owe: 0 };
+      let acts = 0;
+      for (let i = 0; i < 600; i++) if (FE.AI.actorReady(probe)) { acts++; probe.owe = Math.max(probe.owe, -C.TICKS_MOVE) + cost2; }
+      const per = (600 * C.TICKS_MOVE) / acts;
+      ok(Math.abs(per - cost2) <= 1, `失序時重甲角色平均 ${per.toFixed(1)} 刻動一次（應該約 ${cost2}）`);
+      FE.Stability.state = st0;
+      // 出手：attackTicks＋防具多花的刻
+      ok(FE.AI.actCost(g, hv, 'attack') === FE.Char.attackTicks(hv, hv.equip.main) + FE.Gear.extraTicks(hv), `重甲隊友出手 ${FE.AI.actCost(g, hv, 'attack')} 刻`);
     }
 
     // 4d. Tab 換人操作：冒險者 → 隊友 1 → 隊友 2 → 冒險者；被操作的那位吃按鍵，沒被操作的照自動行為走

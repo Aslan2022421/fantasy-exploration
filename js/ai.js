@@ -414,6 +414,7 @@
       s.x = x;
       s.y = y;
       mates.add(k(x, y));
+      actorPay(game, s, 'move'); // 第三十六版之四：照士兵自己的刻數
     };
 
     const preyCache = new Map();
@@ -424,6 +425,8 @@
       FE.Combat.regenBlock(game, s);
       const v = w.villageById(s.villageId);
       if (!v) continue;
+      if (!actorReady(s)) continue; // 第三十六版之四：上一個動作的刻還沒走完
+      const oweBefore = s.owe;
       const home = (x, y) => w.villageAt(x, y) === v;
       // 城鎮外 16 格內衰敗生的小怪物（m.small），創世時的怪物不碰
       // （第三十二版小塊變成 24×24，不再用「城鎮所在那一塊」，改成跟原本 64×64 一塊差不多的範圍）
@@ -446,6 +449,7 @@
         if (adj) {
           st.soldierAttacks++;
           charAttack(game, s, adj);
+          actorPay(game, s, 'attack');
         } else if (s !== lead && target && !near(s, lead)) {
           const step = stepToward(s, (x, y) => Math.abs(x - lead.x) + Math.abs(y - lead.y) <= 1);
           if (step) moveTo(s, step[0], step[1]);
@@ -484,10 +488,39 @@
         }
       }
       if (!game.soldiers.includes(s)) continue; // 出手時被反擊打倒了
+      if (s.owe === oweBefore) actorIdle(s); // 站著沒動：不把空下來的時間存起來
       const inside = home(s.x, s.y);
       if (s.in && !inside) st.sorties++;
       s.in = inside;
     }
+  }
+
+  // ---- 角色（士兵、隊友、沒被操作的冒險者）照自己的刻數行動（第三十六版之四，使用者選的）----
+  // 原本每個世界回合（6 刻）一律動一次，冒險者卻要加防具多花的刻、失序 ×2，失序時穿鎖子甲的冒險者走一步 14 刻，士兵同時間走 2.3 步。
+  // 改成跟冒險者同一套：走一步＝moveTicks（力量不到防具需求 9 刻、超重 36 刻、力竭照比例）＋防具多花的刻；出手、治療＝attackTicks＋防具多花的刻；失序 ×2。
+  // c.owe 記著還欠幾刻：每個世界回合先減 6，還有欠的就這回合不動；動了把這個動作的刻數加上去；沒事做就歸零（不累積）。怪物照舊每 6 刻動一次
+  function actCost(game, c, kind) {
+    const chaos = FE.Stability.state(game) === 2 ? C.CHAOS_TIME : 1;
+    let base;
+    if (kind === 'attack') base = FE.Char.attackTicks(c, c.equip && c.equip.main);
+    else {
+      base = FE.Gear.loadTier(c) >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(c) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(c)) : FE.Char.moveTicks(c);
+      if (c.exhaust) base = Math.round(base * FE.Char.exhaustMoveMul(c));
+    }
+    return (base + FE.Gear.extraTicks(c)) * chaos;
+  }
+  // 這個世界回合輪不輪得到 c 動
+  function actorReady(c) {
+    c.owe = (c.owe || 0) - C.TICKS_MOVE;
+    return c.owe <= 0;
+  }
+  // c 做了一個動作（kind：'move' 或 'attack'）
+  function actorPay(game, c, kind) {
+    c.owe = Math.max(c.owe || 0, -C.TICKS_MOVE) + actCost(game, c, kind);
+  }
+  // c 輪到了卻沒事做：欠的歸零，不把空下來的時間存起來
+  function actorIdle(c) {
+    if (c.owe < 0) c.owe = 0;
   }
 
   // ---- 角色（士兵、隊友）出手與隊友的自動行為（第三十六版之一）----
@@ -561,13 +594,15 @@
     return true;
   }
 
-  // 隊友與沒被操作的冒險者，每個世界回合各做一件事（跟怪物、士兵同一個時鐘）：牧師先治療；看到敵對的怪物（8 格內、看得到、離操作的那位不太遠）就打——
-  // 近戰貼上去、遠程站著射；沒有怪物就跟在操作的那位身邊 2～3 格內（找得到路就走過去）。不進建築、不進聚落裡動手
+  // 隊友與沒被操作的冒險者，照自己的刻數行動（第三十六版之四，見 actCost）：牧師先治療；
+  // 只打「貼著隊伍裡任何一位的怪物」與「操作的那位正在打的目標」（第三十六版之四，使用者選的；原本看到 8 格內的怪物就衝過去，隊友會自己跑去打大怪物）——
+  // 近戰貼上去、遠程站著射；沒有這種怪物就跟在操作的那位身邊 2～3 格內（找得到路就走過去）。不進建築、不進聚落裡動手
   function partyTurn(game) {
     if (!game.mates.length) return;
     const w = game.world;
     const leader = game.player;
-    const actors = game.party().filter((c) => c !== leader);
+    const party = game.party();
+    const actors = party.filter((c) => c !== leader);
     for (const ch of actors) {
       if (game.fell) return;
       if (!game.isAlive(ch) || ch.hp <= 0) continue;
@@ -576,33 +611,47 @@
       if (cd.healCd > 0) cd.healCd--;
       for (const id of Object.keys(cd.spellCd)) if (cd.spellCd[id] > 0) cd.spellCd[id]--;
       FE.Combat.regenBlock(game, ch);
-      if (mateHeal(game, ch)) continue;
+      if (!actorReady(ch)) continue;
+      if (mateHeal(game, ch)) {
+        actorPay(game, ch, 'attack');
+        continue;
+      }
       if (!w.inVillage(ch.x, ch.y)) {
-        const foes = game.monsters.filter((m) => dist(ch, m) <= C.MATE_SIGHT && (dist(leader, m) <= C.MATE_LEASH || dist(ch, m) <= 1) && FE.Combat.lineClear(w, ch, m, 0));
+        const engaged = (m) => party.some((c) => game.isAlive(c) && c.hp > 0 && dist(c, m) <= 1) || m.id === game.battle.targetId;
+        const foes = game.monsters.filter((m) => engaged(m) && dist(ch, m) <= C.MATE_SIGHT && FE.Combat.lineClear(w, ch, m, 0));
         if (foes.length) {
-          foes.sort((a, b) => dist(ch, a) - dist(ch, b) || a.hp - b.hp);
-          const adj = foes.filter((m) => FE.Combat.adjacent(game, ch, m)).sort((a, b) => (a.id === game.battle.targetId ? -1 : b.id === game.battle.targetId ? 1 : a.hp - b.hp))[0];
-          if (charAttack(game, ch, adj || foes[0])) continue;
-          // 打不到：往最近的怪物靠過去（貼到旁邊）
+          // 操作的那位的目標優先，再來是近的、血少的
+          const rank = (a, b) => (a.id === game.battle.targetId ? -1 : b.id === game.battle.targetId ? 1 : dist(ch, a) - dist(ch, b) || a.hp - b.hp);
+          foes.sort(rank);
+          const adj = foes.filter((m) => FE.Combat.adjacent(game, ch, m))[0];
+          if (charAttack(game, ch, adj || foes[0])) {
+            actorPay(game, ch, 'attack');
+            continue;
+          }
+          // 打不到：往那隻怪物靠過去（貼到旁邊）
           const t = foes[0];
           const s = partyStep(game, ch, (x, y) => Math.max(Math.abs(x - t.x), Math.abs(y - t.y)) === 1 && w.heightOk(x, y, t.x, t.y));
           if (s) {
             ch.x = s[0];
             ch.y = s[1];
+            actorPay(game, ch, 'move');
             continue;
           }
         }
       }
-      // 沒有怪物：跟在操作的那位身邊
+      // 沒有要打的：跟在操作的那位身邊
       if (dist(ch, leader) > C.MATE_FOLLOW) {
         const s = partyStep(game, ch, (x, y) => Math.max(Math.abs(x - leader.x), Math.abs(y - leader.y)) <= C.MATE_FOLLOW - 1);
         if (s) {
           ch.x = s[0];
           ch.y = s[1];
+          actorPay(game, ch, 'move');
+          continue;
         }
       }
+      actorIdle(ch);
     }
   }
 
-  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, partyTurn, charAttack, partyStep, touching, free, regenerate, nimbleHide, stepToward, DIRS8 };
+  FE.AI = { worldTurn, canSee, npcTurn, soldierTurn, partyTurn, charAttack, partyStep, touching, free, regenerate, nimbleHide, stepToward, actCost, actorReady, actorPay, DIRS8 };
 })();

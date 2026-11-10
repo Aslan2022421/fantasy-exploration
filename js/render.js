@@ -1091,10 +1091,12 @@
     const hi = FE.levelExp(game.level + 1);
     // 隊友還有沒加的屬性點：屬性表多一欄「加 1」（冒險者的點數照舊跳升級加點視窗）
     const canAdd = p !== game.hero && p.points > 0;
-    const attrRows = FE.ATTRS.map((a) => {
+    // 第三十七版：屬性改成六張卡片（數值大字、修正值、用處；隊友有點數時卡片上有「加 1」）
+    const attrCards = FE.ATTRS.map((a) => {
       const v = p.attr[a.key];
-      const add = canAdd ? `<td><button data-mate-attr="${a.key}"${v >= C.ATTR_CAP ? ' disabled' : ''}>加 1</button></td>` : '';
-      return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td>${add}</tr>`;
+      const m = Ch.mod(v);
+      const add = canAdd ? `<button class="at-add" data-mate-attr="${a.key}"${v >= C.ATTR_CAP ? ' disabled' : ''}>加 1</button>` : '';
+      return `<div class="at-card"><div class="at-top"><span class="at-name">${a.name}</span>${add}</div><div class="at-val"><b>${v}</b><span class="at-mod ${m > 0 ? 'pos' : m < 0 ? 'neg' : ''}">${sign(m)}</span>${v >= C.ATTR_CAP ? '<span class="dim at-cap">上限</span>' : ''}</div><div class="at-info">${esc(a.info)}</div></div>`;
     }).join('');
     // 隊員頁籤：隊伍有兩人以上才有；▶ 是目前操作的那位，＋N 是還有幾點屬性沒加
     const list = game.party();
@@ -1155,24 +1157,54 @@
     const d = FE.Gear.playerDefense(p);
     const con = Ch.attrMod(p, 'con');
     const heal = `1d10${con > 0 ? '+' + con : con < 0 ? con : ''}`; // 野外短休（第三十版）
-    const tired = p.exhaust ? `　<b class="over">力竭 ${p.exhaust}</b>` : '';
     const R = FE.PLAYER_RACES[p.race] || FE.PLAYER_RACES.human;
-    const body = `${R.name}　身高${FE.HEIGHTS[(p.height || 4) - 1]}、體格${FE.BUILDS[(p.build || 4) - 1]}　體型 ${Ch.sizeOf(p).toLocaleString('en-US')}`;
     // 隊友：背景與來自哪個聚落（第三十六版之二起招來的人有背景）
     const home = p !== game.hero ? game.world.villageById(p.villageId) : null;
     const origin = p !== game.hero ? `　${p.bg && FE.RECRUIT_BACKGROUNDS[p.bg] ? FE.RECRUIT_BACKGROUNDS[p.bg].name + '，' : ''}${home ? `來自${esc(home.name)}` : ''}` : '';
-    const pointsNote = p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加${canAdd ? '（在下面的屬性表點「加 1」）' : ''}</b>` : '';
-    $('charInfo').innerHTML = `${tabs}
-      <p><b>${esc(p.name)}</b>　${esc(c.name)}　${p !== game.hero ? `隊友 Lv${p.lv}（冒險者每升一級，隊友跟著升一級）${origin}` : `Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}`}${p === ctl ? '' : '　<span class="dim">（只是在看，沒有換操作）</span>'}${pointsNote}</p>
-      <p>${esc(body)}${p.skillPack ? `　起始技能組合：${esc(p.skillPack)}` : ''}</p>
-      <p>主手 ${p.equip.main ? esc(FE.Gear.name(p.equip.main)) : '空著'}　副手 ${p.equip.off ? esc(FE.Gear.name(p.equip.off)) : '空著'}${p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''}　身上 ${p.equip.body ? esc(FE.Gear.name(p.equip.body)) : '空著'}</p>
-      <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Math.round(Ch.moveTicks(p) * Ch.exhaustMoveMul(p))} 刻　野外歇一小時回 ${heal}（最少 1）${tired}</p>
-      <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
-      <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th>${canAdd ? '<th></th>' : ''}</tr>${attrRows}</table>
-      <h3>技能（用了就累積經驗，升到第 N 級要 ${C.SKILL_NEED_BASE}＋${C.SKILL_NEED_STEP}N 點，沒有上限；經驗倍率 ×${Ch.expFactor(p).toFixed(1)}）</h3>
-      ${skillHtml}
-      <h3>目前的數字</h3>
-      <p>主手傷害 ${esc(game.attackText())}　近戰出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　暴擊 ${Ch.critMin(p, p.equip.main)}～20　攻擊一次 ${Ch.attackTicks(p, p.equip.main)} 刻${masteryLine()}　閃避 ${Math.round(d.dodge * 100)}%　物理傷害再減 ${Ch.conCut(p)}（體質）${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}${p === game.hero ? `　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}` : ''}</p>`;
+    const pointsNote = p.points > 0 ? `<div class="ch-alert">還有 ${p.points} 點屬性沒加${canAdd ? '，在下面的屬性卡片點「加 1」' : ''}</div>` : '';
+    // 第三十七版：角色頁改成卡片排版（使用者要求跟技能卡片一致）：最上面是名字與等級（冒險者有經驗進度條），
+    // 接著三張資訊卡（身體、裝備、狀態），再來是六張屬性卡、戰鬥數字的小格子，最後是技能
+    const bar = (cur, max, cls) => `<div class="ch-bar ${cls || ''}"><i style="width:${max > 0 ? Math.max(0, Math.min(100, Math.round((cur / max) * 100))) : 0}%"></i></div>`;
+    const kv = (k, v) => `<div class="ch-kv"><span>${k}</span><span>${v}</span></div>`;
+    const isHero = p === game.hero;
+    const lvLine = isHero
+      ? game.level >= C.LEVEL_MAX
+        ? `<div class="ch-exp"><span>Lv ${game.level}</span><span class="dim">經驗值 ${game.exp}（最高等級）</span></div>`
+        : `<div class="ch-exp"><span>Lv ${game.level}</span><span class="dim">經驗值 ${game.exp - lo} / ${hi - lo}</span></div>${bar(game.exp - lo, hi - lo, 'exp')}`
+      : `<div class="ch-exp"><span>Lv ${p.lv}</span><span class="dim">冒險者每升一級，隊友跟著升一級</span></div>`;
+    const header = `<div class="ch-head"><div class="ch-id"><div class="ch-name">${esc(p.name)}</div><div class="dim">${esc(c.name)}・${esc(R.name)}${isHero ? '' : `・隊友${origin ? '・' + origin.trim() : ''}`}${p === ctl ? '' : '<span class="ch-tag">只是在看，沒有換操作</span>'}</div></div><div class="ch-lv">${lvLine}</div></div>${pointsNote}`;
+    const gearName = (g) => (g ? esc(FE.Gear.name(g)) : '<span class="dim">空著</span>');
+    const load = game.weight();
+    const cards = `<div class="ch-cards">
+      <div class="ch-card"><h4>身體</h4>${kv('種族', esc(R.name))}${kv('身高、體格', `${FE.HEIGHTS[(p.height || 4) - 1]}、${FE.BUILDS[(p.build || 4) - 1]}`)}${kv('體型', Ch.sizeOf(p).toLocaleString('en-US'))}${p.skillPack ? kv('起始技能', esc(p.skillPack)) : ''}</div>
+      <div class="ch-card"><h4>裝備</h4>${kv('主手', gearName(p.equip.main))}${kv('副手', gearName(p.equip.off) + (p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''))}${kv('身上', gearName(p.equip.body))}</div>
+      <div class="ch-card"><h4>狀態</h4>
+        ${kv('生命', `${p.hp} / ${p.maxHp}`)}${bar(p.hp, p.maxHp, 'hp')}
+        ${kv('負重', `${load} / ${game.carryLimit()} 磅`)}${bar(load, game.carryLimit(), load > game.carryLimit() ? 'over' : 'load')}
+        ${kv('推拖上限', `${game.pushLimit()} 磅`)}${kv('走一步', `${Math.round(Ch.moveTicks(p) * Ch.exhaustMoveMul(p))} 刻`)}${kv('野外歇一小時', `回 ${heal}（最少 1）`)}${p.exhaust ? kv('力竭', `<b class="over">${p.exhaust} 級</b>`) : ''}
+      </div>
+    </div>`;
+    const m = p.equip.main ? Ch.mastery(p, p.equip.main) : null;
+    const tile = (k, v, note) => `<div class="ch-tile"><span class="dim">${k}</span><b>${v}</b>${note ? `<span class="dim ch-note">${note}</span>` : ''}</div>`;
+    const numbers = `<div class="ch-tiles">
+      ${tile('主手傷害', esc(game.attackText()))}
+      ${tile('近戰出手加減', sign(FE.Gear.hitMod(p)), '不含地形與高處')}
+      ${tile('AC', FE.Gear.playerAC(p))}
+      ${tile('暴擊', `${Ch.critMin(p, p.equip.main)}～20`)}
+      ${tile('攻擊一次', `${Ch.attackTicks(p, p.equip.main)} 刻`)}
+      ${tile('閃避', `${Math.round(d.dodge * 100)}%`)}
+      ${tile('物理傷害再減', Ch.conCut(p), '體質')}
+      ${tile('格擋', d.blockMax ? `${Math.round(d.block * 100)}%` : '—', d.blockMax ? `格擋值 ${d.blockMax}` : '沒拿盾牌')}
+      ${m ? tile('精通', esc(FE.MASTERIES[m].name), esc(FE.MASTERIES[m].desc)) : ''}
+      ${isHero ? tile('向工匠買／賣', `×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}／×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}`, '魅力') : ''}
+    </div>`;
+    $('charInfo').innerHTML = `${tabs}${header}${cards}
+      <h3 class="ch-sec">屬性<span class="dim">修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}</span></h3>
+      <div class="at-grid">${attrCards}</div>
+      <h3 class="ch-sec">戰鬥數字</h3>
+      ${numbers}
+      <h3 class="ch-sec">技能<span class="dim">用了就累積經驗，升到第 N 級要 ${C.SKILL_NEED_BASE}＋${C.SKILL_NEED_STEP}N 點，沒有上限；經驗倍率 ×${Ch.expFactor(p).toFixed(1)}</span></h3>
+      ${skillHtml}`;
   }
 
   // ---- 模態視窗：開新世界選職業與起始裝備、升級加點。開著的時候不能做別的事 ----

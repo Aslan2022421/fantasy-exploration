@@ -569,6 +569,43 @@ input {
 .npc.recruit { color: var(--map-mate-fg); }
 .player.mate { color: var(--map-mate-fg); }
 
+/* 第三十七版：角色頁的卡片排版（名字與等級、身體／裝備／狀態三張卡、屬性卡、戰鬥數字小格） */
+.ch-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 40%); gap: 16px; align-items: end; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 3px; background: var(--void); }
+.ch-name { font-size: 20px; color: var(--head); }
+.ch-tag { margin-left: 8px; padding: 0 6px; font-size: 11px; border: 1px solid var(--line); border-radius: 3px; }
+.ch-exp { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+.ch-exp > span:first-child { font-size: 16px; color: var(--head); }
+.ch-alert { margin-top: 6px; padding: 4px 10px; font-size: 13px; color: var(--bad); border: 1px solid var(--bad); border-radius: 3px; }
+.ch-bar { height: 6px; margin: 4px 0 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden; }
+.ch-bar i { display: block; height: 100%; background: var(--map-mate-fg); }
+.ch-bar.hp i { background: var(--hp, #6cc070); }
+.ch-bar.load i { background: var(--dim); }
+.ch-bar.over i { background: var(--bad); }
+.ch-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-top: 8px; }
+.ch-card { min-width: 0; padding: 6px 10px 8px; border: 1px solid var(--line2); border-radius: 3px; background: var(--void); }
+.ch-card h4, .ch-sec { margin: 0 0 4px; font-size: 13px; font-weight: normal; color: var(--dim); }
+.ch-kv { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: 8px; padding: 2px 0; font-size: 13px; }
+.ch-kv > span:first-child { color: var(--dim); }
+.ch-kv > span:last-child { overflow-wrap: anywhere; }
+.ch-sec { margin: 14px 0 6px; padding-bottom: 2px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.ch-sec .dim { font-size: 12px; }
+.at-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.at-card { min-width: 0; padding: 6px 8px; border: 1px solid var(--line2); border-radius: 3px; background: var(--void); }
+.at-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 13px; color: var(--head); }
+.at-add { padding: 1px 8px; font-size: 12px; }
+.at-val { display: flex; align-items: baseline; gap: 8px; margin: 2px 0; }
+.at-val > b { font-size: 22px; color: var(--head); }
+.at-mod { font-size: 14px; }
+.at-mod.pos { color: var(--map-mate-fg); }
+.at-mod.neg { color: var(--bad); }
+.at-cap { font-size: 11px; }
+.at-info { font-size: 12px; line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; }
+.ch-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.ch-tile { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 12px; border: 1px solid var(--line2); border-radius: 3px; background: var(--void); }
+.ch-tile > b { font-size: 15px; font-weight: normal; color: var(--head); overflow-wrap: anywhere; }
+.ch-note { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .ch-head { grid-template-columns: 1fr; } }
+
 /* 第三十七版：角色頁的技能卡片（分組、經驗進度條加「幾／幾」、效果；0 級變淡） */
 .sk-group { margin: 12px 0 6px; font-size: 13px; font-weight: normal; color: var(--dim); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
 .sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }

@@ -445,7 +445,7 @@
       points: 0,
       hp: 1,
       maxHp: 1,
-      equip: { main: null, off: null, body: null, pick: null, sickle: null },
+      equip: { main: null, off: null, body: null, tool1: null, tool2: null }, // 工具 1、工具 2：哪種工具都能放（第三十七版之一）
       block: null,         // 目前的格擋值，第一次需要時補成盾牌的格擋值上限（combat.js）
       copper: 0,           // 身上的錢（第三十版起用銅記帳，1 金＝10 銀＝100 銅；畫面寫 FE.money）
       jobs: {},            // 手上的委託（第三十版）：清除 hunt、送貨 deliver、採藥 herb、採礦 ore 每種最多一個；送貨的物品放在背包裡
@@ -459,10 +459,15 @@
     for (const id of c.fixed.concat(picks)) {
       const o = FE.START_OPTS[id];
       if (o.pack) {
+        // 包裡的東西都放進背包：裝備每件一格（n 件就放 n 格），錢加在身上，其他照種類疊放
         for (const item of FE.EQUIPMENT_PACKS[o.pack].items) {
-          if (item.gear) {
-            const g = FE.Gear.make(item.gear, 0, game.nextGearId++);
-            p.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
+          if (item.silver) {
+            p.copper += item.silver * C.SILVER;
+          } else if (item.gear) {
+            for (let k = 0; k < (item.n || 1); k++) {
+              const g = FE.Gear.make(item.gear, 0, game.nextGearId++);
+              p.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
+            }
           } else {
             const extra = item.id === 'goods' ? undefined : FE.BAG_ITEMS[item.id] && FE.BAG_ITEMS[item.id].bundle ? { q: 0 } : {};
             const entry = p.bag.find((e) => e.id === item.id && (!extra || e.q === extra.q));

@@ -454,7 +454,7 @@ function testCharacter() {
   // 11. 技能（第二十九版，照 Dwarf Fortress）：升到第 N 級要 400＋100N 點經驗，等級沒有上限，15 級以上是傳奇
   {
     ok(Ch.skillNeed(0) === 500 && Ch.skillNeed(1) === 600 && Ch.skillNeed(14) === 1900 && Ch.skillNeed(19) === 2400, `升級門檻不對：${Ch.skillNeed(0)}、${Ch.skillNeed(1)}、${Ch.skillNeed(14)}`);
-    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,firearm,misc,fight,shoot,dodge,light,medium,heavy,shield' && C.SKILL_MAX === undefined, '技能名單不對（劍術、槍術、刀術、杖術、斧術、錘術、鞭術、弓術、弩術、火器、雜物使用、格鬥、射擊、閃避、輕甲、中甲、重甲、盾牌使用）');
+    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,firearm,misc,fight,shoot,dodge,light,medium,heavy,shield,picklock,mining,herbalism' && C.SKILL_MAX === undefined, '技能名單不對（劍術、槍術、刀術、杖術、斧術、錘術、鞭術、弓術、弩術、火器、雜物使用、格鬥、射擊、閃避、輕甲、中甲、重甲、盾牌使用、開鎖、採礦、採藥）');
     ok(FE.SKILLS.sword.name === '劍術' && FE.SKILLS.spear.name === '槍術' && FE.SKILLS.knife.name === '刀術' && FE.SKILLS.staff.name === '杖術' && FE.SKILLS.axe.name === '斧術' && FE.SKILLS.mace.name === '錘術' &&FE.SKILLS.whip.name === '鞭術' && FE.SKILLS.bow.name === '弓術' && FE.SKILLS.crossbow.name === '弩術' && FE.SKILLS.misc.name === '雜物使用' && FE.SKILLS.fight.name === '格鬥' && FE.SKILLS.shoot.name === '射擊' && FE.SKILLS.light.name === '輕甲' && FE.SKILLS.medium.name === '中甲' && FE.SKILLS.heavy.name === '重甲', '技能的名字不對');
     ok(FE.SKILL_LEVELS.join() === '涉獵,新手,尚可,稱職,熟練,精通,天才,老練,專家,專精,卓越,傑出,大師,英雄,宗師,傳奇' && FE.skillLevelName(15) === '傳奇' && FE.skillLevelName(16) === '傳奇 +1' && FE.skillLevelName(30) === '傳奇 +15' && FE.skillLevelName(0) === '涉獵' && FE.skillLevelName(7) === '老練', '等級名稱不對');
     const g = mk(40, 'warrior');

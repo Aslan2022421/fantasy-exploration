@@ -171,6 +171,7 @@
   //   weapon：這一下用的武器（雙持時副手的短刀；null 是徒手；沒給就是主手）、off：雙持時副手那一下（傷害不加正的屬性修正值）
   //   range：遠程的 [正常射程, 最遠射程]、ammoQ：射出去的箭的品質（穿甲看它）
   //   holy：這一下命中時多 1d8 神聖傷害（牧師，每個動作只有第一下命中的那一次）
+  //   poison：射出去的是毒針（第三十七版之一），命中時多 1d4 毒傷並中毒 2 次行動
   //   noWear／noTrain：範圍魔攻的第二隻以後不再磨損法杖、不再練技能（一個動作只算一次）
   //   cleave：順劈（巨斧）的第二隻：不加屬性修正值，也不再磨損、練技能
   // opts.noCounter：這一下不觸發反擊（反擊本身、趁機攻擊）；opts.counter／opts.opportunity 只影響訊息與統計。
@@ -224,6 +225,7 @@
     if (D.prone) adv.push('倒地');
     if (aP && D.vexed) adv.push('侵擾');
     if (A.sapped && !opts.cling) dis.push('削弱');
+    if (!aP && A.poisoned > 0) dis.push('中毒'); // 毒針（第三十七版之一）：中毒的怪物出手有劣勢
     if (prof && prof.heavy && !opts.counter) dis.push('重型');
     if (prof && prof.offClumsy) dis.push('副手不順手');
     if (aP && ranged && opts.range && dist(A, D) > opts.range[0]) dis.push('超出正常射程');
@@ -262,6 +264,7 @@
     let holy = 0;
     let conCut = 0;
     let grazed = false;
+    let poison = 0;
     // 重擊：傷害骰擲兩次（巨劍、長柄刀、巨錘、巨棒的優勢是 3 次）；衝刺再加倍
     const deep = (kind === 'deep' ? edge.deepDice || 2 : 1) * (charge ? 2 : 1);
     // 失手（第三十七版之一）：角色命中後擲那把武器的失手率，失手就傷害減半（跟被閃開同時只減半一次）、精通效果都不觸發
@@ -345,6 +348,11 @@
         holy = Math.max(1, FE.rollDice(r, C.HOLY_DIE, 1) - reduction(game, D, 'holy', 0));
         dmg += holy;
       }
+      // 毒針（第三十七版之一）：命中時多 1d4 毒傷（不受閃避、格擋影響）；不受毒（noPoison）的怪物沒有
+      if (aP && opts.poison && hitKey && !dP && !FE.hasTag(D, 'noPoison')) {
+        poison = FE.rollDice(r, C.POISON_DIE, 1);
+        dmg += poison;
+      }
     } else if (aP && !opts.counter && prof.mastery === 'graze' && !prof.off && prof.attr > 0) {
       // 擦掠（巨劍）：沒命中時照樣造成等於屬性修正值的傷害（修正值是正數才有；副手那一下、順劈的第二隻沒有）
       dmg = prof.attr;
@@ -397,6 +405,11 @@
       const c = Math.max(0, Math.min(C.PROC_MAX, FE.MASTERIES[k].chance + prof.attr * C.PROC_ATTR + (lv - C.PROC_SKILL_FROM) * C.PROC_SKILL + prof.clear * C.PROC_CLEAR)) * (1 - resist);
       return c > 0 && r() < c;
     };
+    // 毒針：中毒 2 次行動（出手有劣勢，ai.js 數次數）
+    if (poison > 0 && alive) {
+      D.poisoned = Math.max(D.poisoned || 0, C.POISON_TURNS);
+      effects.push('牠中毒了，動作變得遲鈍');
+    }
     const live = track && !slip && hitKey && alive && !dP ? prof.masteries || [] : [];
     for (const k of live) {
       if (k === 'sap') {
@@ -504,6 +517,7 @@
         if (crit) parts.push('暴擊，傷害骰擲兩次');
         let tail = dmg > 0 ? `造成 ${dmg} 點傷害` : absorbed > 0 ? '傷害全被擋下' : '沒有造成傷害';
         if (holy > 0) tail += `（其中 ${holy} 點是神聖之力）`;
+        if (poison > 0) tail += `（其中 ${poison} 點是毒）`;
         if (vulnerable) tail += '（正中弱點，傷害加倍）';
         if (absorbed > 0 && dmg > 0) tail += `（${pD}格擋，擋下 ${absorbed} 點）`;
         if (reduced > 0) tail += `（護甲擋下 ${reduced} 點）`;
@@ -525,7 +539,7 @@
       FE.Combat.hook({
         by: aS ? 'soldier' : aP ? (A === hero ? 'player' : 'mate') : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, vulnerable, advWhy: adv.slice(), ac, reduced, conCut, grazed, dmg, holy,
         dmgType, mastery: mastery && hitKey && alive && !slip ? mastery : null, effects, weapon: wpn, off: !!opts.off,
-        counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D, slip, charge, nth,
+        counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D, slip, charge, nth, poison,
       });
     }
     if (countered) resolveAttack(game, D, A, 'attack', { noCounter: true, counter: true });

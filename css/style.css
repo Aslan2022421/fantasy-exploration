@@ -449,12 +449,12 @@ kbd { display: inline-block; min-width: 1.4em; padding: 0 4px; margin-right: 4px
 .eq-right { min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); padding-left: 16px; }
 .eq-weight { line-height: 1.6; }
 /* 裝備格照人形排：上排主手、身上、副手，下排礦鎬、鐮刀（使用者定的：欄位名與 14px 圖示同一列、格高 72px、名稱最多兩行、耐久單行省略） */
-.eq-doll { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "main body off" "pick . sickle"; gap: 8px; margin: 8px 0 12px; }
+.eq-doll { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "main body off" "tool1 . tool2"; gap: 8px; margin: 8px 0 12px; }
 .eqs-main { grid-area: main; }
 .eqs-body { grid-area: body; }
 .eqs-off { grid-area: off; }
-.eqs-pick { grid-area: pick; }
-.eqs-sickle { grid-area: sickle; }
+.eqs-tool1 { grid-area: tool1; }
+.eqs-tool2 { grid-area: tool2; }
 .eq-slot {
   box-sizing: border-box;
   height: 72px;

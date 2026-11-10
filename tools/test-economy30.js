@@ -96,10 +96,10 @@ function testEconomy30() {
       p.copper = 1000;
       p.hp = 1;
       p.equip.main.dur = 100;
-      p.equip.pick = FE.Gear.make('pick', 0, g.nextGearId++);
-      p.equip.pick.dur = 10;
-      p.equip.sickle = FE.Gear.make('sickle', 0, g.nextGearId++);
-      p.equip.sickle.dur = 10;
+      p.equip.tool1 = FE.Gear.make('pick', 0, g.nextGearId++); // 第三十七版之一：工具欄（工具 1、工具 2）
+      p.equip.tool1.dur = 10;
+      p.equip.tool2 = FE.Gear.make('sickle', 0, g.nextGearId++);
+      p.equip.tool2.dur = 10;
       p.exhaust = 4;
       const wt = counter(FE.AI, 'worldTurn');
       const t0 = g.ticks;
@@ -110,7 +110,7 @@ function testEconomy30() {
       const rep = Math.round(200 * C.LIVING_REPAIR[tier]);
       ok(g.ticks - t0 === 800 && wt.n >= 133 && wt.n <= 134 && p.hp === p.maxHp, `長休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、生命 ${p.hp}/${p.maxHp}`);
       const toolRep = C.LIVING_REPAIR[tier] ? Math.max(1, Math.round(50 * C.LIVING_REPAIR[tier])) : 0;
-      ok(paid === C.LIVING_COST[tier] * 10 && p.equip.main.dur === 100 + rep && p.equip.pick.dur === 10 + toolRep && p.equip.sickle.dur === 10 + toolRep, `${FE.PROSPERITY[tier]}：付了 ${paid} 銅（應該 ${C.LIVING_COST[tier]} 銀）、長劍耐久 ${p.equip.main.dur}（應該 ${100 + rep}）、採集工具耐久 ${p.equip.pick.dur}/${p.equip.sickle.dur}`);
+      ok(paid === C.LIVING_COST[tier] * 10 && p.equip.main.dur === 100 + rep && p.equip.tool1.dur === 10 + toolRep && p.equip.tool2.dur === 10 + toolRep, `${FE.PROSPERITY[tier]}：付了 ${paid} 銅（應該 ${C.LIVING_COST[tier]} 銀）、長劍耐久 ${p.equip.main.dur}（應該 ${100 + rep}）、工具耐久 ${p.equip.tool1.dur}/${p.equip.tool2.dur}`);
       ok(p.exhaust === 4 - C.LIVING_EXHAUSTION[tier], `${FE.PROSPERITY[tier]}長休後力竭 ${p.exhaust}（應該 ${4 - C.LIVING_EXHAUSTION[tier]}）`);
       ok(tier < 2 ? !p.lodging : p.lodging && p.lodging.villageId === v.id && p.lodging.bonus === C.LIVING_QUEST[tier], `${FE.PROSPERITY[tier]} 的委託獎勵加成 ${JSON.stringify(p.lodging)}`);
     }

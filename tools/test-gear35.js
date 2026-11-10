@@ -13,9 +13,10 @@ function testGear35() {
   const picks = FE.Char.defaultPicks('warrior', 70000);
   picks[picks.length - 1] = 'pack_supply';
   const starter = FE.Char.create(g, 'warrior', picks, '測試者');
-  ok(starter.bag.some((e) => e.id === 'herb' && e.n === 2) && starter.bag.some((e) => e.id === 'potion' && e.n === 1), '建角補給包沒有放入藥草與治療藥水');
+  // 第三十七版之一：補給包 2 份藥草、3 瓶治療藥水、20 銀；射手包 40 箭矢、40 弩矢、20 子彈、10 毒針、40 銀
+  ok(starter.bag.some((e) => e.id === 'herb' && e.n === 2) && starter.bag.some((e) => e.id === 'potion' && e.n === 3) && starter.copper === 200, '建角補給包沒有放入藥草、治療藥水與 20 銀');
   const archer = FE.Char.create(g, 'warrior', FE.Char.defaultPicks('warrior', 70000).slice(0, -1).concat('pack_archer'), '測試者');
-  ok(archer.bag.some((e) => e.id === 'arrow' && e.n === 20) && archer.bag.some((e) => e.id === 'bolt' && e.n === 20), '建角射手包沒有放入兩種彈藥');
+  ok(archer.bag.some((e) => e.id === 'arrow' && e.n === 40) && archer.bag.some((e) => e.id === 'bolt' && e.n === 40) && archer.bag.some((e) => e.id === 'bullet' && e.n === 20) && archer.bag.some((e) => e.id === 'poisonNeedle' && e.n === 10) && archer.copper === 400, '建角射手包的彈藥與 40 銀不對');
   FE.CLASSES = oldClasses;
   FE.MASTERY_SKILL = oldMastery;
 
@@ -23,8 +24,9 @@ function testGear35() {
   const smith = g.world.npcs.find((n) => n.villageId === village.id && n.role === 'merchant'); // 補給包在商人那裡（第三十六版之一）
   const p = g.player;
   p.copper = 100000;
-  const packPrice = FE.Gear.shopPrice('pack_supply', 0, village, g.chaMod());
-  ok(shopDo(g, smith, 'buyItem:pack_supply:0') && p.copper === 100000 - packPrice && g.bagCount('herb') === 2 && g.bagCount('potion') === 1, '商店沒有正確販售並拆開補給包');
+  // 第三十七版之一：商人不再賣裝備包；開鎖器、撬棍改成工具（20 銀、4 銀，不看經濟）
+  ok(!shopDo(g, smith, 'buyItem:pack_supply:0') && p.copper === 100000, '商人不該再賣裝備包');
+  ok(FE.Gear.shopPrice('lockpick', 0, village, 0) === 200 && FE.Gear.shopPrice('crowbar', 0, village, 0) === 40 && shopDo(g, smith, 'buyItem:lockpick:0') && p.bag.some((e) => e.gear && e.gear.type === 'lockpick') && p.copper === 100000 - 200, '向商人買開鎖器（工具，20 銀）');
   ok(FE.Gear.shopPrice('dart', 0) === 1 && FE.Gear.shopPrice('woodclub', 0) === 2 && FE.Gear.shopPrice('greatclub', 0) === 4 && FE.Gear.shopPrice('slingBullet', 0) === 1 && FE.Gear.shopPrice('oil', 0) === 2, '新物品價格沒有依 SRD 相對價換算，或低價物品被四捨五入成免費');
   ok(['lance', 'musket', 'pistol', 'blowgun'].every((id) => FE.GEAR[id].sold && FE.GEAR[id].drop) && FE.Gear.SHOPS.weaponsmith.buy.pole.includes('lance') && ['musket', 'pistol', 'blowgun', 'bullet', 'needle'].every((id) => FE.Gear.SHOPS.weaponsmith.buy.ranged.includes(id)), '騎槍、火器、吹箭筒或其彈藥沒有接上商店與掉落');
 
@@ -98,7 +100,7 @@ function testGear35() {
   p.hp = 1;
   g.bagAdd('potion', 1);
   g.useItem(g.player.bag.findIndex((e) => e.id === 'potion'));
-  ok(p.hp === 5 && g.bagCount('potion') === 1, '治療藥水沒有回復 2d4＋2 生命或消耗一瓶');
+  ok(p.hp === 5 && g.bagCount('potion') === 0, '治療藥水沒有回復 2d4＋2 生命或消耗一瓶'); // 第三十七版之一：商人不賣補給包，背包裡只有這一瓶
 
   p.x = spot.x;
   p.y = spot.y;
@@ -128,14 +130,23 @@ function testGear35() {
   g.bagAdd('lock', 1);
   g.useItem(g.player.bag.findIndex((e) => e.id === 'lock'));
   ok(g.world.isLocked(door.x, door.y) && !g.world.canStep(spot.x, spot.y, door.x, door.y) && g.bagCount('lock') === 0, '門鎖沒有阻擋通行或消耗門鎖');
-  g.bagAdd('crowbar', 1);
+  // 第三十七版之一：撞上上鎖的門，自動用工具欄裡的撬棍或開鎖器（沒有就只出訊息）
+  p.equip.tool1 = null;
+  p.equip.tool2 = null;
+  p.x = spot.x;
+  p.y = spot.y;
+  g.move(1, 0);
+  ok(g.world.isLocked(door.x, door.y) && p.x === spot.x && /需要開鎖器或撬棍/.test(g.log[0].text), '沒有工具撞上上鎖的門該只出訊息');
+  p.equip.tool1 = FE.Gear.make('crowbar', 0, g.nextGearId++);
   g.rng = () => 0.999;
-  g.useItem(g.player.bag.findIndex((e) => e.id === 'crowbar'));
-  ok(!g.world.isLocked(door.x, door.y) && g.world.canStep(spot.x, spot.y, door.x, door.y) && g.bagCount('crowbar') === 1, '撬棍沒有開鎖，或被錯誤消耗');
+  g.move(1, 0);
+  ok(!g.world.isLocked(door.x, door.y) && g.world.canStep(spot.x, spot.y, door.x, door.y) && p.equip.tool1 && p.equip.tool1.dur === 49 && p.x === spot.x, '撬棍沒有撬開門鎖，或沒有磨損一次');
   g.world.lockDoor(door.x, door.y);
-  g.bagAdd('thievesTools', 1);
-  g.useItem(g.player.bag.findIndex((e) => e.id === 'thievesTools'));
-  ok(!g.world.isLocked(door.x, door.y) && g.bagCount('thievesTools') === 1, '盜賊工具不能開鎖，或被錯誤消耗');
+  p.equip.tool2 = FE.Gear.make('lockpick', 0, g.nextGearId++);
+  g.move(1, 0);
+  ok(!g.world.isLocked(door.x, door.y) && p.equip.tool2.dur === 24 && p.equip.tool1.dur === 49 && /開鎖器/.test(g.log.map((l) => l.text).join('')), '兩把都有時該先用開鎖器');
+  p.equip.tool1 = null;
+  p.equip.tool2 = null;
 
   const saveDoor = { x: door.x, y: door.y };
   g.world.lockDoor(saveDoor.x, saveDoor.y);

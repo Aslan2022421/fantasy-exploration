@@ -1,6 +1,6 @@
 // 裝備與物品（第二十五版；第二十八版加上武器的傷害骰與特質、箭矢）：裝備物件 { id, type, q, dur, max }（type 見 config.js 的 FE.GEAR，q 是 FE.QUALITIES 的索引）、
 // 名字與品質符號、價錢（原價含品質，販售價再乘聚落經濟）、重量與負重、磨損、隨機品質與掉落、商店的貨色。
-// 冒險者穿的裝備放在 player.equip（main 主手、off 副手、body 身上），沒穿的放在背包裡（id 'gear' 的項目，每件單獨一格、不疊放）。
+// 冒險者穿的裝備放在 player.equip（main 主手、off 副手、body 身上、tool1／tool2 工具 1、工具 2），沒穿的放在背包裡（id 'gear' 的項目，每件單獨一格、不疊放）。
 // 遊戲內的文字一律只寫世界裡看得到的現象。
 (function () {
   const C = FE.CONFIG;
@@ -41,14 +41,14 @@
   const buyFactor = (cha) => Math.max(0.1, 1 - C.CHA_PRICE * (cha || 0));
   const sellFactor = (cha) => Math.max(0.1, 1 + C.CHA_PRICE * (cha || 0));
 
-  // 第三十版：價錢的數字（GEAR 的 price、TOOL_PRICE、ORE_PRICE）單位是銀，這裡算出來的一律是銅（乘 SILVER 之後才四捨五入）
-  // 販售價：普通原價×品質價值倍率×聚落經濟倍率（有市場再便宜一成，見 Steading.shopFactor）×魅力，四捨五入；礦鎬、鐮刀固定 20 銀、不看經濟
+  // 第三十版：價錢的數字（GEAR 的 price、ORE_PRICE）單位是銀，這裡算出來的一律是銅（乘 SILVER 之後才四捨五入）
+  // 販售價：普通原價×品質價值倍率×聚落經濟倍率（有市場再便宜一成，見 Steading.shopFactor）×魅力，四捨五入；
+  // 工具（礦鎬、鐮刀、開鎖器、撬棍）照自己的價錢×品質價值倍率×魅力、不看經濟（第三十七版之一，原本一律 20 銀）
   function shopPrice(type, q, v, cha) {
     const gear = G[type];
-    if (gear && gear.cat === 'tool') return Math.round(C.TOOL_PRICE * C.SILVER * buyFactor(cha));
+    if (gear && gear.cat === 'tool') return Math.round(gear.price * Q[q || 0].value * C.SILVER * buyFactor(cha));
     const item = FE.BAG_ITEMS[type];
-    const pack = type.startsWith('pack_') && FE.EQUIPMENT_PACKS[type.slice(5)];
-    const base = gear ? gear.price * Q[q].value : item ? item.price : pack ? pack.price : null;
+    const base = gear ? gear.price * Q[q].value : item ? item.price : null;
     if (!Number.isFinite(base)) throw new Error(`沒有商品價格：${type}`);
     return Math.round(base * C.SILVER * FE.Steading.shopFactor(v) * buyFactor(cha));
   }
@@ -98,7 +98,9 @@
   }
 
   // ---- 冒險者的裝備數字 ----
-  const equipped = (p) => [p.equip.main, p.equip.off, p.equip.body, p.equip.pick, p.equip.sickle].filter(Boolean);
+  const equipped = (p) => [p.equip.main, p.equip.off, p.equip.body, p.equip.tool1, p.equip.tool2].filter(Boolean);
+  // 工具欄的兩格（第三十七版之一）
+  const TOOL_SLOTS = ['tool1', 'tool2'];
   // 掉落、寶箱的訊息用：箭矢是「一捆箭矢」，其他是「一件 X」
   const lootName = (g) => (def(g).cat === 'ammo' ? `一捆 ${def(g).bundle} 支的${name(g)}` : `一件${name(g)}`);
   // 武器的傷害寫法：「1d8」
@@ -289,11 +291,12 @@
       return `${kind}、${ac}、物理減傷 ${Math.round(d.phys * q.armor)}、魔法減傷 ${Math.round(d.magic * q.armor)}、${w}${ex}${d.desc ? '。' + d.desc : ''}`;
     }
     if (d.cat === 'shield') return `AC +${d.ac}、格擋 ${Math.round(d.block * 100)}%、格擋值 ${Math.round(d.value * q.armor)}、${w}`;
+    if (d.cat === 'tool') return `工具：${d.desc}${q.hit && d.use === 'lock' ? `、開鎖 +${q.hit}` : ''}${q.armor > 1 && d.use === 'ore' ? `、挖得快 ×${Math.min(C.MINE_QUALITY_MAX, q.armor)}` : ''}、${w}`;
     return w;
   }
 
   // ---- 商店 ----
-  // 鐵匠與武器匠販售武器、彈藥、礦鎬與鐮刀；盔甲匠販售防具與盾牌；商人販售消耗品、陷阱、門鎖工具與裝備包（第三十六版之一）。
+  // 鐵匠與武器匠販售武器、彈藥、礦鎬與鐮刀；盔甲匠販售防具與盾牌；商人販售消耗品、陷阱、門鎖與開鎖工具（第三十六版之一；第三十七版之一起不賣裝備包）。
   // buy 依類別整理商品資料，交易介面會合併成單一清單；quals：賣哪幾種品質（工具固定普通）；repair：修哪幾類（GEAR 的 cat）；craft：能打造的；sell：收哪幾類
   const SHOPS = {
     blacksmith: {
@@ -339,20 +342,22 @@
       sell: ['armor', 'shield'],
     },
   };
-  // 商人（第三十六版之一，每個聚落一位）：消耗品、陷阱、開鎖工具、裝備包原本放在鐵匠與武器匠那裡，搬到這裡；沒有修理與打造，只收購藥草
+  // 商人（第三十六版之一，每個聚落一位）：消耗品、陷阱、開鎖工具原本放在鐵匠與武器匠那裡，搬到這裡；沒有修理與打造，只收購藥草。
+  // 第三十七版之一：開鎖器（原本的盜賊工具）與撬棍改成工具；毒針只有城鎮（城鎮、城市、堡壘、要塞）的商人賣（townOnly）
   SHOPS.merchant = {
     title: '商人',
     buy: {
-      supplies: ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil'],
-      kit: ['caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'],
+      supplies: ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'poisonNeedle'],
+      kit: ['caltrops', 'bearings', 'huntingTrap', 'lock', 'lockpick', 'crowbar'],
     },
+    townOnly: ['poisonNeedle'],
     quals: [0],
     repair: [],
     craft: [],
     sell: [],
     tabs: ['buy', 'sell'],
   };
-  const CAT_NAMES = { blade: '劍與刀', axe: '斧與錘', pole: '長柄與法杖', ranged: '遠程武器與彈藥', supplies: '藥水與投擲物', kit: '陷阱、門鎖與裝備包', armor: '防具與盾牌', armorL: '輕甲與衣袍', armorM: '中甲', armorH: '重甲', shieldC: '盾牌', tool: '工具' };
+  const CAT_NAMES = { blade: '劍與刀', axe: '斧與錘', pole: '長柄與法杖', ranged: '遠程武器與彈藥', supplies: '藥水與投擲物', kit: '陷阱、門鎖與開鎖工具', armor: '防具與盾牌', armorL: '輕甲與衣袍', armorM: '中甲', armorH: '重甲', shieldC: '盾牌', tool: '工具' };
   // 舊商店頁面相容用：依買賣資料的內部分類整理打造配方
   function craftCats(S) {
     const out = {};
@@ -381,8 +386,7 @@
         const quals = G[id].cat === 'tool' ? [0] : S.quals;
         for (const qq of quals) if (q === undefined || q === qq) out.push({ id, type: id, q: qq, gear: true });
       } else {
-        const pack = id.startsWith('pack_') && FE.EQUIPMENT_PACKS[id.slice(5)];
-        if (FE.BAG_ITEMS[id] || pack) out.push({ id, type: id, q: 0, gear: false, pack: !!pack });
+        if (FE.BAG_ITEMS[id]) out.push({ id, type: id, q: 0, gear: false });
         else throw new Error(`商店列了不存在的商品：${id}`);
       }
     }
@@ -390,20 +394,18 @@
   }
   function productName(e) {
     if (e.gear) return name({ type: e.type, q: e.q });
-    if (e.pack) return FE.EQUIPMENT_PACKS[e.id.slice(5)].name;
     const item = FE.BAG_ITEMS[e.id];
     return item.bundle ? `一捆 ${item.bundle} 支的${item.name}` : item.name;
   }
   function productText(e) {
     if (e.gear) return statText({ type: e.type, q: e.q });
-    if (e.pack) return FE.EQUIPMENT_PACKS[e.id.slice(5)].desc;
     const item = FE.BAG_ITEMS[e.id];
     return `${item.weight} 磅${item.die ? `、${dieText(item.die)} ${item.damage === 'holy' ? '神聖' : FE.DMG_TYPES[item.damage]}` : ''}${item.fixedDamage ? `、${item.fixedDamage} 點${FE.DMG_TYPES[item.damage]}傷害` : ''}`;
   }
 
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, herbPrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
-    equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerAC, playerDefense, counterChance, counterDamage, wearTier, wearPenalty,
+    equipped, TOOL_SLOTS, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerAC, playerDefense, counterChance, counterDamage, wearTier, wearPenalty,
     itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText, edgeText, masteryNames,
     SHOPS, CAT_NAMES, craftCats, shopOf, isShopkeeper, offOk, shopEntries, productName, productText,
   };

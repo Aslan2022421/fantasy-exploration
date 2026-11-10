@@ -42,7 +42,7 @@ function arenaGame(cls, level, wl, seed) {
   p.y = spot.y;
   game.checkCreate = () => {};
   game.addExp = () => {};
-  game.dropChest = () => {};
+  game.dropCoins = () => {};
   game.dropGear = () => {};
   game.defeat = (m) => { game.monsters = game.monsters.filter((o) => o !== m); if (game.battle.targetId === m.id) game.battle.targetId = null; };
   return game;

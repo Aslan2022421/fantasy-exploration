@@ -261,7 +261,8 @@ function testGear() {
     const sA = dump(armorer);
     const sM = dump(merchant);
     // 第三十六版之一：消耗品、陷阱、開鎖工具、裝備包搬到商人那裡
-    const MERCHANT = ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'];
+    // 第三十七版之一：不賣裝備包；盜賊工具改名開鎖器、撬棍改成工具；城鎮的商人多賣毒針
+    const MERCHANT = ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'poisonNeedle', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'lockpick', 'crowbar'];
     const has = (list, t, q) => list.includes(`buyItem:${t}:${q}`);
     const BLACKSMITH = ['sword', 'shortsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'club', 'warhammer', 'handaxe', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'arrow', 'sling', 'slingBullet', 'padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield', 'pick', 'sickle'];
     const WEAPONSMITH = ['sword', 'shortsword', 'greatsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'greataxe', 'handaxe', 'club', 'warhammer', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'whip', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'crossbow', 'handcrossbow', 'heavycrossbow', 'sling', 'arrow', 'bolt', 'slingBullet', 'musket', 'pistol', 'blowgun', 'bullet', 'needle', 'pick', 'sickle'];
@@ -563,12 +564,12 @@ function testGear() {
     const turn1 = g.turn;
     g.useItem(p.bag.findIndex((e) => e.gear === sh2));
     ok(p.equip.off === null && g.turn === turn1, '拿著弓箭不該能拿盾牌');
-    // 採集工具必須裝備後才會用；裝備算一個動作
+    // 工具必須裝進工具欄後才會用；裝備算一個動作（第三十七版之一：工具 1、工具 2）
     const pick = G.make('pick', 0, g.nextGearId++);
     g.bagAddGear(pick);
     const toolTurn = g.turn;
     g.useItem(p.bag.findIndex((e) => e.gear === pick));
-    ok(p.equip.pick === pick && !p.bag.some((e) => e.gear === pick) && g.toolOf('pick') === pick && g.turn === toolTurn + 1, '裝備礦鎬後才生效，並花一個動作');
+    ok(p.equip.tool1 === pick && !p.bag.some((e) => e.gear === pick) && g.toolOf('pick') === pick && g.turn === toolTurn + 1, '裝備礦鎬後才生效，並花一個動作');
     // 丟掉：整疊消失，不算動作
     g.bagAdd('herb', 4);
     const hi = p.bag.findIndex((e) => e.id === 'herb');
@@ -582,15 +583,10 @@ function testGear() {
     ok(!!back && !!back.game, '存檔讀不回來');
     if (back && back.game) {
       const q = back.game.player;
-      ok(q.equip.main.type === 'bow' && q.equip.main.dur === 123 && q.equip.body.type === 'medium' && q.equip.body.q === 4 && q.equip.body.warned === true && q.equip.pick.type === 'pick' && q.bag.filter((e) => e.id === 'gear').length === p.bag.filter((e) => e.id === 'gear').length && back.game.nextGearId === g.nextGearId, '存檔裡的主手、身上與採集裝備沒有完整讀回來');
+      ok(q.equip.main.type === 'bow' && q.equip.main.dur === 123 && q.equip.body.type === 'medium' && q.equip.body.q === 4 && q.equip.body.warned === true && q.equip.tool1.type === 'pick' && q.bag.filter((e) => e.id === 'gear').length === p.bag.filter((e) => e.id === 'gear').length && back.game.nextGearId === g.nextGearId, '存檔裡的主手、身上與採集裝備沒有完整讀回來');
       ok(back.game.weight() === g.weight(), '讀回來的負重不一樣');
-      const legacy = FE.store.load('fe.save', null);
-      legacy.data.player.bag.push({ id: 'gear', name: G.name(p.equip.pick), n: 1, gear: legacy.data.player.equip.pick });
-      delete legacy.data.player.equip.pick;
-      delete legacy.data.player.equip.sickle;
-      FE.store.save('fe.save', legacy);
-      const migrated = FE.Save.load();
-      ok(!!migrated && migrated.game.toolOf('pick') && !migrated.game.player.bag.some((e) => e.id === 'gear' && e.gear.type === 'pick'), '舊存檔的礦鎬遷移到裝備欄，不再留一份在背包');
+      // 第三十七版之一：舊存檔的礦鎬、鐮刀兩格不遷移（存檔版本加一，舊存檔整個清掉）；讀回來的裝備欄一定有工具 1、工具 2
+      ok(back.game.toolOf('pick') && 'tool1' in q.equip && 'tool2' in q.equip && !('pick' in q.equip), '讀回來的裝備欄是主手、副手、身上、工具 1、工具 2');
     }
   }
 
@@ -599,15 +595,15 @@ function testGear() {
     const g = newGame(19);
     const p = g.player;
     const mid = () => { const m = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 6 }, 1, 1); return m; };
-    // 箭矢掉一捆，疊進背包的箭矢裡（當成 { type: 'arrow', q } 算）
-    const bagGear = () => p.bag.filter((e) => e.id === 'gear' || e.id === 'arrow' || e.id === 'bolt').map((e) => (e.id === 'arrow' || e.id === 'bolt' ? { type: e.id, q: e.q, n: e.n } : e.gear));
+    // 第三十七版之一：掉的裝備落在倒下的那一格（world.items），走上去才撿起（箭矢撿起來疊進背包的箭矢裡）
+    const bagGear = () => g.world.items.filter((it) => it.gear).map((it) => it.gear);
     // 創世時的中型怪物（small=false）與合體怪物（small=false、有 members）都會掉；事件生的 small、小怪物不掉
     const runs = 10000;
     let got = 0;
     const hist = {};
     const types = new Set();
     for (let i = 0; i < runs; i++) {
-      p.bag = [];
+      g.world.items = [];
       g.dropGear(mid());
       const l = bagGear();
       if (l.length) { got++; hist[l[0].q] = (hist[l[0].q] || 0) + 1; types.add(l[0].type); }
@@ -618,13 +614,13 @@ function testGear() {
     // 箭矢掉一捆 20 支
     {
       let arrows = null;
-      for (let i = 0; i < 4000 && !arrows; i++) { p.bag = []; g.dropGear(mid()); arrows = p.bag.find((e) => e.id === 'arrow'); }
+      for (let i = 0; i < 4000 && !arrows; i++) { p.bag = []; g.world.items = []; g.dropGear(mid()); g.pickUp(0, 0); arrows = p.bag.find((e) => e.id === 'arrow'); }
       ok(arrows && arrows.n === 20 && arrows.q >= 1 && arrows.q <= 3 && g.log.some((l) => l.text.includes('一捆 20 支的')), `掉落的箭矢該是一捆 20 支：${JSON.stringify(arrows)}`);
     }
     const small = mid(); small.small = true;
     const tiny = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
     let extra = 0;
-    for (let i = 0; i < 1000; i++) { p.bag = []; g.dropGear(small); g.dropGear(tiny); extra += bagGear().length; }
+    for (let i = 0; i < 1000; i++) { g.world.items = []; g.dropGear(small); g.dropGear(tiny); extra += bagGear().length; }
     ok(extra === 0, `事件生的中型怪物或小怪物不該掉裝備（掉了 ${extra} 件）`);
     // 寶箱
     let chestGot = 0;
@@ -635,7 +631,8 @@ function testGear() {
       p.hp = p.maxHp;
       g.world.chests.push({ id: 9000 + i, x: 0, y: 0, copper: 50 });
       g.openChest(g.world.chests[g.world.chests.length - 1]);
-      const l = bagGear();
+      // 寶箱開出的裝備直接放進背包（箭矢疊進背包的箭矢裡，當成 { type: 'arrow', q } 算）
+      const l = p.bag.filter((e) => e.id === 'gear' || e.id === 'arrow' || e.id === 'bolt').map((e) => (e.id === 'arrow' || e.id === 'bolt' ? { type: e.id, q: e.q, n: e.n } : e.gear));
       if (l.length) { chestGot++; ch[l[0].q] = (ch[l[0].q] || 0) + 1; }
     }
     ok(Math.abs(chestGot / chestRuns - 0.1) < 0.02, `寶箱多開出裝備的比例 ${(chestGot / chestRuns).toFixed(3)}（應該約 0.1）`);
@@ -843,9 +840,9 @@ function testGear() {
     const drop = (m, n) => {
       const out = [];
       for (let i = 0; i < n; i++) {
-        g.world.chests = [];
-        g.dropChest(m);
-        if (g.world.chests.length) out.push(g.world.chests[0].copper / C.SILVER);
+        g.world.items = []; // 第三十七版之一：不再掉寶箱，錢掉在倒下的那一格
+        g.dropCoins(m);
+        if (g.world.items.length) out.push(g.world.items[0].copper / C.SILVER);
       }
       return out;
     };
@@ -854,8 +851,8 @@ function testGear() {
     small.small = true;
     const dm = drop(mid, 300);
     const ds = drop(small, 600);
-    ok(Math.abs(dm.length / 300 - C.DROP_BIG_CHANCE) < 0.12 && C.DROP_BIG_CHANCE === 0.5, `中型怪物掉寶箱的比例 ${(dm.length / 300).toFixed(2)}（應該約 0.5）`);
-    ok(Math.abs(ds.length / 600 - C.DROP_SMALL_CHANCE) < 0.07 && C.DROP_SMALL_CHANCE === 0.2, `小怪物掉寶箱的比例 ${(ds.length / 600).toFixed(2)}（應該約 0.2）`);
+    ok(Math.abs(dm.length / 300 - C.DROP_BIG_CHANCE) < 0.12 && C.DROP_BIG_CHANCE === 0.5, `中型怪物掉錢的比例 ${(dm.length / 300).toFixed(2)}（應該約 0.5）`);
+    ok(Math.abs(ds.length / 600 - C.DROP_SMALL_CHANCE) < 0.07 && C.DROP_SMALL_CHANCE === 0.2, `小怪物掉錢的比例 ${(ds.length / 600).toFixed(2)}（應該約 0.2）`);
     ok(dm.length > 0 && Math.min(...dm) >= 14 && Math.max(...dm) <= 16, `中型怪物的寶箱金幣 ${Math.min(...dm)}～${Math.max(...dm)}（原本 27～32，減半後 14～16）`);
     ok(ds.length > 0 && Math.min(...ds) >= 3 && Math.max(...ds) <= 8, `小怪物的寶箱金幣 ${Math.min(...ds)}～${Math.max(...ds)}（原本 5～15，減半後 3～8）`);
     // 第三十版：掉落拆成三種幣、總值不變；小怪物多銅與銀（不出金），中型怪物與寶箱多銀、偶爾有金

@@ -91,18 +91,9 @@
     game.mates = Array.isArray(data.mates) ? data.mates : [];
     if (data.ctl > 0 && game.mates[data.ctl - 1]) game.player = game.mates[data.ctl - 1];
     const p = game.hero;
-    const oldEquip = p.equip || {};
-    p.equip = Object.assign({ main: null, off: null, body: null, pick: null, sickle: null }, oldEquip);
+    // 第三十七版之一：裝備欄是主手、副手、身上、工具 1、工具 2（舊的礦鎬、鐮刀兩格不遷移，存檔版本已加一）
+    p.equip = Object.assign({ main: null, off: null, body: null, tool1: null, tool2: null }, p.equip || {});
     p.bag = p.bag || [];
-    for (const [type, slot] of [['pick', 'pick'], ['sickle', 'sickle']]) {
-      if (Object.prototype.hasOwnProperty.call(oldEquip, slot)) continue;
-      const entry = p.bag
-        .filter((e) => e.id === 'gear' && e.gear.type === type)
-        .sort((a, b) => a.gear.dur - b.gear.dur)[0];
-      if (!entry) continue;
-      p.equip[slot] = entry.gear;
-      p.bag = p.bag.filter((e) => e !== entry);
-    }
     const w = game.world;
     const d = data.world;
     for (const s of d.chunks) {

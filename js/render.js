@@ -190,7 +190,7 @@
         }
         const item = items.get(k);
         if (item) {
-          glyph = item.trap ? (item.armed ? '^' : 'x') : ')';
+          glyph = item.trap ? (item.armed ? '^' : 'x') : item.copper != null ? '$' : ')'; // 怪物倒下時掉的錢（第三十七版之一）
           fg = P['map-item'];
           bold = true;
           alpha = 1;
@@ -928,7 +928,8 @@
     }
     const selected = ui.bagIndex == null ? null : list[ui.bagIndex];
     const tier = game.loadTier();
-    // 第三十七版：裝備格照人形排（上排主手、身上、副手，下排礦鎬、鐮刀），只放真的有用的五格（原本保留的六格空位不畫）。
+    // 第三十七版：裝備格照人形排（上排主手、身上、副手，下排工具 1、工具 2），只放真的有用的五格（原本保留的六格空位不畫）。
+    // 第三十七版之一：下排原本的礦鎬、鐮刀兩格改成工具 1、工具 2，哪種工具都能放
     // 每格高 72px：欄位名與 14px 圖示同一列，物品名稱最多兩行，耐久單行（放不下就省略）；點一下卸下（算一個動作）
     const slot = (key, label, icon, g) =>
       `<button class="eq-slot eqs-${key}" data-unequip="${key}" ${g ? `title="${esc(G.name(g))}：${esc(G.statText(g))}（點一下卸下）"` : 'disabled'}>` +
@@ -940,7 +941,7 @@
       <p class="eq-weight">身上裝備 ${Math.round(worn * 100) / 100} 磅｜負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
         tier === 1 ? '<br><b class="over">超過能背的重量：走一步要 36 刻</b>' : tier === 2 ? '<br><b class="over">超過推拖上限：不能移動、不能撤退，先丟掉東西</b>' : ''
       }</p>
-      <div class="eq-doll">${slot('main', '主手', 'main', p.equip.main)}${slot('body', '身上', 'body', p.equip.body)}${slot('off', '副手', 'off', p.equip.off)}${slot('pick', '礦鎬', 'pick', p.equip.pick)}${slot('sickle', '鐮刀', 'sickle', p.equip.sickle)}</div>`;
+      <div class="eq-doll">${slot('main', '主手', 'main', p.equip.main)}${slot('body', '身上', 'body', p.equip.body)}${slot('off', '副手', 'off', p.equip.off)}${slot('tool1', '工具 1', 'tool', p.equip.tool1)}${slot('tool2', '工具 2', 'tool', p.equip.tool2)}</div>`;
 
     let detail = '<p class="dim">選一件物品查看資訊與可用操作。</p>';
     if (selected) {
@@ -952,7 +953,7 @@
       const offBlocked = canOff && p.equip.main && G.twoHanded(p, p.equip.main);
       const itemName = `${selected.name}${selected.n > 1 ? ` ×${selected.n}` : ''}`;
       const actions = [];
-      if (isTool) actions.push('<button data-bag-action="use">裝備採集工具</button>');
+      if (isTool) actions.push('<button data-bag-action="use">裝進工具欄</button>');
       else if (isGear && canEquip) actions.push('<button data-bag-action="use">穿上或拿起</button>');
       else if (!isGear && selected.use) actions.push('<button data-bag-action="use">使用</button>');
       if (canOff) actions.push(`<button data-bag-action="off" ${offBlocked ? 'disabled' : ''}>拿在副手</button>`);
@@ -963,7 +964,7 @@
           ? `<div class="bag-actions">${actions.join('')}</div>`
           : '';
       const extra = isTool
-        ? '<p class="dim">裝進對應的採集裝備欄後，才能用來採集；同類工具會換回背包。</p>'
+        ? '<p class="dim">裝進工具欄（工具 1、工具 2，哪種工具都能放）才用得上：撞上礦脈、藥草、上鎖的寶箱或門時，自動用對得上的那一把；同種兩把先用耐久低的。兩格都滿時換掉同種的那一把（沒有同種的換工具 1）。</p>'
         : selected.id === 'goods'
           ? '<p class="dim">這是受託運送的物品，不能丟棄或直接使用。</p>'
           : canOff && offBlocked
@@ -1040,7 +1041,7 @@
     if (b.ranged) return 'thrown';
     if (b.trap) return 'trap';
     if (e.id === 'herb' || e.id === 'ore') return 'mat';
-    if (e.id === 'lock' || e.id === 'thievesTools' || e.id === 'crowbar') return 'tool';
+    if (e.id === 'lock') return 'tool';
     return 'use';
   }
 
@@ -1050,8 +1051,7 @@
     main: svg14('<path d="M5 19L19 5M14 5h5v5M6.5 14.5l3 3M4 20l2-2"/>'),
     off: svg14('<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/>'),
     body: svg14('<path d="M8 3l-4 3 2 5h2v10h8V11h2l2-5-4-3-2 2h-4z"/>'),
-    pick: svg14('<path d="M4 7c4-4 12-4 16 0M12 5v16"/>'),
-    sickle: svg14('<path d="M6 20l4-4M10 16c-2-7 3-12 10-12-4 2-6 6-5 11"/>'),
+    tool: svg14('<path d="M4 7c4-4 12-4 16 0M12 5v16"/>'),
   };
 
   // 角色視窗用：主手武器的精通（用得上的才寫）
@@ -1125,6 +1125,13 @@
         return `${ws.map((k) => FE.GEAR[k].name).join('、')}：近戰命中 +${hit}、傷害 +${dmg}${FE.GEAR[ws[0]].thrown ? '（投擲只加傷害）' : ''}${id === 'staff' ? '；法師的範圍魔攻也算' : ''}${unlock}`;
       }
       if (id === 'dodge') return `閃避機率 +${lv}%`;
+      // 第三十七版之一：開鎖、採礦、採藥
+      if (id === 'picklock') return `用開鎖器開鎖 +${Math.floor(lv / C.PICKLOCK_EVERY)}（每 ${C.PICKLOCK_EVERY} 級 +1；撬棍不看這一項）`;
+      if (id === 'mining' || id === 'herbalism') {
+        const more = Math.min(C.GATHER_SKILL_MAX, Math.floor(lv / C.GATHER_SKILL_EVERY));
+        const fast = id === 'mining' ? `；挖一次的時間 ×${((C.MINE_TICK_DIV - Math.min(lv, C.MINE_SKILL_CAP)) / C.MINE_TICK_DIV).toFixed(2)}` : '';
+        return `${id === 'mining' ? '挖礦脈' : '割藥草'}一次得到 ${C.GATHER_YIELD[0] + more}～${C.GATHER_YIELD[1] + more} 份${fast}`;
+      }
       if (id === 'shield') return `格擋機率 +${lv * 2}%`;
       // 輕甲、中甲、重甲：穿這一類時身上防具的重量打折、多花的刻減少
       const t = C.ARMOR_WEIGHT_MUL;
@@ -1146,6 +1153,7 @@
       ['遠程', ['bow', 'crossbow', 'firearm', 'shoot']],
       ['戰鬥', ['fight', 'misc', 'dodge', 'shield']],
       ['防具', ['light', 'medium', 'heavy']],
+      ['工具', ['picklock', 'mining', 'herbalism']],
     ];
     const grouped = new Set(SKILL_GROUPS.flatMap(([, ids]) => ids));
     const rest = Object.keys(FE.SKILLS).filter((id) => !grouped.has(id));

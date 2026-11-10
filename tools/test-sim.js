@@ -143,7 +143,7 @@ function botStep(game, rng, goal, lazy) {
       }
       for (const [dx, dy] of DIRS) {
         const nx = x + dx, ny = y + dy;
-        if (prev.has(key(nx, ny)) || !w.canStep(x, y, nx, ny) || game.monsterAt(nx, ny) || w.npcAt(nx, ny) || game.soldierAt(nx, ny)) continue;
+        if (prev.has(key(nx, ny)) || !w.canStep(x, y, nx, ny) || game.monsterAt(nx, ny) || w.npcAt(nx, ny) || game.soldierAt(nx, ny) || w.chestAt(nx, ny)) continue; // 寶箱上了鎖，繞開（第三十七版之一）
         prev.set(key(nx, ny), key(x, y));
         q.push([nx, ny]);
       }
@@ -335,12 +335,12 @@ function simulate(seed, opts) {
   let endCalls = 0;
   const end0 = game.endTurn.bind(game);
   game.endTurn = (a, b, c) => { endCalls++; return end0(a, b, c); };
-  // 士兵打倒的怪物：冒險者不拿經驗值也不拿算力，也不掉寶箱
+  // 士兵打倒的怪物：冒險者不拿經驗值也不拿算力，也不掉錢與裝備（第三十七版之一起掉在地上，不再掉寶箱）
   const defeat0 = game.defeat.bind(game);
   game.defeat = (m, by) => {
-    const before = [game.exp, game.creation, game.compute, game.world.chests.length];
+    const before = [game.exp, game.creation, game.compute, game.world.items.length];
     defeat0(m, by);
-    if (by && by.role === 'soldier' && (game.exp !== before[0] || game.creation !== before[1] || game.compute !== before[2] || game.world.chests.length !== before[3])) {
+    if (by && by.role === 'soldier' && (game.exp !== before[0] || game.creation !== before[1] || game.compute !== before[2] || game.world.items.length !== before[3])) {
       fail(`模擬 seed${seed} 士兵打倒的怪物給了冒險者獎勵`);
     }
   };

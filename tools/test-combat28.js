@@ -626,15 +626,16 @@ function testCombat28() {
     const armors = Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'armor' && FE.GEAR[k].sold);
     for (const cls of Object.keys(FE.CLASSES)) {
       const gs = FE.startGroups(cls);
-      ok(FE.CLASSES[cls].fixed.length === 0 && gs.length === 4 && gs[0].of.slice().sort().join() === weapons.slice().sort().join() && gs[1].of.slice().sort().join() === armors.slice().sort().join() && gs[2].of.join() === 'shield,nooff' && gs[3].of.join() === 'herb,gold,pack_gathering,pack_supply,pack_archer,pack_thrower', `${cls} 的起始挑法：${gs.map((g) => g.of.length)}`);
-      for (const picks of [['sword', 'medium', 'shield', 'herb'], ['dagger', 'robe', 'nooff', 'gold'], ['bow', 'light', 'nooff', 'herb']]) {
+      ok(FE.CLASSES[cls].fixed.length === 0 && gs.length === 4 && gs[0].of.slice().sort().join() === weapons.slice().sort().join() && gs[1].of.slice().sort().join() === armors.slice().sort().join() && gs[2].of.join() === 'shield,nooff' && gs[3].of.join() === 'money,pack_explore,pack_supply,pack_archer,pack_thrower', `${cls} 的起始挑法：${gs.map((g) => g.of.length)}`);
+      for (const picks of [['sword', 'medium', 'shield', 'pack_supply'], ['dagger', 'robe', 'nooff', 'money'], ['bow', 'light', 'nooff', 'pack_supply']]) {
         const g = new FE.Game(430);
         g.start({ cls, picks });
         const p = g.player;
         const have = [p.equip.main, p.equip.off, p.equip.body].filter(Boolean).map((x) => x.type);
         const want = picks.map((id) => FE.START_OPTS[id].gear).filter(Boolean);
         ok(want.every((t) => have.includes(t)) && have.length === want.length, `${cls} ${picks} 的起始裝備 ${have}（應該 ${want}）`);
-        ok(g.bagCount('herb') === (picks.includes('herb') ? 2 : 0) && p.copper === (picks.includes('gold') ? 200 : 0), `${cls} ${picks} 的藥草與 20 銀`);
+        // 第三十七版之一：補給包 2 份藥草、3 瓶治療藥水、20 銀；只拿錢 50 銀
+        ok(g.bagCount('herb') === (picks.includes('pack_supply') ? 2 : 0) && g.bagCount('potion') === (picks.includes('pack_supply') ? 3 : 0) && p.copper === (picks.includes('pack_supply') ? 200 : picks.includes('money') ? 500 : 0), `${cls} ${picks} 的補給包與錢`);
       }
     }
 

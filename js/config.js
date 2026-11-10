@@ -5,7 +5,7 @@ window.FE = window.FE || {};
 FE.DIRS8 = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
 
 FE.CONFIG = {
-  SAVE_VERSION: 28,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（27：火器技能、武器的新精通與一優一劣、怪物身上的流血、眩暈、定身與連擊紀錄；26：走一格 6 刻、聚落有隱形人口數（v.pop）、士兵改成六個職業的角色套版（有裝備欄與技能）、隊伍與隊友（game.mates）、每個聚落一位商人、堡壘與要塞有武器匠與盔甲匠；25：地形全是坡、山脈、湖少而大、山壁 █、隘口、村莊背後的湖或山壁、世界存隘口（passes、passPlan）；24：每格有穩定值（存在區塊上）、怪物多了 bug 欄位、侵蝕與地形重算與復發與破壞拿掉；23：怪物種族擴充（每個生態區 3～5 種、遺跡墓地的不死者）、數值塊照原件對過、多擲的傷害；21：世界一圈一圈擴散、怪物成群、冷卻區；22：怪物數值照 SRD 5.2.1（AC、攻擊加值、傷害骰、生命骰）、命中改 AC 制、怪物特性、士兵帶 AC；20：建角改版（擲 5 項技能、從全部裝備挑）、反擊、逃跑取代撤退與撤離、施法與加護（player.ward、battle.spellCd）；19：時鐘（一天 2,400 刻）、野外短休與村莊長休、生活開支、聚落經濟值、貨幣改銅記帳、採藥與採礦委託、四種委託各接一個、世界裡的人有種族、力竭；18：六個職業、技能合併與穿甲拆三項、起始技能、防具換成十二件、投擲、精通一律要技能 5 級；17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
+  SAVE_VERSION: 28,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（27：火器技能、武器的新精通與一優一劣、怪物身上的流血、眩暈、定身、中毒與連擊紀錄、裝備欄的礦鎬與鐮刀兩格改成工具 1、工具 2（舊存檔不遷移）、開鎖器與撬棍改成工具、寶箱上鎖（dc）、打倒怪物的錢與裝備掉在地上、開鎖採礦採藥三項技能；26：走一格 6 刻、聚落有隱形人口數（v.pop）、士兵改成六個職業的角色套版（有裝備欄與技能）、隊伍與隊友（game.mates）、每個聚落一位商人、堡壘與要塞有武器匠與盔甲匠；25：地形全是坡、山脈、湖少而大、山壁 █、隘口、村莊背後的湖或山壁、世界存隘口（passes、passPlan）；24：每格有穩定值（存在區塊上）、怪物多了 bug 欄位、侵蝕與地形重算與復發與破壞拿掉；23：怪物種族擴充（每個生態區 3～5 種、遺跡墓地的不死者）、數值塊照原件對過、多擲的傷害；21：世界一圈一圈擴散、怪物成群、冷卻區；22：怪物數值照 SRD 5.2.1（AC、攻擊加值、傷害骰、生命骰）、命中改 AC 制、怪物特性、士兵帶 AC；20：建角改版（擲 5 項技能、從全部裝備挑）、反擊、逃跑取代撤退與撤離、施法與加護（player.ward、battle.spellCd）；19：時鐘（一天 2,400 刻）、野外短休與村莊長休、生活開支、聚落經濟值、貨幣改銅記帳、採藥與採礦委託、四種委託各接一個、世界裡的人有種族、力竭；18：六個職業、技能合併與穿甲拆三項、起始技能、防具換成十二件、投擲、精通一律要技能 5 級；17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
   // 世界的比例：一塊世界 64×64（第十九版從 32×24 放大四倍成 64×48，第二十一版高度再加到 64）。
   // 按「每塊幾個」算的數字照面積乘 4（第二十一版再乘 4/3），按「走幾步」算的距離照長寬乘 2；每步的算力與事件間隔不變，冒險者身邊的密度跟原本一樣
   // 第三十二版：世界由 24×24 的小塊組成。開局 4×4 塊（96×96），之後一圈一圈往外長（每圈每邊 +24：144、192、240、288），
@@ -313,11 +313,15 @@ FE.CONFIG = {
   },
 
   // 背包、工具與採集（第二十四版）：背包不限格數，同一種東西疊放；工具向鐵匠或武器匠買
-  TOOL_PRICE: 20,                         // 礦鎬、鐮刀各多少銀（不看聚落經濟）
   ORE_NODES: [3, 5],                      // 每座礦坑的空地上放幾處礦脈
   HERB_RATE: 0.02,                        // 溫帶森林、針葉林、熱帶雨林裡，每格有藥草的機率
   HERB_BIOMES: ['forest', 'taiga', 'jungle'],
-  GATHER_YIELD: [1, 2],                   // 採一次得到幾份
+  GATHER_YIELD: [1, 2],                   // 採一次得到幾份（再加採礦、採藥技能的 GATHER_SKILL_EVERY 級各 1 份，最多 GATHER_SKILL_MAX 份）
+  GATHER_SKILL_EVERY: 5,                  // 第三十七版之一：採礦、採藥每 5 級多 1 份（0～4 級 1～2、5 級 2～3、10 級 3～4、15 級 4～5）
+  GATHER_SKILL_MAX: 3,
+  MINE_TICK_DIV: 30,                      // 採礦一次的刻數＝原本的刻數×（30－min(採礦技能, 15)）÷30，再除以礦鎬的品質倍率（QUALITIES 的 armor，最多 2）
+  MINE_SKILL_CAP: 15,
+  MINE_QUALITY_MAX: 2,
   REGROW_TICKS: 2000,                     // 採完幾刻後長回來
   HERB_HEAL: 0.25,                        // 吃一份藥草回生命上限的幾成（無條件進位）
 
@@ -750,6 +754,7 @@ FE.BAG_ITEMS = {
   slingBullet: { name: '投石索彈丸', weight: 1.5, bundle: 20, price: 0.08 },
   bullet: { name: '子彈', weight: 1, bundle: 10, price: 5 },
   needle: { name: '吹箭針', weight: 1, bundle: 50, price: 2 },
+  poisonNeedle: { name: '毒針', weight: 0.2, bundle: 10, price: 15 }, // 第三十七版之一：吹箭筒有毒針時先用；一捆 10 支（重量照吹箭針一支 0.02 磅算，Claude 定的）
   potion: { name: '治療藥水', use: true, weight: 0.5, price: 20 },
   acid: { name: '酸液', use: true, weight: 1, price: 50, ranged: true, die: [2, 6], damage: 'acid' },
   alchemistFire: { name: '鍊金術士之火', use: true, weight: 1, price: 50, ranged: true, die: [1, 4], damage: 'fire', burning: true },
@@ -759,8 +764,6 @@ FE.BAG_ITEMS = {
   bearings: { name: '滾珠', use: true, weight: 2, price: 2, trap: true },
   huntingTrap: { name: '捕獸夾', use: true, weight: 25, price: 10, trap: true },
   lock: { name: '門鎖', weight: 1, price: 20, use: true },
-  thievesTools: { name: '盜賊工具', weight: 1, price: 50, use: true },
-  crowbar: { name: '撬棍', weight: 5, price: 4, use: true },
 };
 // 品質（參考矮人要塞的物品品質）：value 價值倍率；hit 武器命中 d20 加值；armor 防具減傷與盾牌格擋值倍率（乘完四捨五入）；
 // pierce 穿甲比例：穿刺傷害無視防守方這個比例的物理減傷（無條件捨去；箭看箭矢的品質）；clear 清除等級（抗性門檻看它）；
@@ -829,12 +832,13 @@ FE.GEAR = {
   longbow: { cat: 'weapon', name: '長弓', die: [1, 8], type: 'pierce', ammo: 'arrow', range: [9, 38], twoHand: true, heavy: true, mastery: 'slow', moreMastery: ['deadly', 'volley', 'root'], edge: { pierce: 0.2, str: 13 }, skill: 'bow', meleeSkill: 'sword', grip: [62500, 77500], weight: 2, price: 50, dur: 200, sold: true, drop: true },
   musket: { cat: 'weapon', name: '火槍', die: [1, 12], type: 'pierce', ammo: 'bullet', range: [3, 8], loading: true, twoHand: true, mastery: 'slow', moreMastery: ['fatal', 'kickback', 'stun'], edge: { pierce: 0.5, ticks: 3 }, skill: 'firearm', grip: [62500, 77500], weight: 10, price: 50, dur: 200, sold: true, drop: true },
   pistol: { cat: 'weapon', name: '手槍', die: [1, 10], type: 'pierce', ammo: 'bullet', range: [2, 6], loading: true, mastery: 'vex', moreMastery: ['fatal', 'stun'], edge: { pierce: 0.3, ticks: 2 }, skill: 'firearm', grip: [15000, 0], weight: 3, price: 50, dur: 200, sold: true, drop: true },
-  blowgun: { cat: 'weapon', name: '吹箭筒', die: [1, 1], type: 'pierce', ammo: 'needle', range: [2, 6], loading: true, mastery: 'vex', moreMastery: ['agile'], skill: 'bow', grip: [15000, 0], weight: 1, price: 20, dur: 200, sold: true, drop: true },
+  blowgun: { cat: 'weapon', name: '吹箭筒', die: [1, 1], type: 'pierce', ammo: 'needle', poisonAmmo: 'poisonNeedle', range: [2, 6], loading: true, mastery: 'vex', moreMastery: ['agile'], skill: 'bow', grip: [15000, 0], weight: 1, price: 20, dur: 200, sold: true, drop: true },
   arrow: { cat: 'ammo', name: '箭矢', weight: 1, price: 5, bundle: 20, sold: true, drop: true },
   bolt: { cat: 'ammo', name: '弩矢', weight: 1.5, price: 5, bundle: 20, sold: true, drop: true },
   slingBullet: { cat: 'ammo', name: '投石索彈丸', weight: 1.5, price: 0.08, bundle: 20, sold: true, drop: false },
   bullet: { cat: 'ammo', name: '子彈', weight: 1, price: 5, bundle: 10, sold: true, drop: false },
   needle: { cat: 'ammo', name: '吹箭針', weight: 1, price: 2, bundle: 50, sold: true, drop: false },
+  poisonNeedle: { cat: 'ammo', name: '毒針', weight: 0.2, price: 15, bundle: 10, sold: true, drop: false }, // 第三十七版之一：命中多 1d4 毒傷並中毒 2 次行動（只有城鎮的商人賣）
   // 防具（第二十九版追加）：cls 類別（light 輕甲、medium 中甲、heavy 重甲、none 無甲＝衣袍）決定敏捷加不加閃避、多花幾刻、練哪一項穿甲技能；
   // str 力量需求（力量不到，走一步 9 刻）；stealth 隱匿劣勢（只建標籤，潛行第 3 階段才做）；desc 遊戲裡的一句說明。
   // 內部 id：light＝皮甲、medium＝鱗甲、heavy＝鎖子甲（原本的輕甲、中甲、重甲改名）
@@ -853,8 +857,12 @@ FE.GEAR = {
   robe: { cat: 'armor', cls: 'none', name: '一般衣袍', phys: 0, magic: 1, ticks: 0, weight: 4, price: 10, dur: 150, sold: true, drop: true },
   mrobe: { cat: 'armor', cls: 'none', name: '魔法衣袍', phys: 0, magic: 3, ticks: 0, weight: 4, price: 40, dur: 150, sold: false, drop: true },
   shield: { cat: 'shield', name: '盾牌', ac: 2, block: 0.25, value: 4, weight: 6, price: 32, ore: 2, dur: 100, sold: true, drop: true },
-  pick: { cat: 'tool', name: '礦鎬', weight: 10, price: 20, dur: 50, sold: true },
-  sickle: { cat: 'tool', name: '鐮刀', weight: 2, price: 20, dur: 50, sold: true },
+  // 工具（第三十七版之一：裝在工具 1、工具 2 兩格，哪種都能放；撞上礦脈、藥草、上鎖的寶箱或門時自動用對得上的那一把，同種兩把先用耐久低的）：
+  // use 是用在哪裡（ore 礦脈、herb 藥草、lock 上鎖的寶箱與門）、desc 是說明；價錢不看聚落經濟（乘品質價值倍率與魅力）
+  pick: { cat: 'tool', use: 'ore', name: '礦鎬', weight: 10, price: 20, dur: 50, sold: true, desc: '挖礦脈；品質好的挖得快' },
+  sickle: { cat: 'tool', use: 'herb', name: '鐮刀', weight: 2, price: 20, dur: 50, sold: true, desc: '割藥草' },
+  lockpick: { cat: 'tool', use: 'lock', name: '開鎖器', weight: 1, price: 20, dur: 25, sold: true, desc: '開鎖：d20＋敏捷修正值＋開鎖技能每 2 級 +1＋品質的命中加值' },
+  crowbar: { cat: 'tool', use: 'lock', name: '撬棍', weight: 5, price: 4, dur: 50, sold: true, desc: '撬開鎖：力量檢定，有優勢；不練開鎖' },
 };
 // 傷害種類：揮砍打中甲、重甲時防具多擋 1 點；穿刺照品質的穿甲比例無視一部分物理減傷；鈍擊無視一半物理減傷（無條件進位）；
 // 魔法、神聖只看魔法減傷。扣完至少吃 1 點（見 combat.js 的 reduce）
@@ -913,12 +921,20 @@ Object.assign(FE.CONFIG, {
   KICKBACK_D20: 2,
   KICKBACK_DMG: 1,
   CHARGE_STEPS: 2,          // 衝刺：這一下之前連續走了 2 格以上
+  POISON_DIE: [1, 4],       // 毒針命中多擲的毒傷
+  POISON_TURNS: 2,          // 中毒幾次行動（出手有劣勢）
+  CHEST_DC: [[2, 10], [4, 15], [6, 20], [Infinity, 25]], // 寶箱的 DC 基準：生成當下世界等級 1～2 是 10、3～4 是 15、5～6 是 20、7 起 25
+  CHEST_DC_ODDS: [0.6, 0.25, 0.15], // 每個寶箱再擲：60% 照基準、25% 低一階、15% 高一階
+  CHEST_DC_STEP: 5,
+  CHEST_DC_RANGE: [5, 30],
+  DOOR_DC: 15,              // 玩家裝的門鎖
+  PICKLOCK_EVERY: 2,        // 開鎖技能每 2 級，開鎖 +1
   DIE_STEPS: [4, 6, 8, 10, 12], // 致死：暴擊時傷害骰升一階，最多 d12
 });
 // 採集點：都可以走過去；裝備對的工具後撞上去就採，採完變回普通地面，REGROW_TICKS 刻後長回來
 FE.NODES = {
-  ore: { name: '礦脈', glyph: '☼', tool: 'pick', item: 'ore', verb: '挖' },
-  herb: { name: '藥草', glyph: '♥', tool: 'sickle', item: 'herb', verb: '割' },
+  ore: { name: '礦脈', glyph: '☼', tool: 'pick', item: 'ore', verb: '挖', skill: 'mining' },
+  herb: { name: '藥草', glyph: '♥', tool: 'sickle', item: 'herb', verb: '割', skill: 'herbalism' },
 };
 // 六項屬性（順序固定：力量、敏捷、體質、智力、感知、魅力）。修正值＝(屬性－10)÷2 無條件捨去（9 和 8 都算 -1）。
 // 力量（近戰與投擲傷害、重型近戰武器、戰士的格擋值與盾擊、負重）、敏捷（出手 d20、遠程傷害、重型遠程武器、閃避、攻擊速度）、體質（生命、休息回復）、
@@ -953,6 +969,10 @@ FE.SKILLS = {
   medium: { name: '中甲' },
   heavy: { name: '重甲' },
   shield: { name: '盾牌使用' },
+  // 第三十七版之一：用工具的技能，用一次 10 點經驗、失敗 5 點（照 SKILL_EXP_HIT／MISS）
+  picklock: { name: '開鎖' },  // 用開鎖器開鎖：每 2 級 +1（撬棍不練）
+  mining: { name: '採礦' },    // 每 5 級多挖 1 份、挖得快
+  herbalism: { name: '採藥' }, // 每 5 級多割 1 份
 };
 // 防具類別對應的穿甲技能（無甲＝衣袍沒有）
 FE.ARMOR_SKILL = { light: 'light', medium: 'medium', heavy: 'heavy' };
@@ -990,14 +1010,14 @@ FE.START_OPTS = {
   light: { label: '皮甲', gear: 'light', desc: '鞣過的皮革，擋不了刀劍，但輕便、不拖慢動作。' },
   heavy: { label: '鎖子甲', gear: 'heavy', desc: '鎖環編成的長甲，擋砍很好，每個動作多花 2 刻，力量要 13 才穿得順。' },
   robe: { label: '一般衣袍', gear: 'robe', desc: '幾乎擋不住傷害，輕得不占負重。' },
-  herb: { label: '2 份藥草', herb: 2, desc: '放進背包，每份吃下去回復生命上限的四分之一。' },
-  gold: { label: '20 銀', silver: 20, desc: '到聚落向工匠買裝備或修理。' },
+  money: { label: '只拿錢', silver: 50, desc: '50 銀，到聚落向工匠、商人買需要的東西。' },
 };
+// 起始裝備第四組的四種包（第三十七版之一：商人不再賣包，只在建角時挑）：items 是 gear 裝備、id 背包物品（n 份）、silver 錢
 FE.EQUIPMENT_PACKS = {
-  gathering: { name: '採集包', price: 40, items: [{ gear: 'pick' }, { gear: 'sickle' }], desc: '礦鎬與鐮刀，採礦、割藥草都用得上。' },
-  supply: { name: '補給包', price: 20, items: [{ id: 'herb', n: 2 }, { id: 'potion', n: 1 }], desc: '2 份藥草與 1 瓶治療藥水。' },
-  archer: { name: '射手包', price: 5, items: [{ id: 'arrow', n: 20 }, { id: 'bolt', n: 20 }], desc: '20 支箭矢與 20 支弩矢。' },
-  thrower: { name: '投擲包', price: 2, items: [{ gear: 'javelin' }, { gear: 'dart' }, { gear: 'dart' }], desc: '1 支標槍與 2 支飛鏢。' },
+  explore: { name: '探索包', items: [{ gear: 'crowbar' }, { gear: 'pick' }, { gear: 'sickle' }, { gear: 'lockpick' }, { id: 'oil', n: 2 }, { silver: 20 }], desc: '撬棍、礦鎬、鐮刀、開鎖器（裝進工具欄才用得上）、2 瓶燈油與 20 銀。' },
+  supply: { name: '補給包', items: [{ id: 'herb', n: 2 }, { id: 'potion', n: 3 }, { silver: 20 }], desc: '2 份藥草、3 瓶治療藥水與 20 銀。' },
+  archer: { name: '射手包', items: [{ id: 'arrow', n: 40 }, { id: 'bolt', n: 40 }, { id: 'bullet', n: 20 }, { id: 'poisonNeedle', n: 10 }, { silver: 40 }], desc: '40 支箭矢、40 支弩矢、20 發子彈、10 支毒針與 40 銀。' },
+  thrower: { name: '投擲包', items: [{ gear: 'javelin', n: 3 }, { gear: 'dart', n: 10 }, { id: 'alchemistFire', n: 1 }, { silver: 30 }], desc: '3 支標槍、10 支飛鏢、1 瓶鍊金術士之火與 30 銀。' },
 };
 for (const [id, pack] of Object.entries(FE.EQUIPMENT_PACKS)) FE.START_OPTS['pack_' + id] = { label: pack.name, pack: id, desc: pack.desc };
 // 第三十一版：武器與防具一律從全部列出（沒寫說明的照裝備資料補上名字），副手挑盾牌或空著；輕弩附 20 支弩矢
@@ -1025,37 +1045,37 @@ FE.CLASSES = {
   warrior: {
     name: '戰士', base: 10, attr: { str: 15, dex: 13, con: 14, int: 10, wis: 12, cha: 8 },
     desc: '生命多、背得多，什麼近戰武器都上手。拿盾牌時格擋值再加力量修正值，還能按 5 用盾牌撞。',
-    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'str', bash: true,
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['money', 'pack_explore', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'str', bash: true,
     pool: ['fight', 'medium', 'heavy', 'shield', 'dodge', 'melee'],
   },
   ranger: {
     name: '遊俠', base: 8, attr: { str: 12, dex: 15, con: 13, int: 8, wis: 14, cha: 10 },
     desc: '腳步輕、閃得開，擅長弓箭。一開始就帶著弓和一捆箭。',
-    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'dex',
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['money', 'pack_explore', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'dex',
     pool: ['shoot', 'dodge', 'fight', 'knife', 'sword', 'light'],
   },
   mage: {
     name: '法師', base: 4, attr: { str: 8, dex: 13, con: 12, int: 15, wis: 14, cha: 10 },
     desc: '生命少、背不動多少東西。拿法杖按 F，魔力會炸開一片，打中目標和周圍的怪物。',
-    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'int', spell: true,
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['money', 'pack_explore', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'int', spell: true,
     pool: ['dodge', 'shoot', 'knife', 'fight'],
   },
   priest: {
     name: '牧師', base: 8, attr: { str: 13, dex: 10, con: 14, int: 8, wis: 15, cha: 12 },
     desc: '靠感知吃飯。按 F 對一個目標放神聖之光（過渡的一招，施法系統還沒談），按 4 治療自己（加感知修正值）。',
-    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'wis', light: true, heal: true, healAttr: 'wis',
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['money', 'pack_explore', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'wis', light: true, heal: true, healAttr: 'wis',
     pool: ['shield', 'medium', 'fight', 'dodge'],
   },
   paladin: {
     name: '聖騎士', base: 10, attr: { str: 14, dex: 10, con: 13, int: 8, wis: 12, cha: 15 },
     desc: '披甲持盾的戰鬥者。每個動作第一下打中時，神聖之力多傷對方一些；按 4 治療自己（加魅力修正值）。',
-    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'cha', holy: true, heal: true, healAttr: 'cha',
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['money', 'pack_explore', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'cha', holy: true, heal: true, healAttr: 'cha',
     pool: ['shield', 'medium', 'heavy', 'fight', 'melee'],
   },
   barbarian: {
     name: '野蠻人', base: 12, attr: { str: 14, dex: 13, con: 15, int: 8, wis: 12, cha: 10 },
     desc: '生命最多，揮著大斧硬衝。不能穿中甲、重甲（輕甲、衣袍、盾牌可以）。',
-    allGear: true, fixed: [], groups: [{ pick: 1, of: ['herb', 'gold', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'str', noHeavyArmor: true,
+    allGear: true, fixed: [], groups: [{ pick: 1, of: ['money', 'pack_explore', 'pack_supply', 'pack_archer', 'pack_thrower'] }], primary: 'str', noHeavyArmor: true,
     pool: ['fight', 'dodge', 'light', 'shoot', 'melee'],
   },
 };
@@ -1139,12 +1159,12 @@ FE.MERCHANT_LINES = [
 // 士兵與隊友的職業套版（第三十六版之一，從測試機器人的起始裝備與種族、競技場的 makeLevelChar 搬進遊戲；char.js 的 makeLevelChar 用）：
 // 起始裝備的挑法（選項 id）與種族（戰士、牧師矮人，遊俠精靈，法師人類加兩點智力，野蠻人人類加兩點力量；身高、體格都取普通）
 FE.TEMPLATE_PICKS = {
-  warrior: ['sword', 'medium', 'shield', 'herb'],
-  ranger: ['bow', 'light', 'nooff', 'herb'],
-  mage: ['staff', 'robe', 'nooff', 'herb'],
-  priest: ['club', 'medium', 'shield', 'herb'],
-  paladin: ['sword', 'heavy', 'shield', 'herb'],
-  barbarian: ['greataxe', 'light', 'nooff', 'herb'], // 不能穿中甲、重甲
+  warrior: ['sword', 'medium', 'shield', 'pack_supply'],
+  ranger: ['bow', 'light', 'nooff', 'pack_supply'],
+  mage: ['staff', 'robe', 'nooff', 'pack_supply'],
+  priest: ['club', 'medium', 'shield', 'pack_supply'],
+  paladin: ['sword', 'heavy', 'shield', 'pack_supply'],
+  barbarian: ['greataxe', 'light', 'nooff', 'pack_supply'], // 不能穿中甲、重甲（第三十七版之一：原本的「2 份藥草」拿掉，改挑補給包）
 };
 FE.TEMPLATE_BODY = {
   warrior: { race: 'dwarf', bonus: {}, height: 4, build: 4 },

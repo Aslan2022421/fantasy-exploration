@@ -31,6 +31,9 @@ const OLD_CLASSES = {
   mage: { name: '法師', base: 4, attr: { str: 8, dex: 13, con: 12, int: 16, wis: 15, cha: 9 }, desc: '', fixed: ['robe'], groups: [{ pick: 1, of: ['staff', 'dagger'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'int', spell: true, pool: ['dodge'] },
   priest: { name: '牧師', base: 8, attr: { str: 13, dex: 8, con: 15, int: 9, wis: 12, cha: 16 }, desc: '', fixed: [], groups: [{ pick: 1, of: ['medium', 'shield'] }, { pick: 1, of: ['staff', 'sword'] }, { pick: 1, of: ['herb', 'gold'] }], primary: 'wis', holy: true, heal: true, pool: ['shield'] },
 };
+// 第三十七版之一：遊戲的起始選項拿掉了「2 份藥草」「20 銀」，舊職業（只在場景檢查用）還挑得到，補在這裡
+FE.START_OPTS.herb = { label: '2 份藥草', herb: 2, desc: '' };
+FE.START_OPTS.gold = { label: '20 銀', silver: 20, desc: '' };
 const useClasses = (which) => {
   FE.CLASSES = which === 'new' ? NEW_CLASSES : OLD_CLASSES;
   FE.MASTERY_SKILL = which === 'new' ? 5 : 0;
@@ -48,7 +51,7 @@ function neutralChar(g) {
   p.height = 4;
   p.build = 4;
   p.size = 70000;
-  p.equip = { main: FE.Gear.make('sword', 0, g.nextGearId++), off: null, body: null };
+  p.equip = { main: FE.Gear.make('sword', 0, g.nextGearId++), off: null, body: null, tool1: null, tool2: null }; // 工具欄（第三十七版之一）
   p.block = null;
   p.copper = 0;
   p.bag = [];
@@ -70,7 +73,7 @@ function v29Picks(cls, picks) {
   const cat = (id) => (FE.START_OPTS[id] && FE.START_OPTS[id].gear ? FE.GEAR[FE.START_OPTS[id].gear].cat : id);
   const weapons = all.filter((id) => cat(id) === 'weapon');
   const armor = all.find((id) => cat(id) === 'armor') || 'robe';
-  const supply = all.includes('herb') ? 'herb' : 'gold';
+  const supply = all.includes('herb') ? 'pack_supply' : 'money'; // 第三十七版之一：第四組改成只拿錢與四種包
   return { picks: [weapons[0] || 'staff', armor, all.includes('shield') ? 'shield' : 'nooff', supply], extra: weapons.slice(1).concat(all.includes('herb') && all.includes('gold') ? ['gold'] : []) };
 }
 const start0 = FE.Game.prototype.start;

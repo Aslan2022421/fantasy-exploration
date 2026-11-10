@@ -340,7 +340,7 @@ function testSoldiers() {
   town.sortieAt = g.ticks;
   const exp0 = g.exp;
   const cr0 = g.creation;
-  const chests0 = w.chests.length;
+  const items0 = w.items.length; // 第三十七版之一：打倒怪物掉的錢與裝備落在地上
   let left = false;
   for (let i = 0; i < 300 && g.monsters.includes(prey); i++) {
     wait();
@@ -349,7 +349,7 @@ function testSoldiers() {
   }
   ok(left, '失序時士兵沒有出城');
   ok(!g.monsters.includes(prey) || !mine().length, '士兵沒有打倒事件生的小怪物');
-  ok(g.exp === exp0 && g.creation === cr0 && w.chests.length === chests0, '士兵打倒的怪物給了冒險者經驗值、創世力或寶箱');
+  ok(g.exp === exp0 && g.creation === cr0 && w.items.length === items0, '士兵打倒的怪物給了冒險者經驗值、創世力或掉了錢與裝備');
   ok(g.monsters.includes(bystander) && bystander.hp === bystander.maxHp, '士兵碰了創世時的怪物');
   ok(stat.soldierKills >= (g.monsters.includes(prey) ? 0 : 1), '士兵清掉的數量沒有記下來');
   // 第三十六版之三：小怪物合成的中型怪物（m.members）士兵也打；血量 1，看出城後打不打得倒
@@ -478,7 +478,7 @@ function testBackpack() {
   const toolIds = () => { g.talkPage = 'buy'; return g.talkOptions(smith).options.map((o) => o.id); };
   const toolOpt = (id) => { g.talkPage = 'buy'; return g.talkOptions(smith).options.find((o) => o.id === id); };
   const toolPick = (id) => { g.talkPage = 'buy'; return g.choose(smith, g.talkOptions(smith).options.findIndex((o) => o.id === id)); };
-  const TP = C.TOOL_PRICE * C.SILVER; // 工具 20 銀＝200 銅（第三十版起用銅記帳）
+  const TP = FE.GEAR.pick.price * C.SILVER; // 礦鎬、鐮刀 20 銀＝200 銅（第三十版起用銅記帳；第三十七版之一起照各工具自己的價錢）
   p.copper = TP - 1;
   ok(toolOpt('buyItem:pick:0') && toolOpt('buyItem:pick:0').disabled && toolOpt('buyItem:pick:0').info.includes('還差 1 銅') && toolOpt('buyItem:sickle:0').disabled, `錢不夠時買工具的選項：${JSON.stringify(toolOpt('buyItem:pick:0'))}`);
   toolPick('buyItem:pick:0');
@@ -488,13 +488,13 @@ function testBackpack() {
   ok(!g.toolOf('pick') && p.bag.some((e) => e.id === 'gear' && e.gear.type === 'pick') && p.copper === TP + 5 && toolIds().includes('buyItem:pick:0') && toolIds().includes('buyItem:sickle:0'), `買礦鎬之後 ${toolIds()}，錢 ${p.copper}（買過的工具選項該還在；背包工具尚未生效）`);
   toolPick('buyItem:sickle:0');
   ok(!g.toolOf('sickle') && p.bag.some((e) => e.id === 'gear' && e.gear.type === 'sickle') && p.copper === 5 && toolIds().includes('buyItem:sickle:0'), `買鐮刀之後 ${toolIds()}，錢 ${p.copper}`);
-  // 工具必須裝進對應欄位才會生效
+  // 工具必須裝進工具欄（工具 1、工具 2，第三十七版之一）才會生效
   g.talking = null;
   const firstPick = p.bag.find((e) => e.id === 'gear' && e.gear.type === 'pick');
   const firstSickle = p.bag.find((e) => e.id === 'gear' && e.gear.type === 'sickle');
   g.equipItem(firstPick);
   g.equipItem(firstSickle);
-  ok(g.toolOf('pick') === firstPick.gear && g.toolOf('sickle') === firstSickle.gear && !p.bag.includes(firstPick) && !p.bag.includes(firstSickle), '礦鎬與鐮刀裝進各自採集欄後才生效');
+  ok(g.toolOf('pick') === firstPick.gear && g.toolOf('sickle') === firstSickle.gear && !p.bag.includes(firstPick) && !p.bag.includes(firstSickle), '礦鎬與鐮刀裝進工具欄後才生效');
   // 工具可以重複買，但一次只能使用裝備欄裡的那一把；壞掉後不會自動換用背包裡的工具
   p.copper = 1000;
   g.talking = smith.id;
@@ -504,21 +504,21 @@ function testBackpack() {
   const picks = () => p.bag.filter((e) => e.id === 'gear' && e.gear.type === 'pick').map((e) => e.gear);
   ok(picks().length === 1 && p.copper === 1000 - TP, `背包裡該有 1 把備用礦鎬（${picks().length}）`);
   const weight = g.weight();
-  p.equip.pick = null;
+  p.equip.tool1 = null; // 礦鎬先裝，在工具 1
   ok(Math.abs(weight - g.weight() - FE.GEAR.pick.weight) < 1e-9, '裝備中的礦鎬重量有計入負重');
-  p.equip.pick = firstPick.gear;
-  p.equip.pick.dur = 1;
-  const worn = p.equip.pick;
+  p.equip.tool1 = firstPick.gear;
+  p.equip.tool1.dur = 1;
+  const worn = p.equip.tool1;
   FE.Gear.wear(g, worn);
-  ok(!p.equip.pick && picks().length === 1 && !g.toolOf('pick'), '裝備中的礦鎬壞掉後清空裝備欄，不自動使用備用工具');
+  ok(!p.equip.tool1 && picks().length === 1 && !g.toolOf('pick'), '裝備中的礦鎬壞掉後清空裝備欄，不自動使用備用工具');
   const sparePick = p.bag.find((e) => e.id === 'gear' && e.gear.type === 'pick');
   g.equipItem(sparePick);
   ok(g.toolOf('pick') === sparePick.gear, '備用礦鎬重新裝備後才生效');
   const replacement = FE.Gear.make('pick', 0, g.nextGearId++);
   g.bagAddGear(replacement);
   g.equipItem(p.bag.find((e) => e.gear === replacement));
-  ok(p.equip.pick === replacement && p.bag.some((e) => e.gear === sparePick.gear), '換裝礦鎬時原工具回到背包');
-  g.unequip('sickle');
+  ok(p.equip.tool1 === replacement && p.bag.some((e) => e.gear === sparePick.gear), '兩格都滿時換掉同種的礦鎬，原工具回到背包');
+  g.unequip('tool2');
   ok(!g.toolOf('sickle') && p.bag.some((e) => e.gear === firstSickle.gear), '卸下鐮刀後不再採集，且放回背包');
   g.equipItem(p.bag.find((e) => e.gear === firstSickle.gear));
   ok(g.toolOf('sickle') === firstSickle.gear, '鐮刀重新裝備後恢復採集');
@@ -535,14 +535,15 @@ function testBackpack() {
     if (!node) continue;
     const [dx, dy] = besides(node);
     // 沒有工具
-    const tool = p.equip[def.tool];
-    p.equip[def.tool] = null;
+    const slot = FE.Gear.TOOL_SLOTS.find((s) => p.equip[s] && p.equip[s].type === def.tool); // 工具欄裡那一把（第三十七版之一）
+    const tool = p.equip[slot];
+    p.equip[slot] = null;
     p.x = node.x + dx; p.y = node.y + dy;
     g.move(-dx, -dy);
-    const said = g.log.slice(0, 5).find((l) => l.text.includes(`需要${toolName}`));
+    const said = g.log.slice(0, 5).find((l) => l.text.includes(`需要把${toolName}裝進工具欄`));
     ok(p.x === node.x && p.y === node.y && !!said && !g.bagCount(def.item), `沒有${toolName}時：位置 (${p.x},${p.y})、訊息「${g.log.slice(0, 3).map((l) => l.text).join('／')}」`);
     // 有工具
-    p.equip[def.tool] = tool;
+    p.equip[slot] = tool;
     p.x = node.x + dx; p.y = node.y + dy;
     const t0 = g.turn, c0 = g.creation, n0 = g.bagCount(def.item), steps0 = p.steps;
     g.move(-dx, -dy);

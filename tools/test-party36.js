@@ -560,9 +560,10 @@ function testParty36() {
     // 商品
     const S = FE.Gear.SHOPS;
     const merchantIds = Object.values(S.merchant.buy).flat().sort().join();
-    ok(merchantIds === ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'].sort().join(), `商人賣的東西 ${merchantIds}`);
+    // 第三十七版之一：不賣裝備包；開鎖器（原本的盜賊工具）、撬棍改成工具；毒針（只有城鎮的商人）
+    ok(merchantIds === ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'poisonNeedle', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'lockpick', 'crowbar'].sort().join() && S.merchant.townOnly.join() === 'poisonNeedle', `商人賣的東西 ${merchantIds}`);
     const others = ['blacksmith', 'weaponsmith', 'armorer'].flatMap((k) => Object.values(S[k].buy).flat());
-    ok(!others.some((id) => ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar'].includes(id) || id.startsWith('pack_')), '鐵匠、武器匠、盔甲匠不賣消耗品、陷阱、開鎖工具與裝備包');
+    ok(!others.some((id) => ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'poisonNeedle', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'lockpick', 'crowbar'].includes(id) || id.startsWith('pack_')), '鐵匠、武器匠、盔甲匠不賣消耗品、陷阱、開鎖工具與裝備包');
     ok(S.blacksmith.buy.tool.join() === 'pick,sickle' && S.weaponsmith.buy.tool.join() === 'pick,sickle' && S.blacksmith.buy.ranged.includes('arrow'), '工匠只留武器、防具、彈藥、礦鎬與鐮刀');
     ok(S.merchant.repair.length === 0 && S.merchant.craft.length === 0 && S.merchant.sell.length === 0 && S.merchant.tabs.join() === 'buy,sell', '商人沒有修理、打造');
     ok(shopDo(g, merchant, 'buyItem:potion:0') && g.bagCount('potion') === 1 && !shopDo(g, smith, 'buyItem:potion:0'), '向商人買治療藥水，鐵匠買不到');

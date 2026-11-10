@@ -644,7 +644,7 @@ function testGrowth29() {
     ok(FE.bodySize('human', 4, 4) === 70000 && FE.bodySize('dwarf', 4, 4) === 60000 && near(FE.bodySize('human', 7, 1), 70000 * 1.15 * 0.85, 1e-6), '體型公式不變');
 
     // 技能合併與拆分
-    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,firearm,misc,fight,shoot,dodge,light,medium,heavy,shield', '技能名單：槍術、錘術合併，穿甲拆成輕甲、中甲、重甲；火器（第三十七版之一）');
+    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,firearm,misc,fight,shoot,dodge,light,medium,heavy,shield,picklock,mining,herbalism', '技能名單：槍術、錘術合併，穿甲拆成輕甲、中甲、重甲；火器、開鎖、採礦、採藥（第三十七版之一）');
     ok(FE.GEAR.spear.skill === 'spear' && FE.GEAR.shortspear.skill === 'spear' && FE.GEAR.club.skill === 'mace' && FE.GEAR.warhammer.skill === 'mace' && FE.GEAR.crossbow.meleeSkill === 'mace', '短矛、長槍都算槍術；硬頭錘、戰錘、拿弩近戰都算錘術');
     ok(FE.ARMOR_SKILL.light === 'light' && FE.ARMOR_SKILL.medium === 'medium' && FE.ARMOR_SKILL.heavy === 'heavy', '防具類別對應輕甲、中甲、重甲');
     // 傷害骰從武器來，技能只給加值
@@ -727,9 +727,9 @@ function testGrowth29() {
       const back = FE.Save.load();
       ok(back && back.game && back.game.player.skills.bow.lv === p.skills.bow.lv, '存檔讀回來，技能等級還在');
       const g3 = new FE.Game(453);
-      g3.start({ cls: 'warrior', picks: ['crossbow', 'plate', 'shield', 'gold'], skills: Ch.rollSkills('warrior', FE.makeRng(3)) });
+      g3.start({ cls: 'warrior', picks: ['crossbow', 'plate', 'shield', 'money'], skills: Ch.rollSkills('warrior', FE.makeRng(3)) });
       ok(g3.bagCount('bolt') === 20 && g3.player.equip.body.type === 'plate' && !g3.player.equip.off, '挑輕弩附 20 支弩矢、全部防具都能挑、雙手武器時盾牌放背包');
-      ok(FE.Char.validPicks('mage', ['greatsword', 'heavy', 'nooff', 'herb']) && !FE.Char.validPicks('mage', ['staff', 'herb']), '每個職業都能挑全部武器與防具（主手、身上、副手、補給各一組）');
+      ok(FE.Char.validPicks('mage', ['greatsword', 'heavy', 'nooff', 'pack_supply']) && !FE.Char.validPicks('mage', ['staff', 'pack_supply']), '每個職業都能挑全部武器與防具（主手、身上、副手、補給各一組）');
       const g2 = new FE.Game(452);
       g2.start({ cls: 'warrior', picks: ['sword', 'medium', 'shield', 'herb'] });
       ok(Object.keys(FE.SKILLS).every((k) => g2.player.skills[k].lv === 0), '沒給起始技能（測試用）都是 0 級，也不加那 1 級');

@@ -102,7 +102,7 @@ function mergeState(part) {
 function buildJobs() {
   const jobs = [];
   const add = (id, w) => jobs.push({ id, w });
-  const units = ['gear', 'gear35', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'stability33', 'terrain34', 'party36', 'weapons371', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
+  const units = ['gear', 'gear35', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'stability33', 'terrain34', 'party36', 'weapons371', 'tools371', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
   if (MODE === 'arena') {
     for (const cls of BOT_CLASSES) add('arena:' + cls, 30);
     return jobs;

@@ -64,7 +64,8 @@
   let walk = null;
   let route = null; // 畫出來、還沒出發的路線：{ path, npc, tx, ty, steps, ticks }
   const WALK_MS = 90;
-  const blockedAt = (x, y) => game.monsterAt(x, y) || game.world.npcAt(x, y) || game.soldierAt(x, y);
+  // 第三十七版之一：寶箱都上了鎖，撞上去是開鎖，自動行走繞開
+  const blockedAt = (x, y) => game.monsterAt(x, y) || game.world.npcAt(x, y) || game.soldierAt(x, y) || game.world.chestAt(x, y);
   // 從冒險者走到 (tx, ty) 的路（不含起點）；goalAdj 時走到它旁邊就算到。只走能走、高度接得上、沒人擋的格子，最多搜 4000 格
   function findPath(tx, ty, goalAdj) {
     const p = game.player;

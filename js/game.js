@@ -3,6 +3,9 @@
 (function () {
   const C = FE.CONFIG;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // 射向怪物的彈藥記在怪物身上的哪一欄（倒下或脫離戰鬥時撿回一半）；第三十七版之一加毒針
+  const AMMO_FIELDS = { arrow: 'arrows', bolt: 'bolts', slingBullet: 'slingBullets', bullet: 'bullets', needle: 'needles', poisonNeedle: 'poisonNeedles' };
+  const shotAt = (m) => Object.values(AMMO_FIELDS).some((f) => m[f]);
 
   // 升到第 level 級要的累計經驗值（第二十九版：《D&D》第五版經驗表 ÷10，最高 LEVEL_MAX 級；超過最高級的等級要的經驗值同最高級）
   FE.levelExp = (level) => C.LEVEL_EXP[Math.max(1, Math.min(level, C.LEVEL_MAX))];
@@ -98,6 +101,20 @@
     // 創世時替這塊世界的每隻怪物配好「打倒時給的算力」、每個任務配好「完成時給的算力」，
     // 加總後乘 PLAYER_COMPUTE_SCALE 與 CREATION_SHARE，就是到下一塊要累積的創世力。
     // 清光這塊世界，一定解得出下一塊；途中的移動、出手、清掉衰敗生的怪物，都會讓它更快。
+    // 寶箱都上鎖（第三十七版之一）：剛生出來、還沒有 DC 的寶箱照生成當下的世界等級定基準（1～2 是 10、3～4 是 15、5～6 是 20、7 起 25），
+    // 每個再擲：60% 照基準、25% 低一階、15% 高一階（一階 5，最低 5、最高 30）。用世界種子與寶箱編號雜湊擲，不動遊戲的亂數序列
+    lockChests() {
+      const wl = FE.Stability.worldLevel(this);
+      const base = C.CHEST_DC.find(([top]) => wl <= top)[1];
+      for (const c of this.world.chests) {
+        if (c.dc != null) continue;
+        const r = FE.hash01(this.seed, c.id, 371);
+        const [same, lower] = C.CHEST_DC_ODDS;
+        const step = r < same ? 0 : r < same + lower ? -1 : 1;
+        c.dc = Math.max(C.CHEST_DC_RANGE[0], Math.min(C.CHEST_DC_RANGE[1], base + step * C.CHEST_DC_STEP));
+      }
+    }
+
     // 新的一塊長在離冒險者最近的邊界上（第一塊在原點）
     // 第三十二版：開局是 96×96 一大塊，之後每次長一段（一圈的上下左右其中一邊，離冒險者最近的先長）；長滿了回傳 false
     createChunk(first) {
@@ -108,6 +125,7 @@
         if (!seg) return false;
       }
       const { index, rect, village, landmarks } = this.world.addRegion(seg);
+      this.lockChests();
       // 新聚落的周圍那一圈可能伸進舊的區塊：已經在那裡的怪物挪到圈外
       // （站在圈外、但生成點在圈內的，生成點改成現在站的位置）。
       // 第三十四版：堡壘廢墟、堡壘兩側的山壁、城市與要塞也可能蓋到舊的區塊上，站在變得不能走的格子上的怪物一樣挪開
@@ -643,17 +661,22 @@
       return e.q;
     }
 
-    // 只有裝在對應採集裝備欄的工具才會生效
+    // 這把遠程武器這一下用哪種彈藥（第三十七版之一）：吹箭筒背包裡有毒針時先用毒針，不然用平常的彈藥
+    ammoFor(w) {
+      const d = FE.Gear.def(w);
+      return d.poisonAmmo && this.bagCount(d.poisonAmmo) ? d.poisonAmmo : d.ammo;
+    }
+
+    // 工具欄（工具 1、工具 2）裡這一種的工具（第三十七版之一）：只有裝在工具欄的才會生效；同種兩把先用耐久低的。沒有回傳 null
     toolOf(type) {
-      const slot = { pick: 'pick', sickle: 'sickle' }[type];
-      const g = slot && this.player.equip[slot];
-      return g && g.type === type ? g : null;
+      const eq = this.player.equip;
+      return FE.Gear.TOOL_SLOTS.map((s) => eq[s]).filter((g) => g && g.type === type).sort((a, b) => a.dur - b.dur)[0] || null;
     }
 
     // 這件裝備從身上或背包拿掉（壞掉、賣掉時用）
     removeGear(g) {
       const p = this.player;
-      for (const slot of ['main', 'off', 'body', 'pick', 'sickle']) {
+      for (const slot of ['main', 'off', 'body'].concat(FE.Gear.TOOL_SLOTS)) {
         if (p.equip[slot] === g) {
           p.equip[slot] = null;
           if (slot === 'off') p.block = null;
@@ -793,7 +816,7 @@
       else if (e.id === 'potion') this.drinkPotion();
       else if (FE.BAG_ITEMS[e.id].ranged) this.aimStart('item:' + e.id);
       else if (FE.BAG_ITEMS[e.id].trap) this.placeTrap(e.id);
-      else if (['lock', 'thievesTools', 'crowbar'].includes(e.id)) this.useDoorTool(e.id);
+      else if (e.id === 'lock') this.useDoorTool(e.id);
     }
 
     // 穿上或拿起背包裡的一件裝備：武器放主手、盾牌放副手、防具穿在身上，換下的放回背包，算一個動作。
@@ -805,17 +828,15 @@
       const g = entry.gear;
       const d = FE.Gear.def(g);
       if (d.cat === 'tool') {
-        const slot = { pick: 'pick', sickle: 'sickle' }[g.type];
-        if (!slot) {
-          this.say(`${FE.Gear.name(g)}不能裝備。`, 'sys');
-          return;
-        }
+        // 工具欄（第三十七版之一）：哪種工具都能放；先放空著的那一格，兩格都滿就換掉同種的那一把（沒有同種的換工具 1）
+        const S = FE.Gear.TOOL_SLOTS;
+        const slot = S.find((s) => !p.equip[s]) || S.find((s) => p.equip[s].type === g.type) || S[0];
         this.beginAction();
         p.bag = p.bag.filter((e) => e !== entry);
         const old = p.equip[slot];
         p.equip[slot] = g;
         if (old) this.bagAddGear(old);
-        this.say(`你把${FE.Gear.name(g)}裝進採集裝備欄。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}`, 'good');
+        this.say(`你把${FE.Gear.name(g)}裝進工具欄（工具 ${S.indexOf(slot) + 1}）。${old ? `換下的${FE.Gear.name(old)}放回背包。` : ''}`, 'good');
         this.endTurn(false);
         return;
       }
@@ -932,41 +953,58 @@
       return null;
     }
 
+    // 在身邊的門裝上門鎖（背包裡的門鎖，用掉一個）；打開上鎖的門與寶箱改成撞上去用工具欄的工具（第三十七版之一，見 tryUnlock）
     useDoorTool(id) {
-      const p = this.player;
-      if (id === 'lock') {
-        const door = this.adjacentDoor(false);
-        if (!door) {
-          this.say('身邊沒有可以裝門鎖的門。', 'sys');
-          return;
-        }
-        if (this.monsterAt(door.x, door.y) || this.world.npcAt(door.x, door.y) || this.soldierAt(door.x, door.y)) {
-          this.say('門口有人或怪物，不能裝門鎖。', 'sys');
-          return;
-        }
-        this.beginAction();
-        this.world.lockDoor(door.x, door.y);
-        this.bagTake('lock', 1);
-        this.say('你把門鎖裝在門上。', 'good');
-        this.endTurn(false);
+      if (id !== 'lock') return;
+      const door = this.adjacentDoor(false);
+      if (!door) {
+        this.say('身邊沒有可以裝門鎖的門。', 'sys');
         return;
       }
-      const door = this.adjacentDoor(true);
-      if (!door) {
-        this.say('身邊沒有上鎖的門。', 'sys');
+      if (this.monsterAt(door.x, door.y) || this.world.npcAt(door.x, door.y) || this.soldierAt(door.x, door.y)) {
+        this.say('門口有人或怪物，不能裝門鎖。', 'sys');
         return;
       }
       this.beginAction();
-      const a = FE.randInt(this.rng, 1, 20);
-      const b = id === 'crowbar' ? FE.randInt(this.rng, 1, 20) : a;
-      const mod = FE.Char.attrMod(p, id === 'crowbar' ? 'str' : 'dex');
-      const total = Math.max(a, b) + mod;
-      if (total >= 15) {
-        this.world.unlockDoor(door.x, door.y);
-        this.say(`你用${FE.BAG_ITEMS[id].name}打開了門鎖（擲出 ${Math.max(a, b)}${mod ? (mod > 0 ? '+' : '') + mod : ''}）。`, 'good');
-      } else {
-        this.say(`你試著用${FE.BAG_ITEMS[id].name}打開門鎖，沒有成功（擲出 ${Math.max(a, b)}${mod ? (mod > 0 ? '+' : '') + mod : ''}）。`, 'sys');
+      this.world.lockDoor(door.x, door.y);
+      this.bagTake('lock', 1);
+      this.say('你把門鎖裝在門上。', 'good');
+      this.endTurn(false);
+    }
+
+    // 撞上上鎖的門或寶箱（第三十七版之一）：用工具欄裡的開鎖器（兩把都有時先用開鎖器），沒有就用撬棍；一次算一個動作，失敗可以再試。
+    // 開鎖器：d20＋敏捷修正值＋開鎖技能每 2 級 +1＋開鎖器品質的命中加值，到 DC 就開，練開鎖（成功 10 點、失敗 5 點）；
+    // 撬棍：力量檢定，有優勢（擲兩次取高的），不加開鎖技能、不練開鎖。每試一次磨那把工具一次（照磨損機率）。
+    // lock：{ door: { x, y } } 或 { chest }。沒有工具只出訊息、不算動作
+    tryUnlock(lock) {
+      const p = this.player;
+      const what = lock.chest ? '寶箱' : '門';
+      const pick = this.toolOf('lockpick');
+      const tool = pick || this.toolOf('crowbar');
+      if (!tool) {
+        this.say(`${what}上了鎖，需要開鎖器或撬棍（裝在工具欄）才打得開。`, 'sys');
+        return;
       }
+      const dc = lock.chest ? lock.chest.dc || C.CHEST_DC[0][1] : C.DOOR_DC;
+      this.beginAction();
+      const a = FE.randInt(this.rng, 1, 20);
+      const b = pick ? a : FE.randInt(this.rng, 1, 20);
+      const n = Math.max(a, b);
+      const mod = pick
+        ? FE.Char.attrMod(p, 'dex') + Math.floor(FE.Char.skillLv(p, 'picklock') / C.PICKLOCK_EVERY) + FE.Gear.qual(pick).hit
+        : FE.Char.attrMod(p, 'str');
+      const ok = n + mod >= dc;
+      const roll = `${pick ? '' : `優勢：${a}、${b}，`}擲出 ${n}${mod ? (mod > 0 ? '+' : '') + mod : ''} 對 DC ${dc}`;
+      const name = FE.Gear.def(tool).name;
+      if (pick) FE.Char.useSkill(this, 'picklock', ok ? C.SKILL_EXP_HIT : C.SKILL_EXP_MISS, p);
+      if (ok) {
+        this.say(`你用${name}${pick ? '打開' : '撬開'}了${what}的鎖（${roll}）。`, 'good');
+        if (lock.chest) this.openChest(lock.chest);
+        else this.world.unlockDoor(lock.door.x, lock.door.y);
+      } else {
+        this.say(`你試著用${name}${pick ? '打開' : '撬開'}${what}的鎖，沒有成功（${roll}）。`, 'sys');
+      }
+      FE.Gear.wear(this, tool);
       this.endTurn(false);
     }
 
@@ -980,19 +1018,26 @@
       return this.world.nodes.find((n) => n.x === x && n.y === y && !(n.regrowAt > t) && this.world.passable(x, y)) || null;
     }
 
-    // 採一次磨損工具一次（耐久 50，用完就壞）
+    // 採一次磨損工具一次（耐久 50，用完就壞）。第三十七版之一：得到 1～2＋min(3, 技能等級÷5 捨去) 份（採礦、採藥），練那一項技能（一次 10 點）；
+    // 採礦一次的刻數＝原本的刻數×（30－min(採礦, 15)）÷30，再除以礦鎬的品質倍率（QUALITIES 的 armor，最多 2）
     gather(node) {
       const def = FE.NODES[node.kind];
       const item = FE.BAG_ITEMS[def.item];
       const tool = this.toolOf(def.tool);
+      const p = this.player;
+      const lv = FE.Char.skillLv(p, def.skill);
       this.beginAction();
-      const n = FE.randInt(this.rng, C.GATHER_YIELD[0], C.GATHER_YIELD[1]);
+      const n = FE.randInt(this.rng, C.GATHER_YIELD[0], C.GATHER_YIELD[1]) + Math.min(C.GATHER_SKILL_MAX, Math.floor(lv / C.GATHER_SKILL_EVERY));
       this.bagAdd(def.item, n);
       node.regrowAt = (this.ticks || 0) + C.REGROW_TICKS;
       this.earn(C.COMPUTE_PER_GATHER);
       this.say(`你用${FE.GEAR[def.tool].name}${def.verb}下${item.name} ${n} 份（背包裡共 ${this.bagCount(def.item)} 份）。`, 'good');
+      FE.Char.useSkill(this, def.skill, C.SKILL_EXP_HIT, p);
+      const ticks = node.kind === 'ore'
+        ? Math.max(1, Math.round((C.TICKS_MOVE * (C.MINE_TICK_DIV - Math.min(lv, C.MINE_SKILL_CAP))) / C.MINE_TICK_DIV / Math.min(C.MINE_QUALITY_MAX, tool ? FE.Gear.qual(tool).armor : 1)))
+        : undefined;
       if (tool) FE.Gear.wear(this, tool);
-      this.endTurn(false);
+      this.endTurn(false, ticks);
     }
 
     // 找附近能放怪物的空地：不在聚落和它周圍那一圈裡；canReach(x, y) 給了就要冒險者碰得到
@@ -1474,8 +1519,9 @@
         this.say('那個斜角過不去。', 'sys');
         return;
       }
+      // 上鎖的門：撞上去自動用工具欄的開鎖器或撬棍（第三十七版之一）
       if (this.world.isLocked(nx, ny)) {
-        this.say('門上了鎖，得先打開才能通過。', 'sys');
+        this.tryUnlock({ door: { x: nx, y: ny } });
         return;
       }
       const m = this.monsterAt(nx, ny);
@@ -1512,7 +1558,15 @@
         this.openTalk(npc);
         return;
       }
-      // 採集點：裝備對的工具後撞上去就採，不移動；沒有工具就照常走過去
+      // 寶箱（第三十七版之一：都上了鎖）：冒險者撞上去自動用工具欄的開鎖器或撬棍，打開就拿到裡面的東西，人不移動；
+      // 隊友走過寶箱不開（照常走過去）。數值暴走體徘徊離開後，寶箱還是壞的，要打倒牠才修得好
+      const chest = this.player === this.hero ? this.world.chestAt(nx, ny) : null;
+      if (chest) {
+        if (FE.Checker.checkChest(chest)) this.say('寶箱被怪物的力量封住了，打不開。', 'sys');
+        else this.tryUnlock({ chest });
+        return;
+      }
+      // 採集點：工具欄有對的工具時撞上去就採，不移動；沒有工具就照常走過去
       const node = this.nodeAt(nx, ny);
       if (node && this.toolOf(FE.NODES[node.kind].tool)) {
         this.gather(node);
@@ -1552,15 +1606,9 @@
       }
       if (node) {
         const def = FE.NODES[node.kind];
-        this.say(`這裡有${def.name}，需要${FE.GEAR[def.tool].name}才${def.verb}得下來（鐵匠或武器匠有賣）。`, 'sys');
+        this.say(`這裡有${def.name}，需要把${FE.GEAR[def.tool].name}裝進工具欄才${def.verb}得下來（鐵匠或武器匠有賣）。`, 'sys');
       }
       this.pickUp(nx, ny);
-      const chest = this.player === this.hero ? this.world.chestAt(nx, ny) : null; // 隊友走過寶箱不開
-      if (chest) {
-        // 數值暴走體徘徊離開後，寶箱還是壞的，要打倒牠才修得好
-        if (FE.Checker.checkChest(chest)) this.say('寶箱被怪物的力量封住了，打不開。', 'sys');
-        else this.openChest(chest);
-      }
       // 走一步花幾刻：6 刻減敏捷修正值（最少 5）；背超過能背的重量一步 36 刻
       // 力量不到身上防具的需求：一步 9 刻（跟超重取大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
       const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
@@ -1583,7 +1631,7 @@
       FE.Combat.regenBlock(this, p);
       this.addRepair(C.VIRTUAL_REPAIR);
       // 冒險者脫離戰鬥（被射過的怪物離冒險者超過視野，撤退、倒下醒來都算）：自動撿回射向牠的箭的一半
-      for (const m of this.monsters) if ((m.arrows || m.bolts || m.slingBullets || m.bullets || m.needles) && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) > C.SIGHT) this.recoverArrows(m);
+      for (const m of this.monsters) if (shotAt(m) && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) > C.SIGHT) this.recoverArrows(m);
       if (moved !== false) {
         p.steps++;
         this.earn(C.COMPUTE_PER_MOVE);
@@ -1814,7 +1862,7 @@
       // 牧師按 F 放神聖之光（不用拿武器）
       if (FE.Char.cls(p).light && !spells.length) return { mode: 'light', weapon: null, range: FE.Char.range(p, C.SPELL_RANGE) };
       if (d && d.ammo) {
-        if (!this.bagCount(d.ammo)) return no(`沒有${FE.GEAR[d.ammo].name}了（鐵匠、武器匠有賣）。`);
+        if (!this.bagCount(this.ammoFor(w))) return no(`沒有${FE.GEAR[d.ammo].name}了（鐵匠、武器匠有賣）。`);
         return { mode: 'shoot', weapon: w, range: FE.Char.range(p, d.range) };
       }
       if (d && d.thrown) return this.throwMode(quiet);
@@ -1901,15 +1949,16 @@
         this.castOn(r.mode, m, r.range);
       } else if (r.mode === 'shoot') {
         // 先記在怪物身上：牠倒下或冒險者脫離戰鬥時撿回一半（見 recoverArrows）；箭矢記在 m.arrows，弩矢記在 m.bolts
-        const q = this.takeArrow(FE.Gear.def(w).ammo);
-        const ammo = FE.Gear.def(w).ammo;
-        const field = { arrow: 'arrows', bolt: 'bolts', slingBullet: 'slingBullets', bullet: 'bullets', needle: 'needles' }[ammo];
+        // 第三十七版之一：吹箭筒有毒針時先用毒針（命中多 1d4 毒傷並中毒，見 combat.js 的 opts.poison）
+        const ammo = this.ammoFor(w);
+        const q = this.takeArrow(ammo);
+        const field = AMMO_FIELDS[ammo];
         if (!field) throw new Error(`遠程武器使用了未知彈藥：${ammo}`);
         if (!auto) {
           m[field] = m[field] || {};
           m[field][q] = (m[field][q] || 0) + 1;
         }
-        FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'shoot', weapon: w, range: r.range, ammoQ: q, holy });
+        FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'shoot', weapon: w, range: r.range, ammoQ: q, holy, poison: ammo === 'poisonNeedle' });
       } else if (r.mode === 'item') {
         const item = r.item;
         this.bagTake(r.itemId, 1);
@@ -2105,7 +2154,7 @@
 
     // 射向這隻怪物的彈藥撿回一半（捨去，照射出去的品質放回背包）：牠倒下、或冒險者脫離戰鬥時
     recoverArrows(m) {
-      for (const [field, id] of [['arrows', 'arrow'], ['bolts', 'bolt'], ['slingBullets', 'slingBullet'], ['bullets', 'bullet'], ['needles', 'needle']]) {
+      for (const [id, field] of Object.entries(AMMO_FIELDS)) {
         const spent = m[field];
         m[field] = null;
         if (!spent) continue;
@@ -2123,7 +2172,8 @@
       }
     }
 
-    // 走到有東西的那一格（擲出去的武器）就撿回來：主手空著就拿在主手，不然放進背包（不算動作）
+    // 走到有東西的那一格（擲出去的武器、怪物倒下時掉的錢與裝備）就撿回來：主手空著就拿在主手，不然放進背包（不算動作）；
+    // 錢（第三十七版之一）算在冒險者身上
     pickUp(x, y) {
       const p = this.player;
       const here = this.world.itemsAt(x, y);
@@ -2135,8 +2185,14 @@
           this.say(`你收起${FE.BAG_ITEMS[it.trap].name}。`, 'good');
           continue;
         }
+        if (it.copper != null) {
+          const copper = Math.max(0, it.copper | 0);
+          this.hero.copper += copper;
+          this.say(`你撿起地上的錢：${this.coins(copper, it.small)}。`, 'good');
+          continue;
+        }
         if (!it.gear) throw new Error('地上的物品資料不完整');
-        if (!p.equip.main && FE.Gear.def(it.gear).cat === 'weapon') {
+        if (!p.equip.main && FE.Gear.def(it.gear).cat === 'weapon' && FE.Char.grip(p, it.gear) !== 'none') {
           p.equip.main = it.gear;
           if (FE.Gear.twoHanded(p, it.gear) && p.equip.off) {
             this.bagAddGear(p.equip.off);
@@ -2146,7 +2202,7 @@
           this.say(`你撿回了${FE.Gear.name(it.gear)}，拿在手上。`, 'good');
         } else {
           this.bagAddGear(it.gear);
-          this.say(`你撿回了${FE.Gear.name(it.gear)}，收進背包。`, 'good');
+          this.say(`你撿${it.loot ? '起' : '回'}了${FE.Gear.name(it.gear)}，收進背包。`, 'good');
         }
       }
     }
@@ -2565,7 +2621,7 @@
       const price = (e) => FE.Gear.shopPrice(e.type, e.q, v, cha);
       const gname = (e) => FE.Gear.productName(e);
       const lines = {
-        blacksmith: '武器、盔甲、盾牌、彈藥、礦鎬和鐮刀我都能賣、能修、能打；藥水、陷阱和裝備包去找商人。',
+        blacksmith: '武器、盔甲、盾牌、彈藥、礦鎬和鐮刀我都能賣、能修、能打；藥水、陷阱和開鎖的工具去找商人。',
         weaponsmith: '武器、彈藥、礦鎬和鐮刀歸我管；盾牌和盔甲去找盔甲匠，藥水和陷阱去找商人。',
         armorer: '盔甲和盾牌歸我管；武器和工具去找武器匠。',
         merchant: FE.MERCHANT_LINES[(npc.id + this.turn) % FE.MERCHANT_LINES.length],
@@ -2600,7 +2656,8 @@
       }
 
       if (page === 'buy') {
-        const all = Object.keys(S.buy).flatMap((cat) => this.buyEntries(S, cat));
+        // townOnly 的商品（毒針）只有城鎮、城市、堡壘、要塞的店賣（第三十七版之一）
+        const all = Object.keys(S.buy).flatMap((cat) => this.buyEntries(S, cat)).filter((e) => !(S.townOnly || []).includes(e.id) || FE.Steading.shopTown(v));
         return [
           `你身上有 ${FE.money(p.copper)}。`,
           all.map((e) => {
@@ -2736,21 +2793,15 @@
       } else if (kind === 'buyItem') {
         const type = a;
         const q = Number(b);
+        if ((S.townOnly || []).includes(type) && !FE.Steading.shopTown(v)) return stay; // 毒針只有城鎮的商人賣
         const pr = FE.Gear.shopPrice(type, q, v, cha);
         if (p.copper < pr) return stay;
         p.copper -= pr;
         if (FE.GEAR[type]) {
           const g = FE.Gear.make(type, q, this.nextGearId++);
           this.bagAddGear(g);
-          this.say(`${npc.name}賣給你${FE.Gear.lootName(g).replace(/^一件/, '')}，花了 ${FE.money(pr)}。${type === 'pick' ? '礦坑裡的礦脈挖得動了。' : type === 'sickle' ? '森林裡的藥草割得下來了。' : ''}`, 'good');
-        } else if (type.startsWith('pack_')) {
-          const pack = FE.EQUIPMENT_PACKS[type.slice(5)];
-          if (!pack) return stay;
-          for (const item of pack.items) {
-            if (item.gear) this.bagAddGear(FE.Gear.make(item.gear, 0, this.nextGearId++));
-            else this.bagAdd(item.id, item.n, FE.BAG_ITEMS[item.id].bundle ? { q: 0 } : undefined);
-          }
-          this.say(`${npc.name}賣給你${pack.name}（${pack.desc}），花了 ${FE.money(pr)}。物品都放進了背包。`, 'good');
+          const hint = { ore: '裝進工具欄，礦坑裡的礦脈就挖得動了。', herb: '裝進工具欄，森林裡的藥草就割得下來了。', lock: '裝進工具欄，撞上上鎖的寶箱或門就會用它。' }[FE.GEAR[type].use] || '';
+          this.say(`${npc.name}賣給你${FE.Gear.lootName(g).replace(/^一件/, '')}，花了 ${FE.money(pr)}。${hint}`, 'good');
         } else {
           const item = FE.BAG_ITEMS[type];
           if (!item || !item.price) return stay;
@@ -2979,11 +3030,11 @@
       }
     }
 
-    // by 是士兵時：修好牠負責的錯，冒險者不拿經驗值也不拿算力，也不掉寶箱
+    // by 是士兵時：修好牠負責的錯，冒險者不拿經驗值也不拿算力，也不掉錢與裝備
     defeat(m, by) {
       this.monsters = this.monsters.filter((o) => o !== m);
       if (this.battle.targetId === m.id) this.battle.targetId = null;
-      if (m.arrows || m.bolts || m.slingBullets || m.bullets || m.needles) this.recoverArrows(m); // 射出的彈藥撿回一半
+      if (shotAt(m)) this.recoverArrows(m); // 射出的彈藥撿回一半
       // 第三十二版：一群共用一處錯誤，全群倒下才修好
       const left = m.group ? this.monsters.filter((o) => o.group === m.group).length : 0;
       const repair = (opts) => {
@@ -3004,7 +3055,7 @@
       const fix = repair();
       // 經驗值與打倒怪物的算力，打倒後一次結算
       this.say(`${m.name}倒下了，經驗值 +${m.exp}。${fix}`, 'good');
-      this.dropChest(m);
+      this.dropCoins(m);
       this.dropGear(m);
       this.addExp(m.exp);
       this.earn(m.compute);
@@ -3033,32 +3084,28 @@
     }
 
     // 創世時的中型怪物與合體生出的中型怪物（不是衰敗生的 m.small），打倒時 30% 機率多掉一件裝備，
-    // 品質做工好～優秀（每高一級機率減半），直接放進背包
+    // 品質做工好～優秀（每高一級機率減半）。第三十七版之一：掉在倒下的那一格（loot），冒險者走上去自動撿起
     dropGear(m) {
       if (m.tier !== 'mid' || m.small || this.rng() >= C.DROP_MID_GEAR) return;
       const g = FE.Gear.randomDrop(this, 1, 3);
-      this.bagAddGear(g, this.hero);
-      this.say(`${m.name}身上掉出${FE.Gear.lootName(g)}，你收進了背包。`, 'good');
+      this.world.items.push({ x: m.x, y: m.y, gear: g, loot: true });
+      this.say(`${m.name}身上掉出${FE.Gear.lootName(g)}，落在地上。`, 'good');
     }
 
-    // 掉寶箱：會追人的怪物（m.small）20% 機率掉、錢少；其他怪物 50% 機率掉，影響範圍越大錢越多。
-    // 多掉一件裝備（dropGear）是另外獨立判定的，不跟寶箱綁在一起
-    dropChest(m) {
+    // 掉錢（第三十七版之一：打倒怪物不再掉寶箱，錢掉在倒下的那一格，冒險者走上去自動撿起）：會追人的怪物（m.small）20% 機率掉、錢少；
+    // 其他怪物 50% 機率掉，影響範圍越大錢越多（機率與金額照原本的寶箱）。多掉一件裝備（dropGear）是另外獨立判定的
+    dropCoins(m) {
       let gold;
       if (m.small) {
         if (this.rng() >= C.DROP_SMALL_CHANCE) return;
         gold = FE.randInt(this.rng, C.DROP_SMALL_GOLD[0], C.DROP_SMALL_GOLD[1]);
       } else {
-        if (this.rng() >= C.DROP_BIG_CHANCE) return; // 中型以上怪物 50% 機率掉寶箱（原本必掉）
+        if (this.rng() >= C.DROP_BIG_CHANCE) return; // 中型以上怪物 50% 機率掉
         gold = C.DROP_GOLD_BASE + m.scope * C.DROP_GOLD_PER_SCOPE + FE.randInt(this.rng, 0, 5);
       }
-      gold = Math.round(gold * C.CHEST_GOLD_MUL); // 所有寶箱的錢減半（單位是銀，存成銅）
-      const w = this.world;
-      let at = { x: m.x, y: m.y };
-      if (w.chestAt(at.x, at.y) || w.inVillage(at.x, at.y) || !w.passable(at.x, at.y)) at = this.findFreeNear(m.x, m.y);
-      if (!at) return;
-      w.chests.push(Object.assign({ id: w.nextId++, x: at.x, y: at.y, copper: gold * C.SILVER }, m.small ? { small: true } : {}));
-      this.say(`${m.name}掉下了一個寶箱。`, 'good');
+      gold = Math.round(gold * C.CHEST_GOLD_MUL); // 錢減半（單位是銀，存成銅）
+      this.world.items.push(Object.assign({ x: m.x, y: m.y, copper: gold * C.SILVER }, m.small ? { small: true } : {}));
+      this.say(`${m.name}身上掉出一些錢，落在地上。`, 'good');
     }
 
     // ---- 執行時錯誤 ----

@@ -42,11 +42,10 @@
   // 體型：畫面上只顯示體型，不顯示格數
   FE.sizeName = (m) => ({ small: '小', mid: '中', big: '巨大' })[m.tier] || '小';
 
-  // 怪物的名字看數值塊（菁英由一群裡最強的升上來時名字前加「菁英」）
+  // 怪物的名字看數值塊。第三十七版（使用者定的）：菁英不在名字上寫「菁英」（原本由一群裡最強的升上來時名字前加「菁英」），菁英的規則與數值不變
   FE.monsterName = (m) => {
     const b = FE.monsterBlock(m.race, FE.blockKey(m));
-    const name = b.name || (FE.RACES[m.race] || FE.RACES.goblin).name;
-    return m.elite && !/Elite$/.test(FE.blockKey(m)) ? '菁英' + name : name;
+    return b.name || (FE.RACES[m.race] || FE.RACES.goblin).name;
   };
 
   // 攻防判定用的防禦數字：防禦看數值塊的 AC，這裡只剩生成當下的世界等級每升一級加的一點閃避與格擋

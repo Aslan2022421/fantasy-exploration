@@ -1117,7 +1117,8 @@
       }
       if (FE.SKILLS[id].weapon) {
         const ws = weaponsOf(id).filter((k) => FE.GEAR[k].skill === id);
-        const unlock = `；精通時：` + ws.map((k) => `${FE.MASTERIES[FE.GEAR[k].mastery].name}${lv >= FE.MASTERY_SKILL ? '' : `（${FE.MASTERY_SKILL} 級）`}`).join('、');
+        const masNames = [...new Set(ws.map((k) => FE.MASTERIES[FE.GEAR[k].mastery].name))]; // 幾把武器學同一種精通時只寫一次
+        const unlock = `；精通時：` + masNames.join('、') + (lv >= FE.MASTERY_SKILL ? '' : `（${FE.MASTERY_SKILL} 級）`);
         return `${ws.map((k) => FE.GEAR[k].name).join('、')}：近戰命中 +${hit}、傷害 +${dmg}${FE.GEAR[ws[0]].thrown ? '（投擲只加傷害）' : ''}${id === 'staff' ? '；法師的範圍魔攻也算' : ''}${unlock}`;
       }
       if (id === 'dodge') return `閃避機率 +${lv}%`;
@@ -1127,10 +1128,30 @@
       const ticks = id === 'light' ? '輕甲本來不多花刻' : id === 'medium' ? (lv >= 5 ? '中甲不多花刻' : '中甲多 1 刻（5 級起不多花）') : lv >= 10 ? '重甲不多花刻' : lv >= 5 ? '重甲少 1 刻（10 級起不多花）' : '重甲多 2 刻（5 級起少 1 刻）';
       return `穿這一類時防具的重量 ×${t[Math.min(lv, t.length - 1)]}；${ticks}`;
     };
-    const skillRows = Object.keys(FE.SKILLS).map((id) => {
+    // 第三十七版：技能改成分組的卡片（使用者要重新排版）：每張卡寫名稱、等級與等級名稱，下面一條經驗進度條加「幾／幾」，再下面是目前的效果；
+    // 還沒練過（0 級）的卡片變淡
+    const skillCard = (id) => {
       const s = p.skills[id];
-      return `<tr><td>${FE.SKILLS[id].name}</td><td><b>${s.lv}</b> <span class="dim">${esc(FE.skillLevelName(s.lv))}</span></td><td>${Math.floor(s.n)} / ${Ch.skillNeed(s.lv)}</td><td class="dim">${esc(effect(id, s.lv))}</td></tr>`;
-    }).join('');
+      const need = Ch.skillNeed(s.lv);
+      const pct = Math.max(0, Math.min(100, Math.round((s.n / need) * 100)));
+      return `<div class="sk-card${s.lv > 0 ? '' : ' sk-zero'}"><div class="sk-top"><b>${FE.SKILLS[id].name}</b><span><b>${s.lv}</b> 級　<span class="dim">${esc(FE.skillLevelName(s.lv))}</span></span></div>` +
+        `<div class="sk-bar" title="到下一級 ${Math.floor(s.n)} / ${need}"><i style="width:${pct}%"></i></div><div class="sk-exp">${Math.floor(s.n)} / ${need}</div>` +
+        `<div class="sk-eff">${esc(effect(id, s.lv))}</div></div>`;
+    };
+    const SKILL_GROUPS = [
+      ['近戰武器', ['sword', 'spear', 'knife', 'staff', 'axe', 'mace', 'whip']],
+      ['遠程', ['bow', 'crossbow', 'shoot']],
+      ['戰鬥', ['fight', 'misc', 'dodge', 'shield']],
+      ['防具', ['light', 'medium', 'heavy']],
+    ];
+    const grouped = new Set(SKILL_GROUPS.flatMap(([, ids]) => ids));
+    const rest = Object.keys(FE.SKILLS).filter((id) => !grouped.has(id));
+    const skillHtml = SKILL_GROUPS.concat(rest.length ? [['其他', rest]] : [])
+      .map(([title, ids]) => {
+        const have = ids.filter((id) => FE.SKILLS[id] && p.skills[id]);
+        return have.length ? `<h4 class="sk-group">${title}</h4><div class="sk-grid">${have.map(skillCard).join('')}</div>` : '';
+      })
+      .join('');
     const d = FE.Gear.playerDefense(p);
     const con = Ch.attrMod(p, 'con');
     const heal = `1d10${con > 0 ? '+' + con : con < 0 ? con : ''}`; // 野外短休（第三十版）
@@ -1149,7 +1170,7 @@
       <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
       <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th>${canAdd ? '<th></th>' : ''}</tr>${attrRows}</table>
       <h3>技能（用了就累積經驗，升到第 N 級要 ${C.SKILL_NEED_BASE}＋${C.SKILL_NEED_STEP}N 點，沒有上限；經驗倍率 ×${Ch.expFactor(p).toFixed(1)}）</h3>
-      <table class="stats"><tr><th>技能</th><th>等級</th><th>到下一級</th><th>目前的效果</th></tr>${skillRows}</table>
+      ${skillHtml}
       <h3>目前的數字</h3>
       <p>主手傷害 ${esc(game.attackText())}　近戰出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　暴擊 ${Ch.critMin(p, p.equip.main)}～20　攻擊一次 ${Ch.attackTicks(p, p.equip.main)} 刻${masteryLine()}　閃避 ${Math.round(d.dodge * 100)}%　物理傷害再減 ${Ch.conCut(p)}（體質）${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}${p === game.hero ? `　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}` : ''}</p>`;
   }

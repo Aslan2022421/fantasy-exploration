@@ -569,6 +569,18 @@ input {
 .npc.recruit { color: var(--map-mate-fg); }
 .player.mate { color: var(--map-mate-fg); }
 
+/* 第三十七版：角色頁的技能卡片（分組、經驗進度條加「幾／幾」、效果；0 級變淡） */
+.sk-group { margin: 12px 0 6px; font-size: 13px; font-weight: normal; color: var(--dim); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.sk-card { min-width: 0; padding: 6px 8px; border: 1px solid var(--line2); border-radius: 3px; background: var(--void); }
+.sk-card.sk-zero { opacity: 0.55; }
+.sk-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+.sk-top > b { color: var(--head); }
+.sk-bar { height: 6px; margin: 5px 0 2px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; overflow: hidden; }
+.sk-bar i { display: block; height: 100%; background: var(--map-mate-fg); }
+.sk-exp { font-size: 11px; color: var(--dim); text-align: right; }
+.sk-eff { margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; }
+
 /* 角色視窗的隊員頁籤（第三十六版之三）：換看的人、不換操作；看的那位標亮 */
 .char-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .char-tab { padding: 3px 8px; font-size: 13px; background: transparent; border: 1px solid var(--line); border-radius: 3px; color: inherit; cursor: pointer; }

@@ -62,6 +62,8 @@
       this.player.y = s.y;
       this.hero = this.player;
       this.lastSafe = { x: s.x, y: s.y };
+      const home = this.world.villageAt(s.x, s.y);
+      if (home) home.visitDay = 1; // 第三十七版：出生的聚落一開始就記進日誌
     }
 
     say(text, kind) {
@@ -2959,13 +2961,16 @@
       return where;
     }
 
-    // 走到地貌旁邊（一格內）第一次看到時，說明那是什麼
+    // 走到地貌旁邊（一格內）第一次看到時，說明那是什麼。第三十七版：記下第幾天第一次到這座聚落（v.visitDay）、發現這處地貌（l.foundDay），給日誌用
     discover() {
       const p = this.player;
       const w = this.world;
+      const here = w.villageAt(p.x, p.y);
+      if (here && !here.visitDay) here.visitDay = this.day();
       for (const l of w.landmarks) {
         if (l.found || p.x < l.x0 - 1 || p.x > l.x1 + 1 || p.y < l.y0 - 1 || p.y > l.y1 + 1) continue;
         l.found = true;
+        l.foundDay = this.day();
         const v = w.villageById(l.villageId);
         this.say(`你發現了${v ? v.name + '附近的' : ''}${l.name}。${FE.LANDMARKS[l.kind].desc}`, 'world');
       }

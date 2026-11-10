@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fantasy Exploration</title>
-  <link rel="stylesheet" href="css/style.css?v=45">
+  <link rel="stylesheet" href="css/style.css?v=46">
 </head>
 <body>
   <!-- 版面參考 Caves of Qud 的文字模式：上方一行狀態＋右上圖示列＋生命與經驗兩條長條；
@@ -28,7 +28,7 @@
         </div>
         <nav id="iconbar" aria-label="視窗">
           <button class="ib" data-win="quests" data-tip="委託（Q）" aria-label="委託（Q）"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg></button>
-          <button class="ib" data-win="history" data-tip="歷史（H）" aria-label="歷史（H）"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg></button>
+          <button class="ib" data-win="history" data-tip="日誌（H）" aria-label="日誌（H）"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg></button>
           <button class="ib" data-win="legend" data-tip="圖例（L）" aria-label="圖例（L）"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
           <button class="ib" data-win="settings" data-tip="設定（Esc）" aria-label="設定（Esc）"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg></button>
         </nav>
@@ -58,7 +58,7 @@
               <button class="qs" data-act="heal"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="qn">治療</span><span class="qcd"></span><span class="qk">&lt;4&gt;</span></button>
               <button class="qs" data-act="bash"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg><span class="qn">盾擊</span><span class="qk">&lt;5&gt;</span></button>
               <button class="qs" data-act="throw"><svg viewBox="0 0 24 24"><path d="M4 20L16 8M12 4h8v8M4 14l6 6"/></svg><span class="qn">投擲</span><span class="qk">&lt;T&gt;</span></button>
-              <button class="qs qw" data-win="backpack"><svg viewBox="0 0 24 24"><path d="M7 9h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z"/><path d="M9 9V6a3 3 0 0 1 6 0v3M5 14h14"/></svg><span class="qn">背包</span><span class="qk">&lt;B&gt;</span></button>
+              <button class="qs qw" data-win="backpack"><svg viewBox="0 0 24 24"><path d="M7 9h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z"/><path d="M9 9V6a3 3 0 0 1 6 0v3M5 14h14"/></svg><span class="qn">裝備</span><span class="qk">&lt;B&gt;</span></button>
               <button class="qs" data-win="character"><svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.4"/><path d="M5.5 20c0-4 3-6.5 6.5-6.5s6.5 2.5 6.5 6.5z"/></svg><span class="qn">角色</span><span class="qk">&lt;C&gt;</span></button>
               <button class="qs" data-win="minimap"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg><span class="qn">地圖</span><span class="qk">&lt;M&gt;</span></button>
             </nav>
@@ -84,7 +84,7 @@
 
   <!-- 按鍵視窗：同時只開一個，Esc 關掉 -->
   <div id="overlay" class="hidden">
-    <section id="win-legend" class="win hidden">
+    <section id="win-legend" class="win win-big hidden">
       <h2>圖例 <span class="dim">（L）</span></h2><button class="x" data-close>Esc 關閉</button>
       <div class="winbody"><div class="legend">
         <div class="row"><span><b class="player">@</b> 冒險者</span><span><b class="npc">&amp;</b> 村民</span><span><b class="npc smith">&amp;</b> 鐵匠（村莊；城鎮、堡壘等是武器匠）</span><span><b class="npc armorer">&amp;</b> 盔甲匠（城鎮、堡壘等才有）</span><span><b class="npc merchant">&amp;</b> 商人（每個聚落一位）</span><span><b class="npc soldier">&amp;</b> 士兵（城鎮、堡壘等才有）</span><span><b class="npc recruit">&amp;</b> 想找同伴的人（在同一個聚落完成 5 件委託後偶爾出現，對話可以邀他同行）</span><span><b class="player mate">@</b> 隊友（Tab 換人操作）</span><span><b class="chest">$</b> 寶箱</span><span><b class="node-ore">☼</b> 礦脈（礦坑裡，要礦鎬）</span><span><b class="node-herb">♥</b> 藥草（森林裡，要鐮刀）</span><span><b class="item">)</b> 地上的武器（擲出去的，走過去撿回來）</span></div>
@@ -117,8 +117,9 @@
       </div></div>
     </section>
 
-    <section id="win-backpack" class="win hidden">
-      <h2>背包 <span class="dim">（B）</span></h2><button class="x" data-close>Esc 關閉</button>
+    <section id="win-backpack" class="win win-big win-tabbed hidden">
+      <h2>裝備 <span class="dim">（B）</span></h2><button class="x" data-close>Esc 關閉</button>
+      <nav class="wtabs" data-tabs></nav>
       <div class="winbody">
       <div id="bagInfo"></div>
       <p class="dim">藥草等東西疊在一起，不限格數，裝備一件一格。點選物品或按數字鍵選取，再從左側資訊操作；Enter 執行一般操作，Delete 丟棄（需確認）。藥草回生命上限的四分之一，裝備是穿上或拿起，算一個動作，戰鬥中也能做；丟棄不算動作。選中可單手拿的武器後，可直接選「拿在副手」。送貨物品不能丟棄。礦鎬與鐮刀須裝進上方對應的採集裝備欄，撞上礦脈或藥草才會使用。東西越多越重（單位磅）：超過能背的重量（力量值×15 磅）走一步要 36 刻，超過推拖上限（力量值×30 磅）就走不動，要先丟東西。</p>
@@ -127,31 +128,49 @@
         <ol id="backpack" class="bag"></ol>
       </div>
       </div>
+      <div class="wfoot"><span>點一下選取、點兩下或 Enter 使用或穿上、右鍵看操作、Delete 丟棄、點裝備格卸下</span><span>C、B、Q、H、I、M、J 換頁或點上方頁籤｜Esc 關閉</span></div>
     </section>
 
-    <section id="win-character" class="win hidden">
+    <section id="win-character" class="win win-big win-tabbed hidden">
       <h2>角色 <span class="dim">（C）</span></h2><button class="x" data-close>Esc 關閉</button>
+      <nav class="wtabs" data-tabs></nav>
       <div class="winbody"><div id="charInfo"></div></div>
+      <div class="wfoot"><span>有隊友時 ← → 換看隊員（不換操作），隊友的屬性點在屬性表點「加 1」</span><span>C、B、Q、H、I、M、J 換頁或點上方頁籤｜Esc 關閉</span></div>
     </section>
 
-    <section id="win-history" class="win hidden">
-      <h2>世界的歷史紀錄 <span class="dim">（H）</span></h2><button class="x" data-close>Esc 關閉</button>
-      <div class="winbody"><ol id="history"></ol></div>
+    <section id="win-history" class="win win-big win-tabbed hidden">
+      <h2>日誌 <span class="dim">（H）</span></h2><button class="x" data-close>Esc 關閉</button>
+      <nav class="wtabs" data-tabs></nav>
+      <div class="winbody"><div id="journal"></div></div>
+      <div class="wfoot"><span>世界的歷史紀錄，以及你到過的聚落與發現的地貌</span><span>C、B、Q、H、I、M、J 換頁或點上方頁籤｜Esc 關閉</span></div>
     </section>
 
-    <section id="win-messages" class="win hidden">
-      <h2>訊息紀錄 <span class="dim">（J）</span></h2><button class="x" data-close>Esc 關閉</button>
+    <section id="win-steading" class="win win-big win-tabbed hidden">
+      <h2>聚落 <span class="dim">（I）</span></h2><button class="x" data-close>Esc 關閉</button>
+      <nav class="wtabs" data-tabs></nav>
+      <div class="winbody"><div class="st-layout"><ol id="steadingList" class="st-list"></ol><div id="steading" class="st-detail"></div></div></div>
+      <div class="wfoot"><span>點左邊的聚落看詳細；在地圖上點聚落也會切到這裡</span><span>C、B、Q、H、I、M、J 換頁或點上方頁籤｜Esc 關閉</span></div>
+    </section>
+
+    <section id="win-messages" class="win win-big win-tabbed hidden">
+      <h2>訊息 <span class="dim">（J）</span></h2><button class="x" data-close>Esc 關閉</button>
+      <nav class="wtabs" data-tabs></nav>
       <div class="winbody"><ol id="logAll" class="logall"></ol></div>
+      <div class="wfoot"><span>最近的訊息在最下面</span><span>C、B、Q、H、I、M、J 換頁或點上方頁籤｜Esc 關閉</span></div>
     </section>
 
-    <section id="win-minimap" class="win hidden">
+    <section id="win-minimap" class="win win-big win-tabbed hidden">
       <h2>地圖 <span class="dim">（M）</span></h2><button class="x" data-close>Esc 關閉</button>
-      <div class="winbody"><div id="miniwrap"><canvas id="minimap" aria-label="地圖"></canvas><div id="mapTip" class="hidden"></div></div><p class="dim maplegend">白點是你、紅點是怪物（大點是中型）、黃菱形是礦脈、綠點是藥草；虛線框是下一段會長的地方。滑鼠移到地圖上看那裡的狀況，點聚落看它的資訊。</p><div id="steading"></div></div>
+      <nav class="wtabs" data-tabs></nav>
+      <div class="winbody"><div id="miniwrap"><canvas id="minimap" aria-label="地圖"></canvas><div id="mapTip" class="hidden"></div></div><p class="dim maplegend">白點是你、紅點是怪物（大點是中型）、黃菱形是礦脈、綠點是藥草；虛線框是下一段會長的地方。</p></div>
+      <div class="wfoot"><span>滑鼠移到地圖上看那裡的狀況；點聚落切到聚落頁看它的資訊</span><span>C、B、Q、H、I、M、J 換頁或點上方頁籤｜Esc 關閉</span></div>
     </section>
 
-    <section id="win-quests" class="win hidden">
+    <section id="win-quests" class="win win-big win-tabbed hidden">
       <h2>委託 <span class="dim">（Q）</span></h2><button class="x" data-close>Esc 關閉</button>
+      <nav class="wtabs" data-tabs></nav>
       <div class="winbody"><div id="questText"></div></div>
+      <div class="wfoot"><span>清除、送貨、採藥、採礦四種委託各能同時接一個</span><span>C、B、Q、H、I、M、J 換頁或點上方頁籤｜Esc 關閉</span></div>
     </section>
 
     <section id="win-look" class="win hidden">
@@ -244,22 +263,22 @@
   </div>
 
   <!-- ?v= 只是為了讓瀏覽器丟掉換伺服器之前的舊快取 -->
-  <script src="js/config.js?v=45"></script>
-  <script src="js/rng.js?v=45"></script>
-  <script src="js/world.js?v=45"></script>
-  <script src="js/checker.js?v=45"></script>
-  <script src="js/bugs.js?v=45"></script>
-  <script src="js/steading.js?v=45"></script>
-  <script src="js/plans.js?v=45"></script>
-  <script src="js/char.js?v=45"></script>
-  <script src="js/gear.js?v=45"></script>
-  <script src="js/combat.js?v=45"></script>
-  <script src="js/stability.js?v=45"></script>
-  <script src="js/events.js?v=45"></script>
-  <script src="js/ai.js?v=45"></script>
-  <script src="js/game.js?v=45"></script>
-  <script src="js/save.js?v=45"></script>
-  <script src="js/render.js?v=45"></script>
-  <script src="js/main.js?v=45"></script>
+  <script src="js/config.js?v=46"></script>
+  <script src="js/rng.js?v=46"></script>
+  <script src="js/world.js?v=46"></script>
+  <script src="js/checker.js?v=46"></script>
+  <script src="js/bugs.js?v=46"></script>
+  <script src="js/steading.js?v=46"></script>
+  <script src="js/plans.js?v=46"></script>
+  <script src="js/char.js?v=46"></script>
+  <script src="js/gear.js?v=46"></script>
+  <script src="js/combat.js?v=46"></script>
+  <script src="js/stability.js?v=46"></script>
+  <script src="js/events.js?v=46"></script>
+  <script src="js/ai.js?v=46"></script>
+  <script src="js/game.js?v=46"></script>
+  <script src="js/save.js?v=46"></script>
+  <script src="js/render.js?v=46"></script>
+  <script src="js/main.js?v=46"></script>
 </body>
 </html>

@@ -255,7 +255,8 @@
   // 1 攻擊、2 重擊、3 撤退、4 治療（牧師、聖騎士）、5 盾擊（戰士）、6 撤離、7 閃避、F 遠程（射擊、投擲、施法、神聖之光：先進入瞄準）、T 投擲（任何武器）
   const ACTS = { 1: 'attack', 2: 'deep', 3: 'flee', 4: 'heal', 5: 'bash', f: 'fire', t: 'throw' }; // 第三十一版：撤退與撤離合併成 3 逃跑，主動閃避拿掉
   // 按鍵視窗：同時只開一個
-  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', b: 'backpack', c: 'character', m: 'minimap', q: 'quests', '`': 'reports' }; // 第三十一版：聚落資訊併進地圖（M），委託 Q
+  // 第三十七版：角色 C、裝備 B、委託 Q、日誌 H、聚落 I、地圖 M、訊息 J 是同一個大視窗的頁籤（按另一頁的字母就換頁，同一個字母關掉）；圖例 L、錯誤報告 ` 各自一個視窗
+  const WINDOW_KEYS = { l: 'legend', h: 'history', j: 'messages', b: 'backpack', c: 'character', m: 'minimap', q: 'quests', i: 'steading', '`': 'reports' };
 
   // 在對話視窗裡選第 i 個選項（選項本身不再花動作）
   function choose(i) {
@@ -655,6 +656,17 @@
     if (b && ready && game.talking == null && game.hero.points <= 0) toggleWindow(b.dataset.win);
   });
   document.getElementById('overlay').addEventListener('click', (e) => {
+    // 第三十七版：大視窗的頁籤、聚落頁左邊的聚落清單
+    const tab = e.target.closest && e.target.closest('[data-tab]');
+    if (tab) {
+      FE.UI.openWindow(tab.dataset.tab);
+      return;
+    }
+    const st = e.target.closest && e.target.closest('[data-steading]');
+    if (st) {
+      FE.UI.pickSteading(Number(st.dataset.steading));
+      return;
+    }
     const select = e.target.closest && e.target.closest('[data-bag-select]');
     const action = e.target.closest && e.target.closest('[data-bag-action]');
     const unequip = e.target.closest && e.target.closest('[data-unequip]');

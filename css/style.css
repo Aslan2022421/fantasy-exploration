@@ -277,6 +277,38 @@ b { font-weight: bold; }
 }
 .win > .x:hover { color: var(--head); }
 .win.win-small { width: min(520px, 100%); height: min(440px, calc(100vh - 48px)); height: min(440px, calc(100dvh - 48px)); }
+/* 第三十七版：大視窗（角色、裝備、委託、日誌、聚落、地圖、訊息，加上圖例）固定 1180px × 82dvh（上限 820px，使用者定的），不隨內容伸縮；
+   畫面比這個窄時縮到畫面寬減 32px；內容多了在框裡捲動 */
+.win.win-big {
+  width: min(1180px, calc(100vw - 32px));
+  height: min(82vh, 820px);
+  height: min(82dvh, 820px);
+}
+/* 頁籤列：在框線裡的最上面一排，目前這頁標亮 */
+.wtabs { flex: none; display: flex; flex-wrap: wrap; gap: 4px; padding: 16px 12px 0; border-bottom: 1px solid var(--line); }
+.wtabs button {
+  padding: 5px 14px 6px;
+  font-size: 14px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+}
+.wtabs button:hover { color: var(--head); }
+.wtabs button.on { color: var(--head); background: var(--panel2, rgba(255, 255, 255, 0.06)); border-color: var(--line2); }
+.wtabs button .k { margin-left: 4px; font-size: 11px; opacity: 0.7; }
+.win-tabbed > .winbody { padding-top: 14px; }
+/* 底部按鍵說明：左邊是這一頁的，右邊是共通的 */
+.wfoot { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 6px 12px; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line); }
+/* 聚落頁：左邊聚落清單，右邊詳細 */
+.st-layout { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 16px; align-items: start; }
+.st-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.st-list button { width: 100%; text-align: left; padding: 6px 8px; font-size: 13px; line-height: 1.4; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 3px; cursor: pointer; }
+.st-list button.on { border-color: var(--map-mate-fg); background: rgba(127, 224, 160, 0.12); }
+.st-list .st-sub { display: block; font-size: 12px; color: var(--dim); }
+@media (max-width: 720px) { .st-layout { grid-template-columns: 1fr; } }
 .winbody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 20px 16px 14px; }
 .win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--head); }
 .help p { margin: 10px 0 2px; }
@@ -543,6 +575,9 @@ input {
   .bar { width: 70px; }
   .win { height: min(640px, calc(100dvh - 40px)); }
   .win.win-small { height: min(440px, calc(100dvh - 40px)); }
+  .win.win-big { width: 100%; height: calc(100dvh - 40px); } /* 第三十七版：手機上大視窗佔滿畫面 */
+  .wtabs { padding: 14px 6px 0; }
+  .wtabs button { padding: 4px 8px 5px; font-size: 13px; }
   .winbody { padding: 18px 10px 10px; }
   .cc h1 { font-size: 22px; }
   .cc-cols { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }

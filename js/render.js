@@ -517,9 +517,11 @@
       if (!at || !game) return;
       const W = game.world;
       const v = W.villageAt(at.x, at.y) || W.villages.find((o) => at.x >= o.x0 - 2 && at.x <= o.x1 + 2 && at.y >= o.y0 - 2 && at.y <= o.y1 + 2);
-      ui.mapSel = v ? v.id : null; // 點空地回到所在或最近的聚落
-      drawMinimap();
-      drawSteading();
+      // 第三十七版：點聚落切到聚落頁看它的資訊；點空地什麼都不做
+      if (!v) return;
+      ui.mapSel = v.id;
+      ui.win = 'steading';
+      update();
     });
   }
 
@@ -796,6 +798,22 @@
 
   // ---- 按鍵視窗：同時只開一個 ----
 
+  // 日誌（第三十七版，原本的世界歷史紀錄）：歷史紀錄，加上你到過的聚落與發現的地貌（照第幾天排，新的在上面）
+  function drawJournal() {
+    const W = game.world;
+    const places = W.villages
+      .filter((v) => v.visitDay)
+      .map((v) => ({ day: v.visitDay, text: `到了${v.name}（${FE.SETTLE_KINDS[v.kind]}）` }))
+      .concat(W.landmarks.filter((l) => l.found).map((l) => {
+        const v = W.villageById(l.villageId);
+        return { day: l.foundDay || 0, text: `發現了${v ? v.name + '附近的' : ''}${l.name}` };
+      }))
+      .sort((a, b) => b.day - a.day);
+    $('journal').innerHTML = `<h3 style="margin-top:0">世界的歷史紀錄</h3><ol id="history"></ol>
+      <h3>到過的地方</h3><ol class="journal-places">${places.length ? places.map((x) => `<li>${x.day ? `第 ${x.day} 天，` : ''}${esc(x.text)}</li>`).join('') : '<li class="dim">還沒有記下任何地方。</li>'}</ol>`;
+    drawHistory();
+  }
+
   function drawHistory() {
     const list = game.history.filter((h) => h.seed === game.seed);
     $('history').innerHTML = list.length
@@ -841,7 +859,28 @@
     return list.map((n) => `${n.name}（${role(n)}${FE.PLAYER_RACES[FE.npcRace(game.world, n)].name}）`).join('、') || '沒有人';
   }
 
-  // 聚落資訊：所在的聚落，不在聚落裡就是離冒險者最近的那一座
+  // 聚落頁（第三十七版）：左邊列出世界上的聚落（你在的、最近的排前面），右邊是選中那座的資訊；
+  // 沒選過就看所在的聚落，不在聚落裡看最近的那一座。在地圖上點聚落也會切到這一頁並選中它
+  function drawSteadingPage() {
+    const W = game.world;
+    const p = game.hero || game.player;
+    const dist = (a) => Math.abs(a.cx - p.x) + Math.abs(a.cy - p.y);
+    const here = W.villageAt(p.x, p.y);
+    const list = W.villages.filter((v) => v.steading).sort((a, b) => (a === here ? -1 : b === here ? 1 : dist(a) - dist(b)));
+    if (ui.mapSel == null || !W.villageById(ui.mapSel)) ui.mapSel = list[0] ? list[0].id : null;
+    const done = (p.done || {});
+    const recruits = (v) => W.npcs.filter((n) => n.role === 'recruit' && n.villageId === v.id).length;
+    $('steadingList').innerHTML = list
+      .map((v) => {
+        const sub = [FE.SETTLE_KINDS[v.kind], FE.PROSPERITY[v.steading.prosperity], v === here ? '你在這裡' : game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 })];
+        const extra = `${done[v.id] ? `完成委託 ${done[v.id]} 件` : ''}${recruits(v) ? `${done[v.id] ? '，' : ''}有人想找同伴` : ''}`;
+        return `<li><button class="${v.id === ui.mapSel ? 'on' : ''}" data-steading="${v.id}">${esc(v.name)}<span class="st-sub">${esc(sub.join('・'))}</span>${extra ? `<span class="st-sub">${esc(extra)}</span>` : ''}</button></li>`;
+      })
+      .join('') || '<li class="dim">還沒有聚落。</li>';
+    drawSteading();
+  }
+
+  // 聚落資訊：選中的聚落（ui.mapSel），沒有就看所在的聚落，不在聚落裡就是離冒險者最近的那一座
   function drawSteading() {
     const el = $('steading');
     const W = game.world;
@@ -857,6 +896,8 @@
       el.innerHTML = '<p class="dim">附近還沒有聚落。</p>';
       return;
     }
+    const doneHere = ((game.hero && game.hero.done) || {})[v.id] || 0;
+    const waiting = W.npcs.filter((n) => n.role === 'recruit' && n.villageId === v.id);
     const s = v.steading;
     const lm = W.landmarks.find((l) => l.villageId === v.id);
     const lmText = lm ? `${lm.name}，在${game.directionTo({ x0: lm.x0, x1: lm.x1 + 1, y0: lm.y0, y1: lm.y1 + 1 })}` : '沒有';
@@ -864,10 +905,12 @@
       .map((t) => `<li><b>${esc(t.text)}</b><span class="dim">　${esc(t.info)}</span></li>`)
       .join('');
     el.innerHTML = `
-      <h3 style="margin-top:0">${esc(v.name)}（${FE.SETTLE_KINDS[v.kind]}）${inside || W.villageAt(p.x, p.y) === v ? '' : `<span class="dim">　${picked ? '在地圖上點選的聚落' : '你不在這裡，這是離你最近的聚落'}，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
+      <h3 style="margin-top:0">${esc(v.name)}（${FE.SETTLE_KINDS[v.kind]}）${inside || W.villageAt(p.x, p.y) === v ? '' : `<span class="dim">　你不在這裡，在${esc(game.directionTo({ x0: v.cx, x1: v.cx + 1, y0: v.cy, y1: v.cy + 1 }))}</span>`}</h3>
       <div class="row"><span>經濟</span><span>${FE.PROSPERITY[s.prosperity]}（裝備售價 ×${FE.Steading.shopFactor(v).toFixed(2)}）</span></div>
       <div class="row"><span>住一晚</span><span>${FE.money(C.LIVING_COST[s.prosperity] * C.SILVER)}（${FE.PROSPERITY[s.prosperity]}的生活，力竭降低 ${C.LIVING_EXHAUSTION[s.prosperity]} 級${C.LIVING_REPAIR[s.prosperity] ? `，裝備耐久回 ${Math.round(C.LIVING_REPAIR[s.prosperity] * 100)}%` : ''}${C.LIVING_QUEST[s.prosperity] ? `，這裡的委託獎勵 +${Math.round(C.LIVING_QUEST[s.prosperity] * 100)}%` : ''}）</span></div>
       <div class="row"><span>人口</span><span>${FE.POPULATION[s.population]}</span></div>
+      <div class="row"><span>你完成的委託</span><span>${doneHere} 件${doneHere < C.RECRUIT_JOBS ? `（再 ${C.RECRUIT_JOBS - doneHere} 件起，這裡可能會來想找同伴的人）` : '（每再完成一件，這裡可能會來想找同伴的人）'}</span></div>
+      <div class="row"><span>想找同伴的人</span><span>${waiting.length ? esc(waiting.map((n) => `${n.name}（${FE.RECRUIT_BACKGROUNDS[n.bg].name}・${FE.Char.cls(n).name}）`).join('、')) : '沒有'}</span></div>
       <div class="row"><span>居民</span><span>${esc(residents(v))}</span></div>
       <div class="row"><span>由來</span><span>${esc(s.option)}；${esc(s.problem)}</span></div>
       <ul class="tags">${tags}</ul>
@@ -1431,16 +1474,27 @@
     look: drawLook,
     backpack: drawBackpack,
     character: drawCharacter,
-    history: drawHistory,
+    history: drawJournal,
+    steading: drawSteadingPage,
     messages: drawLogAll,
     reports: drawReports,
-    minimap: () => { drawMinimap(); drawSteading(); }, // 第三十一版：小地圖與聚落資訊合在同一個視窗（M、I）
+    minimap: drawMinimap, // 第三十七版：聚落資訊移到聚落頁（I），地圖只畫地圖
     settings: null,
   };
+
+  // 第三十七版：大視窗的頁籤（照順序），[視窗名, 頁籤名, 按鍵]
+  const TABS = [['character', '角色', 'C'], ['backpack', '裝備', 'B'], ['quests', '委託', 'Q'], ['history', '日誌', 'H'], ['steading', '聚落', 'I'], ['minimap', '地圖', 'M'], ['messages', '訊息', 'J']];
+  function drawTabs() {
+    const html = TABS.map(([name, label, key]) => `<button class="${name === ui.win ? 'on' : ''}" data-tab="${name}">${label}<span class="k">${key}</span></button>`).join('');
+    document.querySelectorAll('[data-tabs]').forEach((el) => {
+      if (el.closest('.win') && !el.closest('.win').classList.contains('hidden')) el.innerHTML = html;
+    });
+  }
 
   function drawWindow() {
     $('overlay').classList.toggle('hidden', !ui.win);
     for (const name of Object.keys(WINDOWS)) $('win-' + name).classList.toggle('hidden', name !== ui.win);
+    if (ui.win) drawTabs();
     // 右上角圖示列：開著的視窗那顆亮起來
     document.querySelectorAll('#iconbar .ib').forEach((b) => b.classList.toggle('on', b.dataset.win === ui.win));
     if (ui.win && WINDOWS[ui.win]) WINDOWS[ui.win]();
@@ -1632,6 +1686,12 @@
       }
       if (name === 'reports' && game.reports.length) FE.store.save('fe.reportSeen', reportId(game.reports[0]));
       if (name === 'character') ui.charView = null; // 打開時先看目前操作的那位
+      if (name === 'steading') ui.mapSel = null; // 按 I 或點頁籤：先看所在或最近的聚落（從地圖點聚落進來的不經過這裡）
+      update();
+    },
+    // 聚落頁選一座聚落（第三十七版）
+    pickSteading(id) {
+      ui.mapSel = id;
       update();
     },
     // 角色視窗換看隊伍裡的第 i 位（第三十六版之三），或往前後 d 位（← →）；不換操作

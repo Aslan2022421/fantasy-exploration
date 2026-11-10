@@ -458,10 +458,10 @@
       applyZoom();
       return;
     }
-    // 背包視窗開著：數字鍵選物品，Enter 執行一般操作，Delete 丟棄並要求確認
-    if (FE.UI.win() === 'backpack' && /^[1-9]$/.test(k)) {
+    // 裝備頁開著：↑↓ 照畫面上的順序換選取（第三十七版，取代數字鍵），Enter 執行一般操作，Delete 丟棄並要求確認
+    if (FE.UI.win() === 'backpack' && (k === 'arrowup' || k === 'arrowdown')) {
       e.preventDefault();
-      FE.UI.selectBagItem(Number(k) - 1);
+      FE.UI.bagMove(k === 'arrowup' ? -1 : 1);
       return;
     }
     if (FE.UI.win() === 'backpack' && k === 'enter') {
@@ -667,6 +667,17 @@
       FE.UI.pickSteading(Number(st.dataset.steading));
       return;
     }
+    // 裝備頁：分類篩選、收合分類
+    const filter = e.target.closest && e.target.closest('[data-bag-filter]');
+    if (filter) {
+      FE.UI.bagFilter(filter.dataset.bagFilter);
+      return;
+    }
+    const group = e.target.closest && e.target.closest('[data-bag-group]');
+    if (group) {
+      FE.UI.toggleBagGroup(group.dataset.bagGroup);
+      return;
+    }
     const select = e.target.closest && e.target.closest('[data-bag-select]');
     const action = e.target.closest && e.target.closest('[data-bag-action]');
     const unequip = e.target.closest && e.target.closest('[data-unequip]');
@@ -678,6 +689,20 @@
     else if (action && !action.disabled) bagAction(action.dataset.bagAction);
     else if (e.target.id === 'overlay' || (e.target.dataset && 'close' in e.target.dataset)) FE.UI.closeWindow();
     else if (e.target.dataset && e.target.dataset.open) FE.UI.openWindow(e.target.dataset.open);
+  });
+
+  // 裝備頁（第三十七版）：點兩下物品＝一般操作（使用、穿上或拿起）；右鍵＝選取並在左邊看可用的操作
+  document.getElementById('overlay').addEventListener('dblclick', (e) => {
+    const row = e.target.closest && e.target.closest('[data-bag-select]');
+    if (!row || !ready) return;
+    FE.UI.selectBagItem(Number(row.dataset.bagSelect));
+    bagAction('use');
+  });
+  document.getElementById('overlay').addEventListener('contextmenu', (e) => {
+    const row = e.target.closest && e.target.closest('[data-bag-select]');
+    if (!row || !ready) return;
+    e.preventDefault();
+    FE.UI.selectBagItem(Number(row.dataset.bagSelect));
   });
 
   document.getElementById('playerName').addEventListener('change', (e) => {

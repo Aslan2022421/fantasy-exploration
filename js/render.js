@@ -9,7 +9,7 @@
   let game = null;
 
   // 畫面狀態（不進存檔）：開著哪個視窗（小地圖也是視窗）、地圖的版面
-  const ui = { win: null, bagIndex: null, bagDropConfirm: false, shopSelection: null, shopContext: null, route: null, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
+  const ui = { win: null, bagIndex: null, bagDropConfirm: false, bagFilter: 'all', bagCollapsed: new Set(), bagOrder: [], bagScroll: false, shopSelection: null, shopContext: null, route: null, cell: 22, cols: 21, rows: 21, ox: 0, oy: 0, w: 0, h: 0, dpr: 1 };
 
   // ---- 配色：Canvas 畫的顏色全部讀 css/style.css 的變數，改色只改那裡 ----
   const P = {};
@@ -928,16 +928,19 @@
     }
     const selected = ui.bagIndex == null ? null : list[ui.bagIndex];
     const tier = game.loadTier();
-    // 點裝備格可卸下放回背包，算一個動作；另外保留六格版面空間
-    const slot = (label, g, key) =>
-      `<li><button data-unequip="${key}" ${g ? '' : 'disabled'}><span class="dim">${label}</span><br>${g ? `${esc(G.name(g))} <span class="dim">（${esc(G.statText(g))}、${esc(G.durText(g))}）【卸下】</span>` : '<span class="dim">空著</span>'}</button></li>`;
-    const reserve = '<li class="reserved" aria-hidden="true"></li>'.repeat(6);
+    // 第三十七版：裝備格照人形排（上排主手、身上、副手，下排礦鎬、鐮刀），只放真的有用的五格（原本保留的六格空位不畫）。
+    // 每格高 72px：欄位名與 14px 圖示同一列，物品名稱最多兩行，耐久單行（放不下就省略）；點一下卸下（算一個動作）
+    const slot = (key, label, icon, g) =>
+      `<button class="eq-slot eqs-${key}" data-unequip="${key}" ${g ? `title="${esc(G.name(g))}：${esc(G.statText(g))}（點一下卸下）"` : 'disabled'}>` +
+      `<span class="eq-head">${SLOT_ICONS[icon]}<span>${label}</span></span>` +
+      `<span class="eq-name">${g ? esc(G.name(g)) : '<span class="dim">空著</span>'}</span>` +
+      `<span class="eq-dur">${g ? esc(G.durText(g)) : ''}</span></button>`;
+    const worn = FE.Gear.equipped(p).reduce((s, g) => s + G.def(g).weight * (g === p.equip.body ? FE.Char.armorWeightMul(p) : 1), 0);
     $('bagInfo').innerHTML = `
-      <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
-        tier === 1 ? '　超過能背的重量：走一步要 36 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
+      <p class="eq-weight">身上裝備 ${Math.round(worn * 100) / 100} 磅｜負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
+        tier === 1 ? '<br><b class="over">超過能背的重量：走一步要 36 刻</b>' : tier === 2 ? '<br><b class="over">超過推拖上限：不能移動、不能撤退，先丟掉東西</b>' : ''
       }</p>
-      <ul class="equipped">${slot('主手', p.equip.main, 'main', 1)}${slot('副手', p.equip.off, 'off', 2)}${slot('身上', p.equip.body, 'body', 3)}${slot('礦鎬', p.equip.pick, 'pick', 4)}${slot('鐮刀', p.equip.sickle, 'sickle', 5)}${reserve}</ul>
-      <p class="dim">雙持：副手只能放以你的體型能單手拿的武器。主手、副手各出手一次時，副手不加屬性修正值；副手拿非輕型武器時有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 3 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
+      <div class="eq-doll">${slot('main', '主手', 'main', p.equip.main)}${slot('body', '身上', 'body', p.equip.body)}${slot('off', '副手', 'off', p.equip.off)}${slot('pick', '礦鎬', 'pick', p.equip.pick)}${slot('sickle', '鐮刀', 'sickle', p.equip.sickle)}</div>`;
 
     let detail = '<p class="dim">選一件物品查看資訊與可用操作。</p>';
     if (selected) {
@@ -965,16 +968,91 @@
           ? '<p class="dim">這是受託運送的物品，不能丟棄或直接使用。</p>'
           : canOff && offBlocked
             ? '<p class="dim">主手武器需要用兩隻手拿，先換下後才能把武器放在副手。</p>'
-            : '';
+            : canOff
+              ? '<p class="dim">放在副手：副手出手不加屬性修正值；不是輕型武器時有劣勢、傷害骰降成 1d4，沒有迅切時這個動作多花 3 刻。副手拿了武器就不能拿盾牌。</p>'
+              : '';
       detail = `<h3>${esc(itemName)}</h3>${selected.info ? `<p>${esc(selected.info)}</p>` : ''}${extra}${actionMarkup}`;
     }
     $('bagDetail').innerHTML = detail;
-    $('backpack').innerHTML = list.length
-      ? list
-          .map((e, i) => `<li><button data-bag-select="${i}" class="${ui.bagIndex === i ? 'selected' : ''}" aria-pressed="${ui.bagIndex === i}"><kbd>${i + 1}</kbd>${esc(e.name)}${e.n > 1 ? ` ×${e.n}` : ''}</button></li>`)
+
+    // 第三十七版：右邊的分類清單。上方分類篩選（全部＋各類，只列有東西的類），每一類一組、標題寫總重，點標題收合；
+    // 每一行寫名稱（太長換行、不截斷）、數量、簡短數字與重量。點一下選取、點兩下使用、右鍵選取並看操作（在左邊的資訊區）
+    const raw = p.bag;
+    const rows = list.map((e, i) => ({ e, i, cat: bagCat(e), w: G.itemWeight(raw[i]) }));
+    const present = BAG_CATS.filter(([key]) => rows.some((r) => r.cat === key));
+    if (ui.bagFilter !== 'all' && !present.some(([key]) => key === ui.bagFilter)) ui.bagFilter = 'all';
+    const chip = (key, glyph, label, n) => `<button class="eq-chip${ui.bagFilter === key ? ' on' : ''}" data-bag-filter="${key}" title="${label}"><b>${glyph}</b><span>${label}</span>${n != null ? `<span class="dim">${n}</span>` : ''}</button>`;
+    $('bagFilters').innerHTML = chip('all', '*', '全部', null) + present.map(([key, glyph, label]) => chip(key, glyph, label, rows.filter((r) => r.cat === key).length)).join('');
+    const shown = present.filter(([key]) => ui.bagFilter === 'all' || ui.bagFilter === key);
+    const fmtW = (w) => `${Math.round(w * 100) / 100} 磅`;
+    const order = [];
+    $('backpack').innerHTML = rows.length
+      ? shown
+          .map(([key, glyph, label]) => {
+            const mine = rows.filter((r) => r.cat === key);
+            const open = !ui.bagCollapsed.has(key);
+            if (open) for (const r of mine) order.push(r.i);
+            const head = `<button class="eq-group" data-bag-group="${key}" aria-expanded="${open}"><span class="eq-tog">[${open ? '−' : '+'}]</span><b>${glyph}</b> ${label}<span class="eq-gw">${fmtW(mine.reduce((s, r) => s + r.w, 0))}</span></button>`;
+            const items = open
+              ? mine
+                  .map(({ e, i, w }) => {
+                    // 簡短數字：重量已經寫在右邊，拿掉「重 N」；拿法（單手、雙手）跟武器特質重複時只寫一次
+                    const base = e.gear ? G.statText(e.gear).replace(/、?重 [\d.]+/, '').replace(/^、/, '') : '';
+                    const stat = e.gear ? `${e.grip && !base.split('、').includes(e.grip) ? e.grip + '、' : ''}${base}` : '';
+                    return `<button class="eq-row${ui.bagIndex === i ? ' selected' : ''}" data-bag-select="${i}" aria-pressed="${ui.bagIndex === i}"><span class="eq-rn">${esc(e.name)}${e.n > 1 ? ` <span class="dim">×${e.n}</span>` : ''}${stat ? `<span class="eq-rs">${esc(stat)}</span>` : ''}</span><span class="eq-rw">${fmtW(w)}</span></button>`;
+                  })
+                  .join('')
+              : '';
+            return `<div class="eq-sec">${head}${items}</div>`;
+          })
           .join('')
-      : '<li class="dim">背包是空的。</li>';
+      : '<p class="dim">背包是空的。</p>';
+    ui.bagOrder = order;
+    $('bagTotal').innerHTML = `背包 ${fmtW(rows.reduce((s, r) => s + r.w, 0))}｜負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>`;
+    // 選中的那一行捲到看得見的地方
+    const sel = $('backpack').querySelector('.eq-row.selected');
+    if (sel && ui.bagScroll) {
+      sel.scrollIntoView({ block: 'nearest' });
+      ui.bagScroll = false;
+    }
   }
+
+  // 第三十七版：背包物品的分類 [key, 字元, 名稱]（字元是我們自己挑的 ASCII，不用 Qud 的圖示）
+  const BAG_CATS = [
+    ['weapon', ')', '武器'],
+    ['armor', '[', '防具'],
+    ['ammo', '/', '彈藥'],
+    ['thrown', '~', '投擲物'],
+    ['use', '!', '消耗品'],
+    ['trap', '^', '陷阱'],
+    ['tool', '(', '工具'],
+    ['mat', '*', '素材'],
+    ['goods', '&', '送貨'],
+  ];
+  function bagCat(e) {
+    if (e.gear) {
+      const c = FE.Gear.def(e.gear).cat;
+      return c === 'weapon' ? 'weapon' : c === 'tool' ? 'tool' : 'armor'; // 防具與盾牌放一起
+    }
+    if (e.id === 'goods') return 'goods';
+    if (FE.GEAR[e.id] && FE.GEAR[e.id].cat === 'ammo') return 'ammo';
+    const b = FE.BAG_ITEMS[e.id] || {};
+    if (b.ranged) return 'thrown';
+    if (b.trap) return 'trap';
+    if (e.id === 'herb' || e.id === 'ore') return 'mat';
+    if (e.id === 'lock' || e.id === 'thievesTools' || e.id === 'crowbar') return 'tool';
+    return 'use';
+  }
+
+  // 第三十七版：裝備格的 14px 圖示（自己畫的線條，不用 Qud 的圖）
+  const svg14 = (d) => `<svg class="eq-ico" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  const SLOT_ICONS = {
+    main: svg14('<path d="M5 19L19 5M14 5h5v5M6.5 14.5l3 3M4 20l2-2"/>'),
+    off: svg14('<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/>'),
+    body: svg14('<path d="M8 3l-4 3 2 5h2v10h8V11h2l2-5-4-3-2 2h-4z"/>'),
+    pick: svg14('<path d="M4 7c4-4 12-4 16 0M12 5v16"/>'),
+    sickle: svg14('<path d="M6 20l4-4M10 16c-2-7 3-12 10-12-4 2-6 6-5 11"/>'),
+  };
 
   // 角色視窗用：主手武器的精通（用得上的才寫）
   function masteryLine() {
@@ -1662,6 +1740,26 @@
       if (!Number.isInteger(i) || !game.bagList()[i]) return;
       ui.bagIndex = i;
       ui.bagDropConfirm = false;
+      update();
+    },
+    // 第三十七版：裝備頁的分類篩選、收合分類、↑↓ 照畫面上的順序換選取
+    bagFilter(key) {
+      ui.bagFilter = key;
+      update();
+    },
+    toggleBagGroup(key) {
+      if (ui.bagCollapsed.has(key)) ui.bagCollapsed.delete(key);
+      else ui.bagCollapsed.add(key);
+      update();
+    },
+    bagMove(d) {
+      const order = ui.bagOrder;
+      if (!order.length) return;
+      const at = order.indexOf(ui.bagIndex);
+      const next = at < 0 ? (d > 0 ? 0 : order.length - 1) : Math.max(0, Math.min(order.length - 1, at + d));
+      ui.bagIndex = order[next];
+      ui.bagDropConfirm = false;
+      ui.bagScroll = true;
       update();
     },
     askBagDrop() {

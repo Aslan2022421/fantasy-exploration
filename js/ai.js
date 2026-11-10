@@ -297,11 +297,11 @@
   }
 
   // 村民在自己的聚落裡走動，不出聚落，也不進別人的建築；走一走會回家，在家待一陣子再出門。
-  // 鐵匠、武器匠、盔甲匠固定站在工坊裡
+  // 鐵匠、武器匠、盔甲匠固定站在工坊裡；等著被招的人（第三十六版之二）站在原地等
   function npcTurn(game) {
     const w = game.world;
     for (const n of w.npcs) {
-      if (FE.Gear.isShopkeeper(n) || game.rng() >= C.NPC_MOVE_CHANCE) continue;
+      if (FE.Gear.isShopkeeper(n) || n.role === 'recruit' || game.rng() >= C.NPC_MOVE_CHANCE) continue;
       const v = w.villageById(n.villageId);
       if (!v) continue;
       const open = (fx, fy, x, y) =>
@@ -352,9 +352,10 @@
 
   // ---- 士兵 ----
   // 士兵跟怪物照同一個時鐘（第三十版）：每 6 刻做一個動作（移動、出手或站著不動）；失序時冒險者的動作花兩倍的刻，士兵跟怪物一樣多動一次。
-  // 安穩、動盪：在自己的城鎮裡室外走動（跟村民一樣，不進建築）；在城外就走回城鎮。
-  // 失序：出城，追打該塊世界裡衰敗生的小怪物（m.small）；創世時的怪物一律不碰，免得冒險者解不出下一塊。
-  // 打不到（沒有目標或走不到）就在城鎮附近巡邏。士兵可以走進聚落周圍的圈，怪物不行。
+  // 平常：在自己的城鎮裡室外走動（跟村民一樣，不進建築）；在城外就走回城鎮。
+  // 出城（第三十六版之二：每天照世界狀態擲，見 game.sortieDay；原本是失序就一律出城）：追打城外 16 格內衰敗生的小怪物（m.small），
+  // 創世時的怪物一律不碰，免得冒險者解不出下一塊。附近沒有這種小怪物（打完了或本來就沒有）就結束出城、走回城裡。
+  // 士兵可以走進聚落周圍的圈，怪物不行。
   const inBuilding = (w, x, y) => {
     const v = w.villageAt(x, y);
     return !!v && FE.Steading.roomAt(v, x, y) >= 0;
@@ -364,7 +365,6 @@
     if (!game.soldiers.length) return;
     const w = game.world;
     const st = FE.Stability.stat(game);
-    const disorder = FE.Stability.state(game) === 2;
     const k = (x, y) => x + ',' + y;
     // 被占住的格子：整理一次，找路時直接查。士兵另外記：找路時隊友只擋第一步，
     // 不然 3 位士兵在路上互相擋，最短路每回合換方向，整隊原地來回走
@@ -422,12 +422,16 @@
       const v = w.villageById(s.villageId);
       if (!v) continue;
       const home = (x, y) => w.villageAt(x, y) === v;
-      if (disorder) {
-        // 城鎮外 16 格內衰敗生的小怪物（m.small），創世時的怪物不碰
-        // （第三十二版小塊變成 24×24，不再用「城鎮所在那一塊」，改成跟原本 64×64 一塊差不多的範圍）
+      // 城鎮外 16 格內衰敗生的小怪物（m.small），創世時的怪物不碰
+      // （第三十二版小塊變成 24×24，不再用「城鎮所在那一塊」，改成跟原本 64×64 一塊差不多的範圍）
+      let prey = null;
+      if (game.sortieOn(v)) {
         const around = (m) => m.x >= v.x0 - 16 && m.x <= v.x1 + 16 && m.y >= v.y0 - 16 && m.y <= v.y1 + 16;
         if (!preyCache.has(v)) preyCache.set(v, game.monsters.filter((m) => m.small && around(m)));
-        const prey = preyCache.get(v).filter((m) => game.monsters.includes(m));
+        prey = preyCache.get(v).filter((m) => game.monsters.includes(m));
+        if (!prey.length) v.sortieUntil = 0; // 打完了或附近沒有：結束出城，走回城裡
+      }
+      if (prey && prey.length) {
         const adj = prey.filter((m) => FE.Combat.adjacent(game, s, m)).sort((a, b) => a.hp - b.hp)[0];
         // 士兵比小怪物弱，要一起打才贏：同一座城鎮的士兵跟著第一位（隊長）走，
         // 隊長等其他人都跟到 2 步內，才往同一隻小怪物前進
@@ -465,7 +469,7 @@
           }
         }
       } else if (!home(s.x, s.y)) {
-        // 回到動盪或安穩：走回城鎮
+        // 沒在出城（或出城結束）：走回城鎮
         const back = stepToward(s, home);
         if (back) moveTo(s, back[0], back[1]);
       } else if (game.rng() < C.SOLDIER_WANDER) {

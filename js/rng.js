@@ -45,6 +45,14 @@ FE.randInt = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
 
 FE.pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
 
+// 不動亂數序列的擲骰（第三十六版之二）：照世界種子與兩個整數雜湊出 0～1 之間的數，同樣的輸入永遠一樣
+FE.hash01 = (seed, a, b) => {
+  let h = (seed ^ Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ 0x2545f491) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+
 FE.fill = (template, vars) => template.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : ''));
 
 FE.nowTaipei = () => new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });

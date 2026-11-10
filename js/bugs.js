@@ -184,7 +184,7 @@
     if (!v) return null;
     // 村莊住滿了就不放，改由現有的村民接手，不然事件一直補人，村莊會擠滿
     const cap = v.kind === 'city' ? 2 * FE.CONFIG.TOWN_MAX_NPC : v.kind === 'town' ? FE.CONFIG.TOWN_MAX_NPC : FE.CONFIG.VILLAGE_MAX_NPC; // 城市是兩座城鎮（第三十四版）
-    if (w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n)).length >= cap) return null;
+    if (w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n) && n.role !== 'recruit').length >= cap) return null;
     // 每個村民有自己的家：沒有空床也不放；人口裡沒有名字的人用完了也不放（第三十六版之一）
     if (game.unnamed && game.unnamed(v) < 1) return null;
     const h = FE.Steading.freeHome(w, game.rng, v);
@@ -259,7 +259,7 @@
         // 冒險者手上如果正拿著這個任務，那份也要跟著改，不然會送不出去
         const c = game.player && game.player.jobs ? game.player.jobs.deliver : null;
         const mine = !!c && c.giverId === n.id;
-        const others = w.npcs.filter((o) => o.id !== n.id && !FE.Gear.isShopkeeper(o));
+        const others = w.npcs.filter((o) => o.id !== n.id && !FE.Gear.isShopkeeper(o) && o.role !== 'recruit');
         if (others.length) {
           const t = FE.pick(game.rng, others);
           const v = w.villageById(t.villageId);

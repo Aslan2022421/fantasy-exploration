@@ -77,7 +77,8 @@
   function questEvent(game, canReach) {
     const w = game.world;
     const p = game.player;
-    const free = (n) => !FE.Gear.isShopkeeper(n) &&!game.monsterAt(n.x, n.y) && canReach(n.x, n.y);
+    // 工匠、商人和等著被招的人（第三十六版之二，過幾天就離開）不給委託、也不當收貨人
+    const free = (n) => !FE.Gear.isShopkeeper(n) && n.role !== 'recruit' && !game.monsterAt(n.x, n.y) && canReach(n.x, n.y);
     const givers = w.npcs.filter((n) => (!n.quest || n.quest.done) && free(n));
     if (!givers.length) return null;
     if (huntQuest(game, givers)) return {};

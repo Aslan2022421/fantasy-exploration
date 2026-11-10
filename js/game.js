@@ -32,7 +32,6 @@
       this.hero = null;      // 冒險者本人（第三十六版之一）：錢、背包、委託、經驗值、等級都記在他身上
       this.mates = [];       // 隊友（role 'mate'，最多 PARTY_MAX 位，會跟著冒險者升級）
       this.autoAct = false;  // 正在替自動行動的隊友出手（不是玩家操作的那一位，訊息不寫「你」；不進存檔）
-      this.talkInvite = false; // 這一次跟士兵對話有沒有出現「邀他同行」（開對話時擲，不進存檔）
       this.worldEvery = 1;   // 世界（怪物、士兵）每 6 刻走一回合，這個數字讓它再慢幾倍；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
       this.worldClock = 0;
       this.fell = false;     // 這一個動作裡冒險者倒下了
@@ -322,21 +321,93 @@
       if (v) this.popDelta(v, -1);
     }
 
-    // 招募：士兵 s 變成隊友（等級＝冒險者等級－1，最少 1；職業、名字、種族不變，裝備與技能照套版重建）。離開城裡的士兵名額，那個聚落之後照補員規則補。
-    // 條件：隊伍沒滿，冒險者在這個聚落完成過 RECRUIT_JOBS 件以上委託
-    canRecruit(s) {
-      const h = this.hero;
-      return !!h && s.role === 'soldier' && this.mates.length < C.PARTY_MAX && ((h.done && h.done[s.villageId]) || 0) >= C.RECRUIT_JOBS;
+    // ---- 可以招成隊友的人（第三十六版之二，取代之一的「招募士兵」）----
+    // 在同一個聚落完成第 RECRUIT_JOBS 件委託起，每完成一件擲一次（rollRecruits）：機率＝RECRUIT_BASE[聚落種類] × RECRUIT_ECON[經濟標籤]，
+    // 擲中就在聚落室外生成 1～RECRUIT_MAX[種類] 位（同時待著的也不超過這個數）。他們是 world.npcs 裡 role 'recruit' 的人：
+    // 帶一個背景（bg，只決定稱呼與台詞），職業六選一（神聖聚落牧師權重 RECRUIT_HOLY_PRIEST），站著不動、不給委託；
+    // 跟他對話可以「邀他同行」（隊伍沒滿），變成隊友：等級＝冒險者等級－1（最少 1），技能隨機 5 項、上限照聚落（同士兵套版），裝備品質跟世界等級。
+    // 從聚落的人口裡取（算有名字的人），RECRUIT_DAYS 天沒被招就離開（回到沒有名字的人裡，人口不變）
+    recruitChance(v) {
+      if (!v) return 0;
+      const base = C.RECRUIT_BASE[v.kind] || 0;
+      const econ = C.RECRUIT_ECON[v.steading ? v.steading.prosperity : 2];
+      return base * (econ == null ? 1 : econ);
     }
 
-    recruit(s) {
-      if (!this.canRecruit(s)) return null;
+    recruitsAt(v) {
+      return this.world.npcs.filter((n) => n.role === 'recruit' && n.villageId === v.id);
+    }
+
+    // 完成委託時叫（finishJob）：這個聚落完成滿 RECRUIT_JOBS 件起擲一次；回傳這次生成的人
+    rollRecruits(v) {
+      const h = this.hero;
+      if (!v || !h || ((h.done && h.done[v.id]) || 0) < C.RECRUIT_JOBS) return [];
+      if (this.rng() >= this.recruitChance(v)) return [];
+      const room = (C.RECRUIT_MAX[v.kind] || 1) - this.recruitsAt(v).length;
+      if (room <= 0) return [];
+      const n = Math.min(room, FE.randInt(this.rng, 1, C.RECRUIT_MAX[v.kind] || 1));
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const r = this.spawnRecruit(v);
+        if (r) out.push(r);
+      }
+      if (out.length) this.say(`${v.name}來了${out.length > 1 ? `${out.length} 個` : '一個'}看起來想找同伴的人。`, 'world');
+      return out;
+    }
+
+    // 在聚落室外、不貼著建築門口的空地放一位；沒位置、人口裡沒有名字的人用完了就不放
+    spawnRecruit(v) {
+      const w = this.world;
+      if (this.unnamed(v) < 1) return null;
+      const nearDoor = (x, y) => (v.buildings || []).some((b) => (b.doors || []).some(([dx, dy]) => Math.max(Math.abs(dx - x), Math.abs(dy - y)) <= 1));
+      const spots = [];
+      for (let y = v.y0; y <= v.y1; y++) {
+        for (let x = v.x0; x <= v.x1; x++) {
+          if (w.villageAt(x, y) !== v || !w.passable(x, y) || FE.Steading.roomAt(v, x, y) >= 0 || nearDoor(x, y)) continue;
+          if (w.npcAt(x, y) || w.chestAt(x, y) || this.soldierAt(x, y) || this.isPlayerAt(x, y) || this.partyAt(x, y)) continue;
+          spots.push([x, y]);
+        }
+      }
+      if (!spots.length) return null;
+      const [x, y] = FE.pick(this.rng, spots);
+      const classes = Object.keys(FE.TEMPLATE_PICKS).filter((k) => FE.CLASSES[k]);
+      const holy = FE.Steading.isHoly(v);
+      const weights = classes.map((k) => (holy && k === 'priest' ? C.RECRUIT_HOLY_PRIEST : 1));
+      let roll = this.rng() * weights.reduce((s, x) => s + x, 0);
+      let cls = classes[classes.length - 1];
+      for (let i = 0; i < classes.length; i++) {
+        roll -= weights[i];
+        if (roll < 0) {
+          cls = classes[i];
+          break;
+        }
+      }
+      const bg = FE.pick(this.rng, Object.keys(FE.RECRUIT_BACKGROUNDS));
+      let name = FE.pickName(w, this.rng);
+      for (let t = 0; t < 8 && this.soldiers.concat(this.mates).some((o) => o.name === name); t++) name = FE.pickName(w, this.rng);
+      const r = { id: w.nextId++, name, role: 'recruit', villageId: v.id, x, y, quest: null, cls, bg, line: this.rng() < 0.5 ? 0 : 1, until: (this.ticks || 0) + C.RECRUIT_DAYS * C.DAY_TICKS };
+      FE.npcRace(w, r);
+      w.npcs.push(r);
+      return r;
+    }
+
+    // 每天一次（popDay 叫）：待滿 RECRUIT_DAYS 天沒被招的人離開
+    recruitDay(v) {
+      const now = this.ticks || 0;
+      this.world.npcs = this.world.npcs.filter((n) => !(n.role === 'recruit' && n.villageId === v.id && n.until <= now && this.talking !== n.id));
+    }
+
+    canRecruit(n) {
+      return !!this.hero && !!n && n.role === 'recruit' && this.mates.length < C.PARTY_MAX;
+    }
+
+    recruit(n) {
+      if (!this.canRecruit(n)) return null;
+      const v = this.world.villageById(n.villageId);
       const lv = Math.max(1, this.level - 1);
-      const m = FE.Char.makeLevelChar(this, s.cls, lv, FE.Stability.worldLevel(this), s.name);
-      // 技能沿用他當士兵時的那 5 項與等級（第三十六版之一，使用者定的），之後照用照練
-      m.skills = JSON.parse(JSON.stringify(s.skills));
-      Object.assign(m, { id: s.id, role: 'mate', villageId: s.villageId, x: s.x, y: s.y, race: s.race });
-      this.soldiers = this.soldiers.filter((o) => o !== s);
+      const m = FE.Char.makeLevelChar(this, n.cls, lv, FE.Stability.worldLevel(this), n.name, { skillCap: C.SOLDIER_SKILL_CAP[v ? v.kind : 'town'] || 5, rng: this.rng });
+      Object.assign(m, { id: n.id, role: 'mate', villageId: n.villageId, x: n.x, y: n.y, race: n.race, cls: n.cls, bg: n.bg });
+      this.world.npcs = this.world.npcs.filter((o) => o !== n);
       this.mates.push(m);
       return m;
     }
@@ -390,7 +461,26 @@
         const rate = C.POP_RATE[v.steading.population];
         if (rate) this.popDelta(v, Math.round(this.initPop(v) * rate));
         this.refillSoldier(v);
+        this.sortieDay(v);
+        this.recruitDay(v);
       }
+    }
+
+    // 士兵出城（第三十六版之二）：每個有士兵的聚落每天擲一次，機率照世界狀態（SORTIE_CHANCE：安穩 0、動盪 25%、失序 75%）；
+    // 擲中就出城一天（v.sortieUntil），打完、找不到怪物或世界回到安穩就提早回城（ai.js 的 soldierTurn）。
+    // 用世界種子、聚落編號與天數的雜湊擲，不動玩法的亂數序列
+    sortieDay(v) {
+      if (!this.soldierQuota(v)) return;
+      const p = C.SORTIE_CHANCE[FE.Stability.state(this)] || 0;
+      if (p > 0 && FE.hash01(this.seed, v.id, this.day()) < p) {
+        v.sortieUntil = (this.ticks || 0) + C.SORTIE_TICKS;
+        v.sortieAt = this.ticks || 0;
+      }
+    }
+
+    // 這個聚落的士兵現在在不在出城
+    sortieOn(v) {
+      return !!v && FE.Stability.state(this) > 0 && (v.sortieUntil || 0) > (this.ticks || 0);
     }
 
     // ---- 士兵 ----
@@ -2224,7 +2314,6 @@
       this.beginAction();
       this.talking = npc.id;
       this.talkPage = 'main';
-      this.talkInvite = npc.role === 'soldier' && this.rng() < C.RECRUIT_CHANCE; // 這一次對話有沒有出現「邀他同行」（還要看條件）
       this.endTurn(false);
     }
 
@@ -2241,17 +2330,20 @@
       const race = FE.PLAYER_RACES[FE.npcRace(this.world, npc)].name;
       const out = (text, options) => ({
         name: npc.name,
-        role: `${shop ? FE.Gear.SHOPS[shop].title : npc.role === 'soldier' ? `士兵（${FE.Char.cls(npc).name}）` : '村民'}・${race}`,
+        role: `${shop ? FE.Gear.SHOPS[shop].title : npc.role === 'soldier' ? `士兵（${FE.Char.cls(npc).name}）` : npc.role === 'recruit' ? `${FE.RECRUIT_BACKGROUNDS[npc.bg].name}（${FE.Char.cls(npc).name}）` : '村民'}・${race}`,
         village: v ? v.name : '',
         text,
         options,
       });
-      // 士兵一句閒話；冒險者在這個聚落完成過 5 件以上委託、隊伍沒滿，有機率多一個「邀他同行」
-      if (npc.role === 'soldier') {
-        const opts = [];
-        if (this.talkInvite && this.canRecruit(npc)) opts.push({ id: 'recruit', label: '邀他同行', note: `${FE.Char.cls(npc).name}，Lv${Math.max(1, this.level - 1)}` });
-        opts.push(leave);
-        return out(opts.length > 1 ? `你在${v ? v.name : '這裡'}幫了不少忙。要是你不嫌棄，我想跟著你出去走走。` : FE.SOLDIER_LINES[(npc.id + this.turn) % FE.SOLDIER_LINES.length], opts);
+      // 士兵一句閒話（第三十六版之二起士兵不能招）
+      if (npc.role === 'soldier') return out(FE.SOLDIER_LINES[(npc.id + this.turn) % FE.SOLDIER_LINES.length], [leave]);
+      // 想找同伴的人：一句背景加邀請，選項「邀他同行」（隊伍滿了就灰掉）
+      if (npc.role === 'recruit') {
+        const bg = FE.RECRUIT_BACKGROUNDS[npc.bg];
+        const vn = v ? v.name : '這裡';
+        const text = `${FE.fill(bg.lines[npc.line || 0], { v: vn })}${FE.fill(FE.RECRUIT_INVITE, { v: vn })}`;
+        const full = this.mates.length >= C.PARTY_MAX;
+        return out(text, [{ id: 'recruit', label: '邀他同行', note: full ? `隊伍已經有 ${C.PARTY_MAX} 位同伴了` : `${FE.Char.cls(npc).name}，Lv${Math.max(1, this.level - 1)}`, disabled: full }, leave]);
       }
       // 工匠：買、修、打造、賣礦石、賣裝備（分層，見 shopTalk）
       if (shop) return out(...this.shopTalk(npc, v, shop));
@@ -2328,6 +2420,7 @@
       this.earn(c.compute); // 完成委託的算力
       const v = this.world.villageById(c.villageId);
       if (v) this.econ(v, C.ECON_QUEST);
+      if (v) this.rollRecruits(v); // 第三十六版之二：完成滿 5 件起，擲會不會來想找同伴的人（經濟標籤先照這件委託更新過）
     }
 
     // 選第 i 個選項；回傳 { close } 說明對話要不要關。不接的委託留在村民身上，之後回來還接得到
@@ -2983,6 +3076,11 @@
       this.reports.unshift(report);
       this.reports = this.reports.slice(0, 30);
       FE.store.save('fe.reports', this.reports);
+      // 怪物遮蔽打開時（第三十六版之二修）：出錯只寫報告，不在現場生怪物（原本照樣生，遮蔽時一路出錯會冒出幾百隻）
+      if (this.veil) {
+        this.say('空間突然裂開了一下。', 'bug');
+        return;
+      }
       const reach = FE.Checker.reachable(this.world);
       const m = this.spawnMonster(
         { type: 'RUNTIME', x: where.x, y: where.y, cells: [[where.x, where.y]], scope: 3, data: { message } },

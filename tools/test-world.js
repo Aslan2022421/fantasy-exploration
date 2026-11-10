@@ -332,6 +332,12 @@ function testSoldiers() {
   C.STATE_CUTS = [1, 2];
   FE.Stability.update(g, true);
   ok(g.worldState === 2, `強制失序沒成功，狀態 ${g.worldState}`);
+  // 第三十六版之二：失序也要當天擲中才出城；沒擲中的話待在城裡
+  town.sortieUntil = 0;
+  for (let i = 0; i < 20; i++) wait();
+  ok(mine().every((s) => w.villageAt(s.x, s.y) === town), '失序但當天沒擲中出城，士兵卻出城了');
+  town.sortieUntil = g.ticks + 1e6;
+  town.sortieAt = g.ticks;
   const exp0 = g.exp;
   const cr0 = g.creation;
   const chests0 = w.chests.length;
@@ -355,9 +361,31 @@ function testSoldiers() {
   g.soldiers = g.soldiers.filter((o) => o.villageId !== town.id); // 換一隊滿血、站在城鎮裡的士兵
   town.steading.population = 4; // 急速發展：缺額每天一定補 1 位
   for (let d = 0; d < quota; d++) g.refillSoldier(town);
+  town.sortieUntil = g.ticks + 1e6; // 上一場打完就結束出城了，這一場再出一次
   let rounds = 0;
   for (; rounds < 300 && g.monsters.includes(fair) && mine().length; rounds++) wait();
   console.log(`士兵公平一戰：${mine().length ? '' : '全隊陣亡，'}${g.monsters.includes(fair) ? '沒打倒' : '打倒了'}（${rounds} 回合，士兵 ${quota} 位，小怪物血量 ${fair.maxHp}）`);
+
+  // 第三十六版之二：每天擲一次出不出城，安穩 0、動盪 25%、失序 75%（用雜湊擲，跑很多天看比例）
+  {
+    const st0 = FE.Stability.state;
+    const t0 = g.ticks;
+    for (const [state, want] of [[0, 0], [1, 0.25], [2, 0.75]]) {
+      FE.Stability.state = () => state;
+      let hit = 0;
+      const N = 2000;
+      for (let d = 0; d < N; d++) {
+        g.ticks = d * C.DAY_TICKS;
+        town.sortieUntil = 0;
+        g.sortieDay(town);
+        if (g.sortieOn(town)) hit++;
+      }
+      ok(Math.abs(hit / N - want) < 0.03, `世界狀態 ${state} 出城比例 ${(hit / N).toFixed(3)}（應該約 ${want}）`);
+    }
+    FE.Stability.state = st0;
+    g.ticks = t0;
+    town.sortieUntil = 0;
+  }
 
   // 陣亡的士兵：死了就是死了，寫進歷史紀錄，聚落人口 −1；補員不看世界狀態，每天擲一次（機率照人口標籤），成功就從人口補 1 位新的人
   C.STATE_CUTS = saved;

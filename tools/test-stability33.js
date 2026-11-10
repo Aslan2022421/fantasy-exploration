@@ -442,7 +442,7 @@ function testStability33() {
     }
     const per = raw.length / g.world.chunks.length;
     ok(raw.length < 60000 * g.world.chunks.length && g.world.chunks.every((ch) => ch.stab.length === 576), `存檔 ${g.world.chunks.length} 塊 ${raw.length} 字元（每塊約 ${per.toFixed(0)}）`);
-    ok(FE.CONFIG.SAVE_VERSION === 26, `存檔版本 ${FE.CONFIG.SAVE_VERSION}`);
+    ok(FE.CONFIG.SAVE_VERSION === 27, `存檔版本 ${FE.CONFIG.SAVE_VERSION}`);
   }
 
   // 10. 獎勵不變：經驗值、打倒時的算力、掉的錢照 m.scope＝max(1, round(blockValue ÷ REWARD_VALUE_PER_SCOPE))，跟格子的穩定值無關

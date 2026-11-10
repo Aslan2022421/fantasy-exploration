@@ -212,6 +212,7 @@
           if (n.role === 'smith') fg = P['map-smith'];
           else if (n.role === 'armorer') fg = P['map-armorer'];
           else if (n.role === 'merchant') fg = P['map-merchant'];
+          else if (n.role === 'recruit') fg = P['map-mate-fg']; // 想找同伴的人（第三十六版之二）：用隊友的顏色
           else {
             fg = P['map-npc'];
             if (handIn(n)) bg = P['map-recipient'];
@@ -413,7 +414,7 @@
     for (const d of W.locks) dot(d.x, d.y, P['map-item'], Math.max(2, S));
     for (const n of W.npcs) {
       const target = handIn(n);
-      dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : n.role === 'merchant' ? P['map-merchant'] : P['map-npc'], target ? big : Math.max(2, S));
+      dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : n.role === 'merchant' ? P['map-merchant'] : n.role === 'recruit' ? P['map-mate-fg'] : P['map-npc'], target ? big : Math.max(2, S));
     }
     for (const sd of game.soldiers) dot(sd.x, sd.y, P['map-soldier'], Math.max(2, S));
     for (const c of game.party()) if (c !== p) dot(c.x, c.y, P['map-mate-fg'], Math.max(3, S + 1));
@@ -835,7 +836,7 @@
 
   // 聚落裡的人（村民、工匠、士兵）與種族，例如「艾德（鐵匠，矮人）、蜜拉（人類）⋯⋯」
   function residents(v) {
-    const role = (n) => (n.role === 'smith' ? (FE.Steading.shopTown(v) ? '武器匠，' : '鐵匠，') : n.role === 'armorer' ? '盔甲匠，' : n.role === 'merchant' ? '商人，' : n.role === 'soldier' ? `士兵・${FE.Char.cls(n).name}，` : '');
+    const role = (n) => (n.role === 'smith' ? (FE.Steading.shopTown(v) ? '武器匠，' : '鐵匠，') : n.role === 'armorer' ? '盔甲匠，' : n.role === 'merchant' ? '商人，' : n.role === 'soldier' ? `士兵・${FE.Char.cls(n).name}，` : n.role === 'recruit' ? `${FE.RECRUIT_BACKGROUNDS[n.bg].name}・${FE.Char.cls(n).name}，` : '');
     const list = game.world.npcs.filter((n) => n.villageId === v.id).concat(game.soldiers.filter((s) => s.villageId === v.id));
     return list.map((n) => `${n.name}（${role(n)}${FE.PLAYER_RACES[FE.npcRace(game.world, n)].name}）`).join('、') || '沒有人';
   }
@@ -1372,9 +1373,9 @@
       const chasing = game.battle.targetId === m.id ? '你的目標' : m.chase > 0 ? '正在追你' : '還沒發現你';
       el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>AC</dt><dd>${m.ac}</dd><dt>攻擊</dt><dd>${esc(monAttackText(m))}</dd>${monTraitText(m) ? `<dt>特性</dt><dd>${esc(monTraitText(m))}</dd>` : ''}${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl><div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
     } else if (n) {
-      const role = n.role === 'smith' ? (FE.Steading.shopTown(W.villageById(n.villageId)) ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'merchant' ? '商人' : n.role === 'soldier' ? `士兵（${FE.Char.cls(n).name}，Lv${n.lv}）` : '村民';
+      const role = n.role === 'smith' ? (FE.Steading.shopTown(W.villageById(n.villageId)) ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'merchant' ? '商人' : n.role === 'soldier' ? `士兵（${FE.Char.cls(n).name}，Lv${n.lv}）` : n.role === 'recruit' ? `${FE.RECRUIT_BACKGROUNDS[n.bg].name}（${FE.Char.cls(n).name}）` : '村民';
       const race = FE.PLAYER_RACES[FE.npcRace(W, n)];
-      const quest = handIn(n) ? '可以交件或回報' : n.quest && !n.quest.accepted && !n.quest.done ? '有委託可以接' : '';
+      const quest = handIn(n) ? '可以交件或回報' : n.role === 'recruit' ? '想找同伴' : n.quest && !n.quest.accepted && !n.quest.done ? '有委託可以接' : '';
       const home = W.villageById ? W.villageById(n.villageId) : null;
       el.innerHTML = `<p><b>${esc(n.name)}</b>　<span class="dim">${role}・${race ? race.name : ''}${home ? `・${esc(home.name)}` : ''}</span></p>${quest ? `<p>${quest}</p>` : ''}<div class="dlg-opts"><button data-look="talk,${n.x},${n.y}">走過去對話</button></div>`;
     } else {

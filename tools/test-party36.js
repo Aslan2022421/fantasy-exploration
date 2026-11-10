@@ -216,47 +216,86 @@ function testParty36() {
   function party() {
     // 4a. 招募的條件與結果
     {
+      // 第三十六版之二：招募改成生成想找同伴的人（role 'recruit'），士兵不能招
       const { g } = field(36005);
       const v = g.world.villages[0];
       v.kind = 'town';
+      v.steading.prosperity = 2;
       g.initPop(v);
       v.pop = g.namedCount(v) + 100;
       for (let i = 0; i < 3; i++) g.spawnSoldier(v, [v.cx + i, v.cy]);
-      const s = g.soldiers[0];
       const h = g.hero;
-      ok(!g.canRecruit(s), '沒完成委託不能招募');
+      // 機率＝種類的基本機率 × 經濟標籤的倍率
+      const near = (a, b) => Math.abs(a - b) < 1e-9;
+      ok(near(g.recruitChance(v), 0.35), `城鎮、普通：${g.recruitChance(v)}（應該 0.35）`);
+      ok(near(g.recruitChance({ kind: 'village', steading: { prosperity: 0 } }), 0.1) && near(g.recruitChance({ kind: 'fortress', steading: { prosperity: 4 } }), 0.75) && near(g.recruitChance({ kind: 'fort', steading: { prosperity: 1 } }), 0.2625), '村莊荒蕪 10%、要塞富裕 75%、堡壘貧窮 26.25%');
+      const rng0 = g.rng;
+      const always = () => 0;
+      g.rng = always;
+      ok(g.rollRecruits(v).length === 0, '沒完成委託不會來人');
       h.done = { [v.id]: 4 };
-      ok(!g.canRecruit(s), '同一個聚落完成 4 件委託還不行');
+      ok(g.rollRecruits(v).length === 0, '同一個聚落完成 4 件委託還不會來人');
       h.done = { [v.id + 1]: 9 };
-      ok(!g.canRecruit(s), '別的聚落完成的委託不算（每個聚落各自計數）');
+      ok(g.rollRecruits(v).length === 0, '別的聚落完成的委託不算（每個聚落各自計數）');
       h.done = { [v.id]: 5 };
-      ok(g.canRecruit(s), '同一個聚落完成 5 件委託就能招募');
-      // 對話：邀請要擲中才出現
+      g.rng = () => 0.999;
+      ok(g.rollRecruits(v).length === 0, '沒擲中就不會來人');
+      g.rng = always;
+      const named0 = g.namedCount(v);
+      const got = g.rollRecruits(v);
+      g.rng = rng0;
+      const r = got[0];
+      const doorNear = (x, y) => v.buildings.some((b) => b.doors.some(([dx, dy]) => Math.max(Math.abs(dx - x), Math.abs(dy - y)) <= 1));
+      ok(got.length >= 1 && r.role === 'recruit' && FE.RECRUIT_BACKGROUNDS[r.bg] && FE.CLASSES[r.cls] && r.until === g.ticks + C.RECRUIT_DAYS * C.DAY_TICKS, `完成 5 件後擲中，來了 ${got.length} 位想找同伴的人（背景 ${r && r.bg}、職業 ${r && r.cls}）`);
+      ok(got.every((o) => g.world.villageAt(o.x, o.y) === v && FE.Steading.roomAt(v, o.x, o.y) < 0 && !doorNear(o.x, o.y)), '想找同伴的人站在聚落室外、不貼著門口');
+      ok(g.namedCount(v) === named0 + got.length, '想找同伴的人從人口裡取（算有名字的人）');
+      for (let i = 0; i < 5; i++) { g.rng = always; g.rollRecruits(v); }
+      g.rng = rng0;
+      ok(g.recruitsAt(v).length <= C.RECRUIT_MAX.town && C.RECRUIT_MAX.town === 2 && C.RECRUIT_MAX.village === 1 && C.RECRUIT_MAX.fortress === 3, `城鎮同時待著的最多 2 位（現在 ${g.recruitsAt(v).length}）`);
+      // 對話：士兵沒有「邀他同行」，想找同伴的人有
       g.level = 6;
-      g.talkInvite = false;
-      ok(!g.talkOptions(s).options.some((o) => o.id === 'recruit'), '沒擲中邀請就沒有「邀他同行」');
-      g.talkInvite = true;
-      const t = g.talkOptions(s);
-      ok(t.options.some((o) => o.id === 'recruit' && o.label === '邀他同行') && t.role.startsWith('士兵（'), '擲中邀請且條件夠，出現「邀他同行」');
-      // 邀他同行：離開士兵名額，等級＝冒險者等級－1，職業、名字不變
-      const cls = s.cls, name = s.name;
-      g.talking = s.id;
-      g.choose(s, t.options.findIndex((o) => o.id === 'recruit'));
-      ok(g.mates.length === 1 && g.mates[0].name === name && g.mates[0].cls === cls && g.mates[0].role === 'mate' && g.mates[0].lv === 5 && g.mates[0].villageId === v.id, `招到隊友：${g.mates.map((m) => `${m.name} Lv${m.lv} ${m.cls}`)}`);
-      ok(!g.soldiers.includes(s) && g.soldiers.filter((o) => o.villageId === v.id).length === 2, '招到的士兵離開城裡的士兵名額');
-      ok(g.mates[0].equip && g.mates[0].skills && g.mates[0].hp === g.mates[0].maxHp, '隊友是職業角色');
+      ok(!g.talkOptions(g.soldiers[0]).options.some((o) => o.id === 'recruit'), '士兵不能招');
+      const t = g.talkOptions(r);
+      ok(t.options.some((o) => o.id === 'recruit' && o.label === '邀他同行' && !o.disabled) && t.role.startsWith(FE.RECRUIT_BACKGROUNDS[r.bg].name + '（') && t.text.includes(v.name), `對話有「邀他同行」，稱呼是背景（${t.role}）`);
+      // 邀他同行：等級＝冒險者等級－1，職業、名字不變，從聚落裡離開
+      const cls = r.cls, name = r.name;
+      g.talking = r.id;
+      g.choose(r, t.options.findIndex((o) => o.id === 'recruit'));
+      const m1 = g.mates[0];
+      ok(g.mates.length === 1 && m1.name === name && m1.cls === cls && m1.role === 'mate' && m1.lv === 5 && m1.villageId === v.id && m1.bg === r.bg, `招到隊友：${g.mates.map((m) => `${m.name} Lv${m.lv} ${m.cls}`)}`);
+      ok(!g.world.npcs.includes(r) && g.soldiers.filter((o) => o.villageId === v.id).length === 3, '招到的人離開聚落，士兵名額不受影響');
+      const lvs = Object.values(m1.skills).map((x) => (x && x.lv) || 0).filter((x) => x > 0);
+      ok(m1.equip && m1.skills && m1.hp === m1.maxHp && lvs.length === 5 && lvs.every((x) => x <= C.SOLDIER_SKILL_CAP.town), `隊友是職業角色，技能 ${lvs.length} 項（${lvs}）、不超過城鎮上限 ${C.SOLDIER_SKILL_CAP.town}`);
       // 等級最少 1
       g.level = 1;
-      const s2 = g.soldiers[0];
-      const s2skills = JSON.stringify(s2.skills);
-      const m2 = g.recruit(s2);
+      const spawnOne = () => { g.rng = always; g.world.npcs = g.world.npcs.filter((o) => !(o.role === 'recruit' && o.villageId === v.id)); const x = g.rollRecruits(v)[0]; g.rng = rng0; return x; };
+      const m2 = g.recruit(spawnOne());
       ok(m2 && m2.lv === 1, `冒險者 1 級時隊友 ${m2 && m2.lv} 級（最少 1）`);
-      ok(m2 && JSON.stringify(m2.skills) === s2skills && m2.skills !== s2.skills, '招募的隊友沿用他當士兵時的技能（複製一份，不共用）');
       // 上限 3 位
-      const s3 = g.soldiers[0];
-      g.recruit(s3);
-      g.spawnSoldier(v, [v.cx, v.cy + 1]);
-      ok(g.mates.length === 3 && !g.canRecruit(g.soldiers[0]) && g.recruit(g.soldiers[0]) === null, '隊伍最多 3 位隊友');
+      g.recruit(spawnOne());
+      const r4 = spawnOne();
+      const t4 = g.talkOptions(r4);
+      ok(g.mates.length === 3 && !g.canRecruit(r4) && g.recruit(r4) === null && t4.options.find((o) => o.id === 'recruit').disabled, '隊伍最多 3 位隊友（滿了「邀他同行」灰掉）');
+      // 待滿 7 天沒被招就離開；人口不變
+      const pop0 = v.pop;
+      g.ticks = r4.until;
+      g.recruitDay(v);
+      ok(!g.world.npcs.includes(r4) && v.pop === pop0, '想找同伴的人 7 天後離開聚落（人口不變）');
+      // 神聖聚落比較常是牧師（權重 3，其他 1）
+      const holy0 = FE.Steading.isHoly;
+      FE.Steading.isHoly = () => true;
+      let pri = 0;
+      const N = 1200;
+      v.pop = 1e6;
+      for (let i = 0; i < N; i++) { const x = g.spawnRecruit(v); if (x) { if (x.cls === 'priest') pri++; g.world.npcs = g.world.npcs.filter((o) => o !== x); } }
+      FE.Steading.isHoly = holy0;
+      const nCls = Object.keys(FE.TEMPLATE_PICKS).filter((k) => FE.CLASSES[k]).length;
+      const want = C.RECRUIT_HOLY_PRIEST / (C.RECRUIT_HOLY_PRIEST + nCls - 1);
+      ok(Math.abs(pri / N - want) < 0.05, `神聖聚落的牧師比例 ${(pri / N).toFixed(3)}（應該約 ${want.toFixed(3)}）`);
+      // 委託不會發給想找同伴的人，也不會指定他們當收貨人
+      const r5 = spawnOne();
+      r5.quest = null;
+      ok(g.world.npcs.filter((n) => n.role === 'recruit').every((n) => !n.quest), '想找同伴的人身上沒有委託');
       // 隊友跟著升級：冒險者每升一級，隊友升一級（生命照職業加、屬性點照主屬性與體質輪流）
       g.level = 5;
       g.mates = g.mates.map((m) => Object.assign(Ch.makeLevelChar(g, m.cls, 4, 1, m.name), { id: m.id, role: 'mate', villageId: m.villageId, x: m.x, y: m.y }));
@@ -274,8 +313,8 @@ function testParty36() {
       g.exp = FE.levelExp(9) - 1;
       g.addExp(1);
       ok(g.level === 9 && g.mates.every((m, i) => m.lv === 8 && attrSum(m.attr) === before[i] + 1), `8 級加 1 點屬性（隊友也加）：${before} → ${g.mates.map((m) => attrSum(m.attr))}`);
-      // 村莊招不到：村莊沒有士兵
-      ok(g.soldierQuota({ kind: 'village' }) === 0, '村莊沒有士兵，招不到');
+      // 第三十六版之二：村莊沒有士兵，但招得到人（基本機率 20%）
+      ok(g.soldierQuota({ kind: 'village' }) === 0 && C.RECRUIT_BASE.village === 0.2, '村莊沒有士兵，但想找同伴的人照樣會來');
     }
 
     // 4b. 跟隨：平常自動跟在操作的那位身邊 2～3 格內

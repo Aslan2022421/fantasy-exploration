@@ -475,6 +475,7 @@ input {
 .npc.armorer { color: var(--map-armorer); }
 .npc.soldier { color: var(--map-soldier); }
 .npc.merchant { color: var(--map-merchant); }
+.npc.recruit { color: var(--map-mate-fg); }
 .player.mate { color: var(--map-mate-fg); }
 
 /* 隊員欄（第三十六版之一）：右側訊息欄上方，每位隊員一行，正在操作的那位標亮，點一下換人 */

@@ -486,8 +486,8 @@ function simulate(seed, opts) {
       console.log(`  [診斷 seed${seed} 第${i}步] 塊 ${game.world.chunks.length} 等級 ${wl} 狀態 ${L} 總 ${FE.Stability.total(game)}（格子欠 ${game.world.debt}）｜創世怪 ${ms.filter((m) => !m.small && !m.members).length} 隻 ${sum(ms.filter((m) => !m.small && !m.members))}｜追人怪 ${ms.filter((m) => m.small).length} 隻 ${sum(ms.filter((m) => m.small))}｜合體 ${ms.filter((m) => m.members).length} 隻 ${sum(ms.filter((m) => m.members))}｜修補力 ${game.compute.toFixed(0)} 創世力 ${game.creation.toFixed(0)}/${game.nextChunkAt.toFixed(0)}`);
     }
 
-    // 士兵：從不進建築；只在失序時出城（回到動盪或安穩後走回來）；陣亡後每天擲一次補員
-    const disorderNow = stateBefore === 2 || L === 2;
+    // 士兵：從不進建築；只在那座聚落出城時（第三十六版之二：動盪、失序每天擲）離開，安穩不出城；陣亡後每天擲一次補員
+    const unrestNow = stateBefore >= 1 || L >= 1;
     for (const s of game.soldiers) {
       const v = game.world.villageById(s.villageId);
       if (!v || s.hp <= 0 || s.hp > s.maxHp) fail(`模擬 seed${seed} 士兵狀態不對`);
@@ -497,7 +497,7 @@ function simulate(seed, opts) {
       const wasOut = sinfo.get(s.id);
       if (!inside && wasOut === undefined) {
         // 這個動作才剛出城（新補回或剛創出的士兵一開始都在城裡）
-        if (!disorderNow) fail(`模擬 seed${seed} 第${i}步 士兵在非失序時出城（前 ${stateBefore}，後 ${L}）`);
+        if (!unrestNow || !Number.isFinite(v.sortieAt)) fail(`模擬 seed${seed} 第${i}步 士兵在安穩或沒擲中出城時出城（前 ${stateBefore}，後 ${L}）`);
       }
       if (!inside) sinfo.set(s.id, true); else sinfo.delete(s.id);
     }

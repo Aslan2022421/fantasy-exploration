@@ -169,6 +169,14 @@ function settleWorld34(seed, ok, saw) {
   for (const v of w.villages) if (v.kind === 'city' || v.kind === 'fort' || v.kind === 'fortress') checkPlan(g, v, '場景');
   terrainChecks += w.villages.length;
   ok(problems.length === n0, '圖樣聚落的大小、出入口、城門、山壁有問題（見上面）');
+  // 第三十六版之二：工匠與商人不站在門內那格或門旁邊（八方向 1 格以內），站上去之後房間其他地方還走得到門
+  for (const v of w.villages) {
+    for (const n of w.npcs.filter((o) => o.villageId === v.id && FE.Gear.isShopkeeper(o) && o.home)) {
+      const b = v.buildings[n.home.b];
+      const d = Math.min(...b.doors.map(([dx, dy]) => Math.max(Math.abs(dx - n.x), Math.abs(dy - n.y))));
+      ok(d >= 2, `${v.name} 的${n.role}站在門口（離門 ${d} 格，${b.kind}）`);
+    }
+  }
   // 城市：兩座城鎮的工匠與士兵（武器匠、盔甲匠各一位站在工坊裡，商人一位，士兵 6 位），住的人有家
   for (const v of kinds('city')) {
     const folk = w.npcs.filter((n) => n.villageId === v.id);

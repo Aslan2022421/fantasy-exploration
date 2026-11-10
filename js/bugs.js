@@ -50,10 +50,28 @@
 
   // 攻防判定用的防禦數字：防禦看數值塊的 AC，這裡只剩生成當下的世界等級每升一級加的一點閃避與格擋
   // （第三十三版之二拿掉異常本身的閃避、反擊、格擋與中型怪物多加的防禦）
+  // 第三十七版之一：被定身（m.rooted）的怪物閃不開，閃避歸零
   FE.monsterDef = (m) => {
     const up = (m.wl || 1) - 1;
     const B = FE.CONFIG.WL_BONUS;
-    return { dodge: up * B.DODGE, counter: 0, block: up * B.BLOCK, blockMax: up * B.BLOCK_MAX };
+    return { dodge: m.rooted > 0 ? 0 : up * B.DODGE, counter: 0, block: up * B.BLOCK, blockMax: up * B.BLOCK_MAX };
+  };
+
+  // 怪物的抗性（第三十七版之一，使用者定的；照數值塊與分級算，0～1）：
+  //   control 控制（擋眩暈）＝數值塊的體質修正值×5%（最少 0），菁英（戰役帶頭的、或用菁英數值塊的）再 +15%；
+  //   move 移動（擋定身與推擊，取代原本寫死的「大型推不動」）＝小怪物 0、中怪物 25%、大怪物 100%；
+  //   bleed 流血＝標了 noBlood 的 100%，其他 0。眩暈中控制與移動各 −25 個百分點（最少 0）
+  FE.monsterResist = (m) => {
+    const C = FE.CONFIG;
+    const b = FE.monsterBlock(m.race, FE.blockKey(m));
+    const elite = !!m.elite || /Elite$/.test(FE.blockKey(m));
+    const cut = m.stunned > 0 ? C.STUN_RESIST_CUT : 0;
+    const conMod = Math.floor(((b.con || 10) - 10) / 2);
+    return {
+      control: Math.max(0, Math.max(0, conMod * C.RESIST_CON) + (elite ? C.RESIST_ELITE : 0) - cut),
+      move: Math.max(0, (C.RESIST_MOVE[m.tier] != null ? C.RESIST_MOVE[m.tier] : 0) - cut),
+      bleed: FE.hasTag(m, 'noBlood') ? 1 : 0,
+    };
   };
 
   // 打倒怪物時給的算力（單人份量）：小怪物 3，中型怪物 8＋影響範圍÷2，再乘世界等級的獎勵倍率
@@ -110,6 +128,7 @@
       extraType: b.extraType || null,
       stealth: b.stealth || 0,
       traits: b.traits.slice(),
+      tags: (b.tags || []).slice(), // 第三十七版之一：noBlood 不會流血、noPoison 不受毒
       vuln: (b.vuln || []).slice(),
       regen: b.regen || 0,
     });
@@ -119,6 +138,7 @@
     return m;
   };
   FE.hasTrait = (m, k) => !!(m && m.traits && m.traits.includes(k));
+  FE.hasTag = (m, k) => !!(m && m.tags && m.tags.includes(k));
 
   // 依 B 點所在的環境決定種族，名字與數值跟著改。第三十三版之一：每個生態區有 3～5 種，給了 rng 就照權重隨機套一種
   // （沒給就是那一區原本的種族）；遺跡、墓地附近是殭屍或食屍鬼（FE.raceAt）

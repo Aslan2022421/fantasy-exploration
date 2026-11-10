@@ -186,7 +186,7 @@ function testCharacter() {
     // 舊版本的存檔讀不了
     FE.store.save('fe.save', { version: C.SAVE_VERSION - 1, data: {} });
     const old = FE.Save.load();
-    ok(C.SAVE_VERSION === 27 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
+    ok(C.SAVE_VERSION === 28 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
   }
 
   // 6. 力量：近戰傷害加修正值（可為負，最少 1）；長劍 1d8（副手空著 1d10）；短刀靈巧取力量與敏捷較高者，不再減半；重擊傷害骰擲兩次
@@ -289,7 +289,7 @@ function testCharacter() {
     p.equip.main = G.make('spear', 2, g.nextGearId++); // 精良 +2
     p.skills.spear.lv = 10; // 長槍練的是槍術，熟練加值 +4（第三十三版之一）；格鬥 10 級再 +1
     p.skills.fight.lv = 10;
-    ok(G.hitMod(p) === 3 + 2 + 4 + 1 && roll() - base === 10, `敏捷 +3、精良 +2、槍術 10 級熟練 +4、格鬥 10 級 +1 該疊成 +10：${roll() - base}`);
+    ok(G.hitMod(p) === 3 + 2 + 4 + 1 && roll() - base === 10 - 1, `敏捷 +3、精良 +2、槍術 10 級熟練 +4、格鬥 10 級 +1 該疊成 +10（長槍打貼身的目標再 −1，第三十七版之一）：${roll() - base}`);
     p.attr.dex = 10;
     p.equip.main = G.make('spear', 0, g.nextGearId++);
     p.skills.spear.lv = 0;
@@ -454,7 +454,7 @@ function testCharacter() {
   // 11. 技能（第二十九版，照 Dwarf Fortress）：升到第 N 級要 400＋100N 點經驗，等級沒有上限，15 級以上是傳奇
   {
     ok(Ch.skillNeed(0) === 500 && Ch.skillNeed(1) === 600 && Ch.skillNeed(14) === 1900 && Ch.skillNeed(19) === 2400, `升級門檻不對：${Ch.skillNeed(0)}、${Ch.skillNeed(1)}、${Ch.skillNeed(14)}`);
-    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,misc,fight,shoot,dodge,light,medium,heavy,shield' && C.SKILL_MAX === undefined, '技能名單不對（劍術、槍術、刀術、杖術、斧術、錘術、鞭術、弓術、弩術、雜物使用、格鬥、射擊、閃避、輕甲、中甲、重甲、盾牌使用）');
+    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,firearm,misc,fight,shoot,dodge,light,medium,heavy,shield' && C.SKILL_MAX === undefined, '技能名單不對（劍術、槍術、刀術、杖術、斧術、錘術、鞭術、弓術、弩術、火器、雜物使用、格鬥、射擊、閃避、輕甲、中甲、重甲、盾牌使用）');
     ok(FE.SKILLS.sword.name === '劍術' && FE.SKILLS.spear.name === '槍術' && FE.SKILLS.knife.name === '刀術' && FE.SKILLS.staff.name === '杖術' && FE.SKILLS.axe.name === '斧術' && FE.SKILLS.mace.name === '錘術' &&FE.SKILLS.whip.name === '鞭術' && FE.SKILLS.bow.name === '弓術' && FE.SKILLS.crossbow.name === '弩術' && FE.SKILLS.misc.name === '雜物使用' && FE.SKILLS.fight.name === '格鬥' && FE.SKILLS.shoot.name === '射擊' && FE.SKILLS.light.name === '輕甲' && FE.SKILLS.medium.name === '中甲' && FE.SKILLS.heavy.name === '重甲', '技能的名字不對');
     ok(FE.SKILL_LEVELS.join() === '涉獵,新手,尚可,稱職,熟練,精通,天才,老練,專家,專精,卓越,傑出,大師,英雄,宗師,傳奇' && FE.skillLevelName(15) === '傳奇' && FE.skillLevelName(16) === '傳奇 +1' && FE.skillLevelName(30) === '傳奇 +15' && FE.skillLevelName(0) === '涉獵' && FE.skillLevelName(7) === '老練', '等級名稱不對');
     const g = mk(40, 'warrior');

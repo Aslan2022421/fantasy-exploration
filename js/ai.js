@@ -81,6 +81,25 @@
     if (m.hp <= 0 && game.monsters.includes(m)) game.defeat(m);
   }
 
+  // 流血（第三十七版之一，精通）：每次行動開頭受 m.bleed 的傷害骰＋武器品質的命中加值；士兵打出來的流血打倒怪物照士兵打倒的算
+  function bleed(game, m) {
+    if (!m.bleed) return;
+    const dmg = Math.max(1, FE.rollDice(game.rng, m.bleed.die, 1) + (m.bleed.bonus || 0));
+    m.hp = Math.max(0, m.hp - dmg);
+    if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}的傷口還在流血，受到 ${dmg} 點傷害。`, 'bad');
+    if (m.hp <= 0 && game.monsters.includes(m)) game.defeat(m, m.bleed.soldier ? true : null);
+  }
+  // 一次行動做完（第三十七版之一）：眩暈、定身、中毒各少一次；流血有 BLEED_STOP 的機率止血
+  function afterMonsterAct(game, m) {
+    if (m.stunned > 0) m.stunned--;
+    if (m.rooted > 0) m.rooted--;
+    if (m.poisoned > 0) m.poisoned--;
+    if (m.bleed && game.rng() < C.BLEED_STOP) {
+      m.bleed = null;
+      if (dist(m, game.player) <= C.SIGHT) game.say(`${m.name}的傷口止住了血。`, 'sys');
+    }
+  }
+
   // 回生成點：回到徘徊範圍內就恢復正常；路被堵住太久，就改在當下的位置徘徊
   function returnHome(game, m) {
     const near = (x, y) => Math.abs(x - m.home.x) + Math.abs(y - m.home.y) <= C.WANDER_LEASH;
@@ -215,17 +234,26 @@
     // 玩家操作的那一位以外的隊員（隊友、沒被操作的冒險者）與士兵：怪物貼著他們也會打
     const others = () => game.party().filter((c) => c !== p).concat(game.soldiers).filter((c) => game.isAlive(c));
     const before = new Map(game.monsters.map((m) => [m, m.x + ',' + m.y])); // 靈巧脫身看這一回合有沒有移動
-    for (const m of game.monsters.slice()) {
-      if (!game.monsters.includes(m)) continue; // 被反擊打倒了
+    // 一隻怪物的一次行動（第三十七版之一從迴圈裡拆出來，做完才算眩暈、定身、中毒的次數與止血）；冒險者倒下回傳 'fell'
+    const act = (m) => {
       burn(game, m);
-      if (!game.monsters.includes(m)) continue;
+      if (!game.monsters.includes(m)) return;
+      bleed(game, m);
+      if (!game.monsters.includes(m)) return;
       FE.Combat.regenBlock(game, m);
       regenerate(game, m);
       // 倒地（失衡）：這一回合不能動，爬起來就過了
       if (m.prone) {
         m.prone = false;
         if (dist(m, p) <= C.SIGHT) game.say(`${m.name}從地上爬了起來。`, 'sys');
-        continue;
+        return;
+      }
+      // 眩暈中又被眩暈（第三十七版之一）：這一次行動停下來，之後眩暈結束
+      if (m.stunSkip) {
+        m.stunSkip = false;
+        m.stunned = 0;
+        if (dist(m, p) <= C.SIGHT) game.say(`${m.name}暈頭轉向，愣在原地。`, 'sys');
+        return;
       }
       if (!safe && touching(game, m, p)) {
         // 追人的怪物纏上之後一直記得冒險者；不追人、只徘徊的怪物也照樣攻擊
@@ -235,20 +263,20 @@
           m.returning = false;
         }
         FE.Combat.resolveAttack(game, m, p, 'attack');
-        if (game.fell) return; // 冒險者倒下了，已經回到醒來的地方
-        continue;
+        if (game.fell) return 'fell'; // 冒險者倒下了，已經回到醒來的地方
+        return;
       }
       // 緩速（鞭子、輕弩的精通）：下一次移動多花 6 刻，怪物 6 刻動一次，所以這一回合牠要移動的話就停在原地（攻擊不受影響）
       const allies = others();
       const soldierNear = allies.some((s) => touching(game, m, s));
       if (m.slowed > 0 && !soldierNear) {
         m.slowed--;
-        continue;
+        return;
       }
       // 纏上：冒險者設定的目標（撞上去設的）跟著冒險者走，保持貼著（路徑被擋就照追擊的走法盡量貼近），
       // 一直打到牠倒下、冒險者撤退成功或倒下才放開。冒險者在聚落裡時牠進不去，照平常行動，出來後再纏上。
       // 貼上之後的下一回合才攻擊（移動或攻擊擇一）
-      if (!safe && m.id === game.battle.targetId) {
+      if (!safe && m.id === game.battle.targetId && !(m.rooted > 0)) {
         const s = stepToward(game, m, (x, y) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1 && game.world.heightOk(x, y, p.x, p.y));
         if (s) {
           moveTo(game, m, s[0], s[1]);
@@ -259,20 +287,21 @@
           m.chaseSteps = 0;
           m.returning = false;
         }
-        continue;
+        return;
       }
       // 貼著士兵、隊友的怪物也會攻擊（照角色挨打的算法）；同時貼著幾位就打血量最少的
       if (allies.length) {
         const near = allies.filter((s) => touching(game, m, s)).sort((a, b) => a.hp - b.hp)[0];
         if (near) {
           FE.Combat.resolveAttack(game, m, near, 'attack');
-          if (game.fell) return; // 沒被操作的冒險者被打倒了，已經回到醒來的地方
-          continue;
+          if (game.fell) return 'fell'; // 沒被操作的冒險者被打倒了，已經回到醒來的地方
+          return;
         }
       }
+      if (m.rooted > 0) return; // 定身（第三十七版之一）：不能移動，攻擊照常（上面已經打過了）
       if (m.small && m.returning) {
         returnHome(game, m);
-        continue;
+        return;
       }
       if (m.small) {
         const sees = canSee(game.world, m, p);
@@ -285,10 +314,16 @@
           m.chaseSteps++;
           // 沒纏上冒險者：追太多步，或看不到之後追丟了，就回生成點
           if (m.chaseSteps >= C.CHASE_LIMIT || m.chase === 0) giveUp(game, m);
-          continue;
+          return;
         }
       }
       wander(game, m);
+    };
+    for (const m of game.monsters.slice()) {
+      if (!game.monsters.includes(m)) continue; // 被反擊打倒了
+      const res = act(m);
+      if (game.monsters.includes(m)) afterMonsterAct(game, m);
+      if (res === 'fell') return;
     }
     // 靈巧脫身：這一回合移動之後貼著冒險者的哥布林，躲進冒險者的死角
     if (!safe) for (const m of game.monsters) if (before.has(m) && before.get(m) !== m.x + ',' + m.y && touching(game, m, p)) nimbleHide(game, m);
@@ -517,6 +552,7 @@
   // c 做了一個動作（kind：'move' 或 'attack'）
   function actorPay(game, c, kind) {
     c.owe = Math.max(c.owe || 0, -C.TICKS_MOVE) + actCost(game, c, kind);
+    FE.Combat.afterAction(c, kind === 'move'); // 第三十七版之一：蓄勢、衝刺、原地出手看這個動作（治療也算沒出手）
   }
   // c 輪到了卻沒事做：欠的歸零，不把空下來的時間存起來
   function actorIdle(c) {

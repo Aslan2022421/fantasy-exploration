@@ -5,7 +5,7 @@ window.FE = window.FE || {};
 FE.DIRS8 = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
 
 FE.CONFIG = {
-  SAVE_VERSION: 27,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（採集裝備欄在載入時遷移舊存檔，不需升版；26：走一格 6 刻、聚落有隱形人口數（v.pop）、士兵改成六個職業的角色套版（有裝備欄與技能）、隊伍與隊友（game.mates）、每個聚落一位商人、堡壘與要塞有武器匠與盔甲匠；25：地形全是坡、山脈、湖少而大、山壁 █、隘口、村莊背後的湖或山壁、世界存隘口（passes、passPlan）；24：每格有穩定值（存在區塊上）、怪物多了 bug 欄位、侵蝕與地形重算與復發與破壞拿掉；23：怪物種族擴充（每個生態區 3～5 種、遺跡墓地的不死者）、數值塊照原件對過、多擲的傷害；21：世界一圈一圈擴散、怪物成群、冷卻區；22：怪物數值照 SRD 5.2.1（AC、攻擊加值、傷害骰、生命骰）、命中改 AC 制、怪物特性、士兵帶 AC；20：建角改版（擲 5 項技能、從全部裝備挑）、反擊、逃跑取代撤退與撤離、施法與加護（player.ward、battle.spellCd）；19：時鐘（一天 2,400 刻）、野外短休與村莊長休、生活開支、聚落經濟值、貨幣改銅記帳、採藥與採礦委託、四種委託各接一個、世界裡的人有種族、力竭；18：六個職業、技能合併與穿甲拆三項、起始技能、防具換成十二件、投擲、精通一律要技能 5 級；17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
+  SAVE_VERSION: 28,     // 規則改到跟舊存檔不相容時加一；讀到舊版本會清掉存檔、歷史紀錄與錯誤報告（27：火器技能、武器的新精通與一優一劣、怪物身上的流血、眩暈、定身與連擊紀錄；26：走一格 6 刻、聚落有隱形人口數（v.pop）、士兵改成六個職業的角色套版（有裝備欄與技能）、隊伍與隊友（game.mates）、每個聚落一位商人、堡壘與要塞有武器匠與盔甲匠；25：地形全是坡、山脈、湖少而大、山壁 █、隘口、村莊背後的湖或山壁、世界存隘口（passes、passPlan）；24：每格有穩定值（存在區塊上）、怪物多了 bug 欄位、侵蝕與地形重算與復發與破壞拿掉；23：怪物種族擴充（每個生態區 3～5 種、遺跡墓地的不死者）、數值塊照原件對過、多擲的傷害；21：世界一圈一圈擴散、怪物成群、冷卻區；22：怪物數值照 SRD 5.2.1（AC、攻擊加值、傷害骰、生命骰）、命中改 AC 制、怪物特性、士兵帶 AC；20：建角改版（擲 5 項技能、從全部裝備挑）、反擊、逃跑取代撤退與撤離、施法與加護（player.ward、battle.spellCd）；19：時鐘（一天 2,400 刻）、野外短休與村莊長休、生活開支、聚落經濟值、貨幣改銅記帳、採藥與採礦委託、四種委託各接一個、世界裡的人有種族、力竭；18：六個職業、技能合併與穿甲拆三項、起始技能、防具換成十二件、投擲、精通一律要技能 5 級；17：種族與體型、技能照 Dwarf Fortress 重做（經驗值、新技能、等級沒有上限）、升級經驗表、負重改磅數、擴充武器第一批與弩矢；16：武器改用傷害骰與特質、精通、優勢與劣勢、遠程與範圍攻擊、箭矢、地上的武器、盾擊與治療、攻擊速度；2：地形加上高度；3：氣候生態區；4：地形字元改成矮人要塞字元表；5：世界改成二維區塊格；6：聚落標籤與地貌；7：聚落的外形、房屋與小路；8：區塊放大四倍、聚落外牆；9：有外牆與室內的建築、村民的家；10：外牆貼建築、怪物進不了聚落周圍、64×64、回合制圍攻與攻防判定、怪物分級、世界狀態；11：房屋與外牆之間的走道鋪成路，舊世界的走道還是空地；12：創世改看算力、世界等級、士兵；13：背包、工具、採集點、城鎮固定 3 位士兵、怪物血量的世界等級加成加大；14：裝備欄與裝備物件（品質、耐久）、拿掉改良武器與武器等級、重量與負重、城鎮的盔甲匠與工坊、打造與修復、裝備掉落；15：職業、六項屬性與技能、生命與負重上限照職業和屬性算、升級加點）
   // 世界的比例：一塊世界 64×64（第十九版從 32×24 放大四倍成 64×48，第二十一版高度再加到 64）。
   // 按「每塊幾個」算的數字照面積乘 4（第二十一版再乘 4/3），按「走幾步」算的距離照長寬乘 2；每步的算力與事件間隔不變，冒險者身邊的密度跟原本一樣
   // 第三十二版：世界由 24×24 的小塊組成。開局 4×4 塊（96×96），之後一圈一圈往外長（每圈每邊 +24：144、192、240、288），
@@ -521,7 +521,8 @@ FE.GROUP_SIZE = {
 //   ac：AC；hd：生命骰 [骰數（＝等級）, 面數]；con：體質值；hit：攻擊加值；die：傷害骰 [顆數, 面數]、dmg：傷害加值、type：傷害種類（FE.DMG_TYPES）；
 //   advDie：有優勢時多擲的傷害骰（哥布林的彎刀）；extraDie／extraType：每次命中都多擲的傷害骰與它的種類（毒、死靈、寒冷、閃電，
 //   遊戲裡還沒有這些種類，照一般傷害算進去）；stealth：潛行加值（靈巧脫身用）；
-//   traits：特性（pack 群體戰術、nimble 靈巧脫身）；vuln：易傷的傷害種類（傷害加倍）；regen：再生（每回合開頭回多少生命）
+//   traits：特性（pack 群體戰術、nimble 靈巧脫身）；vuln：易傷的傷害種類（傷害加倍）；regen：再生（每回合開頭回多少生命）；
+//   tags（第三十七版之一）：noBlood 不會流血（流血抗性 100%）、noPoison 不受毒（毒針的毒傷與中毒都沒有；照 SRD 的毒免疫）
 // 生命＝（面數＋體質值）×1.5 無條件捨去，每多一級（骰數多 1）再加 面數÷2＋體質修正值（跟冒險者同一套，見 bugs.js 的 FE.monsterHp）。
 // 只用一個近戰攻擊（有兩個時挑後面註解寫的那個；SRD 的 Multiattack、擒抱、遠程與其他特性這一版不做）
 FE.MONSTER_BLOCKS = {
@@ -551,8 +552,8 @@ FE.MONSTER_BLOCKS = {
     small: { srd: 'Gnoll Warrior', name: '豺狼人', ac: 15, hd: [6, 8], con: 11, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', traits: [] }, // Rend
   },
   skeleton: {
-    small: { srd: 'Skeleton', name: '骷髏', ac: 14, hd: [2, 8], con: 15, hit: 5, die: [1, 6], dmg: 3, type: 'pierce', traits: [], vuln: ['blunt'] }, // Shortsword
-    mid: { srd: 'Minotaur Skeleton', name: '牛頭人骷髏', ac: 12, hd: [6, 10], con: 15, hit: 6, die: [2, 10], dmg: 4, type: 'blunt', traits: [], vuln: ['blunt'] }, // Slam
+    small: { srd: 'Skeleton', name: '骷髏', ac: 14, hd: [2, 8], con: 15, hit: 5, die: [1, 6], dmg: 3, type: 'pierce', tags: ['noBlood', 'noPoison'], traits: [], vuln: ['blunt'] }, // Shortsword
+    mid: { srd: 'Minotaur Skeleton', name: '牛頭人骷髏', ac: 12, hd: [6, 10], con: 15, hit: 6, die: [2, 10], dmg: 4, type: 'blunt', tags: ['noBlood', 'noPoison'], traits: [], vuln: ['blunt'] }, // Slam
   },
   troll: {
     small: { srd: 'Troll Limb', name: '巨魔斷肢', ac: 13, hd: [4, 6], con: 10, hit: 6, die: [2, 4], dmg: 4, type: 'slash', traits: [], regen: 2 }, // Rend（再生 5→2，第三十六版之一 Claude 定的：每回合 6 刻，跟著時鐘下修）
@@ -589,7 +590,7 @@ FE.MONSTER_BLOCKS = {
     mid: { srd: 'Winter Wolf', name: '冬狼', ac: 13, hd: [10, 10], con: 14, hit: 6, die: [2, 6], dmg: 4, type: 'pierce', traits: ['pack'] }, // Bite
   },
   icemephit: {
-    small: { srd: 'Ice Mephit', name: '冰霜魔', ac: 11, hd: [6, 6], con: 10, hit: 3, die: [1, 4], dmg: 1, type: 'slash', extraDie: [1, 4], extraType: 'cold', traits: [], vuln: ['fire'] }, // Claw
+    small: { srd: 'Ice Mephit', name: '冰霜魔', ac: 11, hd: [6, 6], con: 10, hit: 3, die: [1, 4], dmg: 1, type: 'slash', extraDie: [1, 4], extraType: 'cold', tags: ['noBlood', 'noPoison'], traits: [], vuln: ['fire'] }, // Claw
   },
   constrictor: {
     small: { srd: 'Constrictor Snake', name: '蟒蛇', ac: 13, hd: [2, 10], con: 12, hit: 4, die: [1, 8], dmg: 2, type: 'pierce', traits: [] }, // Bite
@@ -609,10 +610,10 @@ FE.MONSTER_BLOCKS = {
     mid: { srd: 'Giant Scorpion', name: '巨蠍', ac: 15, hd: [7, 10], con: 15, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 10], extraType: 'poison', traits: [] }, // Sting（不用 Claw）
   },
   mummy: {
-    mid: { srd: 'Mummy', name: '木乃伊', ac: 11, hd: [9, 8], con: 15, hit: 5, die: [1, 10], dmg: 3, type: 'blunt', extraDie: [3, 6], extraType: 'necrotic', traits: [], vuln: ['fire'] }, // Rotting Fist
+    mid: { srd: 'Mummy', name: '木乃伊', ac: 11, hd: [9, 8], con: 15, hit: 5, die: [1, 10], dmg: 3, type: 'blunt', extraDie: [3, 6], extraType: 'necrotic', tags: ['noBlood', 'noPoison'], traits: [], vuln: ['fire'] }, // Rotting Fist
   },
   dustmephit: {
-    small: { srd: 'Dust Mephit', name: '塵霧魔', ac: 12, hd: [5, 6], con: 10, hit: 4, die: [1, 4], dmg: 2, type: 'slash', traits: [], vuln: ['fire'] }, // Claw
+    small: { srd: 'Dust Mephit', name: '塵霧魔', ac: 12, hd: [5, 6], con: 10, hit: 4, die: [1, 4], dmg: 2, type: 'slash', tags: ['noBlood', 'noPoison'], traits: [], vuln: ['fire'] }, // Claw
   },
   frog: {
     small: { srd: 'Giant Frog', name: '巨蛙', ac: 11, hd: [4, 8], con: 11, hit: 3, die: [1, 6], dmg: 2, type: 'pierce', traits: [] }, // Bite
@@ -622,24 +623,24 @@ FE.MONSTER_BLOCKS = {
     midElite: { srd: 'Giant Crocodile', name: '巨鱷', ac: 14, hd: [9, 12], con: 17, hit: 8, die: [3, 10], dmg: 5, type: 'pierce', traits: [] }, // Bite（不用 Tail）
   },
   shambler: {
-    midElite: { srd: 'Shambling Mound', name: '泥沼怪', ac: 15, hd: [13, 10], con: 16, hit: 7, die: [1, 6], dmg: 4, type: 'blunt', extraDie: [2, 4], extraType: 'lightning', traits: [] }, // Charged Tendril
+    midElite: { srd: 'Shambling Mound', name: '泥沼怪', ac: 15, hd: [13, 10], con: 16, hit: 7, die: [1, 6], dmg: 4, type: 'blunt', extraDie: [2, 4], extraType: 'lightning', tags: ['noBlood'], traits: [] }, // Charged Tendril
   },
   harpy: {
     smallElite: { srd: 'Harpy', name: '鷹身女妖', ac: 11, hd: [7, 8], con: 12, hit: 3, die: [2, 4], dmg: 1, type: 'slash', traits: [] }, // Claw
   },
   gargoyle: {
-    mid: { srd: 'Gargoyle', name: '石像鬼', ac: 15, hd: [9, 8], con: 16, hit: 4, die: [2, 4], dmg: 2, type: 'slash', traits: [] }, // Claw
+    mid: { srd: 'Gargoyle', name: '石像鬼', ac: 15, hd: [9, 8], con: 16, hit: 4, die: [2, 4], dmg: 2, type: 'slash', tags: ['noPoison'], traits: [] }, // Claw
   },
   ogre: {
     mid: { srd: 'Ogre', name: '食人魔', ac: 11, hd: [8, 10], con: 16, hit: 6, die: [2, 8], dmg: 4, type: 'blunt', traits: [] }, // Greatclub
   },
   zombie: {
-    small: { srd: 'Zombie', name: '殭屍', ac: 8, hd: [2, 8], con: 16, hit: 3, die: [1, 8], dmg: 1, type: 'blunt', traits: [] }, // Slam
-    mid: { srd: 'Ogre Zombie', name: '食人魔殭屍', ac: 8, hd: [9, 10], con: 18, hit: 6, die: [2, 8], dmg: 4, type: 'blunt', traits: [] }, // Slam
+    small: { srd: 'Zombie', name: '殭屍', ac: 8, hd: [2, 8], con: 16, hit: 3, die: [1, 8], dmg: 1, type: 'blunt', tags: ['noPoison'], traits: [] }, // Slam
+    mid: { srd: 'Ogre Zombie', name: '食人魔殭屍', ac: 8, hd: [9, 10], con: 18, hit: 6, die: [2, 8], dmg: 4, type: 'blunt', tags: ['noPoison'], traits: [] }, // Slam
   },
   ghoul: {
-    smallElite: { srd: 'Ghoul', name: '食屍鬼', ac: 12, hd: [5, 8], con: 10, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', extraDie: [1, 6], extraType: 'necrotic', traits: [] }, // Bite（不用會麻痺的 Claw）
-    mid: { srd: 'Ghast', name: '妖鬼', ac: 13, hd: [8, 8], con: 10, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 8], extraType: 'necrotic', traits: [] }, // Bite（不用會麻痺的 Claw）
+    smallElite: { srd: 'Ghoul', name: '食屍鬼', ac: 12, hd: [5, 8], con: 10, hit: 4, die: [1, 6], dmg: 2, type: 'pierce', extraDie: [1, 6], extraType: 'necrotic', tags: ['noPoison'], traits: [] }, // Bite（不用會麻痺的 Claw）
+    mid: { srd: 'Ghast', name: '妖鬼', ac: 13, hd: [8, 8], con: 10, hit: 5, die: [1, 8], dmg: 3, type: 'pierce', extraDie: [2, 8], extraType: 'necrotic', tags: ['noPoison'], traits: [] }, // Bite（不用會麻痺的 Claw）
   },
 };
 // 營地（第三十三版之二，使用者定的）：中怪物以上的 BUG 套上的皮。戰役（創世時）可以套；動盪、失序時衰敗的格子生的怪物與合體的中怪物有機率套（CAMP_CHANCE），
@@ -784,45 +785,51 @@ FE.QUALITIES = [
 // 第二十九版：skill 這把武器練哪一項技能（FE.SKILLS）、meleeSkill 拿來近戰時練哪一項（弓、弩）、
 // grip [能拿, 能單手]：冒險者體型（種族與身高、體格決定）不到「能拿」就拿不起來，到「能單手」可以單手拿（配盾、雙持），
 // 兩個門檻之間只能雙手拿（副手要空著）；弓、輕弩射擊一律雙手（twoHand）。ammo 是用哪種彈藥（arrow 箭矢、bolt 弩矢、slingBullet 投石索彈丸）
+// 第三十七版之一：moreMastery 是 SRD 那一種（mastery）之外再加的精通（PF2 改寫，FE.MASTERIES），一樣要那把武器的技能 5 級；bleedDie 是流血每次行動的傷害骰（沒寫是 1d4）；
+// edge 是一優一劣（不看技能等級，一直有）：hit 命中、meleeHit 近戰命中、throwHit 投擲命中、closeHit 打貼身（相鄰 1 格）的目標命中、
+// stillHit 原地出手（上一個動作不是移動）命中、charge 衝刺（這一下之前連續走了 2 格以上，第一下傷害骰擲兩次）、deepCd 重擊冷卻多幾回合、
+// crit 暴擊範圍擴大幾、critDie 暴擊多擲幾顆武器骰、deepDice 重擊時傷害骰擲幾次（原本 2）、fumble 失手率（命中後擲，失手傷害減半、精通不觸發）、
+// pierce 穿甲比例加多少（加在品質的穿甲上，只對穿刺）、halfQ 品質的穿甲減半、ticks 攻擊多花幾刻（負的是少花）、topple 失衡機率加多少、
+// counter 反擊機率加多少、hardMargin 勉強命中的範圍（到 AC、高不到這個數；平常 HARD_MARGIN）、str／dex 力量、敏捷不到這個數拿不起來
 FE.GEAR = {
   sword: { cat: 'weapon', name: '長劍', die: [1, 8], type: 'slash', versatile: 10, mastery: 'sap', skill: 'sword', grip: [52500, 57500], weight: 3, price: 30, ore: 3, dur: 200, sold: true, drop: true },
-  spear: { cat: 'weapon', name: '長槍', die: [1, 10], type: 'pierce', heavy: true, reach: true, mastery: 'push', skill: 'spear', grip: [62500, 77500], weight: 18, price: 25, ore: 3, dur: 200, sold: true, drop: true },
-  shortspear: { cat: 'weapon', name: '短矛', die: [1, 6], type: 'pierce', thrown: [4, 12], versatile: 8, mastery: 'sap', skill: 'spear', grip: [5000, 47500], weight: 3, price: 20, ore: 3, dur: 200, sold: true, drop: true },
-  dagger: { cat: 'weapon', name: '短刀', die: [1, 4], type: 'pierce', finesse: true, light: true, thrown: [4, 12], mastery: 'nick', skill: 'knife', grip: [5000, 27500], weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
-  bow: { cat: 'weapon', name: '弓箭', die: [1, 6], type: 'pierce', ammo: 'arrow', range: [5, 20], twoHand: true, mastery: 'vex', skill: 'bow', meleeSkill: 'sword', grip: [15000, 0], weight: 2, price: 30, dur: 200, sold: true, drop: true },
-  staff: { cat: 'weapon', name: '法杖', die: [1, 6], type: 'blunt', versatile: 8, mastery: 'topple', skill: 'staff', grip: [5000, 47500], weight: 4, price: 30, dur: 200, sold: true, drop: true },
+  spear: { cat: 'weapon', name: '長槍', die: [1, 10], type: 'pierce', heavy: true, reach: true, mastery: 'push', edge: { pierce: 0.3, closeHit: -1 }, skill: 'spear', grip: [62500, 77500], weight: 18, price: 25, ore: 3, dur: 200, sold: true, drop: true },
+  shortspear: { cat: 'weapon', name: '短矛', die: [1, 6], type: 'pierce', thrown: [4, 12], versatile: 8, mastery: 'sap', edge: { pierce: 0.2, ticks: 1 }, skill: 'spear', grip: [5000, 47500], weight: 3, price: 20, ore: 3, dur: 200, sold: true, drop: true },
+  dagger: { cat: 'weapon', name: '短刀', die: [1, 4], type: 'pierce', finesse: true, light: true, thrown: [4, 12], mastery: 'nick', moreMastery: ['agile', 'bleed'], edge: { crit: 1, hardMargin: 7 }, skill: 'knife', grip: [5000, 27500], weight: 1, price: 15, ore: 3, dur: 200, sold: true, drop: true },
+  bow: { cat: 'weapon', name: '弓箭', die: [1, 6], type: 'pierce', ammo: 'arrow', range: [5, 20], twoHand: true, mastery: 'vex', moreMastery: ['deadly', 'root'], edge: { ticks: -1, halfQ: true }, skill: 'bow', meleeSkill: 'sword', grip: [15000, 0], weight: 2, price: 30, dur: 200, sold: true, drop: true },
+  staff: { cat: 'weapon', name: '法杖', die: [1, 6], type: 'blunt', versatile: 8, mastery: 'topple', edge: { counter: 0.05, deepCd: 1 }, skill: 'staff', grip: [5000, 47500], weight: 4, price: 30, dur: 200, sold: true, drop: true },
   // 第二十九版：擴充武器第一批
-  shortsword: { cat: 'weapon', name: '短劍', die: [1, 6], type: 'pierce', finesse: true, light: true, mastery: 'vex', skill: 'sword', grip: [32500, 37500], weight: 2, price: 20, ore: 3, dur: 200, sold: true, drop: true },
-  waraxe: { cat: 'weapon', name: '戰斧', die: [1, 8], type: 'slash', versatile: 10, mastery: 'topple', skill: 'axe', grip: [42500, 47500], weight: 4, price: 25, ore: 3, dur: 200, sold: true, drop: true },
-  greataxe: { cat: 'weapon', name: '巨斧', die: [1, 12], type: 'slash', heavy: true, mastery: 'cleave', skill: 'axe', grip: [62500, 77500], weight: 7, price: 45, ore: 5, dur: 200, sold: true, drop: true },
-  greatsword: { cat: 'weapon', name: '巨劍', die: [2, 6], type: 'slash', heavy: true, mastery: 'graze', skill: 'sword', grip: [62500, 77500], weight: 6, price: 50, ore: 5, dur: 200, sold: true, drop: true },
+  shortsword: { cat: 'weapon', name: '短劍', die: [1, 6], type: 'pierce', finesse: true, light: true, mastery: 'vex', moreMastery: ['agile'], edge: { hit: 1, deepCd: 1 }, skill: 'sword', grip: [32500, 37500], weight: 2, price: 20, ore: 3, dur: 200, sold: true, drop: true },
+  waraxe: { cat: 'weapon', name: '戰斧', die: [1, 8], type: 'slash', versatile: 10, mastery: 'topple', moreMastery: ['sweep'], edge: { critDie: 1, fumble: 0.1 }, skill: 'axe', grip: [42500, 47500], weight: 4, price: 25, ore: 3, dur: 200, sold: true, drop: true },
+  greataxe: { cat: 'weapon', name: '巨斧', die: [1, 12], type: 'slash', heavy: true, mastery: 'cleave', moreMastery: ['sweep'], edge: { critDie: 1, str: 15 }, skill: 'axe', grip: [62500, 77500], weight: 7, price: 45, ore: 5, dur: 200, sold: true, drop: true },
+  greatsword: { cat: 'weapon', name: '巨劍', die: [2, 6], type: 'slash', heavy: true, mastery: 'graze', edge: { deepDice: 3, deepCd: 2 }, skill: 'sword', grip: [62500, 77500], weight: 6, price: 50, ore: 5, dur: 200, sold: true, drop: true },
   club: { cat: 'weapon', name: '硬頭錘', die: [1, 6], type: 'blunt', mastery: 'sap', skill: 'mace', grip: [32500, 37500], weight: 4, price: 15, ore: 3, dur: 200, sold: true, drop: true },
-  warhammer: { cat: 'weapon', name: '戰錘', die: [1, 8], type: 'blunt', versatile: 10, mastery: 'push', skill: 'mace', grip: [32500, 37500], weight: 5, price: 30, ore: 3, dur: 200, sold: true, drop: true },
-  whip: { cat: 'weapon', name: '鞭子', die: [1, 4], type: 'slash', finesse: true, reach: true, mastery: 'slow', skill: 'whip', grip: [22500, 27500], weight: 3, price: 10, dur: 200, sold: true, drop: true },
-  crossbow: { cat: 'weapon', name: '輕弩', die: [1, 8], type: 'pierce', ammo: 'bolt', range: [5, 20], loading: true, twoHand: true, mastery: 'slow', skill: 'crossbow', meleeSkill: 'mace', grip: [15000, 0], weight: 5, price: 35, dur: 200, sold: true, drop: true },
-  handaxe: { cat: 'weapon', name: '手斧', die: [1, 6], type: 'slash', light: true, thrown: [4, 12], mastery: 'vex', skill: 'axe', grip: [15000, 0], weight: 2, price: 10, dur: 200, sold: true, drop: true },
-  javelin: { cat: 'weapon', name: '標槍', die: [1, 6], type: 'pierce', thrown: [6, 24], mastery: 'slow', skill: 'spear', grip: [15000, 0], weight: 2, price: 1, dur: 200, sold: true, drop: true },
-  lightHammer: { cat: 'weapon', name: '輕錘', die: [1, 4], type: 'blunt', light: true, thrown: [4, 12], mastery: 'nick', skill: 'mace', grip: [15000, 0], weight: 2, price: 4, dur: 200, sold: true, drop: true },
+  warhammer: { cat: 'weapon', name: '戰錘', die: [1, 8], type: 'blunt', versatile: 10, mastery: 'push', edge: { crit: 1, fumble: 0.1 }, skill: 'mace', grip: [32500, 37500], weight: 5, price: 30, ore: 3, dur: 200, sold: true, drop: true },
+  whip: { cat: 'weapon', name: '鞭子', die: [1, 4], type: 'slash', finesse: true, reach: true, mastery: 'slow', edge: { hit: 2, dex: 15 }, skill: 'whip', grip: [22500, 27500], weight: 3, price: 10, dur: 200, sold: true, drop: true },
+  crossbow: { cat: 'weapon', name: '輕弩', die: [1, 8], type: 'pierce', ammo: 'bolt', range: [5, 20], loading: true, twoHand: true, mastery: 'slow', moreMastery: ['bleed'], bleedDie: [1, 6], skill: 'crossbow', meleeSkill: 'mace', grip: [15000, 0], weight: 5, price: 35, dur: 200, sold: true, drop: true },
+  handaxe: { cat: 'weapon', name: '手斧', die: [1, 6], type: 'slash', light: true, thrown: [4, 12], mastery: 'vex', moreMastery: ['agile', 'sweep'], edge: { throwHit: 1, meleeHit: -1 }, skill: 'axe', grip: [15000, 0], weight: 2, price: 10, dur: 200, sold: true, drop: true },
+  javelin: { cat: 'weapon', name: '標槍', die: [1, 6], type: 'pierce', thrown: [6, 24], mastery: 'slow', moreMastery: ['bleed'], edge: { pierce: 0.2, meleeHit: -1 }, skill: 'spear', grip: [15000, 0], weight: 2, price: 1, dur: 200, sold: true, drop: true },
+  lightHammer: { cat: 'weapon', name: '輕錘', die: [1, 4], type: 'blunt', light: true, thrown: [4, 12], mastery: 'nick', moreMastery: ['agile'], edge: { throwHit: 1, meleeHit: -1 }, skill: 'mace', grip: [15000, 0], weight: 2, price: 4, dur: 200, sold: true, drop: true },
   woodclub: { cat: 'weapon', name: '木棒', die: [1, 4], type: 'blunt', light: true, mastery: 'slow', skill: 'mace', grip: [15000, 0], weight: 2, price: 0.2, dur: 200, sold: true, drop: true },
-  greatclub: { cat: 'weapon', name: '巨棒', die: [1, 8], type: 'blunt', twoHand: true, mastery: 'push', skill: 'mace', grip: [52500, 57500], weight: 10, price: 0.4, dur: 200, sold: true, drop: true },
-  dart: { cat: 'weapon', name: '飛鏢', die: [1, 4], type: 'pierce', finesse: true, thrown: [4, 12], mastery: 'vex', skill: 'knife', grip: [1000, 0], weight: 0.25, price: 0.1, dur: 200, sold: true, drop: true },
-  sling: { cat: 'weapon', name: '投石索', die: [1, 4], type: 'blunt', ammo: 'slingBullet', range: [2, 8], mastery: 'slow', skill: 'bow', grip: [5000, 0], weight: 0, price: 0.2, dur: 200, sold: true, drop: true },
-  scimitar: { cat: 'weapon', name: '彎刀', die: [1, 6], type: 'slash', finesse: true, light: true, mastery: 'nick', skill: 'sword', grip: [32500, 37500], weight: 3, price: 50, dur: 200, sold: true, drop: true },
-  glaive: { cat: 'weapon', name: '長柄刀', die: [1, 10], type: 'slash', reach: true, twoHand: true, heavy: true, mastery: 'graze', skill: 'spear', grip: [62500, 77500], weight: 6, price: 40, dur: 200, sold: true, drop: true },
-  flail: { cat: 'weapon', name: '鏈枷', die: [1, 8], type: 'blunt', mastery: 'sap', skill: 'mace', grip: [32500, 37500], weight: 2, price: 20, dur: 200, sold: true, drop: true },
-  halberd: { cat: 'weapon', name: '戟', die: [1, 10], type: 'slash', reach: true, twoHand: true, heavy: true, mastery: 'cleave', skill: 'spear', grip: [62500, 77500], weight: 6, price: 40, dur: 200, sold: true, drop: true },
-  lance: { cat: 'weapon', name: '騎槍', die: [1, 10], type: 'pierce', reach: true, twoHand: true, heavy: true, mastery: 'topple', skill: 'spear', grip: [62500, 77500], weight: 6, price: 20, dur: 200, sold: true, drop: true },
-  maul: { cat: 'weapon', name: '巨錘', die: [2, 6], type: 'blunt', twoHand: true, heavy: true, mastery: 'topple', skill: 'mace', grip: [62500, 77500], weight: 10, price: 20, dur: 200, sold: true, drop: true },
-  morningstar: { cat: 'weapon', name: '晨星錘', die: [1, 8], type: 'pierce', mastery: 'sap', skill: 'mace', grip: [32500, 37500], weight: 4, price: 30, dur: 200, sold: true, drop: true },
-  warpick: { cat: 'weapon', name: '戰鎬', die: [1, 8], type: 'pierce', versatile: 10, mastery: 'sap', skill: 'mace', grip: [32500, 37500], weight: 2, price: 10, dur: 200, sold: true, drop: true },
-  rapier: { cat: 'weapon', name: '刺劍', die: [1, 8], type: 'pierce', finesse: true, mastery: 'vex', skill: 'sword', grip: [52500, 57500], weight: 2, price: 50, dur: 200, sold: true, drop: true },
-  trident: { cat: 'weapon', name: '三叉戟', die: [1, 8], type: 'pierce', thrown: [4, 12], versatile: 10, mastery: 'topple', skill: 'spear', grip: [32500, 37500], weight: 4, price: 10, dur: 200, sold: true, drop: true },
-  handcrossbow: { cat: 'weapon', name: '手弩', die: [1, 6], type: 'pierce', ammo: 'bolt', range: [2, 8], loading: true, light: true, mastery: 'vex', skill: 'crossbow', meleeSkill: 'mace', grip: [15000, 0], weight: 3, price: 50, dur: 200, sold: true, drop: true },
-  heavycrossbow: { cat: 'weapon', name: '重弩', die: [1, 10], type: 'pierce', ammo: 'bolt', range: [6, 24], loading: true, twoHand: true, heavy: true, mastery: 'push', skill: 'crossbow', meleeSkill: 'mace', grip: [62500, 77500], weight: 18, price: 50, dur: 200, sold: true, drop: true },
-  longbow: { cat: 'weapon', name: '長弓', die: [1, 8], type: 'pierce', ammo: 'arrow', range: [9, 38], twoHand: true, heavy: true, mastery: 'slow', skill: 'bow', meleeSkill: 'sword', grip: [62500, 77500], weight: 2, price: 50, dur: 200, sold: true, drop: true },
-  musket: { cat: 'weapon', name: '火槍', die: [1, 12], type: 'pierce', ammo: 'bullet', range: [3, 8], loading: true, twoHand: true, mastery: 'slow', skill: 'crossbow', grip: [62500, 77500], weight: 10, price: 50, dur: 200, sold: true, drop: true },
-  pistol: { cat: 'weapon', name: '手槍', die: [1, 10], type: 'pierce', ammo: 'bullet', range: [2, 6], loading: true, mastery: 'vex', skill: 'crossbow', grip: [15000, 0], weight: 3, price: 50, dur: 200, sold: true, drop: true },
-  blowgun: { cat: 'weapon', name: '吹箭筒', die: [1, 1], type: 'pierce', ammo: 'needle', range: [2, 6], loading: true, mastery: 'vex', skill: 'bow', grip: [15000, 0], weight: 1, price: 20, dur: 200, sold: true, drop: true },
+  greatclub: { cat: 'weapon', name: '巨棒', die: [1, 8], type: 'blunt', twoHand: true, mastery: 'push', moreMastery: ['backswing'], edge: { deepDice: 3, str: 13 }, skill: 'mace', grip: [52500, 57500], weight: 10, price: 0.4, dur: 200, sold: true, drop: true },
+  dart: { cat: 'weapon', name: '飛鏢', die: [1, 4], type: 'pierce', finesse: true, thrown: [4, 12], mastery: 'vex', moreMastery: ['agile', 'bleed'], edge: { crit: 1, fumble: 0.1 }, skill: 'knife', grip: [1000, 0], weight: 0.25, price: 0.1, dur: 200, sold: true, drop: true },
+  sling: { cat: 'weapon', name: '投石索', die: [1, 4], type: 'blunt', ammo: 'slingBullet', range: [2, 8], mastery: 'slow', moreMastery: ['stun'], skill: 'bow', grip: [5000, 0], weight: 0, price: 0.2, dur: 200, sold: true, drop: true },
+  scimitar: { cat: 'weapon', name: '彎刀', die: [1, 6], type: 'slash', finesse: true, light: true, mastery: 'nick', moreMastery: ['sweep', 'forceful'], edge: { crit: 1, fumble: 0.1 }, skill: 'sword', grip: [32500, 37500], weight: 3, price: 50, dur: 200, sold: true, drop: true },
+  glaive: { cat: 'weapon', name: '長柄刀', die: [1, 10], type: 'slash', reach: true, twoHand: true, heavy: true, mastery: 'graze', moreMastery: ['forceful', 'deadly'], edge: { deepDice: 3, closeHit: -1 }, skill: 'spear', grip: [62500, 77500], weight: 6, price: 40, dur: 200, sold: true, drop: true },
+  flail: { cat: 'weapon', name: '鏈枷', die: [1, 8], type: 'blunt', mastery: 'sap', moreMastery: ['sweep'], edge: { critDie: 1, fumble: 0.1 }, skill: 'mace', grip: [32500, 37500], weight: 2, price: 20, dur: 200, sold: true, drop: true },
+  halberd: { cat: 'weapon', name: '戟', die: [1, 10], type: 'slash', reach: true, twoHand: true, heavy: true, mastery: 'cleave', edge: { counter: 0.05, ticks: 1 }, skill: 'spear', grip: [62500, 77500], weight: 6, price: 40, dur: 200, sold: true, drop: true },
+  lance: { cat: 'weapon', name: '騎槍', die: [1, 10], type: 'pierce', reach: true, twoHand: true, heavy: true, mastery: 'topple', moreMastery: ['deadly'], edge: { charge: true, stillHit: -1 }, skill: 'spear', grip: [62500, 77500], weight: 6, price: 20, dur: 200, sold: true, drop: true },
+  maul: { cat: 'weapon', name: '巨錘', die: [2, 6], type: 'blunt', twoHand: true, heavy: true, mastery: 'topple', edge: { deepDice: 3, str: 15 }, skill: 'mace', grip: [62500, 77500], weight: 10, price: 20, dur: 200, sold: true, drop: true },
+  morningstar: { cat: 'weapon', name: '晨星錘', die: [1, 8], type: 'pierce', mastery: 'sap', edge: { pierce: 0.2, ticks: 1 }, skill: 'mace', grip: [32500, 37500], weight: 4, price: 30, dur: 200, sold: true, drop: true },
+  warpick: { cat: 'weapon', name: '戰鎬', die: [1, 8], type: 'pierce', versatile: 10, mastery: 'sap', moreMastery: ['fatal'], edge: { pierce: 0.2, fumble: 0.1 }, skill: 'mace', grip: [32500, 37500], weight: 2, price: 10, dur: 200, sold: true, drop: true },
+  rapier: { cat: 'weapon', name: '刺劍', die: [1, 8], type: 'pierce', finesse: true, mastery: 'vex', moreMastery: ['deadly'], edge: { pierce: 0.2, dex: 13 }, skill: 'sword', grip: [52500, 57500], weight: 2, price: 50, dur: 200, sold: true, drop: true },
+  trident: { cat: 'weapon', name: '三叉戟', die: [1, 8], type: 'pierce', thrown: [4, 12], versatile: 10, mastery: 'topple', edge: { topple: 0.1, halfQ: true }, skill: 'spear', grip: [32500, 37500], weight: 4, price: 10, dur: 200, sold: true, drop: true },
+  handcrossbow: { cat: 'weapon', name: '手弩', die: [1, 6], type: 'pierce', ammo: 'bolt', range: [2, 8], loading: true, light: true, mastery: 'vex', moreMastery: ['bleed'], bleedDie: [1, 6], edge: { ticks: -1, fumble: 0.1 }, skill: 'crossbow', meleeSkill: 'mace', grip: [15000, 0], weight: 3, price: 50, dur: 200, sold: true, drop: true },
+  heavycrossbow: { cat: 'weapon', name: '重弩', die: [1, 10], type: 'pierce', ammo: 'bolt', range: [6, 24], loading: true, twoHand: true, heavy: true, mastery: 'push', moreMastery: ['bleed'], bleedDie: [1, 6], edge: { pierce: 0.3, ticks: 2 }, skill: 'crossbow', meleeSkill: 'mace', grip: [62500, 77500], weight: 18, price: 50, dur: 200, sold: true, drop: true },
+  longbow: { cat: 'weapon', name: '長弓', die: [1, 8], type: 'pierce', ammo: 'arrow', range: [9, 38], twoHand: true, heavy: true, mastery: 'slow', moreMastery: ['deadly', 'volley', 'root'], edge: { pierce: 0.2, str: 13 }, skill: 'bow', meleeSkill: 'sword', grip: [62500, 77500], weight: 2, price: 50, dur: 200, sold: true, drop: true },
+  musket: { cat: 'weapon', name: '火槍', die: [1, 12], type: 'pierce', ammo: 'bullet', range: [3, 8], loading: true, twoHand: true, mastery: 'slow', moreMastery: ['fatal', 'kickback', 'stun'], edge: { pierce: 0.5, ticks: 3 }, skill: 'firearm', grip: [62500, 77500], weight: 10, price: 50, dur: 200, sold: true, drop: true },
+  pistol: { cat: 'weapon', name: '手槍', die: [1, 10], type: 'pierce', ammo: 'bullet', range: [2, 6], loading: true, mastery: 'vex', moreMastery: ['fatal', 'stun'], edge: { pierce: 0.3, ticks: 2 }, skill: 'firearm', grip: [15000, 0], weight: 3, price: 50, dur: 200, sold: true, drop: true },
+  blowgun: { cat: 'weapon', name: '吹箭筒', die: [1, 1], type: 'pierce', ammo: 'needle', range: [2, 6], loading: true, mastery: 'vex', moreMastery: ['agile'], skill: 'bow', grip: [15000, 0], weight: 1, price: 20, dur: 200, sold: true, drop: true },
   arrow: { cat: 'ammo', name: '箭矢', weight: 1, price: 5, bundle: 20, sold: true, drop: true },
   bolt: { cat: 'ammo', name: '弩矢', weight: 1.5, price: 5, bundle: 20, sold: true, drop: true },
   slingBullet: { cat: 'ammo', name: '投石索彈丸', weight: 1.5, price: 0.08, bundle: 20, sold: true, drop: false },
@@ -859,13 +866,55 @@ FE.MASTERIES = {
   sap: { name: '削弱', desc: '命中後，目標下一次出手有劣勢' },
   vex: { name: '侵擾', desc: '命中且造成傷害後，你下一次打牠有優勢' },
   topple: { name: '失衡', desc: '命中後有機會讓目標倒地：下一回合不能動，打牠有優勢' },
-  push: { name: '推擊', desc: '命中後把目標直線推開 2 格，大型怪物推不動' },
+  push: { name: '推擊', desc: '命中後把目標直線推開 2 格，越大的怪物越推不動；撞到東西停下時，目標受 1d4 鈍擊並眩暈 1 次行動' },
   nick: { name: '迅切', desc: '雙持的動作不多花時間' },
   cleave: { name: '順劈', desc: '命中後可以順手打目標旁邊、也在你身邊的另一隻怪物，這一下不加屬性修正值；一個動作最多一次' },
   graze: { name: '擦掠', desc: '沒命中時照樣造成等於屬性修正值的傷害（修正值是正數才有）' },
   slow: { name: '緩速', desc: '命中且造成傷害後，目標下一次移動多花 6 刻' },
+  // 第三十七版之一：PF2 的武器特質改寫成精通（使用者定的），一樣要那把武器的技能 5 級；武器的 moreMastery 列出它多會哪幾種
+  agile: { name: '輕捷', desc: '攻擊少花 1 刻（最少 4 刻）' },
+  sweep: { name: '順勢', desc: '這一下打的跟上一下不是同一個目標時，出手 +1' },
+  forceful: { name: '蓄勢', desc: '連續打同一個目標：第二下傷害多 1×骰數，第三下起多 2×骰數；換目標或做別的事就重來' },
+  backswing: { name: '回擺', desc: '沒打中之後，下一次出手 +1' },
+  deadly: { name: '致命', desc: '暴擊時多擲 1 顆武器骰' },
+  fatal: { name: '致死', desc: '暴擊時傷害骰大一階（最大 d12），再多擲 1 顆' },
+  volley: { name: '齊射', desc: '目標在 2 格內時出手 −2' },
+  kickback: { name: '後座', desc: '傷害 +1；力量修正值不到 +2 時出手 −2' },
+  // 流血、眩暈、定身：命中且造成傷害後擲，機率＝chance＋出手屬性修正值×5%＋（技能等級−5）×1%＋品質清除等級×2%，最高 50%，再乘（1−目標的抗性）
+  bleed: { name: '流血', chance: 0.15, desc: '命中且造成傷害後有機會讓目標流血：每次行動受傷，直到止血' },
+  stun: { name: '眩暈', chance: 0.15, desc: '命中且造成傷害後有機會讓目標眩暈 2 次行動：出手 −2、不能反擊、比較容易被控制；眩暈中再中一次就停下一次行動' },
+  root: { name: '定身', chance: 0.15, desc: '命中且造成傷害後有機會讓目標 2 次行動不能移動，也閃不開' },
 };
 FE.MASTERY_SKILL = 5;
+// 第三十七版之一：精通的流血、眩暈、定身、推擊撞牆，一優一劣的失手，怪物的抗性，毒針（使用者定的數字）
+Object.assign(FE.CONFIG, {
+  PROC_ATTR: 0.05,          // 流血、眩暈、定身的機率：出手屬性修正值每點 +5%
+  PROC_SKILL: 0.01,         // 技能等級每比 PROC_SKILL_FROM（5 級）高 1 級 +1%（低就扣）
+  PROC_SKILL_FROM: 5,
+  PROC_CLEAR: 0.02,         // 武器品質的清除等級每級 +2%
+  PROC_MAX: 0.5,            // 最高 50%（乘抗性之前）
+  BLEED_DIE: [1, 4],        // 流血每次行動的傷害骰（輕弩、手弩、重弩的 bleedDie 是 1d6），再加武器品質的命中加值
+  BLEED_STOP: 0.3,          // 每次行動後止血的機率
+  STUN_TURNS: 2,            // 眩暈幾次行動
+  STUN_D20: 2,              // 眩暈中出手 d20 −2
+  STUN_RESIST_CUT: 0.25,    // 眩暈中控制與移動抗性 −25 個百分點
+  ROOT_TURNS: 2,            // 定身幾次行動（不能移動、閃避歸零）
+  RESIST_CON: 0.05,         // 怪物的控制抗性＝體質修正值×5%（最少 0）
+  RESIST_ELITE: 0.15,       // 菁英的控制抗性再 +15%
+  RESIST_MOVE: { small: 0, mid: 0.25, big: 1 }, // 怪物的移動抗性（擋定身與推擊）：小怪物 0、中怪物 25%、大怪物 100%
+  PUSH_BUMP_DIE: [1, 4],    // 推擊撞到擋路的東西停下：目標受這麼多鈍擊
+  PUSH_BUMP_STUN: 1,        // 並眩暈 1 次行動
+  FUMBLE_DEX: 0.02,         // 失手率：敏捷每點修正值 −2%（最少 0）
+  SWEEP_HIT: 1,             // 順勢：目標跟上一下不同時 d20 +1
+  BACKSWING_HIT: 1,         // 回擺：沒命中之後下一次出手 d20 +1
+  VOLLEY_DIST: 2,           // 齊射：目標在 2 格內 d20 −2
+  VOLLEY_D20: 2,
+  KICKBACK_STR: 2,          // 後座：力量修正值不到 +2 時 d20 −2；傷害 +1
+  KICKBACK_D20: 2,
+  KICKBACK_DMG: 1,
+  CHARGE_STEPS: 2,          // 衝刺：這一下之前連續走了 2 格以上
+  DIE_STEPS: [4, 6, 8, 10, 12], // 致死：暴擊時傷害骰升一階，最多 d12
+});
 // 採集點：都可以走過去；裝備對的工具後撞上去就採，採完變回普通地面，REGROW_TICKS 刻後長回來
 FE.NODES = {
   ore: { name: '礦脈', glyph: '☼', tool: 'pick', item: 'ore', verb: '挖' },
@@ -895,6 +944,7 @@ FE.SKILLS = {
   whip: { name: '鞭術', weapon: true },       // 鞭子
   bow: { name: '弓術', weapon: true },        // 弓箭射擊，管傷害
   crossbow: { name: '弩術', weapon: true },   // 輕弩射擊，管傷害
+  firearm: { name: '火器', weapon: true },    // 火槍、手槍射擊，管傷害（第三十七版之一，原本練弩術）
   misc: { name: '雜物使用', weapon: true },   // 盾擊：命中每 5 級 +1、傷害每 3 級 +1
   fight: { name: '格鬥' },
   shoot: { name: '射擊' },

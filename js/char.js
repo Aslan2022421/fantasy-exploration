@@ -32,22 +32,37 @@
   // ---- 種族與體型 ----
   // 冒險者的體型（沒有的話當成人類的基本體型，舊的測試用角色）
   const sizeOf = (p) => (p.size > 0 ? p.size : FE.PLAYER_RACES.human.size);
+  // 屬性需求（第三十七版之一，一優一劣的劣勢）：武器的 edge.str／edge.dex，屬性不到就跟體型不夠一樣拿不起來。
+  // 回傳不夠的那一項 { key, need }，夠了回傳 null；attr 沒給（只看體型的場合）不檢查
+  function attrShort(attr, type) {
+    const e = FE.GEAR[type] && FE.GEAR[type].edge;
+    if (!attr || !e) return null;
+    for (const key of ['str', 'dex']) if (e[key] && attr[key] < e[key]) return { key, need: e[key] };
+    return null;
+  }
   // 這把武器冒險者怎麼拿：'one' 單手（可以配盾、可以雙持）、'two' 只能雙手（副手要空著）、'none' 拿不動。
-  // 弓、輕弩射擊一律雙手（twoHand 標籤）；其他武器看體型：不到「能拿」拿不動，到「能單手」可以單手，兩個門檻之間只能雙手
+  // 弓、輕弩射擊一律雙手（twoHand 標籤）；其他武器看體型：不到「能拿」拿不動，到「能單手」可以單手，兩個門檻之間只能雙手；
+  // 屬性需求不到也拿不動（p 沒有 attr 時不看）
   function grip(p, w) {
     const d = w && FE.GEAR[w.type];
     if (!d || !d.grip) return 'one';
     const size = sizeOf(p);
-    if (size < d.grip[0]) return 'none';
+    if (size < d.grip[0] || attrShort(p.attr, w.type)) return 'none';
     if (d.twoHand) return 'two';
     return size >= d.grip[1] ? 'one' : 'two';
   }
   const GRIP_NAMES = { one: '單手', two: '雙手', none: '拿不動' };
-  // 這個種類的武器，體型 size 拿不拿得起（建角挑起始裝備時用，不需要裝備物件）
-  const canWieldType = (type, size) => {
+  // 這個種類的武器，體型 size（與屬性 attr，沒給不看）拿不拿得起（建角挑起始裝備時用，不需要裝備物件）
+  const canWieldType = (type, size, attr) => {
     const d = FE.GEAR[type];
-    return !d || !d.grip || size >= d.grip[0];
+    return !d || !d.grip || (size >= d.grip[0] && !attrShort(attr, type));
   };
+  // 拿不起來的原因（訊息用）：屬性不到寫屬性，不然是體型
+  function cantWieldText(p, g) {
+    const s = attrShort(p.attr, g.type);
+    if (s) return `${FE.Gear.name(g)}要${FE.ATTRS.find((a) => a.key === s.key).name} ${s.need} 才拿得動（你是 ${p.attr[s.key]}）。`;
+    return `${FE.Gear.name(g)}太大太沉了，以你的體型拿不起來。`;
+  }
 
   // ---- 技能 ----
   const skillLv = (p, id) => (p.skills && p.skills[id] ? p.skills[id].lv : 0);
@@ -94,9 +109,21 @@
     // 第二十九版追加：精通一律要該武器的技能練到 5 級（精熟），不分職業
     return skillLv(p, d.skill) >= FE.MASTERY_SKILL ? d.mastery : null;
   }
-  // 擲出幾點以上算暴擊：平常 20；感知修正值 +2 以上 19；短刀再擴大 1
+  // 這把武器用得上的所有精通（第三十七版之一）：SRD 那一種加 moreMastery，一樣要那把武器的技能 5 級；用不上回傳空陣列
+  function masteries(p, w) {
+    const d = w && FE.GEAR[w.type];
+    if (!d || !mastery(p, w)) return [];
+    return [d.mastery].concat(d.moreMastery || []);
+  }
+  // 擲出幾點以上算暴擊：平常 20；感知修正值 +2 以上 19；武器的 edge.crit 再擴大（短刀、彎刀、戰錘、飛鏢 1）
   function critMin(p, w) {
-    return 20 - (attrMod(p, 'wis') >= C.CRIT_WIS ? 1 : 0) - (w && w.type === 'dagger' ? 1 : 0);
+    const e = w && FE.GEAR[w.type] && FE.GEAR[w.type].edge;
+    return 20 - (attrMod(p, 'wis') >= C.CRIT_WIS ? 1 : 0) - ((e && e.crit) || 0);
+  }
+  // 失手率（第三十七版之一）：武器的 edge.fumble，敏捷每點修正值 −2%，最少 0；雙持不另外加
+  function fumbleRate(p, w) {
+    const e = w && FE.GEAR[w.type] && FE.GEAR[w.type].edge;
+    return Math.max(0, ((e && e.fumble) || 0) - C.FUMBLE_DEX * attrMod(p, 'dex'));
   }
   // 射程：武器的正常射程與最遠射程都加感知修正值，最少 1 格。base 是 [正常, 最遠]
   function range(p, base) {
@@ -108,14 +135,27 @@
   // w 是用的武器（null 是徒手），off 是雙持時副手那一下（順劈的第二隻也算：不加正的屬性修正值）。回傳：
   //   die 傷害骰（徒手是 null，固定 BARE_DMG）、type 傷害種類、hit 出手 d20 的角色加減（品質＋屬性＋技能；不含地形、高處）、
   //   dmg 傷害加值（屬性＋技能）、attr 這一下用的屬性修正值（失衡的機率、擦掠用）、heavy 重型武器的劣勢、crit 暴擊門檻、
-  //   mastery 用得上的精通、skills 這一下練哪些技能、clear 清除等級（抗性）、pierce 穿甲比例
+  //   mastery 用得上的精通、skills 這一下練哪些技能、clear 清除等級（抗性）、pierce 穿甲比例。
+  // 第三十七版之一：masteries 用得上的所有精通（SRD 那一種加 moreMastery）、edge 這把武器的一優一劣（當武器用時才有：近戰、射擊、真的投擲武器）、
+  //   fumble 失手率、wskill 武器技能（流血、眩暈、定身的機率看它的等級）、qHit 武器品質的命中加值（流血的傷害加它）
   function profile(p, w, mode, off) {
     const d = w ? FE.GEAR[w.type] : null;
     const q = w ? FE.QUALITIES[w.q || 0] : FE.QUALITIES[0];
     const str = attrMod(p, 'str');
     const dex = attrMod(p, 'dex');
     const fight = fightHit(p);
-    const out = { die: null, type: 'blunt', hit: 0, dmg: 0, attr: 0, heavy: false, crit: critMin(p, w), mastery: null, skills: [], clear: q.clear, pierce: q.pierce };
+    const out = { die: null, type: 'blunt', hit: 0, dmg: 0, attr: 0, heavy: false, crit: critMin(p, w), mastery: null, masteries: [], edge: null, fumble: 0, wskill: null, qHit: 0, skills: [], clear: q.clear, pierce: q.pierce };
+    // 一優一劣裡跟出手有關的：穿甲（品質的穿甲減半後再加，最多 100%）、失手率、命中（hit 一直加，meleeHit／throwHit 看這一下怎麼出手）
+    const useEdge = (o, how) => {
+      const e = d.edge || {};
+      o.edge = e;
+      o.wskill = d.skill;
+      o.qHit = q.hit;
+      o.fumble = fumbleRate(p, w);
+      o.pierce = Math.min(1, q.pierce * (e.halfQ ? 0.5 : 1) + (e.pierce || 0));
+      o.hit += (e.hit || 0) + (how === 'melee' ? e.meleeHit || 0 : 0) + (how === 'throw' ? e.throwHit || 0 : 0);
+      o.masteries = masteries(p, w);
+    };
     if (FE.SPELLS[mode] && FE.SPELLS[mode].die) return spellProfile(p, FE.SPELLS[mode]);
     if (mode === 'light') {
       // 牧師的神聖之光（過渡的一招，施法系統還沒談）：1d8 神聖傷害加感知修正值，命中也加感知修正值；沒有神聖傷害附加（那是聖騎士的）
@@ -139,6 +179,7 @@
         clear: real ? q.clear : 0,
         pierce: real ? q.pierce : 0,
       });
+      if (real) useEdge(out, 'throw');
       return out;
     }
     if (mode === 'bash') {
@@ -162,7 +203,7 @@
     if (mode === 'spell') {
       // 法師的範圍魔攻：1d6 魔法＋智力修正值，命中加智力修正值（取代敏捷），練杖術
       const int = attrMod(p, 'int');
-      Object.assign(out, { die: C.SPELL_DIE, type: 'magic', hit: q.hit + int + lvHit(p, d.skill), dmg: int + lvDmg(p, d.skill), attr: int, skills: [d.skill] });
+      Object.assign(out, { die: C.SPELL_DIE, type: 'magic', hit: q.hit + int + lvHit(p, d.skill), dmg: int + lvDmg(p, d.skill), attr: int, skills: [d.skill], masteries: out.mastery ? [out.mastery] : [] });
       return out;
     }
     const ranged = mode === 'shoot' || mode === 'throw';
@@ -188,6 +229,7 @@
     out.skills = ranged ? [d.skill, 'shoot'] : [d.skill, 'fight'];
     // 重型：近戰力量、遠程敏捷不到 13 出手有劣勢
     out.heavy = !!d.heavy && (ranged ? p.attr.dex : p.attr.str) < C.HEAVY_MIN;
+    useEdge(out, mode === 'shoot' ? 'shoot' : mode === 'throw' ? 'throw' : 'melee');
     return out;
   }
 
@@ -208,7 +250,8 @@
     const q = staff ? FE.QUALITIES[w.q || 0] : FE.QUALITIES[0];
     return {
       die: sp.die.slice(), type: sp.type, hit: a + (staff ? q.hit + lvHit(p, 'staff') : 0) - (sp.noStaff ? 0 : castPenalty(p)), dmg: a + (staff ? lvDmg(p, 'staff') : 0),
-      attr: a, heavy: false, crit: critMin(p, null), mastery: staff ? mastery(p, w) : null, skills: staff ? ['staff'] : [], clear: staff ? q.clear : 0, pierce: 0, staff: staff ? w : null,
+      attr: a, heavy: false, crit: critMin(p, null), mastery: staff ? mastery(p, w) : null, masteries: staff && mastery(p, w) ? [mastery(p, w)] : [], edge: null, fumble: 0,
+      skills: staff ? ['staff'] : [], clear: staff ? q.clear : 0, pierce: 0, staff: staff ? w : null,
     };
   }
   // 投擲消耗品用敏捷命中，不加屬性傷害；射擊技能仍會提高命中。
@@ -216,15 +259,17 @@
     const dex = attrMod(p, 'dex');
     return {
       die: item.die ? item.die.slice() : null, type: item.damage, hit: dex + shootHit(p), dmg: 0, fixedDamage: item.fixedDamage,
-      attr: dex, heavy: false, crit: critMin(p, null), mastery: null, skills: ['shoot'], clear: 0, pierce: 0,
+      attr: dex, heavy: false, crit: critMin(p, null), mastery: null, masteries: [], edge: null, fumble: 0, skills: ['shoot'], clear: 0, pierce: 0,
     };
   }
 
-  // 攻擊動作花幾刻：輕型 8、一般 10、重型 12，減敏捷修正值，最少 6（防具多花的刻另外疊加，見 game.js 的 endTurn）
+  // 攻擊動作花幾刻：輕型 5、一般 6、重型 7，減敏捷修正值，加武器一優一劣的 edge.ticks，精通了輕捷再少 1 刻，最少 4（防具多花的刻另外疊加，見 game.js 的 endTurn）
   function attackTicks(p, w) {
     const d = w ? FE.GEAR[w.type] : null;
     const base = d && d.heavy ? C.ATTACK_TICKS.heavy : d && d.light ? C.ATTACK_TICKS.light : C.ATTACK_TICKS.normal;
-    return Math.max(C.ATTACK_TICKS_MIN, base - attrMod(p, 'dex'));
+    const edge = d && d.edge && d.edge.ticks ? d.edge.ticks : 0;
+    const agile = masteries(p, w).includes('agile') ? 1 : 0;
+    return Math.max(C.ATTACK_TICKS_MIN, base - attrMod(p, 'dex') + edge - agile);
   }
 
   // 技能得到經驗：base 是這一次的基本經驗（命中 10、沒命中 5、閃開 10⋯⋯），乘智力的倍率；累積滿這一級要的經驗就升級（可以連升），訊息寫出來
@@ -271,11 +316,11 @@
   const conCut = (p) => Math.max(0, Math.floor(attrMod(p, 'con') / 2));
 
   // ---- 起始裝備 ----
-  // 每組要挑幾樣、挑的是不是都在這組裡、有沒有挑多或挑少，而且體型拿得起（size 沒給就不檢查）；picks 是選項 id 的清單
-  function validPicks(clsKey, picks, size) {
+  // 每組要挑幾樣、挑的是不是都在這組裡、有沒有挑多或挑少，而且體型拿得起（size 沒給就不檢查）、屬性夠（attr 沒給就不檢查）；picks 是選項 id 的清單
+  function validPicks(clsKey, picks, size, attr) {
     const c = FE.CLASSES[clsKey];
     if (!c || !Array.isArray(picks)) return false;
-    if (size !== undefined && picks.some((id) => !startOk(id, size))) return false;
+    if ((size !== undefined || attr) && picks.some((id) => !startOk(id, size, attr))) return false;
     const rest = picks.slice();
     for (const g of FE.startGroups(clsKey)) {
       const mine = rest.filter((id) => g.of.includes(id));
@@ -284,15 +329,31 @@
     }
     return rest.length === 0;
   }
-  // 這個起始選項體型 size 拿不拿得起（拿不起來的不列出）
-  const startOk = (id, size) => {
+  // 這個起始選項體型 size、屬性 attr 拿不拿得起（拿不起來的不列出；size 沒給不看體型，attr 沒給不看屬性需求）
+  const startOk = (id, size, attr) => {
     const o = FE.START_OPTS[id];
-    return !o || !o.gear || canWieldType(o.gear, size);
+    return !o || !o.gear || canWieldType(o.gear, size === undefined ? Infinity : size, attr);
   };
   // 這一組實際列出來的選項（拿不起來的拿掉）
-  const groupOptions = (g, size) => g.of.filter((id) => startOk(id, size));
+  const groupOptions = (g, size, attr) => g.of.filter((id) => startOk(id, size, attr));
   // 預設的挑法：每組從前面挑（拿得起的）
-  const defaultPicks = (clsKey, size) => FE.startGroups(clsKey).flatMap((g) => (size === undefined ? g.of : groupOptions(g, size)).slice(0, g.pick));
+  const defaultPicks = (clsKey, size, attr) => FE.startGroups(clsKey).flatMap((g) => (size === undefined && !attr ? g.of : groupOptions(g, size, attr)).slice(0, g.pick));
+  // 建角時的屬性（第三十七版之一抽出來，挑起始裝備要看屬性需求）：職業的起始屬性加種族加成、人類自己加的點數，上限 ATTR_CAP。
+  // b 是 bodyOf 整理過的身體資料；人類加的點數不對就丟錯
+  function startAttr(clsKey, b) {
+    const c = FE.CLASSES[clsKey];
+    const R = FE.PLAYER_RACES[b.race];
+    const attr = Object.assign({}, c.attr);
+    const bonus = {};
+    for (const k of Object.keys(R.bonus || {})) bonus[k] = (bonus[k] || 0) + R.bonus[k];
+    if (R.free && !b.neutral) {
+      const spent = Object.values(b.bonus).reduce((s, n) => s + n, 0);
+      if (spent !== R.free || Object.keys(b.bonus).some((k) => !(k in attr) || !(b.bonus[k] >= 0))) throw new Error(`${R.name}要自己加 ${R.free} 點屬性`);
+      for (const k of Object.keys(b.bonus)) bonus[k] = (bonus[k] || 0) + b.bonus[k];
+    }
+    for (const k of Object.keys(bonus)) attr[k] = Math.min(C.ATTR_CAP, attr[k] + bonus[k]);
+    return attr;
+  }
 
   // 身體的資料（建角的前半）：race 種族、bonus 人類自己加的屬性點 { 屬性: 點數 }（總共 2 點）、height／build 1～7。沒給就是普通體型的人類，兩點不加
   function bodyOf(body) {
@@ -366,19 +427,11 @@
   // 雙手拿的武器（弓箭、體型不夠單手的）跟盾牌一起挑的時候，盾牌放進背包
   function create(game, clsKey, picks, name, body, skillRoll) {
     const c = FE.CLASSES[clsKey];
+    if (!c) throw new Error('起始裝備的挑法不對');
     const b = bodyOf(body);
-    const R = FE.PLAYER_RACES[b.race];
     const size = FE.bodySize(b.race, b.height, b.build);
-    if (!validPicks(clsKey, picks, size)) throw new Error('起始裝備的挑法不對');
-    const attr = Object.assign({}, c.attr);
-    const bonus = {};
-    for (const k of Object.keys(R.bonus || {})) bonus[k] = (bonus[k] || 0) + R.bonus[k];
-    if (R.free && !b.neutral) {
-      const spent = Object.values(b.bonus).reduce((s, n) => s + n, 0);
-      if (spent !== R.free || Object.keys(b.bonus).some((k) => !(k in attr) || !(b.bonus[k] >= 0))) throw new Error(`${R.name}要自己加 ${R.free} 點屬性`);
-      for (const k of Object.keys(b.bonus)) bonus[k] = (bonus[k] || 0) + b.bonus[k];
-    }
-    for (const k of Object.keys(bonus)) attr[k] = Math.min(C.ATTR_CAP, attr[k] + bonus[k]);
+    const attr = startAttr(clsKey, b);
+    if (!validPicks(clsKey, picks, size, attr)) throw new Error('起始裝備的挑法不對');
     const p = {
       x: 0,
       y: 0,
@@ -548,10 +601,10 @@
   FE.Char = {
     skillLevelFor, autoPoints, applyTemplate, makeLevelChar, levelUpTo, soldierSkills,
     mod, attrMod, cls, maxHp, carryLimit, pushLimit, moveTicks, exhaustMoveMul,
-    sizeOf, grip, GRIP_NAMES, canWieldType,
+    sizeOf, grip, GRIP_NAMES, canWieldType, attrShort, cantWieldText,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,
     armorSkillId, armorWeightMul, armorTicks, strShort, dexForDodge, canWear, startMainSkill, rollSkills, startPlusOne, rollBody, conCut,
-    mastery, critMin, range, profile, attackTicks, castPenalty, spellProfile, itemProfile,
-    validPicks, startOk, groupOptions, defaultPicks, bodyOf, create,
+    mastery, masteries, critMin, fumbleRate, range, profile, attackTicks, castPenalty, spellProfile, itemProfile,
+    validPicks, startOk, groupOptions, defaultPicks, startAttr, bodyOf, create,
   };
 })();

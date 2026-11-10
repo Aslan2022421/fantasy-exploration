@@ -121,8 +121,9 @@
     return dist(p, m) <= range[1] && lineClear(game.world, p, m, FE.Char.attrMod(p, 'wis'));
   }
 
-  // 推擊：把目標從攻擊方直線推開最多 n 格，下一格走不過去（擋路的地形、斷崖、別的怪物、村民、士兵、隊友、寶箱、聚落周圍的圈）就停。回傳推了幾格
-  function push(game, A, D, n) {
+  // 推擊：把目標從攻擊方直線推開最多 n 格，下一格走不過去（擋路的地形、斷崖、別的怪物、村民、士兵、隊友、寶箱、聚落周圍的圈）就停。回傳推了幾格；
+  // info 有給的話，撞到擋路的東西停下時 info.blocked 是 true（第三十七版之一：推擊撞牆的傷害與眩暈看它）
+  function push(game, A, D, n, info) {
     const sx = Math.sign(D.x - A.x);
     const sy = Math.sign(D.y - A.y);
     if (sx && sy) return 0; // 只推上下左右的直線
@@ -130,12 +131,38 @@
     for (let i = 0; i < n; i++) {
       const nx = D.x + sx;
       const ny = D.y + sy;
-      if (!FE.AI.free(game, nx, ny) || !game.world.heightOk(D.x, D.y, nx, ny)) break;
+      if (!FE.AI.free(game, nx, ny) || !game.world.heightOk(D.x, D.y, nx, ny)) {
+        if (info) info.blocked = true;
+        break;
+      }
       D.x = nx;
       D.y = ny;
       moved++;
     }
     return moved;
+  }
+  // 推不推得動（第三十七版之一，取代原本寫死的「大型推不動」）：怪物照移動抗性擲（100% 一定推不動、0 一定推得動，都不擲骰）；角色一律推得動
+  function pushResisted(game, D) {
+    if (isChar(D)) return false;
+    const res = FE.monsterResist(D).move;
+    return res >= 1 || (res > 0 && game.rng() < res);
+  }
+  // 眩暈（第三十七版之一）：n 次行動出手 d20 −2、不能反擊、控制與移動抗性 −25 個百分點；眩暈中再中一次，就跳過下一次行動，之後眩暈結束。
+  // 回傳 'skip'（再中一次）或 'on'
+  function stun(m, n) {
+    if (m.stunned > 0) {
+      m.stunSkip = true;
+      return 'skip';
+    }
+    m.stunned = n;
+    return 'on';
+  }
+  const STUN_TEXT = { on: '牠被打得頭暈眼花', skip: '牠暈得站不穩，下一次行動會停下來' };
+  // 角色做完一個動作（冒險者的 endTurn、士兵與隊友的 actorPay）：這個動作沒有出手，蓄勢歸零；走了一格，連續移動的格數 +1，不然歸零（衝刺、原地出手看它）
+  function afterAction(c, moved) {
+    if (!c.attacked) c.combo = null;
+    c.attacked = false;
+    c.moveRun = moved ? (c.moveRun || 0) + 1 : 0;
   }
 
   // A 對 D 出手一次。kind 是 'attack' 或 'deep'（重擊）。攻擊方與防守方可以是冒險者、隊友、士兵、怪物。
@@ -166,7 +193,14 @@
     // 冒險者這一下用的武器（反擊用主手）與算法；先記下，免得這一下把武器磨壞了找不到
     const wpn = aP ? (opts.counter ? A.equip.main : opts.weapon !== undefined ? opts.weapon : A.equip.main) : null;
     const prof = aP ? opts.item ? FE.Char.itemProfile(A, opts.item) : FE.Char.profile(A, mode === 'bash' ? null : wpn, opts.counter ? 'melee' : mode, opts.cleave ? 'cleave' : !!opts.off) : null;
-    if (prof && opts.ammoQ !== undefined) prof.pierce = FE.QUALITIES[opts.ammoQ].pierce; // 射出去的箭：穿甲看箭矢的品質
+    const edge = (prof && prof.edge) || {}; // 這把武器的一優一劣（第三十七版之一；不看技能等級，一直有）
+    // 射出去的箭：穿甲看箭矢的品質（弓箭的劣勢把品質的穿甲減半），再加武器一優一劣的穿甲
+    if (prof && opts.ammoQ !== undefined) prof.pierce = Math.min(1, FE.QUALITIES[opts.ammoQ].pierce * (edge.halfQ ? 0.5 : 1) + (edge.pierce || 0));
+    // 第三十七版之一：角色自己出手（反擊不算）才看的精通與一優一劣：順勢、蓄勢、回擺、衝刺、原地出手、打貼身的目標
+    const track = aP && !opts.counter;
+    const mOn = (k) => track && !!prof.masteries && prof.masteries.includes(k);
+    const nth = track && A.combo && A.combo.id === D.id ? A.combo.n + 1 : 1; // 連續打同一個目標的第幾下（蓄勢）
+    const charge = track && !!edge.charge && (A.moveRun || 0) >= C.CHARGE_STEPS; // 衝刺（騎槍）：連續走了 2 格以上的第一下
 
     // 1. 擲 d20：加減值＝冒險者站的地形（怪物與士兵不吃地形）＋冒險者這一下的命中加減（品質、屬性、技能、超重）＋高處加值；
     // 怪物加自己的攻擊加值（SRD 數值塊，第三十三版）。d20＋加值到對方的 AC 才命中（acOf；法術的加護算在 AC 裡）
@@ -174,6 +208,16 @@
     let mod = aP ? (FE.BIOMES[cA.biome].hit || 0) + prof.hit - C.EXHAUST_D20 * (A.exhaust || 0) : A.toHit || 0;
     if (cA.h > cD.h) mod += C.HIGH_GROUND;
     else if (cA.h < cD.h) mod -= C.HIGH_GROUND;
+    // 第三十七版之一：一優一劣（打貼身的目標、原地出手）與精通（順勢、回擺、齊射、後座）的命中加減；眩暈中的怪物出手 −2
+    if (track) {
+      if (mode === 'melee' && edge.closeHit && dist(A, D) === 1) mod += edge.closeHit;
+      if (edge.stillHit && !(A.moveRun > 0)) mod += edge.stillHit;
+      if (mOn('sweep') && A.lastTarget != null && A.lastTarget !== D.id) mod += C.SWEEP_HIT;
+      if (mOn('backswing') && A.backswing) mod += C.BACKSWING_HIT;
+      if (mOn('volley') && ranged && dist(A, D) <= C.VOLLEY_DIST) mod -= C.VOLLEY_D20;
+      if (mOn('kickback') && FE.Char.attrMod(A, 'str') < C.KICKBACK_STR) mod -= C.KICKBACK_D20;
+    }
+    if (!aP && A.stunned > 0) mod -= C.STUN_D20;
     // 優勢與劣勢：各自有幾個來源，兩者同時有就抵消（擲一次）
     const adv = [];
     const dis = [];
@@ -194,7 +238,11 @@
     // opts.cling：纏著冒險者的目標趁冒險者移開或換目標時出手，不擲 d20 命中，只看冒險者的閃避（閃開就沒事），
     // 沒閃開照一般傷害，不暴擊、不格擋，護甲照扣
     const ac = acOf(game, D);
-    const roll = opts.cling ? { n: 0, dice: [], adv: 0, key: 'hit', name: '命中' } : FE.rollD20(r, mod, advState, aP ? FE.Char.critMin(A, mode === 'bash' ? null : wpn) : 20, ac);
+    let roll = opts.cling ? { n: 0, dice: [], adv: 0, key: 'hit', name: '命中' } : FE.rollD20(r, mod, advState, aP ? FE.Char.critMin(A, mode === 'bash' ? null : wpn) : 20, ac);
+    // 短刀的劣勢（第三十七版之一）：勉強命中的範圍放寬到「到 AC、高不到 hardMargin」
+    if (edge.hardMargin && roll.key === 'hit' && Number.isFinite(roll.total) && roll.total - roll.ac < edge.hardMargin) {
+      roll = Object.assign({}, roll, { key: 'hard', name: FE.ROLL_BANDS.find((b) => b.key === 'hard').name });
+    }
     // 削弱與侵擾用掉了：削弱的目標下一次擲 d20 出手有劣勢；侵擾讓冒險者下一次打牠有優勢
     if (!opts.cling) A.sapped = false;
     if (aP) D.vexed = false;
@@ -214,7 +262,33 @@
     let holy = 0;
     let conCut = 0;
     let grazed = false;
-    const deep = kind === 'deep' ? 2 : 1; // 重擊：傷害骰擲兩次
+    // 重擊：傷害骰擲兩次（巨劍、長柄刀、巨錘、巨棒的優勢是 3 次）；衝刺再加倍
+    const deep = (kind === 'deep' ? edge.deepDice || 2 : 1) * (charge ? 2 : 1);
+    // 失手（第三十七版之一）：角色命中後擲那把武器的失手率，失手就傷害減半（跟被閃開同時只減半一次）、精通效果都不觸發
+    const slip = track && hitKey && !opts.cling && prof.fumble > 0 && r() < prof.fumble;
+    const mLive = (k) => mOn(k) && !slip;
+    // 角色這一下的傷害：times 次武器骰（baseDamage），暴擊時再加一優一劣的暴擊加骰、致命（多 1 顆）、致死（骰面升一階再多 1 顆），
+    // 加蓄勢（連續打同一個目標的第二下 +1×骰數、第三下起 +2×骰數）與後座（+1）。反擊、徒手、固定傷害照 baseDamage
+    const hitDamage = (times, isCrit) => {
+      if (!track || !prof.die || prof.fixedDamage != null) return baseDamage(game, A, prof, times, opts, advState);
+      let p2 = prof;
+      let faces = prof.die[1];
+      let extra = 0;
+      if (isCrit) {
+        if (mLive('fatal')) {
+          faces = C.DIE_STEPS.find((f) => f > faces) || Math.max(faces, C.DIE_STEPS[C.DIE_STEPS.length - 1]);
+          p2 = Object.assign({}, prof, { die: [prof.die[0], faces] });
+          extra++;
+        }
+        if (mLive('deadly')) extra++;
+        extra += edge.critDie || 0;
+      }
+      let n = baseDamage(game, A, p2, times, opts, advState);
+      if (extra) n += FE.rollDice(r, [extra, faces], 1);
+      if (mLive('forceful') && nth >= 2) n += (nth >= 3 ? 2 : 1) * prof.die[0];
+      if (mLive('kickback')) n += C.KICKBACK_DMG;
+      return n;
+    };
     // 冒險者挨打時，扣身上防具的減傷（照攻擊方的傷害種類），扣完至少吃 1 點；
     // 物理傷害（不是魔法、神聖）在防具減完之後再減體質修正值÷2（捨去），一樣至少吃 1 點（第二十九版）
     const armor = () => {
@@ -243,12 +317,12 @@
       const half = (n) => (aP && opts.counter ? Math.floor(n / 2) : Math.ceil(n / 2));
       dodged = r() < dd.dodge;
       if (roll.key === 'fumble') {
-        dmg = dodged ? 0 : half(baseDamage(game, A, prof, deep, opts, advState)); // 失手：閃開沒傷害，沒閃開吃一半
-      } else if (dodged) {
-        dmg = half(baseDamage(game, A, prof, deep, opts, advState)); // 命中但被閃開：吃一半
+        dmg = dodged ? 0 : half(hitDamage(deep, false)); // 擲出 1 的失手：閃開沒傷害，沒閃開吃一半
       } else {
-        crit = roll.key === 'crit';
-        dmg = baseDamage(game, A, prof, deep * (crit ? 2 : 1), opts, advState); // 沒閃開：暴擊時傷害骰擲兩次加總
+        // 沒閃開：暴擊時傷害骰擲兩次加總；命中但被閃開、或命中後失手（第三十七版之一）：吃一半（兩個都有也只減半一次）
+        crit = roll.key === 'crit' && !dodged;
+        dmg = hitDamage(deep * (crit ? 2 : 1), crit);
+        if (dodged || slip) dmg = half(dmg);
       }
       // 易傷（第三十三版，骷髏怕鈍擊）：暴擊之後、格擋之前，這種傷害加倍
       if (dmg > 0 && !dP && D.vuln && D.vuln.includes(hitType)) {
@@ -312,29 +386,68 @@
         }
       }
     }
-    const alive = !killed && (dP ? game.isAlive(D) : game.monsters.includes(D));
+    let alive = !killed && (dP ? game.isAlive(D) : game.monsters.includes(D));
 
-    // 精通：冒險者這一下命中、目標還活著時才有效果（怪物沒有精通）
+    // 精通：冒險者這一下命中、目標還活著時才有效果（怪物沒有精通）；第三十七版之一起一把武器可以有好幾種（prof.masteries），命中後失手就都不觸發。
+    // 流血、眩暈、定身照機率擲：chance＋出手屬性修正值×5%＋（技能等級−5）×1%＋品質清除等級×2%，最高 50%，再乘（1−目標的抗性，bugs.js 的 FE.monsterResist）
     const effects = [];
     const mastery = aP && !opts.counter ? prof.mastery : null;
-    if (mastery && hitKey && alive && !dP) {
-      if (mastery === 'sap') {
+    const proc = (k, resist) => {
+      const lv = FE.Char.skillLv(A, prof.wskill);
+      const c = Math.max(0, Math.min(C.PROC_MAX, FE.MASTERIES[k].chance + prof.attr * C.PROC_ATTR + (lv - C.PROC_SKILL_FROM) * C.PROC_SKILL + prof.clear * C.PROC_CLEAR)) * (1 - resist);
+      return c > 0 && r() < c;
+    };
+    const live = track && !slip && hitKey && alive && !dP ? prof.masteries || [] : [];
+    for (const k of live) {
+      if (k === 'sap') {
         D.sapped = true;
         effects.push('牠被削弱了，下一次出手有劣勢');
-      } else if (mastery === 'vex' && dmg > 0) {
+      } else if (k === 'vex' && dmg > 0) {
         D.vexed = true;
         effects.push('你抓到了牠的空隙，下一次打牠有優勢');
-      } else if (mastery === 'topple' && !D.prone && r() < C.TOPPLE_BASE + prof.attr * C.TOPPLE_PER) {
+      } else if (k === 'topple' && !D.prone && r() < C.TOPPLE_BASE + prof.attr * C.TOPPLE_PER + (edge.topple || 0)) {
         D.prone = true;
         effects.push('牠失去平衡倒在地上');
-      } else if (mastery === 'push' && !D.boss) {
-        const n = push(game, A, D, C.PUSH_DIST);
+      } else if (k === 'push' && !pushResisted(game, D)) {
+        const info = {};
+        const n = push(game, A, D, C.PUSH_DIST, info);
         if (n > 0) effects.push(`牠被推開了 ${n} 格`);
-      } else if (mastery === 'slow' && dmg > 0) {
+        // 撞到擋路的東西停下：受 1d4 鈍擊並眩暈 1 次行動（第三十七版之一）
+        if (info.blocked) {
+          const b = FE.rollDice(r, C.PUSH_BUMP_DIE, 1);
+          D.hp = Math.max(0, D.hp - b);
+          effects.push(`牠撞上擋路的東西，受到 ${b} 點傷害，${STUN_TEXT[stun(D, C.PUSH_BUMP_STUN)]}`);
+          if (D.hp <= 0 && game.monsters.includes(D)) {
+            killed = true;
+            alive = false;
+            fall = () => game.defeat(D, aS ? A : null);
+            break;
+          }
+        }
+      } else if (k === 'slow' && dmg > 0) {
         // 緩速：命中且造成傷害後，目標下一次移動多花 6 刻（怪物 6 刻動一次，所以牠下一次移動晚一回合，見 ai.js）
         D.slowed = C.SLOW_TURNS;
         effects.push('牠的腳步慢了下來');
+      } else if (k === 'bleed' && dmg > 0 && proc(k, FE.monsterResist(D).bleed)) {
+        // 流血：每次行動受 1d4（弩是 1d6）＋武器品質的命中加值，每次行動後 30% 止血（ai.js）；再中不疊加，取平均比較高的
+        const nb = { die: ((wpn && FE.GEAR[wpn.type].bleedDie) || C.BLEED_DIE).slice(), bonus: prof.qHit || 0, soldier: aS };
+        const avg = (b) => (b.die[0] * (b.die[1] + 1)) / 2 + b.bonus;
+        if (!D.bleed || avg(nb) > avg(D.bleed)) D.bleed = nb;
+        effects.push('牠的傷口血流不止');
+      } else if (k === 'stun' && dmg > 0 && proc(k, FE.monsterResist(D).control)) {
+        effects.push(STUN_TEXT[stun(D, C.STUN_TURNS)]);
+      } else if (k === 'root' && dmg > 0 && proc(k, FE.monsterResist(D).move)) {
+        // 定身：接下來 2 次行動不能移動（攻擊照常），閃避歸零（bugs.js 的 monsterDef）
+        D.rooted = Math.max(D.rooted || 0, C.ROOT_TURNS);
+        effects.push('牠被釘在原地，動彈不得');
       }
+    }
+    // 記下這一下（順勢看上一下的目標、蓄勢看連續打同一個目標幾下、回擺看上一下有沒有命中；做了出手以外的事由 afterAction 歸零）
+    if (track) {
+      A.combo = { id: D.id, n: nth };
+      A.lastTarget = D.id;
+      A.backswing = !hitKey;
+      A.attacked = true;
     }
 
     // 訊息：一次攻擊一行。隊友、士兵與怪物互打時，只有離玩家操作的那一位在視野內才寫，免得訊息洗版
@@ -383,9 +496,11 @@
       } else {
         const parts = [];
         if (roll.key === 'fumble') parts.push('失手了');
+        if (slip) parts.push('手一滑失手了');
         if (dodged) parts.push(`${pD}閃開了`);
         else if (roll.key === 'fumble') parts.push(`${pD}沒閃開`);
-        if (roll.key === 'fumble' ? !dodged : dodged) parts.push('只受到一半的傷害');
+        if (roll.key === 'fumble' ? !dodged : dodged || slip) parts.push('只受到一半的傷害');
+        if (charge) parts.push('衝刺，傷害骰擲兩次');
         if (crit) parts.push('暴擊，傷害骰擲兩次');
         let tail = dmg > 0 ? `造成 ${dmg} 點傷害` : absorbed > 0 ? '傷害全被擋下' : '沒有造成傷害';
         if (holy > 0) tail += `（其中 ${holy} 點是神聖之力）`;
@@ -402,19 +517,20 @@
     // 6. 反擊：防守方還活著、還貼著，冒險者出手擲出 6～10 時怪物必定反擊，不然擲反擊機率；反擊只能一次，反擊打出的那一下不能再被反擊。
     // 「必定反擊」只罰玩家操作的那一位：怪物、士兵與自動行動的隊友擲出 6～10 只是命中，對方照自己的反擊機率擲
     let countered = false;
-    if (alive && !opts.noCounter && adjacent(game, A, D) && ((aY && roll.key === 'hard' && !opts.noForced) || r() < dd.counter)) countered = true;
+    // 眩暈中的怪物不能反擊（第三十七版之一）
+    if (alive && !opts.noCounter && !(D.stunned > 0) && adjacent(game, A, D) && ((aY && roll.key === 'hard' && !opts.noForced) || r() < dd.counter)) countered = true;
     // 必定反擊（擲出 6～10）是不是這一下觸發的；雙持時主手已經觸發就不再觸發第二次（opts.noForced）
     const forced = countered && aY && roll.key === 'hard' && !opts.noForced;
     if (FE.Combat.hook) {
       FE.Combat.hook({
         by: aS ? 'soldier' : aP ? (A === hero ? 'player' : 'mate') : 'monster', kind, mode, key: roll.key, adv: roll.adv, dice: roll.dice, n: roll.n, mod, dodged, crit, blocked: absorbed > 0, vulnerable, advWhy: adv.slice(), ac, reduced, conCut, grazed, dmg, holy,
-        dmgType, mastery: mastery && hitKey && alive ? mastery : null, effects, weapon: wpn, off: !!opts.off,
-        counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D,
+        dmgType, mastery: mastery && hitKey && alive && !slip ? mastery : null, effects, weapon: wpn, off: !!opts.off,
+        counter: !!opts.counter, opportunity: !!opts.opportunity, cling: !!opts.cling, countered, killed, a: A, d: D, slip, charge, nth,
       });
     }
     if (countered) resolveAttack(game, D, A, 'attack', { noCounter: true, counter: true });
-    return { dmg, killed, roll, forced, hit: hitKey && !opts.cling, holy };
+    return { dmg, killed, roll, forced, hit: hitKey && !opts.cling, holy, slip };
   }
 
-  FE.Combat = { resolveAttack, defense, regenBlock, currentBlock, adjacent, reduction, lineClear, canShoot, push, dist, DIRS, hook: null };
+  FE.Combat = { resolveAttack, defense, regenBlock, currentBlock, adjacent, reduction, lineClear, canShoot, push, pushResisted, stun, afterAction, dist, DIRS, hook: null };
 })();

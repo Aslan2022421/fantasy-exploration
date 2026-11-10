@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 global.require = require; // 載進來的檔不是模組，借用這支的 require
-for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-gear35', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30', 'test-skills31', 'test-monsters33', 'test-stability33', 'test-terrain34', 'test-party36']) {
+for (const f of ['test-lib', 'test-gen', 'test-sim', 'test-world', 'test-gear25', 'test-gear35', 'test-char26', 'test-combat28', 'test-arena', 'test-growth29', 'test-economy30', 'test-skills31', 'test-monsters33', 'test-stability33', 'test-terrain34', 'test-party36', 'test-weapons371']) {
   vm.runInThisContext(fs.readFileSync(path.join(__dirname, f + '.js'), 'utf8'), { filename: path.join(__dirname, f + '.js') });
 }
 
@@ -64,7 +64,7 @@ function collectState() {
     problems, pcount: problems.count || 0,
     stats, geo, reachCheck, bufferViolations, cutOff, stuckFixes, dlgStats, combat,
     measure: { armorCmp: measure.armorCmp },
-    checks: { terrain: terrainChecks, dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks, econ: econChecks, spell: spellChecks, monster: monChecks, stab: stabChecks, party: partyChecks },
+    checks: { terrain: terrainChecks, dlg: dlgChecks, creation: creationChecks, wl: wlChecks, soldier: soldierChecks, bag: bagChecks, gear: gearChecks, char: charChecks, reach: reachChecks, combat: combatChecks, growth: growthChecks, econ: econChecks, spell: spellChecks, monster: monChecks, stab: stabChecks, party: partyChecks, weapon: weaponChecks },
     botDrops,
     sims: simResults, arena: arenaData,
   };
@@ -94,7 +94,7 @@ function mergeState(part) {
   cutOff.push(...part.cutOff);
   const c = part.checks;
   dlgChecks += c.dlg; creationChecks += c.creation; wlChecks += c.wl; soldierChecks += c.soldier; bagChecks += c.bag;
-  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth; econChecks += c.econ; spellChecks += c.spell; monChecks += c.monster || 0; stabChecks += c.stab || 0; terrainChecks += c.terrain || 0; partyChecks += c.party || 0;
+  gearChecks += c.gear; charChecks += c.char; reachChecks += c.reach; combatChecks += c.combat; growthChecks += c.growth; econChecks += c.econ; spellChecks += c.spell; monChecks += c.monster || 0; stabChecks += c.stab || 0; terrainChecks += c.terrain || 0; partyChecks += c.party || 0; weaponChecks += c.weapon || 0;
   simResults.push(...part.sims);
   mergeDeep(arenaData, part.arena);
 }
@@ -102,7 +102,7 @@ function mergeState(part) {
 function buildJobs() {
   const jobs = [];
   const add = (id, w) => jobs.push({ id, w });
-  const units = ['gear', 'gear35', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'stability33', 'terrain34', 'party36', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
+  const units = ['gear', 'gear35', 'character', 'combat28', 'growth29', 'economy30', 'spells31', 'monsters33', 'stability33', 'terrain34', 'party36', 'weapons371', 'dialogs', 'creation', 'worldlevel', 'soldiers', 'backpack', 'reach'];
   if (MODE === 'arena') {
     for (const cls of BOT_CLASSES) add('arena:' + cls, 30);
     return jobs;
@@ -251,7 +251,7 @@ console.log(`背包、工具、採集、藥草、艱難選擇的場景檢查 ${b
 }
 // 第三十版：時間與經濟
 {
-  console.log(`時間與經濟（第三十版）的場景檢查 ${econChecks} 項｜施法（第三十一版）的場景檢查 ${spellChecks} 項｜怪物數值、AC 命中與特性（第三十三版）的場景檢查 ${monChecks} 項｜穩定值（第三十三版之三）的場景檢查 ${stabChecks} 項｜地形與聚落、怪物遮蔽（第三十四版）的場景檢查 ${terrainChecks} 項｜時鐘 6 刻、人口、士兵套版、隊友、商人（第三十六版之一）的場景檢查 ${partyChecks} 項`);
+  console.log(`時間與經濟（第三十版）的場景檢查 ${econChecks} 項｜施法（第三十一版）的場景檢查 ${spellChecks} 項｜怪物數值、AC 命中與特性（第三十三版）的場景檢查 ${monChecks} 項｜穩定值（第三十三版之三）的場景檢查 ${stabChecks} 項｜地形與聚落、怪物遮蔽（第三十四版）的場景檢查 ${terrainChecks} 項｜時鐘 6 刻、人口、士兵套版、隊友、商人（第三十六版之一）的場景檢查 ${partyChecks} 項｜武器的新精通、一優一劣、怪物抗性（第三十七版之一）的場景檢查 ${weaponChecks} 項`);
   const all = sim.concat(sim4);
   if (all.length) {
     for (const s of all) console.log(`  ${FE.CLASSES[s.cls] ? FE.CLASSES[s.cls].name : s.cls} seed${s.seed} ${s.worldEvery > 1 ? '四人等效' : '單人'}（${s.actions} 動作、${s.days} 天）：長休 ${s.longRests} 次、平均每次付 ${FE.money(s.longRests ? s.restPaid / s.longRests : 0)}、短休 ${s.shortRests}｜經濟標籤 升 ${s.econUp}、降 ${s.econDown}（結束時 ${s.econEnd}）｜力竭最高 ${s.exhaustMax} 級｜完成委託 清除 ${s.jobs.hunt}、送貨 ${s.jobs.deliver}、採藥 ${s.jobs.herb}、採礦 ${s.jobs.ore}，同時最多 ${s.jobsMax} 個｜身上 ${FE.money(s.money)}`);

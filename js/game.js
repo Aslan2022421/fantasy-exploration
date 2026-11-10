@@ -51,7 +51,7 @@
       opts = opts || {};
       const clsKey = opts.cls || 'warrior';
       const b = FE.Char.bodyOf(opts.body);
-      const picks = opts.picks || FE.Char.defaultPicks(clsKey, FE.bodySize(b.race, b.height, b.build));
+      const picks = opts.picks || FE.Char.defaultPicks(clsKey, FE.bodySize(b.race, b.height, b.build), FE.CLASSES[clsKey] ? FE.Char.startAttr(clsKey, b) : undefined);
       if (!FE.Char.validPicks(clsKey, picks)) throw new Error('起始裝備的挑法不對');
       this.say('創世神正在創世。你是冒險者：走遍世界、打倒怪物、完成任務，世界會跟著長下去。', 'sys');
       this.createChunk(true);
@@ -825,7 +825,7 @@
       }
       const grip = d.cat === 'weapon' ? FE.Char.grip(p, g) : 'one';
       if (grip === 'none') {
-        this.say(`${FE.Gear.name(g)}太大太沉了，以你的體型拿不起來。`, 'sys');
+        this.say(FE.Char.cantWieldText(p, g), 'sys'); // 體型不夠，或屬性不到武器的需求（第三十七版之一）
         return;
       }
       const slot = d.cat === 'weapon' ? (toOff && FE.Gear.offOk(p, g) ? 'off' : 'main') : d.cat === 'shield' ? 'off' : 'body';
@@ -1579,6 +1579,7 @@
       // 身上防具讓每個動作多花幾刻（見 gear.js 的 extraTicks）；超重只讓走路變慢（見 move）
       const t = opts.exact ? ticks : ((ticks || C.TICKS_MOVE) + FE.Gear.extraTicks(p)) * chaos;
       this.turn++;
+      FE.Combat.afterAction(p, moved === true); // 第三十七版之一：沒出手的動作讓蓄勢歸零；連續移動的格數（衝刺、原地出手）
       FE.Combat.regenBlock(this, p);
       this.addRepair(C.VIRTUAL_REPAIR);
       // 冒險者脫離戰鬥（被射過的怪物離冒險者超過視野，撤退、倒下醒來都算）：自動撿回射向牠的箭的一半
@@ -1720,9 +1721,10 @@
         // 打怪的過程是在提供算力給創世神：每次出手跟走一步一樣累積算力（經驗值與打倒怪物的算力等打倒才結算）
         this.earn(C.COMPUTE_PER_ATTACK);
       }
-      if (kind === 'deep') this.bs().cooldown = C.DEEP_COOLDOWN;
       // 拿著弓箭按 1、2 是拿弓打人：1d4 鈍擊（見 char.js 的 profile）；射擊要按 F
       const main = p.equip.main;
+      // 重擊冷卻：主手武器一優一劣的 edge.deepCd 再加（短劍、法杖 +1，巨劍 +2；第三十七版之一）
+      if (kind === 'deep') this.bs().cooldown = C.DEEP_COOLDOWN + ((main && FE.Gear.def(main).edge && FE.Gear.def(main).edge.deepCd) || 0);
       // 雙持：副手也拿著武器時（暫時弓箭以外都能放副手），按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20；
       // 副手那一下不加屬性修正值（負的照扣）。重擊只用主手。目標在第一下倒下（或冒險者倒下）就不出第二下
       const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
@@ -1738,7 +1740,8 @@
       // 主手那一下把目標推開（長槍的推擊）或打倒了，副手就不出手：副手只打得到還貼在旁邊的目標
       if (dual && !this.fell && this.monsters.includes(m) && FE.AI.touching(this, m, p)) FE.Combat.resolveAttack(this, p, m, kind, { dual: true, weapon: off, off: true, noForced: first.forced, holy });
       // 順劈（巨斧的精通）：主手命中後，可以順手打目標旁邊（八方向）、也在你的觸及範圍內（貼著你）的另一隻怪物（挑血量最少的），這一下不加屬性修正值；一個動作最多一次，不再磨損、練技能
-      if (first.hit && !this.fell && main && FE.Char.mastery(p, main) === 'cleave' && !(extra && extra.reach)) {
+      // 命中後失手（第三十七版之一）：精通效果都不觸發，順劈也沒有
+      if (first.hit && !first.slip && !this.fell && main && FE.Char.mastery(p, main) === 'cleave' && !(extra && extra.reach)) {
         const other = this.monsters
           .filter((o) => o !== m && Math.max(Math.abs(o.x - m.x), Math.abs(o.y - m.y)) === 1 && FE.AI.touching(this, o, p))
           .sort((a, b) => a.hp - b.hp || a.id - b.id)[0];
@@ -2017,8 +2020,8 @@
       around.sort((a, b) => a.id - b.id).forEach((o, i) => {
         if (this.fell || !this.monsters.includes(o)) return;
         const r = FE.Combat.resolveAttack(this, p, o, 'attack', { mode: id, weapon: staff, noWear: i > 0, noTrain: i > 0 });
-        // 大神聖攻擊：打中（還活著）就推開，大型推不動
-        if (sp.push && r && r.hit && this.monsters.includes(o) && !o.boss) FE.Combat.push(this, p, o, sp.push);
+        // 大神聖攻擊：打中（還活著）就推開，照怪物的移動抗性擲推不推得動（第三十七版之一，取代原本的「大型推不動」）
+        if (sp.push && r && r.hit && this.monsters.includes(o) && !FE.Combat.pushResisted(this, o)) FE.Combat.push(this, p, o, sp.push);
       });
       this.endTurn(false, FE.Char.attackTicks(p, staff));
       return true;

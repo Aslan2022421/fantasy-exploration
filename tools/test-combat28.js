@@ -378,9 +378,13 @@ function testCombat28() {
     g.world.setCell(p.x + 3, p.y, '#', 'plain');
     ok(push() === 1, '推到巨石前面就停');
     g.world.setCell(p.x + 3, p.y, '.', 'plain');
-    m.boss = true;
-    ok(push() === 0, '大型怪物推不動');
-    m.boss = false;
+    ok(m.stunned === 1 && /撞上擋路的東西/.test(g.log.find((l) => /推開/.test(l.text) || /撞上/.test(l.text)).text), '推到巨石前面停下：撞傷並眩暈 1 次行動（第三十七版之一）');
+    m.stunned = 0;
+    m.stunSkip = false;
+    const tier0 = m.tier;
+    m.tier = 'big';
+    ok(push() === 0, '大型怪物推不動（移動抗性 100%）');
+    m.tier = tier0;
     // 失衡：法杖（戰士一開始就會）命中後 30%＋力量修正值×5% 讓目標倒地；倒地的下一回合不能動，打牠有優勢
     p.equip.main = G.make('staff', 0, g.nextGearId++);
     p.equip.main.dur = 1e6;
@@ -701,7 +705,7 @@ function testCombat28() {
 
     // 野蠻人不能穿中甲、重甲（輕甲、衣袍、盾牌可以）
     {
-      const { g, p } = arena(438, 'barbarian', ['greataxe', 'herb']);
+      const { g, p } = arena(438, 'barbarian', ['waraxe', 'herb']);
       const can = (t) => Ch.canWear(p, G.make(t, 0, 1));
       ok(!can('medium') && !can('hide') && !can('breastplate') && !can('heavy') && !can('ringmail') && !can('plate') && can('light') && can('padded') && can('studded') && can('robe') && can('mrobe') && can('shield'), '野蠻人只穿得了輕甲、衣袍、盾牌');
       g.bagAddGear(G.make('medium', 0, g.nextGearId++));

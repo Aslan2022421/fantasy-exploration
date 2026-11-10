@@ -1057,8 +1057,8 @@
   // 角色視窗用：主手武器的精通（用得上的才寫）
   function masteryLine() {
     const p = game.player;
-    const m = p.equip.main ? FE.Char.mastery(p, p.equip.main) : null;
-    return m ? `　精通時${FE.MASTERIES[m].name}（${FE.MASTERIES[m].desc}）` : '';
+    const ms = p.equip.main ? FE.Char.masteries(p, p.equip.main) : [];
+    return ms.length ? `　精通時${ms.map((k) => `${FE.MASTERIES[k].name}（${FE.MASTERIES[k].desc}）`).join('、')}` : '';
   }
 
   // 角色視窗（C）：職業與等級、生命與負重上限、六項屬性與修正值、各技能的等級與到下一級的進度、目前的加成
@@ -1111,15 +1111,16 @@
       if (id === 'fight') return `所有近戰出手（含徒手）命中 +${Math.floor(lv / C.FIGHT_HIT_EVERY)}，跟武器技能疊加`;
       if (id === 'shoot') return `所有遠程（射擊、投擲）命中 +${hit}`;
       if (id === 'misc') return `盾擊命中 +${hit}、傷害 +${dmg}`;
-      if (id === 'bow' || id === 'crossbow') {
-        const name = FE.GEAR[id === 'bow' ? 'bow' : 'crossbow'].name;
-        const mas = FE.GEAR[id === 'bow' ? 'bow' : 'crossbow'].mastery;
-        const unlock = lv >= FE.MASTERY_SKILL ? `；精通時${FE.MASTERIES[mas].name}` : `；${FE.MASTERY_SKILL} 級（精通）學會${FE.MASTERIES[mas].name}`;
-        return `${name}射擊的傷害 +${dmg}${unlock}`;
+      // 幾把武器學同一種精通時只寫一次（第三十七版之一：一把武器可以有好幾種精通）
+      const masOf = (ws) => [...new Set(ws.flatMap((k) => [FE.GEAR[k].mastery].concat(FE.GEAR[k].moreMastery || [])))].map((k) => FE.MASTERIES[k].name);
+      if (id === 'bow' || id === 'crossbow' || id === 'firearm') {
+        const ws = weaponsOf(id).filter((k) => FE.GEAR[k].skill === id);
+        const unlock = lv >= FE.MASTERY_SKILL ? `；精通時：${masOf(ws).join('、')}` : `；${FE.MASTERY_SKILL} 級（精通）學會${masOf(ws).join('、')}`;
+        return `${ws.map((k) => FE.GEAR[k].name).join('、')}射擊的傷害 +${dmg}${unlock}`;
       }
       if (FE.SKILLS[id].weapon) {
         const ws = weaponsOf(id).filter((k) => FE.GEAR[k].skill === id);
-        const masNames = [...new Set(ws.map((k) => FE.MASTERIES[FE.GEAR[k].mastery].name))]; // 幾把武器學同一種精通時只寫一次
+        const masNames = masOf(ws);
         const unlock = `；精通時：` + masNames.join('、') + (lv >= FE.MASTERY_SKILL ? '' : `（${FE.MASTERY_SKILL} 級）`);
         return `${ws.map((k) => FE.GEAR[k].name).join('、')}：近戰命中 +${hit}、傷害 +${dmg}${FE.GEAR[ws[0]].thrown ? '（投擲只加傷害）' : ''}${id === 'staff' ? '；法師的範圍魔攻也算' : ''}${unlock}`;
       }
@@ -1142,7 +1143,7 @@
     };
     const SKILL_GROUPS = [
       ['近戰武器', ['sword', 'spear', 'knife', 'staff', 'axe', 'mace', 'whip']],
-      ['遠程', ['bow', 'crossbow', 'shoot']],
+      ['遠程', ['bow', 'crossbow', 'firearm', 'shoot']],
       ['戰鬥', ['fight', 'misc', 'dodge', 'shield']],
       ['防具', ['light', 'medium', 'heavy']],
     ];
@@ -1184,7 +1185,10 @@
         ${kv('推拖上限', `${game.pushLimit()} 磅`)}${kv('走一步', `${Math.round(Ch.moveTicks(p) * Ch.exhaustMoveMul(p))} 刻`)}${kv('野外歇一小時', `回 ${heal}（最少 1）`)}${p.exhaust ? kv('力竭', `<b class="over">${p.exhaust} 級</b>`) : ''}
       </div>
     </div>`;
-    const m = p.equip.main ? Ch.mastery(p, p.equip.main) : null;
+    // 第三十七版之一：主手武器用得上的所有精通（SRD 那一種加新的幾種），以及一優一劣（不看技能等級，一直有）
+    const ms = p.equip.main ? Ch.masteries(p, p.equip.main) : [];
+    const ed = p.equip.main ? FE.Gear.edgeText(p.equip.main.type) : { pro: '', con: '' };
+    const fumble = p.equip.main ? Ch.fumbleRate(p, p.equip.main) : 0;
     const tile = (k, v, note) => `<div class="ch-tile"><span class="dim">${k}</span><b>${v}</b>${note ? `<span class="dim ch-note">${note}</span>` : ''}</div>`;
     const numbers = `<div class="ch-tiles">
       ${tile('主手傷害', esc(game.attackText()))}
@@ -1195,7 +1199,9 @@
       ${tile('閃避', `${Math.round(d.dodge * 100)}%`)}
       ${tile('物理傷害再減', Ch.conCut(p), '體質')}
       ${tile('格擋', d.blockMax ? `${Math.round(d.block * 100)}%` : '—', d.blockMax ? `格擋值 ${d.blockMax}` : '沒拿盾牌')}
-      ${m ? tile('精通', esc(FE.MASTERIES[m].name), esc(FE.MASTERIES[m].desc)) : ''}
+      ${ms.length ? tile('精通', esc(ms.map((k) => FE.MASTERIES[k].name).join('、')), esc(ms.map((k) => `${FE.MASTERIES[k].name}：${FE.MASTERIES[k].desc}`).join('；'))) : ''}
+      ${ed.pro || ed.con ? tile('武器的優劣', esc(`${ed.pro ? '優：' + ed.pro : ''}${ed.pro && ed.con ? '／' : ''}${ed.con ? '劣：' + ed.con : ''}`)) : ''}
+      ${tile('失手率', `${Math.round(fumble * 100)}%`, '命中後擲，失手傷害減半；敏捷每點修正值 −2%')}
       ${isHero ? tile('向工匠買／賣', `×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}／×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}`, '魅力') : ''}
     </div>`;
     $('charInfo').innerHTML = `${tabs}${header}${cards}
@@ -1219,6 +1225,15 @@
   const signed = (n) => (n > 0 ? '+' : '') + n;
   // 目前這個體型（種族、身高、體格）算出來的體型數字
   const startSize = () => FE.bodySize(ui.start.race, ui.start.height, ui.start.build);
+  // 目前挑的職業、種族加成算出來的起始屬性（第三十七版之一：武器有屬性需求，不到的不列出）；還沒挑完（人類兩點沒加完）就不看屬性
+  const startAttrNow = () => {
+    const s = ui.start;
+    try {
+      return s.cls ? FE.Char.startAttr(s.cls, { race: s.race, bonus: s.bonus || {}, height: s.height, build: s.build }) : undefined;
+    } catch (e) {
+      return undefined;
+    }
+  };
   // 目前這一步左欄的選項（種族、人類加的屬性、體型的接受或重擲、職業，或這一組的起始裝備；拿不起來的武器不列出）
   const startList = () => {
     const s = ui.start;
@@ -1227,7 +1242,7 @@
     if (s.step === 'body') return ['accept', 'reroll'];
     if (s.step === 'class') return classKeys;
     if (s.step === 'skills') return s.skills.slots.map((x, i) => 's' + i).concat(['reroll', 'accept']);
-    return FE.Char.groupOptions(startGroups()[s.gi], startSize());
+    return FE.Char.groupOptions(startGroups()[s.gi], startSize(), startAttrNow());
   };
   // 擲身高與體格（各 1～7）
   const rollBody = () => {
@@ -1295,7 +1310,7 @@
       const g = FE.Gear.make(o.gear, 0, 0);
       const d = FE.Gear.def(g);
       const stat = FE.Gear.statText(g).split('、').filter((t) => !t.startsWith('重 ')).join('、');
-      rows = `<dt>種類</dt><dd>${d.cat === 'weapon' ? '武器' : d.cat === 'shield' ? '盾牌' : '防具'}</dd><dt>數值</dt><dd>${esc(stat || '無')}</dd>${d.cat === 'weapon' ? `<dt>你拿起來</dt><dd>${FE.Char.GRIP_NAMES[FE.Char.grip({ size: startSize() }, g)]}</dd>` : ''}<dt>重量</dt><dd>${d.weight} 磅</dd>`;
+      rows = `<dt>種類</dt><dd>${d.cat === 'weapon' ? '武器' : d.cat === 'shield' ? '盾牌' : '防具'}</dd><dt>數值</dt><dd>${esc(stat || '無')}</dd>${d.cat === 'weapon' ? `<dt>你拿起來</dt><dd>${FE.Char.GRIP_NAMES[FE.Char.grip({ size: startSize(), attr: startAttrNow() }, g)]}</dd>` : ''}<dt>重量</dt><dd>${d.weight} 磅</dd>`;
     } else rows = `<dt>內容</dt><dd>${esc(o.label)}</dd>`;
     return `<dl>${rows}</dl><p>${esc(o.desc || '')}</p>`;
   }

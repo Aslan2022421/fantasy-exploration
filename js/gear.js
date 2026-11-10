@@ -139,6 +139,7 @@
     }
     const w = p.equip.main;
     if (w && def(w).heavy) c += C.COUNTER_HEAVY * legendShare(FE.Char.skillLv(p, def(w).skill)) + C.COUNTER_CLEAR * qual(w).clear;
+    if (w && def(w).edge && def(w).edge.counter) c += def(w).edge.counter; // 一優一劣：戟、法杖反擊機率 +5%（第三十七版之一）
     const sh = shieldOf(p);
     if (sh) c += C.COUNTER_SHIELD * legendShare(FE.Char.skillLv(p, 'shield')) + C.COUNTER_CLEAR * qual(sh).clear;
     return Math.min(C.COUNTER_MAX, c);
@@ -230,6 +231,39 @@
 
   const durText = (g) => `耐久 ${g.dur} / ${g.max}`;
 
+  // 武器的一優一劣寫成兩段短句（第三十七版之一，背包、商店、角色頁用）：{ pro: '命中 +1', con: '重擊冷卻 +1' }，沒有的是空字串
+  const pct = (n) => `${Math.round(n * 100)}%`;
+  const sgn = (n) => (n > 0 ? '+' : '−') + Math.abs(n);
+  function edgeText(type) {
+    const e = G[type] && G[type].edge;
+    const pro = [];
+    const con = [];
+    if (!e) return { pro: '', con: '' };
+    if (e.hit) pro.push(`命中 +${e.hit}`);
+    if (e.throwHit) pro.push(`投擲時命中 ${sgn(e.throwHit)}`);
+    if (e.meleeHit) con.push(`近戰時命中 ${sgn(e.meleeHit)}`);
+    if (e.crit) pro.push(`暴擊範圍 +${e.crit}`);
+    if (e.critDie) pro.push(`暴擊多擲 ${e.critDie} 顆武器骰`);
+    if (e.deepDice) pro.push(`重擊時傷害骰擲 ${e.deepDice} 次`);
+    if (e.pierce) pro.push(`穿甲 +${pct(e.pierce)}`);
+    if (e.topple) pro.push(`失衡機率 +${pct(e.topple)}`);
+    if (e.counter) pro.push(`反擊機率 +${pct(e.counter)}`);
+    if (e.charge) pro.push(`衝刺（連續走 ${C.CHARGE_STEPS} 格以上後第一下傷害骰擲兩次）`);
+    if (e.ticks < 0) pro.push(`攻擊少 ${-e.ticks} 刻`);
+    if (e.ticks > 0) con.push(`攻擊多 ${e.ticks} 刻`);
+    if (e.deepCd) con.push(`重擊冷卻 +${e.deepCd}`);
+    if (e.fumble) con.push(`失手率 ${pct(e.fumble)}`);
+    if (e.halfQ) con.push('品質的穿甲減半');
+    if (e.closeHit) con.push(`打貼身的目標命中 ${sgn(e.closeHit)}`);
+    if (e.stillHit) con.push(`原地出手命中 ${sgn(e.stillHit)}`);
+    if (e.hardMargin) con.push(`勉強命中放寬到高出 AC 不到 ${e.hardMargin}`);
+    if (e.str) con.push(`力量要 ${e.str}`);
+    if (e.dex) con.push(`敏捷要 ${e.dex}`);
+    return { pro: pro.join('、'), con: con.join('、') };
+  }
+  // 武器會的所有精通的名字（SRD 那一種加 moreMastery），例如「侵擾、輕捷、流血」
+  const masteryNames = (type) => [G[type].mastery].concat(G[type].moreMastery || []).map((k) => FE.MASTERIES[k].name).join('、');
+
   // 背包與商店列用的簡短說明（g 只要有 type 和 q 就行）
   function statText(g) {
     const d = def(g);
@@ -242,7 +276,9 @@
       if (d.thrown) tags.push(`投擲 ${d.thrown[0]}／${d.thrown[1]} 格`);
       if (d.ammo) tags.push(`彈藥（${G[d.ammo].name}，射程 ${d.range[0]}／${d.range[1]} 格）`);
       if (d.loading) tags.push(FE.WEAPON_TAGS.loading);
-      return `${dieText(d.die)} ${FE.DMG_TYPES[d.type]}${tags.length ? '、' + tags.join('、') : ''}、精通時${FE.MASTERIES[d.mastery].name}${q.hit ? `、命中 +${q.hit}` : ''}、${w}`;
+      const ed = edgeText(g.type);
+      const pc = `${ed.pro ? `、優：${ed.pro}` : ''}${ed.con ? `、劣：${ed.con}` : ''}`;
+      return `${dieText(d.die)} ${FE.DMG_TYPES[d.type]}${tags.length ? '、' + tags.join('、') : ''}、精通時${masteryNames(g.type)}${pc}${q.hit ? `、命中 +${q.hit}` : ''}、${w}`;
     }
     if (d.cat === 'ammo') return `一捆 ${d.bundle} 支${q.pierce ? `、穿甲 ${Math.round(q.pierce * 100)}%` : ''}、重 ${d.weight}`;
     if (d.cat === 'armor') {
@@ -368,7 +404,7 @@
   FE.Gear = {
     def, qual, name, make, value, buyFactor, sellFactor, shopPrice, sellPrice, orePrice, herbPrice, repairQuote, craftQuote, rollQuality, randomDrop, DROP_TYPES,
     equipped, lootName, dieText, dmgText, hitBonus, clearLevel, physReduce, magicReduce, shieldOf, playerAC, playerDefense, counterChance, counterDamage, wearTier, wearPenalty,
-    itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText,
+    itemWeight, weightOf, loadTier, extraTicks, hitMod, gripText, twoHanded, wear, repaired, durText, statText, edgeText, masteryNames,
     SHOPS, CAT_NAMES, craftCats, shopOf, isShopkeeper, offOk, shopEntries, productName, productText,
   };
 })();

@@ -116,9 +116,14 @@ function testGrowth29() {
     // 副手：能單手拿的武器才放得上去
     ok(G.offOk(p, gear('dagger')) && G.offOk(p, gear('sword')) && !G.offOk(p, gear('greatsword')) && !G.offOk(p, gear('bow')) && !G.offOk(p, gear('crossbow')) && !G.offOk(p, gear('shield')), '體型 60,000：短刀、長劍放得上副手，巨劍、弓、弩、盾牌放不上（盾牌走自己的規則）');
     p.size = 25000;
+    const dexW = p.attr.dex;
+    p.attr.dex = 15; // 第三十七版之一：鞭子要敏捷 15 才拿得起來（一優一劣），這裡只量體型
     ok(!G.offOk(p, gear('dagger')) && !G.offOk(p, gear('whip')) && !G.offOk(p, gear('shortspear')), '體型 25,000 的副手：短刀（要 27,500 才能單手）、鞭子（27,500）、短矛（47,500）都不行');
     p.size = 27500;
     ok(G.offOk(p, gear('dagger')) && G.offOk(p, gear('whip')) && !G.offOk(p, gear('shortspear')), '體型 27,500 短刀、鞭子可以放副手，短矛還不行');
+    p.attr.dex = 13;
+    ok(!G.offOk(p, gear('whip')) && Ch.grip(p, gear('whip')) === 'none', '敏捷 13 拿不起鞭子（要 15）');
+    p.attr.dex = dexW;
     // 把拿不動的武器放副手：不行
     const g2 = mkg(4, 'ranger', ['dagger']);
     const p2 = g2.player;
@@ -248,14 +253,16 @@ function testGrowth29() {
     ok(prof('crossbow', 'melee').die.join() === '1,4' && prof('crossbow', 'melee').type === 'blunt' && prof('crossbow', 'melee').skills.join() === 'mace,fight' && prof('bow', 'melee').skills.join() === 'sword,fight', '拿弩近戰 1d4 鈍擊算錘術，拿弓近戰算劍術');
     // 靈巧：短劍、鞭子取力量與敏捷較高者；重型：巨斧、巨劍近戰力量不到 13 有劣勢
     p.attr.str = 8; p.attr.dex = 16;
-    ok(prof('shortsword').dmg === 3 && prof('shortsword').hit === 3 && prof('whip').dmg === 3 && prof('waraxe').dmg === -1, '短劍、鞭子靈巧取較高的修正值');
+    // 第三十七版之一：短劍的優勢命中 +1、鞭子命中 +2（一優一劣）
+    ok(prof('shortsword').dmg === 3 && prof('shortsword').hit === 3 + 1 && prof('whip').dmg === 3 && prof('whip').hit === 3 + 2 && prof('waraxe').dmg === -1, '短劍、鞭子靈巧取較高的修正值');
     ok(prof('greatsword').heavy && prof('greataxe').heavy && !prof('waraxe').heavy, '力量 8：巨劍、巨斧有劣勢');
     p.attr.str = 13;
     ok(!prof('greatsword').heavy && !prof('greataxe').heavy, '力量 13：巨劍、巨斧沒有劣勢');
     {
       const dex0 = p.attr.dex;
       p.attr.dex = 10; // 修正值 0，才量得出三類武器的差別（敏捷 16 都壓到最少 4 刻）
-      ok(FE.GEAR.shortsword.light && !FE.GEAR.whip.light && Ch.attackTicks(p, gear('shortsword')) === 5 && Ch.attackTicks(p, gear('whip')) === 6 && Ch.attackTicks(p, gear('greataxe')) === 7, '短劍輕型（5 刻）；鞭子一般（6 刻）；巨斧重型（7 刻）');
+      // 場景檢查的精通門檻是 0 級：短劍的輕捷（第三十七版之一）再少 1 刻
+      ok(FE.GEAR.shortsword.light && !FE.GEAR.whip.light && Ch.attackTicks(p, gear('shortsword')) === 5 - 1 && Ch.attackTicks(p, gear('whip')) === 6 && Ch.attackTicks(p, gear('greataxe')) === 7, '短劍輕型（5 刻，輕捷再少 1）；鞭子一般（6 刻）；巨斧重型（7 刻）');
       p.attr.dex = dex0;
     }
     // 特質標籤
@@ -637,7 +644,7 @@ function testGrowth29() {
     ok(FE.bodySize('human', 4, 4) === 70000 && FE.bodySize('dwarf', 4, 4) === 60000 && near(FE.bodySize('human', 7, 1), 70000 * 1.15 * 0.85, 1e-6), '體型公式不變');
 
     // 技能合併與拆分
-    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,misc,fight,shoot,dodge,light,medium,heavy,shield', '技能名單：槍術、錘術合併，穿甲拆成輕甲、中甲、重甲');
+    ok(Object.keys(FE.SKILLS).join() === 'sword,spear,knife,staff,axe,mace,whip,bow,crossbow,firearm,misc,fight,shoot,dodge,light,medium,heavy,shield', '技能名單：槍術、錘術合併，穿甲拆成輕甲、中甲、重甲；火器（第三十七版之一）');
     ok(FE.GEAR.spear.skill === 'spear' && FE.GEAR.shortspear.skill === 'spear' && FE.GEAR.club.skill === 'mace' && FE.GEAR.warhammer.skill === 'mace' && FE.GEAR.crossbow.meleeSkill === 'mace', '短矛、長槍都算槍術；硬頭錘、戰錘、拿弩近戰都算錘術');
     ok(FE.ARMOR_SKILL.light === 'light' && FE.ARMOR_SKILL.medium === 'medium' && FE.ARMOR_SKILL.heavy === 'heavy', '防具類別對應輕甲、中甲、重甲');
     // 傷害骰從武器來，技能只給加值

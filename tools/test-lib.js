@@ -170,7 +170,7 @@ function checkResidents(game, tag) {
     const v = w.villageById(n.villageId);
     const reach = reaches.get(v.id);
     if (!DIRS.some(([dx, dy]) => reach.has(key(n.x + dx, n.y + dy)) && w.heightOk(n.x, n.y, n.x + dx, n.y + dy))) fail(`${tag} ${v.name} ${n.name}(${n.role}) 碰不到`);
-    if (FE.Gear.isShopkeeper(n)) continue;
+    if (FE.Gear.isShopkeeper(n) || n.role === 'recruit') continue; // 想找同伴的人（第三十六版之二）只待幾天，沒有家
     if (!n.home) { fail(`${tag} ${v.name} ${n.name} 沒有家`); continue; }
     if (!reach.has(key(n.home.spot[0], n.home.spot[1]))) fail(`${tag} ${v.name} ${n.name} 家裡站的格子走不到`);
     if (FE.Steading.roomAt(v, n.x, n.y) >= 0 && FE.Steading.roomAt(v, n.x, n.y) !== n.home.b) fail(`${tag} ${v.name} ${n.name} 跑進別人的建築`);
@@ -236,7 +236,7 @@ function compareReach(world, r, monsters, res) {
 // 量測：on 時才記（機器人模擬）；cond 是對照組的名字（'none' 沒有防具、'heavy' 穿重甲），armorCmp[cond] = 怪物出手打冒險者的次數與總傷害
 // （第二十九版起，打倒怪物要幾下和各職業被打一下的傷害改在競技場量，見 runArena，不再從世界模擬統計）
 const measure = { on: false, cond: null, armorCmp: {} };
-const combat = { player: {}, monster: {}, soldier: {}, reduced: 0, soldierHits: 0, onSoldier: 0, dodged: 0, blocked: 0, resisted: 0, crit: 0, counters: 0, opportunity: 0, opportunityHit: 0, chain: 0, negative: 0, events: 0, pdmg: 0, mdmg: 0, pn: 0, mn: 0 };
+const combat = { player: {}, monster: {}, soldier: {}, mate: {}, reduced: 0, soldierHits: 0, onSoldier: 0, dodged: 0, blocked: 0, resisted: 0, crit: 0, counters: 0, opportunity: 0, opportunityHit: 0, chain: 0, negative: 0, events: 0, pdmg: 0, mdmg: 0, pn: 0, mn: 0 };
 FE.Combat.hook = (e) => {
   combat.events++;
   const t = combat[e.by];
@@ -253,22 +253,19 @@ FE.Combat.hook = (e) => {
   if (e.by === 'player') { combat.pdmg += e.dmg; combat.pn++; } else if (e.by === 'monster') { combat.mdmg += e.dmg; combat.mn++; }
   if (e.reduced > 0) combat.reduced++;
   // 對照組：怪物出手打冒險者，每一下受到的傷害
-  if (measure.on && measure.cond && e.by === 'monster' && e.d && e.d.equip) {
+  if (measure.on && measure.cond && e.by === 'monster' && e.d && e.d.equip && !e.d.role) { // 冒險者（士兵、隊友有 role）
     const r = measure.armorCmp[measure.cond] || (measure.armorCmp[measure.cond] = { n: 0, dmg: 0, hit: 0 });
     r.n++;
     r.dmg += e.dmg;
     if (e.dmg > 0) r.hit++;
   }
-  // 士兵：只打事件與侵蝕生的小怪物（m.small），從不碰創世時的怪物；不反擊；怪物打士兵也走同一套判定
+  // 士兵：只打衰敗生的小怪物（m.small）與牠們合成的中型怪物、營地（m.members，第三十六版之三），從不碰創世時與戰役的怪物
+  // （被打時照冒險者那一套可以反擊，第三十六版之一）；怪物打士兵也走同一套判定
   if (e.by === 'soldier') {
     combat.soldierHits++;
-    if (!e.d.small || e.d.role === 'soldier') fail(`士兵攻擊了不該碰的對象：${e.d.name}（small=${e.d.small}）`);
-    if (e.counter) fail('士兵反擊了');
+    if (!e.counter && (!(e.d.small || e.d.members) || e.d.role === 'soldier')) fail(`士兵攻擊了不該碰的對象：${e.d.name}（small=${e.d.small}，members=${!!e.d.members}）`);
   }
-  if (e.d && e.d.role === 'soldier') {
-    combat.onSoldier++;
-    if (e.countered) fail('士兵被打時觸發了他的反擊');
-  }
+  if (e.d && e.d.role === 'soldier') combat.onSoldier++;
 };
 
 

@@ -21,7 +21,7 @@
   // 負重（第二十九版，《D&D》2024 的磅數）：能背＝力量值×15 磅，推拖上限＝力量值×30 磅
   const carryLimit = (p) => p.attr.str * C.CARRY_PER_STR;
   const pushLimit = (p) => p.attr.str * C.PUSH_PER_STR;
-  // 走一步花幾刻：基本 10 刻減敏捷修正值，最少 8 刻（超重、被扭曲的地面另外算，見 game.js 的 move）
+  // 走一步花幾刻：基本 6 刻減敏捷修正值，最少 5 刻（超重、被扭曲的地面另外算，見 game.js 的 move）
   const moveTicks = (p) => Math.max(C.MOVE_TICKS_MIN, C.TICKS_MOVE - attrMod(p, 'dex'));
   // 力竭讓走一步的刻放大幾倍：速度 30 呎每級少 5 呎，刻數照比例放大（1 級 ×1.2、2 級 ×1.5、3 級 ×2、4 級 ×3、5 級 ×6）
   const exhaustMoveMul = (p) => {
@@ -228,15 +228,16 @@
   }
 
   // 技能得到經驗：base 是這一次的基本經驗（命中 10、沒命中 5、閃開 10⋯⋯），乘智力的倍率；累積滿這一級要的經驗就升級（可以連升），訊息寫出來
-  function useSkill(game, id, base) {
-    const p = game.player;
+  // who 是練技能的人（隊友出手時不是玩家操作的那位；沒給就是玩家操作的那位）；升級的訊息，冒險者本人寫「你的」，隊友寫名字
+  function useSkill(game, id, base, who) {
+    const p = who || game.player;
     const s = p.skills && p.skills[id];
     if (!s) return;
     s.n = Math.round((s.n + (base === undefined ? C.SKILL_EXP_HIT : base) * expFactor(p)) * 100) / 100;
     while (s.n >= skillNeed(s.lv)) {
       s.n = Math.round((s.n - skillNeed(s.lv)) * 100) / 100;
       s.lv++;
-      game.say(`你的${FE.SKILLS[id].name}越練越熟，升到 ${s.lv} 級（${FE.skillLevelName(s.lv)}）了。`, 'good');
+      game.say(`${p === game.hero || !game.hero ? '你' : p.name}的${FE.SKILLS[id].name}越練越熟，升到 ${s.lv} 級（${FE.skillLevelName(s.lv)}）了。`, 'good');
     }
   }
 
@@ -449,7 +450,103 @@
     return p;
   }
 
+  // ---- 職業套版（第三十六版之一）：士兵、隊友用。原本是測試競技場的 makeLevelChar（tools/test-arena.js），搬進遊戲 ----
+  // 累積這麼多技能經驗是幾級
+  function skillLevelFor(exp) {
+    let lv = 0;
+    while (exp >= skillNeed(lv)) exp -= skillNeed(lv++);
+    return lv;
+  }
+  // 升級加點（機器人的做法）：照職業的主屬性與體質輪流加，一個加到 18 就改加另一個，兩個都滿了加別的；偶數點加主屬性，奇數點加體質
+  function autoPoints(p) {
+    const c = cls(p);
+    const sum = (a) => FE.ATTRS.reduce((s, x) => s + a[x.key], 0);
+    while (p.points > 0) {
+      const want = (sum(p.attr) - sum(c.attr)) % 2 === 0 ? [c.primary, 'con'] : ['con', c.primary];
+      const key = want.concat(FE.ATTRS.map((a) => a.key)).find((k) => p.attr[k] < C.ATTR_CAP);
+      if (!key) {
+        p.points = 0;
+        break;
+      }
+      p.attr[key]++;
+      p.points--;
+    }
+  }
+  // 把剛建好的角色套成「等級 level、世界等級 wl」的樣子：屬性點照 4、8、12、16、19 級各 1 點、照 autoPoints 分配，生命照等級算滿，
+  // 裝備（武器、身上的防具、盾牌）品質照世界等級，技能照累計經驗換算（FE.TEMPLATE_PER_EXP）。p.lv 記著等級
+  function applyTemplate(p, level, wl) {
+    p.lv = level;
+    p.points = C.LEVEL_POINT_AT.filter((l) => l <= level).length * C.LEVEL_POINTS;
+    autoPoints(p);
+    p.maxHp = p.hp = maxHp(p, level);
+    const q = FE.qualityForWL(wl);
+    for (const g of FE.Gear.equipped(p)) g.q = q;
+    const c = cls(p);
+    const E = FE.levelExp(level);
+    const per = FE.TEMPLATE_PER_EXP;
+    const lvOf = (k) => ({ lv: skillLevelFor(E * per[k]), n: 0 });
+    const w = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
+    p.skills.dodge = lvOf('dodge');
+    if (p.equip.off && FE.GEAR[p.equip.off.type].cat === 'shield') p.skills.shield = lvOf('shield');
+    const aid = armorSkillId(p);
+    if (aid && aid !== 'light') p.skills[aid] = lvOf('armor'); // 輕甲幾乎擋不下傷害，機器人也練不起來，不給
+    if (w) {
+      p.skills[w.skill] = lvOf('main');
+      if (w.ammo) p.skills.shoot = lvOf('fight');
+      else p.skills.fight = lvOf('fight');
+    }
+    if (c.spell) p.skills.staff = lvOf('main');
+    return p;
+  }
+  // 士兵的技能（第三十六版之一，使用者定的）：隨機 5 項，每項 1 級到 cap 級（城鎮、堡壘 5，城市、要塞 10，FE.CONFIG.SOLDIER_SKILL_CAP）。
+  // 一定含主手武器的技能與身上防具的技能（衣袍沒有），其餘照建角的抽法：本職業的池子加權 FE.SKILL_ROLL.classWeight 倍；等級在 1～cap 平均擲（Claude 定的）
+  function soldierSkills(p, cap, rng) {
+    const c = cls(p);
+    const mine = new Set((c.pool || []).flatMap((t) => (t === 'melee' ? FE.MELEE_SKILLS : [t])));
+    const ids = [];
+    const w = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
+    if (w && w.skill) ids.push(w.skill);
+    const aid = armorSkillId(p);
+    if (aid && !ids.includes(aid)) ids.push(aid);
+    while (ids.length < FE.SKILL_ROLL.slots) {
+      const cand = Object.keys(FE.SKILLS).filter((k) => !ids.includes(k));
+      const wt = cand.map((k) => (mine.has(k) ? FE.SKILL_ROLL.classWeight : 1));
+      let r = rng() * wt.reduce((a, b) => a + b, 0);
+      let k = cand[cand.length - 1];
+      for (let i = 0; i < cand.length; i++) if ((r -= wt[i]) < 0) { k = cand[i]; break; }
+      ids.push(k);
+    }
+    p.skills = freshSkills();
+    for (const k of ids) p.skills[k] = { lv: FE.randInt(rng, 1, Math.max(1, cap)), n: 0 };
+    return p;
+  }
+  // 建一個職業套版的角色（還沒放上地圖）：起始裝備與種族照 FE.TEMPLATE_PICKS、FE.TEMPLATE_BODY，再套上等級與世界等級。
+  // opts.skillCap 有給（士兵）：技能改成隨機 5 項、1～skillCap 級（soldierSkills，用 opts.rng）；沒給（競技場）照累計經驗換算
+  function makeLevelChar(game, clsKey, level, wl, name, opts) {
+    const picks = validPicks(clsKey, FE.TEMPLATE_PICKS[clsKey]) ? FE.TEMPLATE_PICKS[clsKey] : defaultPicks(clsKey); // 場景檢查換掉職業定義時，套版的挑法不一定合法
+    const p = create(game, clsKey, picks, name || '', FE.TEMPLATE_BODY[clsKey], null);
+    applyTemplate(p, level, wl);
+    if (opts && opts.skillCap) soldierSkills(p, opts.skillCap, opts.rng || game.rng);
+    return p;
+  }
+  // 隊友升級：升到 level 級（p.lv），生命上限照公式重算、多出來的部分同時補到目前的生命。回傳生命上限多了幾點。
+  // 新到的屬性點：opts.manual（第三十六版之三，使用者選的）留在 p.points 給玩家在角色視窗裡加；沒給（測試、競技場）照 autoPoints 分配
+  function levelUpTo(p, level, opts) {
+    const from = p.lv || 1;
+    if (level <= from) return 0;
+    for (let l = from + 1; l <= level; l++) if (C.LEVEL_POINT_AT.includes(l)) p.points = (p.points || 0) + C.LEVEL_POINTS;
+    p.lv = level;
+    if (!(opts && opts.manual)) autoPoints(p);
+    const max = maxHp(p, level);
+    const gain = max - p.maxHp;
+    p.maxHp = max;
+    if (gain > 0) p.hp += gain;
+    p.hp = Math.min(p.hp, p.maxHp);
+    return gain;
+  }
+
   FE.Char = {
+    skillLevelFor, autoPoints, applyTemplate, makeLevelChar, levelUpTo, soldierSkills,
     mod, attrMod, cls, maxHp, carryLimit, pushLimit, moveTicks, exhaustMoveMul,
     sizeOf, grip, GRIP_NAMES, canWieldType,
     skillLv, skillNeed, expFactor, freshSkills, weaponSkill, skillHit, skillDmg, shootHit, fightHit, isFinesse, dmgBonus, useSkill,

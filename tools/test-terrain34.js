@@ -169,7 +169,15 @@ function settleWorld34(seed, ok, saw) {
   for (const v of w.villages) if (v.kind === 'city' || v.kind === 'fort' || v.kind === 'fortress') checkPlan(g, v, '場景');
   terrainChecks += w.villages.length;
   ok(problems.length === n0, '圖樣聚落的大小、出入口、城門、山壁有問題（見上面）');
-  // 城市：兩座城鎮的工匠與士兵（武器匠、盔甲匠各一位站在工坊裡，士兵 6 位），住的人有家
+  // 第三十六版之二：工匠與商人不站在門內那格或門旁邊（八方向 1 格以內），站上去之後房間其他地方還走得到門
+  for (const v of w.villages) {
+    for (const n of w.npcs.filter((o) => o.villageId === v.id && FE.Gear.isShopkeeper(o) && o.home)) {
+      const b = v.buildings[n.home.b];
+      const d = Math.min(...b.doors.map(([dx, dy]) => Math.max(Math.abs(dx - n.x), Math.abs(dy - n.y))));
+      ok(d >= 2, `${v.name} 的${n.role}站在門口（離門 ${d} 格，${b.kind}）`);
+    }
+  }
+  // 城市：兩座城鎮的工匠與士兵（武器匠、盔甲匠各一位站在工坊裡，商人一位，士兵 6 位），住的人有家
   for (const v of kinds('city')) {
     const folk = w.npcs.filter((n) => n.villageId === v.id);
     const smith = folk.find((n) => n.role === 'smith');
@@ -177,14 +185,20 @@ function settleWorld34(seed, ok, saw) {
     ok(!!smith && FE.Steading.roomAt(v, smith.x, smith.y) >= 0 && v.buildings[FE.Steading.roomAt(v, smith.x, smith.y)].kind === 'smithy', `${v.name} 的武器匠沒站在工坊裡`);
     ok(!!arm && FE.Steading.roomAt(v, arm.x, arm.y) >= 0 && v.buildings[FE.Steading.roomAt(v, arm.x, arm.y)].kind === 'armory', `${v.name} 的盔甲匠沒站在盔甲匠工坊裡`);
     ok(folk.filter((n) => n.role === 'villager').every((n) => n.home), `${v.name} 有村民沒有家`);
-    ok(g.soldiers.filter((s) => s.villageId === v.id).length === 2 * C.SOLDIER_PER_TOWN, `${v.name} 的士兵 ${g.soldiers.filter((s) => s.villageId === v.id).length} 位`);
+    ok(g.soldiers.filter((s) => s.villageId === v.id).length === C.SOLDIER_COUNT.city, `${v.name} 的士兵 ${g.soldiers.filter((s) => s.villageId === v.id).length} 位`);
+    ok(folk.filter((n) => n.role === 'merchant').length === 1, `${v.name} 的商人不是 1 位`);
     ok(['temple', 'market', 'keep', 'tower', 'smithy', 'armory'].every((k) => v.buildings.some((b) => b.kind === k)), `${v.name} 少了神殿、市場、城堡、塔樓或工坊：${[...new Set(v.buildings.map((b) => b.kind))]}`);
   }
-  // 堡壘與要塞：鐵匠站在工坊、村民住兵營；城門接窄路，不走窄路要繞很遠
+  // 堡壘與要塞：武器匠、盔甲匠站在各自的工坊（沒有鐵匠）、商人一位、士兵 3 位（要塞 6 位）、村民住兵營；城門接窄路，不走窄路要繞很遠
   for (const v of kinds('fort').concat(kinds('fortress'))) {
     const folk = w.npcs.filter((n) => n.villageId === v.id);
     const smith = folk.find((n) => n.role === 'smith');
-    ok(!!smith && FE.Steading.roomAt(v, smith.x, smith.y) >= 0, `${v.name} 的鐵匠沒站在工坊裡`);
+    const arm = folk.find((n) => n.role === 'armorer');
+    ok(!!smith && FE.Steading.roomAt(v, smith.x, smith.y) >= 0 && v.buildings[FE.Steading.roomAt(v, smith.x, smith.y)].kind === 'smithy', `${v.name} 的武器匠沒站在工坊裡`);
+    ok(!!arm && FE.Steading.roomAt(v, arm.x, arm.y) >= 0 && v.buildings[FE.Steading.roomAt(v, arm.x, arm.y)].kind === 'armory', `${v.name} 的盔甲匠沒站在盔甲匠工坊裡`);
+    ok(FE.Gear.shopOf(smith, v) === 'weaponsmith' && FE.Gear.shopOf(arm, v) === 'armorer', `${v.name} 的工匠不是武器匠加盔甲匠（沒有鐵匠）`);
+    ok(folk.filter((n) => n.role === 'merchant').length === 1, `${v.name} 的商人不是 1 位`);
+    ok(g.soldiers.filter((s) => s.villageId === v.id).length === C.SOLDIER_COUNT[v.kind] || v.kind === 'fortress', `${v.name} 的士兵 ${g.soldiers.filter((s) => s.villageId === v.id).length} 位`);
     ok(folk.filter((n) => n.role === 'villager').every((n) => n.home && v.buildings[n.home.b].kind === 'big'), `${v.name} 有村民沒住在兵營`);
     const f = v.flat;
     const [d0, d1] = v.exitDirs;

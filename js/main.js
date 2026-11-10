@@ -42,7 +42,7 @@
     }
     playlog.push({
       t: game.turn, k: game.ticks || 0, a: label, x: p.x, y: p.y, hp: p.hp, mhp: p.maxHp, lv: game.level, exp: game.exp,
-      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.attackText(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: p.copper, ex: p.exhaust, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
+      wpn: p.equip.main ? FE.Gear.name(p.equip.main) : '徒手', atk: game.attackText(), body: p.equip.body ? FE.Gear.name(p.equip.body) : '', g: game.hero.copper, ex: p.exhaust, ws: game.worldState, ch: game.world.chunks.length, mon: game.monsters.length,
       m: msgs.reverse(),
     });
     if (playlog.length > PLAYLOG_MAX) playlog = playlog.slice(-PLAYLOG_MAX);
@@ -101,8 +101,7 @@
       FE.UI.update();
     }
   }
-  // 這條路大約走幾刻：照 move 與 endTurn 的算法加起來（超重、力量不到防具需求、被扭曲的地面、身上的防具、力竭、失序）
-  // 被扭曲的地面就是斷崖與地面錯位那幾隻怪物占的格子，先收成一份查表，畫路線時不用一格一格找
+  // 這條路大約走幾刻：照 move 與 endTurn 的算法加起來（超重、力量不到防具需求、身上的防具、力竭、失序）
   function pathTicks(path) {
     const p = game.player;
     const cfg = FE.CONFIG;
@@ -110,15 +109,7 @@
     const tired = FE.Char.exhaustMoveMul(p);
     const extra = FE.Gear.extraTicks(p);
     const chaos = FE.Stability.state(game) === 2 ? cfg.CHAOS_TIME : 1;
-    const hard = new Set();
-    for (const m of game.monsters) {
-      if (m.type !== 'TERRAIN' && m.type !== 'CLIFF') continue;
-      for (const [x, y] of m.cells) hard.add(x + ',' + y);
-      for (const o of m.members || []) for (const [x, y] of o.cells) hard.add(x + ',' + y);
-    }
-    let total = 0;
-    for (const [x, y] of path) total += (Math.round((hard.has(x + ',' + y) ? Math.max(cfg.TICKS_HARD, base) : base) * tired) + extra) * chaos;
-    return total;
+    return path.length * (Math.round(base * tired) + extra) * chaos;
   }
   // 把路線收掉（出發前改做別的事都用得到）；回傳 true 表示本來有路線
   function clearRoute() {
@@ -154,7 +145,7 @@
   function startWalk(path, npc) {
     walk = { path: path.slice(), npc, seen: seenMonsters(), timer: null };
     const step = () => {
-      if (!walk || game.talking != null || FE.UI.win() || game.player.points > 0) return stopWalk();
+      if (!walk || game.talking != null || FE.UI.win() || game.hero.points > 0) return stopWalk();
       if (!walk.path.length) {
         const n = walk.npc;
         stopWalk();
@@ -303,6 +294,32 @@
     }
   }
 
+  // 換人操作（Tab 或點隊員欄）：i 沒給就換下一位；換了不花時間，存一次檔
+  function switchParty(i) {
+    stopWalk();
+    clearRoute();
+    if (game.cycleControl(i)) FE.Save.save(game);
+    FE.UI.update();
+  }
+  // 角色視窗（第三十六版之三）：點頁籤換看的人；點「加 1」替那位隊友加屬性點
+  document.getElementById('charInfo').addEventListener('click', (e) => {
+    if (!ready) return;
+    const tab = e.target.closest && e.target.closest('[data-charview]');
+    if (tab) {
+      FE.UI.charView(Number(tab.dataset.charview));
+      return;
+    }
+    const add = e.target.closest && e.target.closest('[data-mate-attr]');
+    if (add && !add.disabled) {
+      const m = FE.UI.charViewed();
+      dispatch('隊友加點', () => game.spendMatePoint(m, add.dataset.mateAttr));
+    }
+  });
+  document.getElementById('party').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-party]');
+    if (b && ready && game.talking == null && !FE.UI.win() && !game.aim) switchParty(Number(b.dataset.party));
+  });
+
   function toggleWindow(name) {
     cancelRoute();
     if (FE.UI.win() === name) FE.UI.closeWindow();
@@ -333,7 +350,7 @@
       return;
     }
     // 升級加點視窗開著：只能按 1～6 選屬性，其他鍵都不作用
-    if (game.player.points > 0) {
+    if (game.hero.points > 0) {
       e.preventDefault();
       if (/^[1-6]$/.test(k)) dispatch('升級加點', () => game.spendPoint(FE.ATTRS[Number(k) - 1].key));
       return;
@@ -416,6 +433,12 @@
       }
       return;
     }
+    // Tab：換下一位操作（冒險者 → 隊友 1 → 隊友 2 → ⋯⋯ → 冒險者；第三十六版之一）。不花時間；視窗開著時不作用
+    if (k === 'tab') {
+      e.preventDefault();
+      if (!FE.UI.win()) switchParty();
+      return;
+    }
     if (k === 'escape') {
       e.preventDefault();
       if (FE.UI.win() === 'backpack' && FE.UI.bagDropConfirm()) FE.UI.cancelBagDrop();
@@ -448,6 +471,12 @@
     if (FE.UI.win() === 'backpack' && k === 'delete') {
       e.preventDefault();
       bagAction('drop');
+      return;
+    }
+    // 角色視窗開著：← → 換看隊伍裡的另一位（第三十六版之三，不換操作）
+    if (FE.UI.win() === 'character' && (k === 'arrowleft' || k === 'arrowright')) {
+      e.preventDefault();
+      FE.UI.charStep(k === 'arrowleft' ? -1 : 1);
       return;
     }
     // 視窗開著時，方向鍵與戰鬥鍵都不作用
@@ -529,7 +558,7 @@
     // 右下角的視窗按鈕：背包、角色、地圖
     const wb = e.target.closest && e.target.closest('[data-win]');
     if (wb) {
-      if (ready && game.talking == null && game.player.points <= 0) toggleWindow(wb.dataset.win);
+      if (ready && game.talking == null && game.hero.points <= 0) toggleWindow(wb.dataset.win);
       return;
     }
     const b = e.target.closest && e.target.closest('[data-act]');
@@ -555,13 +584,13 @@
   // 地圖上的滑鼠（第三十一版）：右鍵查看那一格；左鍵點怪物把牠設成目標（不出手、不算動作，同撞上去）
   document.getElementById('map').addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (!ready || game.talking != null || game.player.points > 0) return;
+    if (!ready || game.talking != null || game.hero.points > 0) return;
     const c = FE.UI.cellAt(e.clientX, e.clientY);
     cancelRoute();
     if (c) FE.UI.look(c.x, c.y);
   });
   document.getElementById('map').addEventListener('click', (e) => {
-    if (!ready || game.talking != null || FE.UI.win() || game.player.points > 0) return;
+    if (!ready || game.talking != null || FE.UI.win() || game.hero.points > 0) return;
     const c = FE.UI.cellAt(e.clientX, e.clientY);
     if (!c) return;
     const m = game.monsterAt(c.x, c.y);
@@ -623,7 +652,7 @@
   // 視窗：右上角的圖示列開關各視窗；設定裡也有各視窗的按鈕；點視窗外面或「Esc 關閉」關掉
   document.getElementById('iconbar').addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-win]');
-    if (b && ready && game.talking == null && game.player.points <= 0) toggleWindow(b.dataset.win);
+    if (b && ready && game.talking == null && game.hero.points <= 0) toggleWindow(b.dataset.win);
   });
   document.getElementById('overlay').addEventListener('click', (e) => {
     const select = e.target.closest && e.target.closest('[data-bag-select]');
@@ -641,7 +670,7 @@
 
   document.getElementById('playerName').addEventListener('change', (e) => {
     const name = e.target.value.trim() || '冒險者';
-    game.player.name = name;
+    game.hero.name = name;
     FE.store.save('fe.name', name);
     FE.Save.save(game);
     FE.UI.update();

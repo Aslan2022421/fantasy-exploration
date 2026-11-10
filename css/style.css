@@ -53,6 +53,8 @@
   --map-smith: #7fb0cf;
   --map-armorer: #d09a60;
   --map-soldier: #aab8b6;
+  --map-merchant: #e0a8ff;
+  --map-mate-fg: #7fe0a0;
   --map-player-fg: #f6f3de;
   --map-player-bg: #3d8b8f;
   --map-mon-fg: #1b0d0b;       /* 小怪物 */
@@ -233,14 +235,17 @@ b { font-weight: bold; }
 .log-npc { color: var(--npc); }
 .log-sys { color: var(--dim); }
 
-/* ---- 同一套框線：標題嵌在框線上。視窗、對話、建角都用 ---- */
+/* ---- 同一套框線：標題嵌在框線上。視窗、對話、建角都用 ----
+   第三十六版前整理：互動視窗一律固定大小（不再跟著字數變大變小），內容多了在框裡捲動。
+   三種大小：一般視窗（背包、角色、地圖、委託、歷史、圖例、設定⋯⋯）860×640；必須先處理的小視窗（升級加點、住一晚、施法）520×440；
+   對話 520×420、工匠交易 900×640。畫面比這個小時縮到畫面裡 */
 .win {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(720px, 100%);
-  max-height: calc(100vh - 48px);
-  max-height: calc(100dvh - 48px);
+  width: min(860px, 100%);
+  height: min(640px, calc(100vh - 48px));
+  height: min(640px, calc(100dvh - 48px));
   background: var(--panel);
   border: 1px solid var(--line2);
 }
@@ -271,8 +276,12 @@ b { font-weight: bold; }
   border: 0;
 }
 .win > .x:hover { color: var(--head); }
+.win.win-small { width: min(520px, 100%); height: min(440px, calc(100vh - 48px)); height: min(440px, calc(100dvh - 48px)); }
 .winbody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 20px 16px 14px; }
 .win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--head); }
+.help p { margin: 10px 0 2px; }
+.help ul { margin: 0 0 4px; padding-left: 1.3em; line-height: 1.6; }
+.help li { margin: 2px 0; }
 .win p { margin: 6px 0; }
 .frame { position: relative; min-height: 0; background: var(--panel); border: 1px solid var(--line2); }
 .frame > .fb { height: 100%; overflow: auto; padding: 20px 16px 12px; }
@@ -310,7 +319,10 @@ b { font-weight: bold; }
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(440px, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  width: min(520px, calc(100% - 24px));
+  height: min(420px, calc(100% - 24px));
   padding: 22px 16px 12px;
   background: var(--panel);
   border: 1px solid var(--line2);
@@ -322,7 +334,8 @@ b { font-weight: bold; }
 .dlg-opts { display: flex; flex-direction: column; gap: 6px; }
 .dlg-opts button { text-align: left; }
 .dlg-hint { margin: 8px 0 0; font-size: 12px; }
-#dialog.shop-dialog { width: min(900px, calc(100% - 24px)); max-height: min(82vh, 760px); overflow-y: auto; }
+.dlg-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+#dialog.shop-dialog { width: min(900px, calc(100% - 24px)); height: min(640px, calc(100% - 24px)); }
 .shop-dialog .dlg-head { position: static; margin-bottom: 4px; padding: 0; background: transparent; }
 .shop-dialog .dlg-text { margin-bottom: 8px; }
 .shop-head { display: flex; align-items: center; justify-content: space-between; color: var(--head); }
@@ -461,6 +474,28 @@ input {
 .npc.smith { color: var(--map-smith); }
 .npc.armorer { color: var(--map-armorer); }
 .npc.soldier { color: var(--map-soldier); }
+.npc.merchant { color: var(--map-merchant); }
+.npc.recruit { color: var(--map-mate-fg); }
+.player.mate { color: var(--map-mate-fg); }
+
+/* 角色視窗的隊員頁籤（第三十六版之三）：換看的人、不換操作；看的那位標亮 */
+.char-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.char-tab { padding: 3px 8px; font-size: 13px; background: transparent; border: 1px solid var(--line); border-radius: 3px; color: inherit; cursor: pointer; }
+.char-tab.on { border-color: var(--map-mate-fg); background: rgba(127, 224, 160, 0.12); }
+.char-tabs-hint { font-size: 12px; }
+
+/* 隊員欄（第三十六版之一）：右側訊息欄上方，每位隊員一行，正在操作的那位標亮，點一下換人 */
+#party { flex: none; padding: 6px 8px 4px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+#party.hidden { display: none; }
+#party .pm { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 3px 6px; font-size: 12px; line-height: 1.35; background: transparent; border: 1px solid var(--line); border-radius: 3px; color: inherit; cursor: pointer; }
+#party .pm.on { border-color: var(--map-mate-fg); background: rgba(127, 224, 160, 0.12); }
+#party .pm-name { font-weight: bold; }
+#party .pm-cls { grid-column: 2; grid-row: 1; opacity: 0.8; }
+#party .pm-bar { grid-column: 1; grid-row: 2; height: 6px; background: rgba(255, 255, 255, 0.12); border-radius: 3px; overflow: hidden; }
+#party .pm-bar i { display: block; height: 100%; background: var(--hp, #6cc070); }
+#party .pm-bar.mid i { background: var(--hp-mid, #d8b040); }
+#party .pm-bar.low i { background: var(--hp-low, #d85050); }
+#party .pm-hp { grid-column: 2; grid-row: 2; opacity: 0.8; }
 .village { background: var(--map-village); }
 .legend b.town { background: var(--map-town); }
 .chest { color: var(--map-chest); font-weight: bold; }
@@ -506,7 +541,8 @@ input {
   #place { display: none; }
   #lowrow { justify-content: center; }
   .bar { width: 70px; }
-  .win { max-height: calc(100dvh - 40px); }
+  .win { height: min(640px, calc(100dvh - 40px)); }
+  .win.win-small { height: min(440px, calc(100dvh - 40px)); }
   .winbody { padding: 18px 10px 10px; }
   .cc h1 { font-size: 22px; }
   .cc-cols { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }

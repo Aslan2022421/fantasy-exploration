@@ -29,24 +29,24 @@ function testEconomy30() {
   ok(C.HOUR_TICKS === 100 && C.DAY_TICKS === 2400 && C.HOUR_TICKS * 36 === 3600, '時鐘的數字');
   ok(FE.clockText(0) === '第 1 天 0 時' && FE.clockText(2 * 2400 + 1400) === '第 3 天 14 時' && FE.clockText(2399) === '第 1 天 23 時', `時間的寫法 ${FE.clockText(2 * 2400 + 1400)}`);
 
-  // 2. 怪物、士兵、事件照同一個時鐘：每 10 刻世界一回合（怪物、士兵各動一次），每 100 刻演算一次事件
+  // 2. 怪物、士兵、事件照同一個時鐘：每 6 刻世界一回合（怪物、士兵各動一次；第三十六版之一，原本 10 刻），每 100 刻演算一次事件
   {
     const g = newGame(301);
     const ev = counter(FE.Events, 'tick');
     const wt = counter(FE.AI, 'worldTurn');
     const stt = counter(FE.AI, 'soldierTurn');
     const t0 = g.ticks;
-    for (let i = 0; i < 37; i++) g.endTurn(false, 10, { exact: true });
-    ok(g.ticks - t0 === 370 && wt.n === 37 && stt.n === 37, `370 刻：世界 ${wt.n} 回合、士兵 ${stt.n} 次（應該各 37）`);
-    ok(ev.n === Math.floor(g.ticks / 100) - Math.floor(t0 / 100), `370 刻演算事件 ${ev.n} 次（應該每 100 刻一次）`);
-    // 一個動作 25 刻（例如重甲走一步）：刻數累積，湊滿 10 刻就多動一次
+    for (let i = 0; i < 37; i++) g.endTurn(false, 6, { exact: true });
+    ok(g.ticks - t0 === 222 && wt.n === 37 && stt.n === 37, `222 刻：世界 ${wt.n} 回合、士兵 ${stt.n} 次（應該各 37）`);
+    ok(ev.n === Math.floor(g.ticks / 100) - Math.floor(t0 / 100), `222 刻演算事件 ${ev.n} 次（應該每 100 刻一次）`);
+    // 一個動作 25 刻（例如重甲走一步）：刻數累積，湊滿 6 刻就多動一次
     const w0 = wt.n;
     for (let i = 0; i < 4; i++) g.endTurn(false, 25, { exact: true });
-    ok(wt.n - w0 === 10, `4 個 25 刻的動作，世界該走 10 回合，走了 ${wt.n - w0}`);
+    ok(wt.n - w0 === 16, `4 個 25 刻的動作，世界該走 16 回合，走了 ${wt.n - w0}`);
     ev.restore(); wt.restore(); stt.restore();
   }
 
-  // 3. 野外短休：1 小時（100 刻，世界跑 10 回合），回 1d10＋體質修正值，不花錢；旁邊有怪物不能休息；途中怪物貼上來就被打斷
+  // 3. 野外短休：1 小時（100 刻，世界跑約 16 回合），回 1d10＋體質修正值，不花錢；旁邊有怪物不能休息；途中怪物貼上來就被打斷
   {
     const g = newGame(302);
     const p = g.player;
@@ -55,11 +55,11 @@ function testEconomy30() {
     const wt = counter(FE.AI, 'worldTurn');
     const t0 = g.ticks;
     g.rest();
-    ok(g.ticks - t0 === 100 && wt.n === 10 && p.copper === 500 && p.hp > 1 && p.hp <= 1 + 10, `短休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、錢 ${p.copper}、生命 ${p.hp}`);
+    ok(g.ticks - t0 === 100 && wt.n >= 16 && wt.n <= 17 && p.copper === 500 && p.hp > 1 && p.hp <= 1 + 10, `短休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、錢 ${p.copper}、生命 ${p.hp}`);
     wt.restore();
     // 旁邊有怪物：不能休息、不花時間
     const side = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy));
-    const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + side[0], y: p.y + side[1], cells: [], scope: 2, data: {} });
+    const m = g.spawnMonster({ type: 'DECAY', x: p.x + side[0], y: p.y + side[1], cells: [], scope: 2, data: {} });
     m.x = p.x + side[0]; m.y = p.y + side[1];
     const t1 = g.ticks;
     g.rest();
@@ -74,7 +74,7 @@ function testEconomy30() {
     }
     if (spot && far) {
       // 種族固定哥布林：上面挑位置時的視線用感知修正值 0 算，照環境隨機套的種族感知不一樣，可能看不到冒險者、不追上來（第三十三版之三（三））
-      const c = g.spawnMonster({ type: 'TERRAIN', x: spot.x, y: spot.y, cells: [], scope: 2, data: {}, race: 'goblin' });
+      const c = g.spawnMonster({ type: 'DECAY', x: spot.x, y: spot.y, cells: [], scope: 2, data: {}, race: 'goblin' });
       Object.assign(c, { x: spot.x, y: spot.y, small: true });
       p.hp = 5;
       const t2 = g.ticks;
@@ -83,7 +83,7 @@ function testEconomy30() {
     }
   }
 
-  // 4. 村莊長休：8 小時（800 刻，世界跑 80 回合），生命回滿，照經濟標籤付生活開支，得到生活水準的效果
+  // 4. 村莊長休：8 小時（800 刻，世界跑約 133 回合），生命回滿，照經濟標籤付生活開支，得到生活水準的效果
   {
     const g = newGame(303);
     const p = g.player;
@@ -108,7 +108,7 @@ function testEconomy30() {
       const paid = 1000 - p.copper;
       tiers.push(paid);
       const rep = Math.round(200 * C.LIVING_REPAIR[tier]);
-      ok(g.ticks - t0 === 800 && wt.n === 80 && p.hp === p.maxHp, `長休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、生命 ${p.hp}/${p.maxHp}`);
+      ok(g.ticks - t0 === 800 && wt.n >= 133 && wt.n <= 134 && p.hp === p.maxHp, `長休：${g.ticks - t0} 刻、世界 ${wt.n} 回合、生命 ${p.hp}/${p.maxHp}`);
       const toolRep = C.LIVING_REPAIR[tier] ? Math.max(1, Math.round(50 * C.LIVING_REPAIR[tier])) : 0;
       ok(paid === C.LIVING_COST[tier] * 10 && p.equip.main.dur === 100 + rep && p.equip.pick.dur === 10 + toolRep && p.equip.sickle.dur === 10 + toolRep, `${FE.PROSPERITY[tier]}：付了 ${paid} 銅（應該 ${C.LIVING_COST[tier]} 銀）、長劍耐久 ${p.equip.main.dur}（應該 ${100 + rep}）、採集工具耐久 ${p.equip.pick.dur}/${p.equip.sickle.dur}`);
       ok(p.exhaust === 4 - C.LIVING_EXHAUSTION[tier], `${FE.PROSPERITY[tier]}長休後力竭 ${p.exhaust}（應該 ${4 - C.LIVING_EXHAUSTION[tier]}）`);
@@ -133,19 +133,19 @@ function testEconomy30() {
     ok(g.questPay(q, v.id) === Math.round(200 * FE.Steading.questEcon(v) * 1.05) && g.questPay(q, -1) === 200, `住宿加成：這裡 ${g.questPay(q, v.id)}（不加是 ${base}）、別處 ${g.questPay(q, -1)}`);
   }
 
-  // 5. 倒下在聚落醒來也算一次長休（世界跑 80 回合），不收錢
+  // 5. 倒下在聚落醒來也算一次長休（世界跑約 133 回合），不收錢
   {
     const g = newGame(304);
     const p = g.player;
     const at = fieldSpot(g);
     Object.assign(p, { x: at.x, y: at.y, copper: 777, exhaust: 2 });
-    const m = g.spawnMonster({ type: 'TERRAIN', x: at.x + 30, y: at.y, cells: [], scope: 2, data: {} });
+    const m = g.spawnMonster({ type: 'DECAY', x: at.x + 30, y: at.y, cells: [], scope: 2, data: {} });
     const wt = counter(FE.AI, 'worldTurn');
     const t0 = g.ticks;
     g.die(m);
     g.endTurn(false);
     wt.restore();
-    ok(g.world.villageAt(p.x, p.y) && p.hp === p.maxHp && p.copper === 777 && p.exhaust === 1 && g.ticks - t0 >= 800 && wt.n >= 80, `倒下醒來：在聚落 ${!!g.world.villageAt(p.x, p.y)}、生命 ${p.hp}/${p.maxHp}、錢 ${p.copper}、力竭 ${p.exhaust}、過了 ${g.ticks - t0} 刻、世界 ${wt.n} 回合`);
+    ok(g.world.villageAt(p.x, p.y) && p.hp === p.maxHp && p.copper === 777 && p.exhaust === 1 && g.ticks - t0 >= 800 && wt.n >= 133, `倒下醒來：在聚落 ${!!g.world.villageAt(p.x, p.y)}、生命 ${p.hp}/${p.maxHp}、錢 ${p.copper}、力竭 ${p.exhaust}、過了 ${g.ticks - t0} 刻、世界 ${wt.n} 回合`);
   }
 
   // 6. 經濟值：初始在標籤那一段的中間；在這裡花錢每 10 銀 +1、完成委託 +3、24 步內每隻怪物每天 −1；標籤改變時出訊息，物價跟著標籤
@@ -178,7 +178,7 @@ function testEconomy30() {
       if (g.world.passable(x, y) && !g.world.inBuffer(x, y) && box(x, y) <= 20 && box(x, y) >= 10) spots.push([x, y]);
     }
     g.monsters = [];
-    for (const [x, y] of spots.slice(0, 12)) { const m = g.spawnMonster({ type: 'TERRAIN', x, y, cells: [], scope: 2, data: {} }); Object.assign(m, { x, y }); }
+    for (const [x, y] of spots.slice(0, 12)) { const m = g.spawnMonster({ type: 'DECAY', x, y, cells: [], scope: 2, data: {} }); Object.assign(m, { x, y }); }
     const near = g.monsters.filter((m) => box(m.x, m.y) <= C.HUNT_RADIUS).length;
     const others = g.world.villages.filter((o) => o !== v).map((o) => FE.Steading.econ(o));
     g.econDay();
@@ -287,7 +287,7 @@ function testEconomy30() {
       ok(accept(a, { kind: 'herb', n: 5, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '接不了採藥委託');
       ok(!accept(b, { kind: 'herb', n: 5, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '已經有採藥委託還能再接一個');
       ok(accept(b, { kind: 'ore', n: 3, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '有採藥委託時接不了採礦委託');
-      const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + 40, y: p.y, cells: [], scope: 2, data: {} });
+      const m = g.spawnMonster({ type: 'DECAY', x: p.x + 40, y: p.y, cells: [], scope: 2, data: {} });
       const c = ns[2] || a;
       c.quest = null;
       ok(accept(c, { kind: 'hunt', monsterIds: [m ? m.id : -1], total: 1, village: v.name, exp: 1, copper: 1, compute: 0, accepted: false, done: false }), '有採藥採礦委託時接不了清除委託');
@@ -309,7 +309,8 @@ function testEconomy30() {
       const g = new FE.Game(4000 + s);
       g.start();
       for (let k = 0; k < 3; k++) g.createChunk(false);
-      for (const o of g.world.npcs.concat(g.soldiers)) { cnt[o.race]++; n++; }
+      for (const o of g.world.npcs) { cnt[o.race]++; n++; } // 士兵與隊友的種族照職業套版（第三十六版之一），不在這個比例裡
+      for (const o of g.soldiers) if (!o.race || !FE.PLAYER_RACES[o.race]) fail('時間與經濟 士兵沒有種族');
     }
     ok(n > 200 && Object.values(cnt).reduce((a, b) => a + b, 0) === n, `每個人都該有種族（${n} 人：${JSON.stringify(cnt)}）`);
     ok(Math.abs(cnt.human / n - 0.7) < 0.07 && Math.abs(cnt.dwarf / n - 0.15) < 0.05 && Math.abs(cnt.elf / n - 0.15) < 0.05, `種族比例 人類 ${(cnt.human / n).toFixed(2)}、矮人 ${(cnt.dwarf / n).toFixed(2)}、精靈 ${(cnt.elf / n).toFixed(2)}`);
@@ -328,7 +329,7 @@ function testEconomy30() {
     g.endTurn(false, 10, { exact: true });
     ok(p.exhaust === 1 && /一整天沒好好睡/.test(g.log.map((l) => l.text).join('|')), `一整天沒長休：力竭 ${p.exhaust}`);
     // 走一步多花的刻
-    const free = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy) && !g.isHardGround(p.x + dx, p.y + dy));
+    const free = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy));
     const step = (lv) => { p.exhaust = lv; p.awakeAt = g.ticks; const t0 = g.ticks; g.move(free[0], free[1]); g.move(-free[0], -free[1]); return (g.ticks - t0) / 2; };
     const s0 = step(0), s1 = step(1), s3 = step(3);
     ok(s1 === Math.round(s0 * 1.2) && s3 === s0 * 2, `力竭照速度換算：0 級 ${s0}、1 級 ${s1}（應該 ${Math.round(s0 * 1.2)}）、3 級 ${s3}（應該 ${s0 * 2}）刻`);
@@ -361,7 +362,7 @@ function testEconomy30() {
     Object.assign(p, { x: at.x, y: at.y });
     const free = DIRS.find(([dx, dy]) => g.world.passable(p.x + dx, p.y + dy) && g.world.heightOk(p.x, p.y, p.x + dx, p.y + dy) && g.world.cell(p.x + dx, p.y + dy).h === g.world.cell(p.x, p.y).h && !g.world.npcAt(p.x + dx, p.y + dy));
     if (free) {
-      const m = g.spawnMonster({ type: 'TERRAIN', x: p.x + free[0], y: p.y + free[1], cells: [], scope: 2, data: {} });
+      const m = g.spawnMonster({ type: 'DECAY', x: p.x + free[0], y: p.y + free[1], cells: [], scope: 2, data: {} });
       Object.assign(m, { x: p.x + free[0], y: p.y + free[1], hp: 999, maxHp: 999 });
       const d20 = FE.rollD20;
       const mods = {};
@@ -375,7 +376,7 @@ function testEconomy30() {
     }
   }
 
-  // 12. 侵蝕拿掉了（第三十三版之三）：怪物放著、冒險者長休一晚（80 回合，含整點的事件），地面的生態區與高度一格都沒變，
+  // 12. 侵蝕拿掉了（第三十三版之三）：怪物放著、冒險者長休一晚（800 刻，含整點的事件），地面的生態區與高度一格都沒變，
   // 也沒有因此生出新的怪物（怪物只從負的穩定值生，離冒險者至少 DECAY_MIN_DIST 步）
   {
     let changed = 0, spawned = 0, nights = 0;
@@ -398,7 +399,7 @@ function testEconomy30() {
       const rr = FE.makeRng(s + 9);
       for (let k = 0; k < 4 && spots.length; k++) {
         const [x, y] = spots.splice(Math.floor(rr() * spots.length), 1)[0];
-        const m = g.spawnMonster({ type: 'TERRAIN', x, y, cells: [], scope: 2, data: {} });
+        const m = g.spawnMonster({ type: 'DECAY', x, y, cells: [], scope: 2, data: {} });
         if (m) Object.assign(m, { x, y, home: { x, y } });
       }
       if (!g.monsters.length) continue;

@@ -116,7 +116,7 @@ function testStability33() {
       reset(g);
       g.monsters = [];
       const d0 = g.world.debt;
-      const group = g.spawnGroup({ d: { type: 'TERRAIN', x: at[0], y: at[1], cells: [], scope: 3, data: {} }, must: false }, null, false, room);
+      const group = g.spawnGroup({ d: { type: 'DECAY', x: at[0], y: at[1], cells: [], scope: 3, data: {} }, must: false }, null, false, room);
       const placed = group.reduce((t, m) => t + m.bug, 0);
       ok(group.length <= room && group.debt === placed + group.left && g.world.debt - d0 === group.left && sumDebt(g) === g.world.debt, `限 ${room} 隻：生了 ${group.length} 隻（帶走 ${placed}），這處欠 ${group.debt}，格子 ${group.left}，全世界多了 ${g.world.debt - d0}`);
       if (room === 0) ok(group.left === group.debt && group.debt >= C.SITE_DEBT[0], `限 0 隻時欠的量全留在格子裡：${group.left}／${group.debt}`);
@@ -183,7 +183,7 @@ function testStability33() {
     reset(g);
     const c = field(g, 8, { minD: 14 });
     ok(!!c, '找得到空地');
-    const m = FE.makeMonster({ type: 'TERRAIN', x: c[0], y: c[1], cells: [], scope: 2, data: {}, race: 'goblin' }, g.nextMonsterId++, 1);
+    const m = FE.makeMonster({ type: 'DECAY', x: c[0], y: c[1], cells: [], scope: 2, data: {}, race: 'goblin' }, g.nextMonsterId++, 1);
     Object.assign(m, { home: { x: c[0], y: c[1] } });
     g.monsters.push(m);
     const cells = box(c, 8);
@@ -265,7 +265,7 @@ function testStability33() {
     // 已經有怪物負責的範圍不算：一隻怪物的生成點旁邊的負格子，不另外生
     reset(g);
     fillBox(spots[1], 4, -800);
-    const guardM = FE.makeMonster({ type: 'TERRAIN', x: spots[1][0], y: spots[1][1], cells: [], scope: 2, data: {}, race: 'goblin' }, g.nextMonsterId++, 1);
+    const guardM = FE.makeMonster({ type: 'DECAY', x: spots[1][0], y: spots[1][1], cells: [], scope: 2, data: {}, race: 'goblin' }, g.nextMonsterId++, 1);
     g.monsters.push(guardM);
     ok(FE.Stability.spawnDecay(g, reachNow()) === 0 && g.monsters.length === 1, '怪物負責的範圍裡的負格子不另外生怪物');
     g.monsters = [];
@@ -396,7 +396,7 @@ function testStability33() {
     w.setCell(c[0] + 5, c[1] + 5, '.', 'tundra');
     w.setCell(c[0] + 6, c[1] + 5, ':', 'desert');
     w.setHeight(c[0] - 5, c[1] - 5, 2);
-    const mon = FE.makeMonster({ type: 'TERRAIN', x: c[0] + 3, y: c[1], cells: [], scope: 2, data: {}, race: 'goblin' }, g.nextMonsterId++, 1);
+    const mon = FE.makeMonster({ type: 'DECAY', x: c[0] + 3, y: c[1], cells: [], scope: 2, data: {}, race: 'goblin' }, g.nextMonsterId++, 1);
     Object.assign(mon, { home: { x: mon.x, y: mon.y } });
     g.monsters.push(mon);
     const snap = () => {
@@ -442,7 +442,7 @@ function testStability33() {
     }
     const per = raw.length / g.world.chunks.length;
     ok(raw.length < 60000 * g.world.chunks.length && g.world.chunks.every((ch) => ch.stab.length === 576), `存檔 ${g.world.chunks.length} 塊 ${raw.length} 字元（每塊約 ${per.toFixed(0)}）`);
-    ok(FE.CONFIG.SAVE_VERSION === 25, `存檔版本 ${FE.CONFIG.SAVE_VERSION}`);
+    ok(FE.CONFIG.SAVE_VERSION === 27, `存檔版本 ${FE.CONFIG.SAVE_VERSION}`);
   }
 
   // 10. 獎勵不變：經驗值、打倒時的算力、掉的錢照 m.scope＝max(1, round(blockValue ÷ REWARD_VALUE_PER_SCOPE))，跟格子的穩定值無關

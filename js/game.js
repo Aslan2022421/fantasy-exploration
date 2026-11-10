@@ -28,15 +28,18 @@
       this.battle = { targetId: null, cooldown: 0, healCd: 0 }; // 目前的目標、重擊冷卻、治療冷卻（牧師）
       this.aim = null;       // 按 F 瞄準時：{ mode, ids 看得到的怪物（近的在前）, i 目前選的 }（不進存檔）
       this.worldState = 0;   // 世界狀態：0 安穩、1 動盪、2 失序（stability.js）；世界等級另外算，見 FE.Stability.worldLevel
-      this.soldiers = [];    // 城鎮的士兵（role 'soldier'），不在 world.npcs 裡
-      this.worldEvery = 1;   // 世界（怪物、士兵）每 10 刻走一回合，這個數字讓它再慢幾倍；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
+      this.soldiers = [];    // 城鎮、堡壘、城市、要塞的士兵（role 'soldier'，六個職業的角色套版），不在 world.npcs 裡
+      this.hero = null;      // 冒險者本人（第三十六版之一）：錢、背包、委託、經驗值、等級都記在他身上
+      this.mates = [];       // 隊友（role 'mate'，最多 PARTY_MAX 位，會跟著冒險者升級）
+      this.autoAct = false;  // 正在替自動行動的隊友出手（不是玩家操作的那一位，訊息不寫「你」；不進存檔）
+      this.worldEvery = 1;   // 世界（怪物、士兵）每 6 刻走一回合，這個數字讓它再慢幾倍；平常是 1，測試的「四人等效」模擬用 4（不進存檔）
       this.worldClock = 0;
       this.fell = false;     // 這一個動作裡冒險者倒下了
       this.talking = null;   // 對話視窗開著時，對方的 id（不進存檔）
       this.talkPage = 'main'; // 工匠的對話停在哪一層（'main'、'buy'、'buy:weapon'、'repair'⋯⋯），不進存檔
       this.nextGearId = 1;   // 下一件裝備的編號
-      this.tickAcc = 0;      // 還沒湊滿 10 刻的零頭（怪物每 10 刻行動一次）
-      this.player = null;
+      this.tickAcc = 0;      // 還沒湊滿 6 刻的零頭（怪物每 6 刻行動一次）
+      this.player = null;    // 玩家目前操作的那一位（冒險者，戰鬥中可以按 Tab 換成隊友；其他程式都看這一位）
       this.history = FE.store.load('fe.history', []);
       this.reports = FE.store.load('fe.reports', []);
     }
@@ -57,6 +60,7 @@
       this.player = FE.Char.create(this, clsKey, picks, FE.store.load('fe.name', '冒險者'), b, opts.skills);
       this.player.x = s.x;
       this.player.y = s.y;
+      this.hero = this.player;
       this.lastSafe = { x: s.x, y: s.y };
     }
 
@@ -120,8 +124,6 @@
         }
       }
       if (village) this.moveBufferDebt(village);
-      // 世界越亂，新的一塊越粗糙：依世界狀態額外多蓋幾塊氣候印章或高度突變（基本生成不變）
-      FE.Stability.roughen(this, rect);
       const inChunk = (n) => FE.inRect(rect, n.x, n.y);
       const found = FE.Checker.scan(this.world, rect, this.monsters);
       // 斷層蟲先放，牠負責的區域打通後就走得到，區域裡的怪物和村民才算碰得到
@@ -133,7 +135,6 @@
         return FE.DIRS8.some(([dx, dy]) => reach.at(x + dx, y + dy) && this.world.heightOk(x, y, x + dx, y + dy)); // 八方向（第三十五版之四）
       };
       const spawned = [];
-      // 檢查器找到的地形錯位與斷崖（rest）不處理：第三十三版之三起錯的種類不決定怪物，只有挑上的地點才欠 BUG 值
       // 怪物遮蔽時不生怪物（一定要生的也不生；創世門檻只剩任務）
       const { sites } = this.veil ? { sites: [] } : this.pickSites(found, rect, first, landmarks || []);
       this.curCampaign = index; // 這一段生的怪物都記上是第幾段戰役（spawnGroup）
@@ -172,10 +173,13 @@
       }
       const content = spawned.reduce((s, m) => s + m.compute, 0) + quests.reduce((s, q) => s + q.compute, 0);
       this.nextChunkAt = (first ? 0 : this.nextChunkAt) + content * C.PLAYER_COMPUTE_SCALE * C.CREATION_SHARE;
-      // 城鎮的士兵（住幾位看人口）
-      if (village && FE.Steading.townish(village)) {
-        for (let i = 0; i < this.soldierQuota(village); i++) this.spawnSoldier(village);
+      // 聚落的隱形人口數（扣掉已經住在裡面的人），再放士兵（城鎮、堡壘各 3 位，城市、要塞各 6 位，村莊沒有）
+      if (village) this.initPop(village);
+      if (village && this.soldierQuota(village) > 0) {
+        for (let i = 0; i < this.soldierQuota(village); i++) if (!this.spawnSoldier(village)) break;
       }
+      for (const v of this.world.villages) if (v.popKind && v.popKind !== v.kind) this.initPop(v); // 堡壘加蓋成要塞：人口照新的範圍重擲
+      this.relocateSoldiers();
 
       const mids = spawned.filter((m) => m.tier !== 'small').length;
       const where = first ? '' : this.directionTo(rect);
@@ -208,61 +212,384 @@
       return this.soldiers.find((s) => s.x === x && s.y === y) || null;
     }
 
-    // ---- 士兵 ----
-    // 只有城鎮有，每座城鎮固定 3 位（第二十四版起不看人口）。
-    // 數值以同世界等級的小怪物為準，不升級；被打倒就消失，要等世界回到安穩，該城鎮才補回原本的人數。
-    soldierQuota(v) {
-      return v && v.kind === 'city' ? 2 * C.SOLDIER_PER_TOWN : C.SOLDIER_PER_TOWN; // 城市是兩座城鎮併起來，士兵加倍（第三十四版，Claude 定的）
+    // ---- 隊伍（第三十六版之一）----
+    // 隊伍＝冒險者（hero）加隊友（mates，最多 PARTY_MAX 位）。game.player 是玩家目前操作的那一位，按 Tab 換下一位（冒險者 → 隊友 1 → 隊友 2 → ⋯⋯ → 冒險者），
+    // 其他程式（移動、出手、背包、鏡頭、狀態列）都看 game.player，所以被操作的那位吃玩家的按鍵；沒被操作的那幾位照自動行為走（ai.js 的 partyTurn）。
+    // 錢、委託、經驗值、等級只算冒險者本人（hero）：隊友不進聚落的建築、不開對話、不開寶箱、不採集，進了聚落或要做這些事就換回冒險者
+    party() {
+      return this.hero ? [this.hero].concat(this.mates) : this.player ? [this.player] : [];
     }
 
-    // 在城鎮室外的空地放一位士兵；沒位置放就不放
-    spawnSoldier(v) {
+    // 這一格站著隊伍裡的誰（不含玩家操作的那一位）
+    partyAt(x, y) {
+      return this.party().find((c) => c !== this.player && c.x === x && c.y === y) || null;
+    }
+
+    // 角色（冒險者、隊友、士兵）還在不在
+    isAlive(c) {
+      return c === this.hero || this.mates.includes(c) || this.soldiers.includes(c);
+    }
+
+    // 換成操作隊伍裡的某一位（c 必須在隊伍裡）；目標、瞄準重來
+    switchControl(c) {
+      if (!c || c === this.player || !this.party().includes(c)) return false;
+      this.player = c;
+      this.battle.targetId = null;
+      this.aim = null;
+      this.say(c === this.hero ? '你換回了冒險者本人。' : `你換成操作${c.name}（${FE.Char.cls(c).name}）。`, 'sys');
+      return true;
+    }
+
+    // Tab：換下一位。戰鬥中也能換，不花時間；對話、升級加點時不換。沒有隊友就沒事
+    // i 給了就換成操作隊伍的第 i 位（點隊員欄用）
+    cycleControl(i) {
+      const list = this.party();
+      if (list.length < 2 || this.talking != null || (this.hero && this.hero.points > 0)) return false;
+      const to = i == null ? list[(list.indexOf(this.player) + 1) % list.length] : list[i];
+      if (to && to !== this.hero && this.world.inVillage(to.x, to.y)) {
+        this.say('在聚落裡，隊友只是跟著你，不用換人操作。', 'sys');
+        return false;
+      }
+      if (this.world.inVillage(this.player.x, this.player.y) && this.player === this.hero && to !== this.hero) {
+        this.say('在聚落裡，隊友只是跟著你，不用換人操作。', 'sys');
+        return false;
+      }
+      return this.switchControl(to);
+    }
+
+    // 臨時把 player 換成 c 做一件事（隊友自動出手用）：不算玩家操作，訊息不寫「你」；做完換回去
+    asActor(c, fn) {
+      const keep = this.player;
+      const keepAuto = this.autoAct;
+      this.player = c;
+      this.autoAct = true;
+      try {
+        return fn();
+      } finally {
+        this.player = keep;
+        this.autoAct = keepAuto;
+      }
+    }
+
+    // 目前這個出手的人的重擊、治療、法術冷卻：玩家操作的那一位用 game.battle，自動行動的隊友各記在自己身上（c.cd）
+    bs() {
+      if (!this.autoAct) return this.battle;
+      return this.player.cd || (this.player.cd = { cooldown: 0, healCd: 0, spellCd: {} });
+    }
+
+    // 隊友升級：冒險者每升一級，隊友的等級＝冒險者等級－1（最少 1）；生命照職業算法加。
+    // 屬性點（4、8、12、16、19 級）留給玩家在角色視窗（C）裡加（第三十六版之三，使用者選的；原本照 Char.autoPoints 自動分配），不跳視窗
+    syncMates() {
+      for (const m of this.mates) {
+        const target = Math.max(1, this.level - 1);
+        if ((m.lv || 1) >= target) continue;
+        const pts = m.points || 0;
+        const gain = FE.Char.levelUpTo(m, target, { manual: true });
+        const more = (m.points || 0) - pts;
+        this.say(`${m.name}也升到 Lv${m.lv}，生命上限 +${gain}（現在 ${m.maxHp}）${more > 0 ? `，有 ${m.points} 點屬性可以加（按 C 打開角色視窗）` : ''}。`, 'world');
+      }
+    }
+
+    // 替隊友 m 加 1 點屬性（角色視窗裡點的）：跟冒險者一樣上限 18，體質加了生命上限照公式重算。回傳有沒有加成功
+    spendMatePoint(m, key) {
+      const a = FE.ATTRS.find((x) => x.key === key);
+      if (!m || !this.mates.includes(m) || !a || !(m.points > 0)) return false;
+      if (m.attr[key] >= C.ATTR_CAP) {
+        this.say(`${m.name}的${a.name}已經到 ${C.ATTR_CAP} 了，不能再加。`, 'sys');
+        return false;
+      }
+      m.attr[key]++;
+      m.points--;
+      const max = FE.Char.maxHp(m, m.lv || 1) + (m.ward ? m.ward.hp || 0 : 0);
+      const gain = max - m.maxHp;
+      m.maxHp = max;
+      if (gain > 0) m.hp += gain;
+      m.hp = Math.min(m.hp, m.maxHp);
+      const mod = FE.Char.mod(m.attr[key]);
+      this.say(`${m.name}的${a.name}加到 ${m.attr[key]}（修正值 ${mod > 0 ? '+' : ''}${mod}）${gain > 0 ? `，生命上限 +${gain}（現在 ${m.maxHp}）` : ''}。`, 'good');
+      if (m.points > 0 && FE.ATTRS.every((x) => m.attr[x.key] >= C.ATTR_CAP)) m.points = 0;
+      return true;
+    }
+
+    // 隊友倒下就是死了：寫進歷史紀錄，原本聚落的人口 −1，從隊伍拿掉；正被操作的話換回冒險者
+    mateDown(m, by) {
+      this.mates = this.mates.filter((o) => o !== m);
+      this.recordDeath(m, '隊友');
+      this.say(`${m.name}（${FE.Char.cls(m).name}）被${by ? by.name : '怪物'}打倒了，再也站不起來。`, 'bad');
+      if (this.player === m) {
+        this.player = this.hero;
+        this.battle.targetId = null;
+        this.aim = null;
+      }
+    }
+
+    // 士兵或隊友陣亡：寫進歷史紀錄（遊戲內只寫世界裡的現象），聚落人口 −1（不補回）
+    recordDeath(c, role) {
       const w = this.world;
+      const v = w.villageById(c.villageId);
+      const here = w.villageAt(c.x, c.y);
+      const near = here || w.villages.slice().sort((a, b) => Math.abs(a.cx - c.x) + Math.abs(a.cy - c.y) - (Math.abs(b.cx - c.x) + Math.abs(b.cy - c.y)))[0];
+      const where = here ? `${here.name}裡` : near ? `${near.name}附近` : '荒野';
+      this.history.unshift({
+        kind: 'death',
+        time: FE.nowTaipei(),
+        seed: this.seed,
+        day: this.day(),
+        role,
+        name: c.name,
+        cls: FE.Char.cls(c).name,
+        village: v ? `${v.name}（${FE.SETTLE_KINDS[v.kind]}）` : '',
+        where,
+      });
+      FE.store.save('fe.history', this.history.slice(0, 200));
+      if (v) this.popDelta(v, -1);
+    }
+
+    // ---- 可以招成隊友的人（第三十六版之二，取代之一的「招募士兵」）----
+    // 在同一個聚落完成第 RECRUIT_JOBS 件委託起，每完成一件擲一次（rollRecruits）：機率＝RECRUIT_BASE[聚落種類] × RECRUIT_ECON[經濟標籤]，
+    // 擲中就在聚落室外生成 1～RECRUIT_MAX[種類] 位（同時待著的也不超過這個數）。他們是 world.npcs 裡 role 'recruit' 的人：
+    // 帶一個背景（bg，只決定稱呼與台詞），職業六選一（神聖聚落牧師權重 RECRUIT_HOLY_PRIEST），站著不動、不給委託；
+    // 跟他對話可以「邀他同行」（隊伍沒滿），變成隊友：等級＝冒險者等級－1（最少 1），技能隨機 5 項、上限照聚落（同士兵套版），裝備品質跟世界等級。
+    // 從聚落的人口裡取（算有名字的人），RECRUIT_DAYS 天沒被招就離開（回到沒有名字的人裡，人口不變）
+    recruitChance(v) {
+      if (!v) return 0;
+      const base = C.RECRUIT_BASE[v.kind] || 0;
+      const econ = C.RECRUIT_ECON[v.steading ? v.steading.prosperity : 2];
+      return base * (econ == null ? 1 : econ);
+    }
+
+    recruitsAt(v) {
+      return this.world.npcs.filter((n) => n.role === 'recruit' && n.villageId === v.id);
+    }
+
+    // 完成委託時叫（finishJob）：這個聚落完成滿 RECRUIT_JOBS 件起擲一次；回傳這次生成的人
+    rollRecruits(v) {
+      const h = this.hero;
+      if (!v || !h || ((h.done && h.done[v.id]) || 0) < C.RECRUIT_JOBS) return [];
+      if (this.rng() >= this.recruitChance(v)) return [];
+      const room = (C.RECRUIT_MAX[v.kind] || 1) - this.recruitsAt(v).length;
+      if (room <= 0) return [];
+      const n = Math.min(room, FE.randInt(this.rng, 1, C.RECRUIT_MAX[v.kind] || 1));
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const r = this.spawnRecruit(v);
+        if (r) out.push(r);
+      }
+      if (out.length) this.say(`${v.name}來了${out.length > 1 ? `${out.length} 個` : '一個'}看起來想找同伴的人。`, 'world');
+      return out;
+    }
+
+    // 在聚落室外、不貼著建築門口的空地放一位；沒位置、人口裡沒有名字的人用完了就不放
+    spawnRecruit(v) {
+      const w = this.world;
+      if (this.unnamed(v) < 1) return null;
+      const nearDoor = (x, y) => (v.buildings || []).some((b) => (b.doors || []).some(([dx, dy]) => Math.max(Math.abs(dx - x), Math.abs(dy - y)) <= 1));
       const spots = [];
       for (let y = v.y0; y <= v.y1; y++) {
         for (let x = v.x0; x <= v.x1; x++) {
-          if (w.villageAt(x, y) !== v || !w.passable(x, y) || FE.Steading.roomAt(v, x, y) >= 0) continue;
-          if (w.npcAt(x, y) || w.chestAt(x, y) || this.soldierAt(x, y) || this.isPlayerAt(x, y)) continue;
+          if (w.villageAt(x, y) !== v || !w.passable(x, y) || FE.Steading.roomAt(v, x, y) >= 0 || nearDoor(x, y)) continue;
+          if (w.npcAt(x, y) || w.chestAt(x, y) || this.soldierAt(x, y) || this.isPlayerAt(x, y) || this.partyAt(x, y)) continue;
           spots.push([x, y]);
         }
       }
       if (!spots.length) return null;
       const [x, y] = FE.pick(this.rng, spots);
-      const s = Object.assign(
-        { id: w.nextId++, name: FE.pickName(w, this.rng), role: 'soldier', villageId: v.id, x, y, wl: FE.Stability.worldLevel(this), in: true },
-        FE.soldierStats(FE.Stability.worldLevel(this))
-      );
-      FE.npcRace(w, s); // 士兵也擲種族（人類 70%、矮人 15%、精靈 15%）
+      const classes = Object.keys(FE.TEMPLATE_PICKS).filter((k) => FE.CLASSES[k]);
+      const holy = FE.Steading.isHoly(v);
+      const weights = classes.map((k) => (holy && k === 'priest' ? C.RECRUIT_HOLY_PRIEST : 1));
+      let roll = this.rng() * weights.reduce((s, x) => s + x, 0);
+      let cls = classes[classes.length - 1];
+      for (let i = 0; i < classes.length; i++) {
+        roll -= weights[i];
+        if (roll < 0) {
+          cls = classes[i];
+          break;
+        }
+      }
+      const bg = FE.pick(this.rng, Object.keys(FE.RECRUIT_BACKGROUNDS));
+      let name = FE.pickName(w, this.rng);
+      for (let t = 0; t < 8 && this.soldiers.concat(this.mates).some((o) => o.name === name); t++) name = FE.pickName(w, this.rng);
+      const r = { id: w.nextId++, name, role: 'recruit', villageId: v.id, x, y, quest: null, cls, bg, line: this.rng() < 0.5 ? 0 : 1, until: (this.ticks || 0) + C.RECRUIT_DAYS * C.DAY_TICKS };
+      FE.npcRace(w, r);
+      w.npcs.push(r);
+      return r;
+    }
+
+    // 每天一次（popDay 叫）：待滿 RECRUIT_DAYS 天沒被招的人離開
+    recruitDay(v) {
+      const now = this.ticks || 0;
+      this.world.npcs = this.world.npcs.filter((n) => !(n.role === 'recruit' && n.villageId === v.id && n.until <= now && this.talking !== n.id));
+    }
+
+    canRecruit(n) {
+      return !!this.hero && !!n && n.role === 'recruit' && this.mates.length < C.PARTY_MAX;
+    }
+
+    recruit(n) {
+      if (!this.canRecruit(n)) return null;
+      const v = this.world.villageById(n.villageId);
+      const lv = Math.max(1, this.level - 1);
+      const m = FE.Char.makeLevelChar(this, n.cls, lv, FE.Stability.worldLevel(this), n.name, { skillCap: C.SOLDIER_SKILL_CAP[v ? v.kind : 'town'] || 5, rng: this.rng });
+      Object.assign(m, { id: n.id, role: 'mate', villageId: n.villageId, x: n.x, y: n.y, race: n.race, cls: n.cls, bg: n.bg });
+      this.world.npcs = this.world.npcs.filter((o) => o !== n);
+      this.mates.push(m);
+      return m;
+    }
+
+    // ---- 聚落的隱形人口數（第三十六版之一）----
+    // v.pop 是這個聚落的總人數（不顯示）：村民、工匠、商人、士兵都算在裡面。第一次用到時照範圍與人口標籤擲出來。
+    // 沒有名字的人＝人口數－有名字的人（world.npcs 裡的村民、工匠、商人，加這個聚落的士兵）；補士兵從沒有名字的人取 1 位。
+    // 每天照人口標籤增減（POP_RATE），不超出這一種聚落範圍的上限，也不會少過有名字的人數
+    popRange(v) {
+      return C.POP_RANGE[v.kind] || C.POP_RANGE.village;
+    }
+
+    // 有名字的人：還在聚落裡的村民、工匠、商人，加這個聚落的士兵
+    namedCount(v) {
+      return this.world.npcs.filter((n) => n.villageId === v.id).length + this.soldiers.filter((s) => s.villageId === v.id).length;
+    }
+
+    // 沒擲過就擲：落在範圍裡人口標籤那一五分之一（用世界種子與聚落編號的雜湊擲，不動生成與玩法用的亂數）；至少要容得下有名字的人。
+    // 堡壘加蓋成要塞後種類變了，照新種類的範圍重擲（v.popKind 記著當時是哪一種）
+    initPop(v) {
+      if (Number.isFinite(v.pop) && !(v.popKind && v.popKind !== v.kind)) return v.pop;
+      v.popKind = v.kind;
+      const [lo, hi] = this.popRange(v);
+      const tag = v.steading ? v.steading.population : 2;
+      const a = lo + ((hi - lo) * tag) / 5;
+      const b = lo + ((hi - lo) * (tag + 1)) / 5;
+      let h = (this.seed ^ (v.id * 0x9e3779b1) ^ 0x5bd1e995) >>> 0;
+      h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
+      h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+      h = (h ^ (h >>> 16)) >>> 0;
+      v.pop = Math.max(this.namedCount(v), Math.round(a + (b - a) * (h / 4294967296)));
+      return v.pop;
+    }
+
+    // 人口數加減 d（不低於有名字的人數，不超過範圍的上限）
+    popDelta(v, d) {
+      this.initPop(v);
+      v.pop = Math.max(Math.min(v.pop, this.namedCount(v)), Math.min(this.popRange(v)[1], v.pop + d));
+      return v.pop;
+    }
+
+    // 沒有名字的人還有幾位
+    unnamed(v) {
+      return Math.max(0, this.initPop(v) - this.namedCount(v));
+    }
+
+    // 每天一次：人口數照人口標籤增減（取整）；缺額的士兵每天擲一次，成功就從沒有名字的人裡補 1 位
+    popDay() {
+      for (const v of this.world.villages) {
+        if (!v.steading) continue;
+        const rate = C.POP_RATE[v.steading.population];
+        if (rate) this.popDelta(v, Math.round(this.initPop(v) * rate));
+        this.refillSoldier(v);
+        this.sortieDay(v);
+        this.recruitDay(v);
+      }
+    }
+
+    // 士兵出城（第三十六版之二）：每個有士兵的聚落每天擲一次，機率照世界狀態（SORTIE_CHANCE：安穩 0、動盪 25%、失序 75%）；
+    // 擲中就出城一天（v.sortieUntil），打完、找不到怪物或世界回到安穩就提早回城（ai.js 的 soldierTurn）。
+    // 用世界種子、聚落編號與天數的雜湊擲，不動玩法的亂數序列
+    sortieDay(v) {
+      if (!this.soldierQuota(v)) return;
+      const p = C.SORTIE_CHANCE[FE.Stability.state(this)] || 0;
+      if (p > 0 && FE.hash01(this.seed, v.id, this.day()) < p) {
+        v.sortieUntil = (this.ticks || 0) + C.SORTIE_TICKS;
+        v.sortieAt = this.ticks || 0;
+      }
+    }
+
+    // 這個聚落的士兵現在在不在出城
+    sortieOn(v) {
+      return !!v && FE.Stability.state(this) > 0 && (v.sortieUntil || 0) > (this.ticks || 0);
+    }
+
+    // ---- 士兵 ----
+    // 城鎮、堡壘各 3 位，城市、要塞各 6 位，村莊沒有（第三十六版之一，使用者定的）。每位士兵是六個職業的角色套版（職業隨機，等級＝1＋（世界等級－1）×2，
+    // 屬性、技能、裝備照 char.js 的 makeLevelChar），不再特別弱化，自己不升級；陣亡就是死了，寫進歷史紀錄，聚落人口 −1。
+    // 缺額時每天擲一次，成功就從人口補 1 位（新的人、新名字），機率照人口標籤（SOLDIER_REFILL）；沒有名字的人用完了就不補
+    soldierQuota(v) {
+      return v ? C.SOLDIER_COUNT[v.kind] || 0 : 0;
+    }
+
+    // 在聚落室外的空地放一位士兵；沒位置放、沒有名字的人用完了就不放
+    spawnSoldier(v, spot) {
+      const w = this.world;
+      if (this.unnamed(v) < 1) return null;
+      let at = spot || null;
+      if (!at) {
+        const spots = [];
+        for (let y = v.y0; y <= v.y1; y++) {
+          for (let x = v.x0; x <= v.x1; x++) {
+            if (w.villageAt(x, y) !== v || !w.passable(x, y) || FE.Steading.roomAt(v, x, y) >= 0) continue;
+            if (w.npcAt(x, y) || w.chestAt(x, y) || this.soldierAt(x, y) || this.isPlayerAt(x, y) || this.partyAt(x, y)) continue;
+            spots.push([x, y]);
+          }
+        }
+        if (!spots.length) return null;
+        at = FE.pick(this.rng, spots);
+      }
+      const wl = FE.Stability.worldLevel(this);
+      const clsKey = FE.pick(this.rng, Object.keys(FE.TEMPLATE_PICKS).filter((k) => FE.CLASSES[k]));
+      let name = FE.pickName(w, this.rng);
+      for (let t = 0; t < 8 && this.soldiers.concat(this.mates).some((o) => o.name === name); t++) name = FE.pickName(w, this.rng);
+      const s = FE.Char.makeLevelChar(this, clsKey, FE.soldierLevel(wl), wl, name, { skillCap: C.SOLDIER_SKILL_CAP[v.kind] || 5, rng: this.rng });
+      Object.assign(s, { id: w.nextId++, role: 'soldier', villageId: v.id, x: at[0], y: at[1], wl, in: true, cls: clsKey });
       this.soldiers.push(s);
       return s;
     }
 
-    // 世界回到安穩，陣亡的士兵補回原本的人數
-    refillSoldiers() {
-      for (const v of this.world.villages) {
-        if (!FE.Steading.townish(v)) continue;
-        const lack = this.soldierQuota(v) - this.soldiers.filter((s) => s.villageId === v.id).length;
-        for (let i = 0; i < lack; i++) {
-          if (this.spawnSoldier(v)) FE.Stability.stat(this).refills++;
+    // 缺額的士兵每天補（popDay 叫）：擲 SOLDIER_REFILL[人口標籤]，成功補 1 位；回傳補進來的那位
+    refillSoldier(v) {
+      const quota = this.soldierQuota(v);
+      if (!quota || this.soldiers.filter((s) => s.villageId === v.id).length >= quota) return null;
+      if (this.rng() >= C.SOLDIER_REFILL[v.steading ? v.steading.population : 2]) return null;
+      const s = this.spawnSoldier(v);
+      if (s) FE.Stability.stat(this).refills++;
+      return s;
+    }
+
+    // 聚落改建（堡壘加蓋成要塞）之後，站在不能站的地方（牆裡、建築裡）的士兵挪到聚落室外的空地
+    relocateSoldiers() {
+      const w = this.world;
+      for (const s of this.soldiers) {
+        const v = w.villageById(s.villageId);
+        if (!v) continue;
+        const bad = !w.passable(s.x, s.y) || (w.villageAt(s.x, s.y) === v && FE.Steading.roomAt(v, s.x, s.y) >= 0) || w.npcAt(s.x, s.y);
+        if (!bad) continue;
+        for (let y = v.y0; y <= v.y1; y++) {
+          for (let x = v.x0; x <= v.x1; x++) {
+            if (w.villageAt(x, y) !== v || !w.passable(x, y) || FE.Steading.roomAt(v, x, y) >= 0) continue;
+            if (w.npcAt(x, y) || w.chestAt(x, y) || this.soldierAt(x, y) || this.isPlayerAt(x, y)) continue;
+            s.x = x;
+            s.y = y;
+            y = v.y1 + 1;
+            break;
+          }
         }
       }
     }
 
-    // 士兵被打倒：消失，不再補到世界回到安穩為止
+    // 士兵被打倒：死了就是死了，寫進歷史紀錄，聚落人口 −1（不補回人口；之後照補員規則補新的人）
     soldierDown(s, by) {
       this.soldiers = this.soldiers.filter((o) => o !== s);
       FE.Stability.stat(this).soldierDeaths++;
+      this.recordDeath(s, '士兵');
       const p = this.player;
-      if (Math.abs(s.x - p.x) + Math.abs(s.y - p.y) <= C.SIGHT) this.say(`士兵被${by ? by.name : '怪物'}打倒了。`, 'bug');
+      if (Math.abs(s.x - p.x) + Math.abs(s.y - p.y) <= C.SIGHT) this.say(`士兵${s.name}被${by ? by.name : '怪物'}打倒了。`, 'bug');
     }
 
-    // 對話的對象：村民、武器匠或士兵
+    // 對話的對象：村民、工匠、商人或士兵
     talkTarget(id) {
       return this.world.npcById(id) || this.soldiers.find((s) => s.id === id) || null;
     }
 
+    // 這一格有沒有冒險者、隊友（整個隊伍，怪物與生成都要避開）
     isPlayerAt(x, y) {
-      return !!this.player && this.player.x === x && this.player.y === y;
+      return this.party().some((c) => c.x === x && c.y === y);
     }
 
     // ---- 背包 ----
@@ -293,13 +620,16 @@
     }
 
     // 一件裝備放進背包；箭矢、弩矢（買來的、掉的）是一捆，疊進同品質的裡面
-    bagAddGear(g) {
+    bagAddGear(g, owner) {
       const d = FE.Gear.def(g);
       if (d.cat === 'ammo') {
+        const keep = this.player;
+        if (owner) this.player = owner;
         this.bagAdd(g.type, d.bundle, { q: g.q || 0 });
+        this.player = keep;
         return;
       }
-      this.player.bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
+      (owner || this.player).bag.push({ id: 'gear', name: FE.Gear.name(g), n: 1, gear: g });
     }
 
     // 射一支彈藥：先用品質最高的，回傳那一支的品質；沒有回傳 null。
@@ -365,7 +695,7 @@
     // ×魅力（每點修正值 +5%）×生活水準的加成（上一次在這個聚落長休，普通 +5%、繁盛 +10%、富裕 +15%），最後才四捨五入。
     // q 是委託（npc.quest 或手上的 jobs），villageId 是委託人的聚落
     questPay(q, villageId) {
-      const p = this.player;
+      const p = this.hero;
       const v = this.world.villageById(villageId);
       const lodge = p.lodging && p.lodging.villageId === villageId ? p.lodging.bonus : 0;
       return Math.max(0, Math.round((q.copper || 0) * FE.Steading.questEcon(v) * (1 + C.CHA_PRICE * this.chaMod()) * (1 + lodge)));
@@ -419,7 +749,7 @@
 
     // 手上的委託（第三十版：清除、送貨、採藥、採礦每種最多一個）：照右側欄的順序列出來
     jobList() {
-      const j = this.player.jobs || {};
+      const j = this.hero.jobs || {};
       return FE.JOB_KINDS.map((k) => j[k]).filter(Boolean);
     }
 
@@ -687,13 +1017,11 @@
     // 斷層、虛影、狂亂、碎裂一定生（不處理就有走不到的地方、懸空的任務），算進處數。
     // 第三十四版（使用者定的）：其餘的地點不再從檢查器找到的地形錯位與斷崖裡挑（地形改成全是坡、拿掉印章之後幾乎沒有），
     // 改在這一段裡挑「從出生點走得到、不在聚落周圍那一圈裡」的格子（type 'DECAY'：沒有哪一處具體的錯要修，清光時補回那一帶的穩定值）；
-    // 這一段的每個興趣點各放一處（附近已經有一定要生的就不再放，沒有就放在興趣點上）。檢查器找到的地形錯位與斷崖不處理
-    // （不生怪物、不算進創世門檻、不欠 BUG 值）。回傳 { sites: [{ d, must, at }], rest }，at 是放到興趣點上的位置
+    // 這一段的每個興趣點各放一處（附近已經有一定要生的就不再放，沒有就放在興趣點上）。回傳 { sites: [{ d, must, at }] }，at 是放到興趣點上的位置
     pickSites(found, rect, first, landmarks) {
       const rng = this.rng;
       const w = this.world;
-      const sites = found.filter((d) => d.type !== 'TERRAIN' && d.type !== 'CLIFF').map((d) => ({ d, must: true }));
-      const rest = found.filter((d) => d.type === 'TERRAIN' || d.type === 'CLIFF');
+      const sites = found.map((d) => ({ d, must: true }));
       const n = first ? C.START_SITES : FE.randInt(rng, C.SITE_COUNT[0], C.SITE_COUNT[1]);
       const near = (l, d) => d.x >= l.x0 - 3 && d.x <= l.x1 + 3 && d.y >= l.y0 - 3 && d.y <= l.y1 + 3;
       const reach = FE.Checker.reachable(w);
@@ -720,7 +1048,7 @@
         if (!d) break;
         sites.push({ d });
       }
-      return { sites, rest };
+      return { sites };
     }
 
     // 第三十三版之二：一處的 BUG 量（budget）拿去配一組怪物，也就是套皮。每隻怪物值多少 BUG 量看數值塊
@@ -962,7 +1290,7 @@
         kind: 'campaign',
         time: FE.nowTaipei(),
         seed: this.seed,
-        player: this.player.name,
+        player: this.hero.name,
         seg: rec.seg,
         place: rec.place,
         day: rec.day,
@@ -1026,7 +1354,7 @@
     addExp(n) {
       if (n <= 0) return;
       this.exp += n;
-      const p = this.player;
+      const p = this.hero;
       while (p && this.level < C.LEVEL_MAX && this.exp >= FE.levelExp(this.level + 1)) {
         this.level++;
         // 只有升到 4、8、12、16、19 級才有 1 點屬性（畫面會跳出加點視窗，視窗開著不能做別的事），其他等級升級只加生命
@@ -1034,13 +1362,14 @@
         if (point) p.points += C.LEVEL_POINTS;
         const gain = this.recalc();
         this.say(`升到 Lv${this.level}！生命上限 +${gain}（現在 ${p.maxHp}）${point ? `，可以加 ${C.LEVEL_POINTS} 點屬性` : ''}。`, 'world');
+        this.syncMates();
       }
       this.dropLostPoints();
     }
 
     // 生命上限照公式重算（職業基礎、體質、等級），多出來的部分同時補到目前的生命；回傳多了幾點
     recalc() {
-      const p = this.player;
+      const p = this.hero;
       const max = FE.Char.maxHp(p, this.level) + (p.ward ? p.ward.hp || 0 : 0); // 神聖加護、守護加的生命上限
       const gain = max - p.maxHp;
       p.maxHp = max;
@@ -1051,7 +1380,7 @@
 
     // 升級的屬性點：選一項還沒到上限（18）的屬性加 1。回傳有沒有加成功
     spendPoint(key) {
-      const p = this.player;
+      const p = this.hero;
       const a = FE.ATTRS.find((x) => x.key === key);
       if (!a || !(p.points > 0)) return false;
       if (p.attr[key] >= C.ATTR_CAP) {
@@ -1069,7 +1398,7 @@
 
     // 六項屬性都到上限了，沒地方加的點數就不留
     dropLostPoints() {
-      const p = this.player;
+      const p = this.hero;
       if (p && p.points > 0 && FE.ATTRS.every((a) => p.attr[a.key] >= C.ATTR_CAP)) {
         p.points = 0;
         this.say('六項屬性都到上限了。', 'sys');
@@ -1097,9 +1426,9 @@
     // 回合骨架：冒險者每一回合只做一件事（移動一步，或一個行動：攻擊、重擊、撤退、休息、對話），
     // 接著所有怪物各做一件事（移動一步或攻擊）。戰鬥中世界不暫停，貼著的怪物都會攻擊（圍攻）。
 
-    // 貼在冒險者旁邊（高度差 1 以內）的怪物
-    adjacentMonsters() {
-      const p = this.player;
+    // 貼在這一位旁邊（高度差 1 以內）的怪物；沒給就是玩家操作的那一位
+    adjacentMonsters(of) {
+      const p = of || this.player;
       return this.monsters.filter((m) => FE.AI.touching(this, m, p));
     }
 
@@ -1173,6 +1502,10 @@
       const npc = this.world.npcAt(nx, ny) || this.soldierAt(nx, ny);
       if (npc) {
         if (opts && opts.noTalk) return;
+        if (this.player !== this.hero) {
+          this.say('隊友不跟人談事情，按 Tab 換回冒險者。', 'sys');
+          return;
+        }
         // 對話不移動，算一個動作但不算步數；打開對話視窗，選項在視窗裡選（村民、武器匠、士兵都一樣）
         this.openTalk(npc);
         return;
@@ -1191,6 +1524,11 @@
       }
       this.beginAction();
       const leaving = this.adjacentMonsters();
+      const swap = this.partyAt(nx, ny); // 走進隊友那一格，兩個人換位置
+      if (swap) {
+        swap.x = p.x;
+        swap.y = p.y;
+      }
       p.x = nx;
       p.y = ny;
       this.discover();
@@ -1215,29 +1553,23 @@
         this.say(`這裡有${def.name}，需要${FE.GEAR[def.tool].name}才${def.verb}得下來（鐵匠或武器匠有賣）。`, 'sys');
       }
       this.pickUp(nx, ny);
-      const chest = this.world.chestAt(nx, ny);
+      const chest = this.player === this.hero ? this.world.chestAt(nx, ny) : null; // 隊友走過寶箱不開
       if (chest) {
         // 數值暴走體徘徊離開後，寶箱還是壞的，要打倒牠才修得好
         if (FE.Checker.checkChest(chest)) this.say('寶箱被怪物的力量封住了，打不開。', 'sys');
         else this.openChest(chest);
       }
-      // 走一步花幾刻：10 刻減敏捷修正值（最少 8）；背超過能背的重量一步 60 刻；被扭曲過的地面一步 30 刻（取較大的）
-      // 力量不到身上防具的需求：一步 15 刻（跟超重、被扭曲的地面取最大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
+      // 走一步花幾刻：6 刻減敏捷修正值（最少 5）；背超過能背的重量一步 36 刻
+      // 力量不到身上防具的需求：一步 9 刻（跟超重取大的）；力竭照《D&D》每級速度少 5 呎，刻數照比例放大（第三十版）
       const base = this.loadTier() >= 1 ? C.OVER_MOVE_TICKS : FE.Char.strShort(p) ? Math.max(C.STR_REQ_TICKS, FE.Char.moveTicks(p)) : FE.Char.moveTicks(p);
       const tired = (t) => Math.round(t * FE.Char.exhaustMoveMul(p));
-      if (this.isHardGround(nx, ny)) {
-        const t = tired(Math.max(C.TICKS_HARD, base));
-        this.say(`這裡的地面被異常扭曲過，很難走，這一步花了 ${t} 刻。`, 'sys');
-        this.endTurn(true, t);
-      } else {
-        this.endTurn(true, tired(base));
-      }
+      this.endTurn(true, tired(base));
     }
 
     // 冒險者做完一個動作：每個動作都附帶一點虛擬的修補力；移動才累積步數與算力。
     // 時間用「刻」算（參考矮人要塞）：動作花幾刻，失序時每個動作的刻加倍。花掉的刻交給 advance 讓世界照時鐘跑。
     // opts.exact：刻數照給的（休息用：不加防具多花的刻、失序不加倍）；opts.sleep：長休中（不累積力竭）；
-    // opts.interrupt()：每 10 刻問一次，回傳 true 就停（野外短休被怪物打斷）。回傳實際花了幾刻
+    // opts.interrupt()：每 6 刻問一次，回傳 true 就停（野外短休被怪物打斷）。回傳實際花了幾刻
     endTurn(moved, ticks, opts) {
       opts = opts || {};
       const p = this.player;
@@ -1261,12 +1593,12 @@
       return spent;
     }
 
-    // 時間往前走 t 刻（第三十版的時鐘，一次走 10 刻）：怪物與士兵每 10 刻各動一次（刻數累積起來，湊滿 10 刻就多動一次，
+    // 時間往前走 t 刻（第三十版的時鐘，一次走 6 刻）：怪物與士兵每 6 刻各動一次（刻數累積起來，湊滿 6 刻就多動一次，
     // 防具多花的刻真的讓世界多動）；每過 100 刻演算一次事件；每過一天（2,400 刻）聚落的經濟值照附近的怪物扣；
     // 連續一整天沒有長休，力竭 +1。平常 worldEvery 是 1；測試的「四人等效」模擬用 4，世界慢四倍。
     // interrupt() 回傳 true、或冒險者倒下了就停，回傳實際走了幾刻
     advance(t, interrupt) {
-      const p = this.player;
+      const p = this.hero;
       let done = 0;
       while (done < t) {
         const step = Math.min(C.TICKS_MOVE, t - done);
@@ -1281,13 +1613,17 @@
           this.worldClock -= 1;
           FE.AI.worldTurn(this);
           if (!this.fell) FE.AI.soldierTurn(this);
+          if (!this.fell) FE.AI.partyTurn(this);
         }
         if (this.fell) {
           this.worldClock -= Math.floor(this.worldClock); // 冒險者倒下了，沒走完的回合不補
           return done;
         }
         for (let k = Math.floor(before / C.EVENT_TICKS) + 1; k * C.EVENT_TICKS <= this.ticks; k++) FE.Events.tick(this);
-        for (let k = Math.floor(before / C.DAY_TICKS) + 1; k * C.DAY_TICKS <= this.ticks; k++) this.econDay();
+        for (let k = Math.floor(before / C.DAY_TICKS) + 1; k * C.DAY_TICKS <= this.ticks; k++) {
+          this.econDay();
+          this.popDay(); // 每天人口照標籤增減、缺額的士兵補員（第三十六版之一）
+        }
         // 力竭：連續一整天（2,400 刻）沒有長休 +1 級（最多 6 級；長休中不算）
         while (!this.sleeping && p.exhaust < C.EXHAUST_MAX && this.ticks - (p.awakeAt || 0) >= C.DAY_TICKS) {
           p.awakeAt = (p.awakeAt || 0) + C.DAY_TICKS;
@@ -1300,14 +1636,16 @@
       return done;
     }
 
-    // 一個動作的收尾：倒下的醒來也算一次長休（世界跑 80 回合、不收錢）；力竭到 6 級也倒下，在最近的聚落醒來，
+    // 一個動作的收尾：倒下的醒來也算一次長休（世界跑 800 刻、不收錢）；力竭到 6 級也倒下，在最近的聚落醒來，
     // 降到 5 級再照長休 −1。最後量一次世界狀態
     afterTurn() {
-      const p = this.player;
+      const p = this.hero;
       const fell = this.fell;
       this.fell = false;
-      if (p.ward && this.ticks >= p.ward.until) this.endWard();
+      for (const c of this.party()) if (c.ward && this.ticks >= c.ward.until) this.endWard(undefined, c);
       this.unstrand();
+      // 隊友進了聚落就換回冒險者（隊友不進建築、不開對話、不開寶箱）
+      if (this.player !== this.hero && this.world.inVillage(this.player.x, this.player.y)) this.switchControl(this.hero);
       const collapsed = p.exhaust >= C.EXHAUST_MAX;
       if (collapsed) {
         if (!fell) {
@@ -1320,7 +1658,7 @@
       FE.Stability.update(this);
     }
 
-    // 不收錢的長休（倒下、力竭倒下後醒來）：世界同步跑 80 回合，生命回滿、力竭 −1，沒有生活水準的效果
+    // 不收錢的長休（倒下、力竭倒下後醒來）：世界同步跑 800 刻，生命回滿、力竭 −1，沒有生活水準的效果
     sleepFree() {
       this.sleeping = true;
       this.advance(C.LONG_REST_TICKS);
@@ -1333,8 +1671,18 @@
 
     // 長休完：生命回滿、依生活水準降低力竭（免費醒來預設 −1），從現在起重新算「連續多久沒有長休」
     rested(exhaustionDrop) {
-      const p = this.player;
+      const p = this.hero;
       p.hp = p.maxHp;
+      // 隊友一起回滿（遠程的隊友補滿箭）
+      for (const m of this.mates) {
+        m.hp = m.maxHp;
+        const w = m.equip.main && FE.GEAR[m.equip.main.type];
+        if (w && w.ammo) {
+          const e = m.bag.find((x) => x.id === w.ammo);
+          if (e) e.n = Math.max(e.n, FE.GEAR[w.ammo].bundle);
+          else m.bag.push({ id: w.ammo, name: FE.Gear.name({ type: w.ammo, q: 0 }), n: FE.GEAR[w.ammo].bundle, q: 0 });
+        }
+      }
       p.exhaust = Math.max(0, (p.exhaust || 0) - (exhaustionDrop === undefined ? 1 : exhaustionDrop));
       p.awakeAt = this.ticks;
       FE.Stability.stat(this).longRests++;
@@ -1358,23 +1706,26 @@
     // extra.reach：長槍打直線 2 格外的目標（觸及）
     strike(kind, m, extra) {
       const p = this.player;
+      const auto = this.autoAct; // 隊友自動出手：不花刻、不算動作、不累積算力（世界本來就照刻數走）
       // 村莊是安全區：站在聚落裡（包括邊緣）不能對外面的怪物動手
       if (this.world.inVillage(p.x, p.y)) {
-        this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
+        if (!auto) this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
         return;
       }
-      this.beginAction();
-      this.battle.targetId = m.id;
-      // 打怪的過程是在提供算力給創世神：每次出手跟走一步一樣累積算力（經驗值與打倒怪物的算力等打倒才結算）
-      this.earn(C.COMPUTE_PER_ATTACK);
-      if (kind === 'deep') this.battle.cooldown = C.DEEP_COOLDOWN;
+      if (!auto) {
+        this.beginAction();
+        this.battle.targetId = m.id;
+        // 打怪的過程是在提供算力給創世神：每次出手跟走一步一樣累積算力（經驗值與打倒怪物的算力等打倒才結算）
+        this.earn(C.COMPUTE_PER_ATTACK);
+      }
+      if (kind === 'deep') this.bs().cooldown = C.DEEP_COOLDOWN;
       // 拿著弓箭按 1、2 是拿弓打人：1d4 鈍擊（見 char.js 的 profile）；射擊要按 F
       const main = p.equip.main;
       // 雙持：副手也拿著武器時（暫時弓箭以外都能放副手），按 1 一般攻擊，主手、副手各對目標出手一次，各擲 d20；
       // 副手那一下不加屬性修正值（負的照扣）。重擊只用主手。目標在第一下倒下（或冒險者倒下）就不出第二下
       const off = p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? p.equip.off : null;
       const dual = kind === 'attack' && !!off && !!main && !(extra && extra.reach);
-      // 攻擊動作的刻：輕型 8、一般 10、重型 12，減敏捷修正值（最少 6）；雙持時副手那把沒有迅切（短刀以外、或還沒解鎖）就多 5 刻
+      // 攻擊動作的刻：輕型 5、一般 6、重型 7，減敏捷修正值（最少 4）；雙持時副手那把沒有迅切（短刀以外、或還沒解鎖）就多 3 刻
       const nick = dual && FE.Char.mastery(p, off) === 'nick';
       const ticks = FE.Char.attackTicks(p, main) + (dual && !nick ? C.DUAL_TICKS : 0);
       // 牧師：每個動作第一下命中時，目標多受 1d8 神聖傷害（雙持只算第一下命中的）
@@ -1391,7 +1742,7 @@
           .sort((a, b) => a.hp - b.hp || a.id - b.id)[0];
         if (other) FE.Combat.resolveAttack(this, p, other, 'attack', { weapon: main, cleave: true, noWear: true, noTrain: true, noForced: true });
       }
-      this.endTurn(false, ticks);
+      if (!auto) this.endTurn(false, ticks);
     }
 
     // 觸及：主手是長槍、旁邊沒有目標時，上下左右直線 2 格外、中間是空格的怪物打得到（目前的目標優先）
@@ -1522,19 +1873,22 @@
     // 出手的目標設成目前的目標（牠會纏上來）。測試的機器人直接叫這個
     fireAt(m, kind) {
       const p = this.player;
+      const auto = this.autoAct; // 隊友自動出手：不花刻、不算動作、不累積算力、不記箭矢（不撿回）
       if (this.world.inVillage(p.x, p.y)) {
-        this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
+        if (!auto) this.say('在村莊和城鎮裡不能動手，先走出去。', 'sys');
         return false;
       }
-      const r = this.rangedMode(false, kind);
+      const r = this.rangedMode(auto, kind);
       if (!r) return false;
       if (!this.monsters.includes(m) || !FE.Combat.canShoot(this, p, m, r.range)) {
-        this.say(`${m.name}不在射程內，或中間有東西擋著。`, 'sys');
+        if (!auto) this.say(`${m.name}不在射程內，或中間有東西擋著。`, 'sys');
         return false;
       }
-      this.beginAction();
-      this.battle.targetId = m.id;
-      this.earn(C.COMPUTE_PER_ATTACK);
+      if (!auto) {
+        this.beginAction();
+        this.battle.targetId = m.id;
+        this.earn(C.COMPUTE_PER_ATTACK);
+      }
       const w = r.weapon;
       const ticks = FE.Char.attackTicks(p, w);
       let holy = !!FE.Char.cls(p).holy;
@@ -1546,8 +1900,10 @@
         const ammo = FE.Gear.def(w).ammo;
         const field = { arrow: 'arrows', bolt: 'bolts', slingBullet: 'slingBullets', bullet: 'bullets', needle: 'needles' }[ammo];
         if (!field) throw new Error(`遠程武器使用了未知彈藥：${ammo}`);
-        m[field] = m[field] || {};
-        m[field][q] = (m[field][q] || 0) + 1;
+        if (!auto) {
+          m[field] = m[field] || {};
+          m[field][q] = (m[field][q] || 0) + 1;
+        }
         FE.Combat.resolveAttack(this, p, m, 'attack', { mode: 'shoot', weapon: w, range: r.range, ammoQ: q, holy });
       } else if (r.mode === 'item') {
         const item = r.item;
@@ -1590,7 +1946,7 @@
           FE.Combat.resolveAttack(this, p, o, 'attack', { mode: 'spell', weapon: w, range: r.range, noWear: i > 0, noTrain: i > 0 });
         });
       }
-      this.endTurn(false, ticks);
+      if (!auto) this.endTurn(false, ticks);
       return true;
     }
 
@@ -1600,16 +1956,18 @@
       return FE.CLASSES[p.cls] && FE.CLASSES[p.cls].allGear ? FE.CLASS_SPELLS[p.cls] || [] : [];
     }
     spellCd(id) {
-      return (this.battle.spellCd && this.battle.spellCd[id]) || 0;
+      const b = this.bs();
+      return (b.spellCd && b.spellCd[id]) || 0;
     }
     // 瞄準的攻擊招打出去（fireAt 叫，已經算了動作）：單體打目標；大魔法攻擊打目標與周圍（法杖只磨一次、技能只練一次）
     castOn(id, m, range) {
       const p = this.player;
       const sp = FE.SPELLS[id];
       const staff = !sp.noStaff && p.equip.main && p.equip.main.type === 'staff' ? p.equip.main : null;
-      this.battle.spellCd = this.battle.spellCd || {};
-      this.battle.spellCd[id] = sp.cd || 0;
-      this.say(`你施放${sp.name}。`, 'sys');
+      const bs = this.bs();
+      bs.spellCd = bs.spellCd || {};
+      bs.spellCd[id] = sp.cd || 0;
+      if (!this.autoAct) this.say(`你施放${sp.name}。`, 'sys');
       if (sp.area !== 'target') {
         FE.Combat.resolveAttack(this, p, m, 'attack', { mode: id, weapon: staff, range });
         return;
@@ -1687,30 +2045,32 @@
       this.endTurn(false);
       return true;
     }
-    armored() {
-      const b = this.player.equip.body;
+    armored(c) {
+      const b = (c || this.player).equip.body;
       return !!b && FE.GEAR[b.type].cls !== 'none';
     }
-    // 加護給的 AC（combat 叫）：魔法防禦穿上防具就結束
-    wardAC() {
-      const w = this.player.ward;
+    // 加護給的 AC（combat 叫）：魔法防禦穿上防具就結束；o 是挨打的那位（沒給就是玩家操作的那位）
+    wardAC(o) {
+      const c = o || this.player;
+      const w = c.ward;
       if (!w) return 0;
-      if (FE.SPELLS[w.id].unarmored && this.armored()) {
-        this.endWard('你穿上了防具，魔法防禦散掉了。');
+      if (FE.SPELLS[w.id].unarmored && this.armored(c)) {
+        this.endWard('你穿上了防具，魔法防禦散掉了。', c);
         return 0;
       }
       return w.ac;
     }
     // 被打中一次（combat 叫）：守護數次數
-    wardHit() {
-      const w = this.player.ward;
+    wardHit(o) {
+      const c = o || this.player;
+      const w = c.ward;
       if (!w || w.hits == null) return;
       w.hits--;
-      if (w.hits <= 0) this.endWard(`${FE.SPELLS[w.id].name}擋到極限，散掉了。`);
+      if (w.hits <= 0) this.endWard(`${FE.SPELLS[w.id].name}擋到極限，散掉了。`, c);
     }
     // 加護結束：生命上限扣回去，目前生命最少留 1
-    endWard(text) {
-      const p = this.player;
+    endWard(text, who) {
+      const p = who || this.player;
       const w = p.ward;
       if (!w) return;
       p.ward = null;
@@ -1860,15 +2220,9 @@
       this.endTurn(false, FE.Char.attackTicks(p, null));
     }
 
-    // 被怪物的異常扭曲過的地面（氣候錯位、斷崖影響的格子）很難走
-    isHardGround(x, y) {
-      const hit = (m) => (m.type === 'TERRAIN' || m.type === 'CLIFF') && m.cells.some(([cx, cy]) => cx === x && cy === y);
-      return this.monsters.some((m) => hit(m) || (m.members && m.members.some(hit)));
-    }
-
     // 休息（第三十版）。旁邊有怪物時不能休息；休息一次只把修補力存起來（不進創世力）。
-    // 野外短休：1 小時（100 刻，世界同步跑 10 回合），回 1d10＋體質修正值（最少 1），不花錢；途中有怪物貼上來就被打斷，沒回生命。
-    // 聚落裡長休：8 小時（800 刻，世界同步跑 80 回合），生命回滿；力竭降低級數與修復量依生活水準，付生活開支（見 payLiving）
+    // 野外短休：1 小時（100 刻，世界同步跑 100 刻），回 1d10＋體質修正值（最少 1），不花錢；途中有怪物貼上來就被打斷，沒回生命。
+    // 聚落裡長休：8 小時（800 刻，世界同步跑 800 刻），生命回滿；力竭降低級數與修復量依生活水準，付生活開支（見 payLiving）
     // lv：在聚落住一晚選的生活水準（0 荒蕪～這個聚落的經濟等級）；沒給就照聚落的經濟、付不起就住最便宜的（機器人用）
     rest(lv) {
       if (this.adjacentMonsters().length) {
@@ -1977,6 +2331,10 @@
     // 對話開著時 game.talking 記著對方的 id（不進存檔）
 
     openTalk(npc) {
+      if (this.player !== this.hero) {
+        this.say('隊友不跟人談事情，按 Tab 換回冒險者。', 'sys');
+        return;
+      }
       this.beginAction();
       this.talking = npc.id;
       this.talkPage = 'main';
@@ -1987,7 +2345,7 @@
     // 第三十版：委託分清除、送貨、採藥、採礦四種，每種同時只能接一個。同一個人身上可能同時有好幾件事
     // （他是你送貨的收貨人、你接了他的採藥委託、他自己又有新的委託），選項一起列出來：先交件與回報，再接委託
     talkOptions(npc) {
-      const p = this.player;
+      const p = this.hero;
       const q = npc.quest;
       const jobs = p.jobs;
       const v = this.world.villageById(npc.villageId);
@@ -1996,13 +2354,21 @@
       const race = FE.PLAYER_RACES[FE.npcRace(this.world, npc)].name;
       const out = (text, options) => ({
         name: npc.name,
-        role: `${shop ? FE.Gear.SHOPS[shop].title : npc.role === 'soldier' ? '士兵' : '村民'}・${race}`,
+        role: `${shop ? FE.Gear.SHOPS[shop].title : npc.role === 'soldier' ? `士兵（${FE.Char.cls(npc).name}）` : npc.role === 'recruit' ? `${FE.RECRUIT_BACKGROUNDS[npc.bg].name}（${FE.Char.cls(npc).name}）` : '村民'}・${race}`,
         village: v ? v.name : '',
         text,
         options,
       });
-      // 士兵只有一句閒話
+      // 士兵一句閒話（第三十六版之二起士兵不能招）
       if (npc.role === 'soldier') return out(FE.SOLDIER_LINES[(npc.id + this.turn) % FE.SOLDIER_LINES.length], [leave]);
+      // 想找同伴的人：一句背景加邀請，選項「邀他同行」（隊伍滿了就灰掉）
+      if (npc.role === 'recruit') {
+        const bg = FE.RECRUIT_BACKGROUNDS[npc.bg];
+        const vn = v ? v.name : '這裡';
+        const text = `${FE.fill(bg.lines[npc.line || 0], { v: vn })}${FE.fill(FE.RECRUIT_INVITE, { v: vn })}`;
+        const full = this.mates.length >= C.PARTY_MAX;
+        return out(text, [{ id: 'recruit', label: '邀他同行', note: full ? `隊伍已經有 ${C.PARTY_MAX} 位同伴了` : `${FE.Char.cls(npc).name}，Lv${Math.max(1, this.level - 1)}`, disabled: full }, leave]);
+      }
       // 工匠：買、修、打造、賣礦石、賣裝備（分層，見 shopTalk）
       if (shop) return out(...this.shopTalk(npc, v, shop));
       const reward = (o, vid) => `經驗值 +${o.exp}、${FE.money(this.questPay(o, vid))}`;
@@ -2066,16 +2432,19 @@
 
     // 完成一件委託：拿錢與經驗值、算力（一半創世力、一半修補力），委託人的聚落經濟值 +3
     finishJob(npc, c, head) {
-      const p = this.player;
+      const p = this.hero;
       const pay = this.questPay(c, c.villageId);
       this.say(`${head}：經驗值 +${c.exp}、${FE.money(pay)}。`, 'good');
       p.copper += pay;
       p.jobs[c.kind] = null;
+      p.done = p.done || {}; // 每個聚落完成過幾件委託（招募隊友的條件）
+      p.done[c.villageId] = (p.done[c.villageId] || 0) + 1;
       FE.Stability.stat(this).jobs[c.kind]++;
       this.addExp(c.exp);
       this.earn(c.compute); // 完成委託的算力
       const v = this.world.villageById(c.villageId);
       if (v) this.econ(v, C.ECON_QUEST);
+      if (v) this.rollRecruits(v); // 第三十六版之二：完成滿 5 件起，擲會不會來想找同伴的人（經濟標籤先照這件委託更新過）
     }
 
     // 選第 i 個選項；回傳 { close } 說明對話要不要關。不接的委託留在村民身上，之後回來還接得到
@@ -2083,7 +2452,7 @@
       const t = this.talkOptions(npc);
       const o = t.options[i];
       if (!o) return { close: false };
-      const p = this.player;
+      const p = this.hero;
       const q = npc.quest;
       const jobs = p.jobs;
       let close = true;
@@ -2092,7 +2461,10 @@
         if (r.close) this.talking = null;
         return r;
       }
-      if (o.id === 'report') {
+      if (o.id === 'recruit') {
+        const m = this.recruit(npc);
+        if (m) this.say(`${m.name}（${FE.Char.cls(m).name}，Lv${m.lv}）跟你同行了。`, 'good');
+      } else if (o.id === 'report') {
         const c = jobs.hunt;
         if (q && q.kind === 'hunt') q.done = true;
         this.say(`${npc.name}：村子外面安靜多了，謝謝你。`, 'npc');
@@ -2182,17 +2554,29 @@
       const p = this.player;
       const S = FE.Gear.SHOPS[shopKey];
       const back = { id: 'back', label: '返回' };
-      const have = `你身上有 ${FE.money(p.copper)}、${this.bagCount('ore')} 顆礦石。`;
+      const have = shopKey === 'merchant' ? `你身上有 ${FE.money(p.copper)}、${this.bagCount('herb')} 份藥草。` : `你身上有 ${FE.money(p.copper)}、${this.bagCount('ore')} 顆礦石。`;
       let page = this.talkPage || 'main';
       const cha = this.chaMod(); // 魅力：買東西每點修正值 −5%，賣東西 +5%
       const price = (e) => FE.Gear.shopPrice(e.type, e.q, v, cha);
       const gname = (e) => FE.Gear.productName(e);
       const lines = {
-        blacksmith: '武器、盔甲、盾牌、藥水和陷阱我都能賣、能修、能打；礦鎬、鐮刀與裝備包也有。',
-        weaponsmith: '武器、彈藥、藥水、陷阱、裝備包、礦鎬和鐮刀歸我管；盾牌和盔甲去找盔甲匠。',
+        blacksmith: '武器、盔甲、盾牌、彈藥、礦鎬和鐮刀我都能賣、能修、能打；藥水、陷阱和裝備包去找商人。',
+        weaponsmith: '武器、彈藥、礦鎬和鐮刀歸我管；盾牌和盔甲去找盔甲匠，藥水和陷阱去找商人。',
         armorer: '盔甲和盾牌歸我管；武器和工具去找武器匠。',
+        merchant: FE.MERCHANT_LINES[(npc.id + this.turn) % FE.MERCHANT_LINES.length],
       };
 
+      if (page === 'main' && shopKey === 'merchant') {
+        const herb = this.bagCount('herb');
+        return [
+          `${lines[shopKey]}${have}`,
+          [
+            { id: 'buy', label: '買' },
+            { id: 'sell', label: '賣藥草', note: herb ? `${herb} 份，+${FE.money(FE.Gear.herbPrice(herb, cha))}` : '沒有藥草' },
+            { id: 'leave', label: '離開' },
+          ],
+        ];
+      }
       if (page === 'main') {
         const repairs = this.allGear().filter((g) => S.repair.includes(FE.GEAR[g.type].cat) && g.dur < g.max).length;
         const sellable = p.bag.filter((e) => e.id === 'gear' && S.sell.includes(FE.GEAR[e.gear.type].cat)).length;
@@ -2276,6 +2660,11 @@
           note: `+${FE.money(FE.Gear.sellPrice(e.gear, cha))}`,
           info: `${FE.Gear.statText(e.gear)}；${FE.Gear.durText(e.gear)}；售價 +${FE.money(FE.Gear.sellPrice(e.gear, cha))}`,
         }));
+        if (shopKey === 'merchant') {
+          const herb = this.bagCount('herb');
+          if (herb) opts.push({ id: 'sellHerb', label: '藥草', note: `+${FE.money(FE.Gear.herbPrice(herb, cha))}`, info: `出售 ${herb} 份藥草，一份 ${C.HERB_PRICE} 銀，可得 ${FE.money(FE.Gear.herbPrice(herb, cha))}` });
+          return [`藥草我收，一份 ${C.HERB_PRICE} 銀，不挑新舊。${have}`, opts];
+        }
         const ore = this.bagCount('ore');
         if (ore) opts.push({ id: 'sellOre', label: '礦石', note: `+${FE.money(FE.Gear.orePrice(ore, cha))}`, info: `出售 ${ore} 顆礦石，可得 ${FE.money(FE.Gear.orePrice(ore, cha))}` });
         return [`背包裡的東西我照原價的一半、再看磨損收。穿在身上的要先換下來。${have}`, opts];
@@ -2326,7 +2715,14 @@
       }
       const [kind, a, b] = o.id.split(':');
       const cha = this.chaMod();
-      if (kind === 'sellOre') {
+      if (kind === 'sellHerb') {
+        const n = this.bagCount('herb');
+        if (!n || S !== FE.Gear.SHOPS.merchant) return stay;
+        const gain = FE.Gear.herbPrice(n, cha);
+        this.bagTake('herb', n);
+        p.copper += gain;
+        this.say(`${npc.name}收下 ${n} 份藥草，給了你 ${FE.money(gain)}。`, 'good');
+      } else if (kind === 'sellOre') {
         const n = this.bagCount('ore');
         const gain = FE.Gear.orePrice(n, cha);
         this.bagTake('ore', n);
@@ -2497,17 +2893,44 @@
     }
 
     // 倒下後在離倒下的地方最近的聚落（村莊或城鎮，不看神聖與否）醒來，沒有聚落才回出生點。
-    // 醒來也算一次長休（世界跑 80 回合、不收錢），在這個動作收尾時做（afterTurn）
+    // 醒來也算一次長休（世界跑 800 刻、不收錢），在這個動作收尾時做（afterTurn）
     die(m) {
       this.fell = true;
       this.battle.targetId = null;
+      this.player = this.hero; // 冒險者倒下了，操作權回到他身上
+      this.aim = null;
       const where = this.wakeSpot();
-      this.say(`你倒下了，在${where}重新醒來。${m.name}的血量還剩 ${m.hp} / ${m.maxHp}，不會回復。`, 'bad');
+      this.say(`你倒下了，${this.mates.length ? '隊友把你帶回' : '在'}${where}${this.mates.length ? '' : '重新'}醒來。${m.name}的血量還剩 ${m.hp} / ${m.maxHp}，不會回復。`, 'bad');
+    }
+
+    // 把隊友放到 (x, y) 附近的空地（聚落裡的路上、室外），隊友不陣亡，跟著冒險者一起出現
+    gatherMates(x, y) {
+      const w = this.world;
+      for (const m of this.mates) {
+        const seen = new Set([x + ',' + y]);
+        const q = [[x, y]];
+        for (let h = 0; h < q.length && h < 400; h++) {
+          const [cx, cy] = q[h];
+          const v = w.villageAt(cx, cy);
+          if ((cx !== x || cy !== y) && w.passable(cx, cy) && !w.chestAt(cx, cy) && !w.npcAt(cx, cy) && !this.soldierAt(cx, cy) && !this.isPlayerAt(cx, cy) && !(v && FE.Steading.roomAt(v, cx, cy) >= 0)) {
+            m.x = cx;
+            m.y = cy;
+            break;
+          }
+          for (const [dx, dy] of FE.DIRS8) {
+            const k = cx + dx + ',' + (cy + dy);
+            if (!seen.has(k)) {
+              seen.add(k);
+              q.push([cx + dx, cy + dy]);
+            }
+          }
+        }
+      }
     }
 
     // 把冒險者放到離他最近的聚落（中央附近的路上）醒來，生命回滿；回傳地名
     wakeSpot() {
-      const p = this.player;
+      const p = this.hero;
       const w = this.world;
       let at = w.spawn;
       let where = '出生點';
@@ -2532,6 +2955,7 @@
       p.x = at.x;
       p.y = at.y;
       p.hp = p.maxHp;
+      this.gatherMates(at.x, at.y);
       return where;
     }
 
@@ -2576,7 +3000,7 @@
       this.dropGear(m);
       this.addExp(m.exp);
       this.earn(m.compute);
-      const c = this.player.jobs.hunt;
+      const c = this.hero.jobs.hunt;
       if (c) {
         const ids = [m.id].concat(m.members ? m.members.map((o) => o.id) : []);
         if (ids.some((id) => c.monsterIds.includes(id))) {
@@ -2589,13 +3013,13 @@
         this.history.unshift({
           time: FE.nowTaipei(),
           seed: this.seed,
-          player: this.player.name,
+          player: this.hero.name,
           bug: m.name,
           chunk: this.world.chunkNumber(m.x, m.y),
           scope: m.scope,
         });
         FE.store.save('fe.history', this.history.slice(0, 200));
-        this.say(`${this.player.name}擊敗${m.name}的事寫進了世界的歷史紀錄。`, 'world');
+        this.say(`${this.hero.name}擊敗${m.name}的事寫進了世界的歷史紀錄。`, 'world');
       }
       FE.Stability.update(this);
     }
@@ -2605,7 +3029,7 @@
     dropGear(m) {
       if (m.tier !== 'mid' || m.small || this.rng() >= C.DROP_MID_GEAR) return;
       const g = FE.Gear.randomDrop(this, 1, 3);
-      this.bagAddGear(g);
+      this.bagAddGear(g, this.hero);
       this.say(`${m.name}身上掉出${FE.Gear.lootName(g)}，你收進了背包。`, 'good');
     }
 
@@ -2676,6 +3100,11 @@
       this.reports.unshift(report);
       this.reports = this.reports.slice(0, 30);
       FE.store.save('fe.reports', this.reports);
+      // 怪物遮蔽打開時（第三十六版之二修）：出錯只寫報告，不在現場生怪物（原本照樣生，遮蔽時一路出錯會冒出幾百隻）
+      if (this.veil) {
+        this.say('空間突然裂開了一下。', 'bug');
+        return;
+      }
       const reach = FE.Checker.reachable(this.world);
       const m = this.spawnMonster(
         { type: 'RUNTIME', x: where.x, y: where.y, cells: [[where.x, where.y]], scope: 3, data: { message } },

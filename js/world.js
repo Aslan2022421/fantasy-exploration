@@ -688,9 +688,6 @@
     return rain < 0.36 ? 'desert' : rain < 0.5 ? 'savanna' : 'jungle';
   }
 
-  const STAMP_BIOMES = ['tundra', 'taiga', 'desert', 'savanna', 'jungle', 'grassland', 'forest', 'shrubland'];
-  FE.STAMP_BIOMES = STAMP_BIOMES;
-
   // 生成器刻意粗糙：每塊世界的溫度帶一點偏差，四邊的接縫處偶爾冷熱直接相鄰。
   // 第三十四版：拿掉隨手蓋的氣候印章與高度突變（斷崖的來源）；rough 只剩溫度偏差
   function paintBiomes(world, rng, r, index) {
@@ -938,13 +935,21 @@
     world.chests = world.chests.filter((c) => !world.inVillage(c.x, c.y));
     world.nodes = world.nodes.filter((n) => world.passable(n.x, n.y) && !world.inVillage(n.x, n.y));
     // 住的人搬到新的家：先清掉舊的家，再照 freeHome 重新挑；工匠站回工坊
+    // 等著被招的人（第三十六版之二）趁改建離開（他們本來就只待幾天）
+    world.npcs = world.npcs.filter((n) => !(n.villageId === f.id && n.role === 'recruit'));
     const folk = world.npcs.filter((n) => n.villageId === f.id);
     for (const n of folk) n.home = null;
     for (const n of folk) {
-      if (n.role === 'smith') {
-        const si = f.buildings.findIndex((b) => b.kind === 'smithy');
-        const [sx, sy] = si >= 0 ? f.buildings[si].spots[0] : [f.cx, f.cy];
-        Object.assign(n, { x: sx, y: sy, home: si >= 0 ? { b: si } : null });
+      if (n.role === 'smith' || n.role === 'armorer') {
+        n.x = n.y = null; // 先讓出原本的位置，不然 shopSpot 會把自己當成擋路的人
+        const ss = smithSpot(world, f, n.role === 'smith' ? 'smithy' : 'armory', [f.cx, f.cy]);
+        Object.assign(n, { x: ss.x, y: ss.y, home: ss.b >= 0 ? { b: ss.b } : null });
+        continue;
+      }
+      if (n.role === 'merchant') {
+        n.x = n.y = null;
+        const ms = merchantSpot(world, f);
+        Object.assign(n, { x: ms.x, y: ms.y, home: ms.b >= 0 ? { b: ms.b } : null });
         continue;
       }
       const h = FE.Steading.freeHome(world, rng, f);
@@ -1198,17 +1203,114 @@
     };
   };
 
-  function placeNpcs(world, rng, v) {
-    // 鐵匠（城鎮裡叫武器匠）固定站在工坊裡、貼著門內那一格；萬一沒蓋成工坊，站在廣場中央。
-    // 城鎮另有盔甲匠，站在盔甲匠工坊裡（沒蓋成就站在廣場中央旁邊一格，不跟武器匠重疊）
-    const si = (v.buildings || []).findIndex((b) => b.kind === 'smithy');
-    const [sx, sy] = si >= 0 ? v.buildings[si].spots[0] : [v.cx, v.cy];
-    world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'smith', villageId: v.id, x: sx, y: sy, quest: null, home: si >= 0 ? { b: si } : null });
-    if (FE.Steading.townish(v)) {
-      const ai = (v.buildings || []).findIndex((b) => b.kind === 'armory');
-      const [ax, ay] = ai >= 0 ? v.buildings[ai].spots[0] : [v.cx + 1, v.cy];
-      world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'armorer', villageId: v.id, x: ax, y: ay, quest: null, home: ai >= 0 ? { b: ai } : null });
+  // 買賣 NPC（鐵匠、武器匠、盔甲匠、商人）在建築 i 裡站的格子（第三十六版之二，使用者定的：不要擋在門口）：
+  // 不站門內那一格、也不站門旁邊的格子（跟門的距離，八方向 1 格以內都不站）；站上去之後，房間其他能走的格子都還走得到門，自己旁邊也有走得到的格子（才能跟他說話）。
+  // 符合的格子裡挑離門最近的（冒險者不用走太遠）；房間太小、一格都不符合，就站離門最遠的角落。不用亂數（不動世界生成的亂數序列）。
+  // keepOut 是不能站的格子（住戶的床邊位置）。回傳 [x, y]，建築裡沒有能站的地方回傳 null
+  function shopSpot(world, v, i, keepOut) {
+    const b = v.buildings[i];
+    const doors = b.doors || [];
+    const k = (x, y) => x + ',' + y;
+    const isDoor = (x, y) => doors.some(([dx, dy]) => dx === x && dy === y);
+    const blocked = new Set((keepOut || []).map(([x, y]) => k(x, y)));
+    const cells = [];
+    for (let y = b.y0; y <= b.y1; y++) {
+      for (let x = b.x0; x <= b.x1; x++) {
+        if (FE.Steading.roomAt(v, x, y) !== i || isDoor(x, y) || !world.passable(x, y) || world.npcAt(x, y)) continue;
+        cells.push([x, y]);
+      }
     }
+    if (!cells.length) return null;
+    const floorSet = new Set(cells.map(([x, y]) => k(x, y)));
+    const doorDist = (x, y) => Math.min(...doors.map(([dx, dy]) => Math.max(Math.abs(dx - x), Math.abs(dy - y))), 99);
+    // 從門往裡面走，skip 那格當成擋住：回傳走得到的格子
+    const reach = (skip) => {
+      const seen = new Set();
+      const q = [];
+      for (const [dx, dy] of doors) q.push([dx, dy]);
+      for (let h = 0; h < q.length; h++) {
+        const [x, y] = q[h];
+        for (const [ox, oy] of DIRS8) {
+          const nx = x + ox, ny = y + oy, nk = k(nx, ny);
+          if (seen.has(nk) || !floorSet.has(nk) || nk === skip || !world.canStep(x, y, nx, ny)) continue;
+          seen.add(nk);
+          q.push([nx, ny]);
+        }
+      }
+      return seen;
+    };
+    const ok = cells.filter(([x, y]) => {
+      if (doorDist(x, y) <= 1 || blocked.has(k(x, y))) return false;
+      const got = reach(k(x, y));
+      if (got.size < floorSet.size - 1) return false; // 擋住了房間的一部分
+      return DIRS8.some(([ox, oy]) => got.has(k(x + ox, y + oy)) && world.canStep(x + ox, y + oy, x, y));
+    });
+    if (ok.length) {
+      ok.sort((p, q) => doorDist(p[0], p[1]) - doorDist(q[0], q[1]));
+      return ok[0];
+    }
+    const rest = cells.filter(([x, y]) => !blocked.has(k(x, y)));
+    if (!rest.length) return null;
+    rest.sort((p, q) => doorDist(q[0], q[1]) - doorDist(p[0], p[1]));
+    return rest[0];
+  }
+
+  // 工匠站在自己的工坊（kind 是 smithy 或 armory）裡；沒蓋成工坊就站在 fallback。回傳 { x, y, b }
+  function smithSpot(world, v, kind, fallback) {
+    const si = (v.buildings || []).findIndex((b) => b.kind === kind);
+    const at = si >= 0 ? shopSpot(world, v, si) : null;
+    return at ? { x: at[0], y: at[1], b: si } : { x: fallback[0], y: fallback[1], b: -1 };
+  }
+
+  // 商人（第三十六版之一，每個聚落一位）站的地方：有市場就在市場裡，沒有市場就在一間民房裡（挑能站的格子最多的那間，
+  // 不站住戶的床邊位置）；都沒有就站在廣場中央旁邊一格。站法照 shopSpot（不擋門）。回傳 { x, y, b }，b 是建築編號（沒有是 -1）
+  function merchantSpot(world, v) {
+    const bs = v.buildings || [];
+    const mi = bs.findIndex((b) => b.kind === 'market');
+    const mat = mi >= 0 ? shopSpot(world, v, mi) : null;
+    if (mat) return { x: mat[0], y: mat[1], b: mi };
+    // 沒有市場：民房；堡壘與要塞沒有民房，住人的建築是兵營（big）
+    const room = (i) => {
+      let n = 0;
+      const b = bs[i];
+      for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) if (FE.Steading.roomAt(v, x, y) === i && world.passable(x, y)) n++;
+      return n;
+    };
+    for (const kind of ['house', 'big']) {
+      const list = bs.map((b, i) => i).filter((i) => bs[i].kind === kind).sort((a, c) => room(c) - room(a) || a - c);
+      for (const i of list) {
+        const at = shopSpot(world, v, i, bs[i].spots);
+        if (at) return { x: at[0], y: at[1], b: i };
+      }
+    }
+    return { x: v.cx + 1, y: v.cy + 1, b: -1 };
+  }
+
+  // 不動生成亂數的取名（商人用）：照世界種子與編號的雜湊挑一個還沒用過的名字
+  function pickNameHash(world, key) {
+    const used = new Set(world.npcs.map((n) => n.name));
+    const free = FE.NAMES.filter((n) => !used.has(n));
+    const list = free.length ? free : FE.NAMES;
+    return list[Math.floor(hash(world.seed ^ 0x7f4a7c15, key, 4242) * list.length)];
+  }
+
+  function placeNpcs(world, rng, v) {
+    // 鐵匠（城鎮、城市、堡壘、要塞裡叫武器匠）固定站在工坊裡、貼著門內那一格；萬一沒蓋成工坊，站在廣場中央。
+    // 城鎮、城市、堡壘、要塞另有盔甲匠，站在盔甲匠工坊裡（沒蓋成就站在廣場中央旁邊一格，不跟武器匠重疊）
+    // 第三十六版之二：工匠不再貼著門內站，照 shopSpot 挑不擋門的格子
+    const ss = smithSpot(world, v, 'smithy', [v.cx, v.cy]);
+    world.npcs.push({ id: world.nextId++, name: pickName(world, rng), role: 'smith', villageId: v.id, x: ss.x, y: ss.y, quest: null, home: ss.b >= 0 ? { b: ss.b } : null });
+    if (FE.Steading.shopTown(v)) {
+      const as = smithSpot(world, v, 'armory', [v.cx + 1, v.cy]);
+      // 堡壘、要塞的盔甲匠取名不用生成的亂數（不動這些世界原本的亂數序列，使用者看過的種子才不會變樣）
+      const aid = world.nextId++;
+      const aname = v.kind === 'fort' || v.kind === 'fortress' ? pickNameHash(world, aid) : pickName(world, rng);
+      world.npcs.push({ id: aid, name: aname, role: 'armorer', villageId: v.id, x: as.x, y: as.y, quest: null, home: as.b >= 0 ? { b: as.b } : null });
+    }
+    // 商人：每個聚落一位，站在市場或一間民房裡，不走動、不給委託
+    const ms = merchantSpot(world, v);
+    const mid = world.nextId++;
+    world.npcs.push({ id: mid, name: pickNameHash(world, mid), role: 'merchant', villageId: v.id, x: ms.x, y: ms.y, quest: null, home: ms.b >= 0 ? { b: ms.b } : null });
 
     const candidates = [];
     // 村民不超過實際蓋出來的床位（民房沒蓋齊時人就少一點，不會有人沒有家）
@@ -1235,7 +1337,7 @@
 
     // 先決定每個候選人的委託對象，再刪掉站錯地方的人。
     // 委託對象被刪掉的人就不給委託（第二十五版起送貨委託不留懸空指標）。
-    const pool = candidates.concat(world.npcs.filter((o) => !FE.Gear.isShopkeeper(o)));
+    const pool = candidates.concat(world.npcs.filter((o) => !FE.Gear.isShopkeeper(o) && o.role !== 'recruit')); // 等著被招的人過幾天就走，不當收貨人
     const targets = new Map();
     for (const npc of candidates) {
       if (rng() >= 0.75) continue;

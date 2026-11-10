@@ -23,7 +23,7 @@ function testSpells31() {
     return g;
   };
   const mon = (g, x, y) => {
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x, y, cells: [], scope: 2, data: {} }, 9000 + g.monsters.length, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x, y, cells: [], scope: 2, data: {} }, 9000 + g.monsters.length, 1), g.world);
     Object.assign(m, { home: { x, y }, hp: 1e6, maxHp: 1e6, atk: 2 });
     g.monsters.push(m);
     return m;

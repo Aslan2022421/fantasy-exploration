@@ -1,5 +1,5 @@
 // 怪物：程式裡叫 BUG，遊戲內文字一律叫怪物。種族看環境（config.js 的 RACES），
-// 錯誤種類是牠身上的異常，決定行為、抗性與閃爍方式；影響範圍決定強度與經驗值。
+// 錯誤種類（m.type）只在世界底層，決定打倒時修什麼；強度看種族與數值塊，影響範圍只換算經驗值與算力。
 // 血條歸零時呼叫 repairBug 修世界。
 (function () {
   // 遊戲內的字（name、desc）只寫世界裡看得到的現象，不寫程式用語；
@@ -7,11 +7,6 @@
   // name 是異常的名字、desc 是現象。第三十三版之二：異常種類只在世界底層（檢查器找錯、修補時修什麼），
   // 不再給怪物生命倍率、傷害加減、抗性與防禦；怪物怎麼打只看套上去的數值塊
   FE.BUG_TYPES = {
-    // 生態區冷熱直接相鄰
-    TERRAIN: {
-      name: '氣候錯位',
-      desc: '冷熱兩地硬生生接在一起，周圍的空氣扭曲不定。',
-    },
     // 走不到的區域
     UNREACHABLE: {
       name: '斷層',
@@ -27,11 +22,6 @@
       name: '虛影',
       desc: '牠纏著一個不在這世上的人，身形虛實不定，很難打中。',
     },
-    // 相鄰兩格高度差 2 以上
-    CLIFF: {
-      name: '斷崖',
-      desc: '地面的高低突然斷開，四周的土地跟著崩落。',
-    },
     // 執行時抓到的例外或不合法的狀態
     RUNTIME: {
       name: '碎裂',
@@ -44,8 +34,6 @@
     },
   };
 
-  FE.KIND_NAMES = { attack: '一般攻擊', deep: '重擊' };
-
   // 分級（m.tier）：影響範圍 1～4 是小怪物，5 以上是中型怪物，12 以上才是大怪物（只來自世界級事件，第 2 階段才做）。
   // 注意 m.small 不是「小怪物」，是「會追人、會合體」的旗標，只有衰敗的格子生出的怪物有（第三十三版之三）；
   // 創世時生出的怪物就算影響範圍只有 1，m.small 也是 false，只在自己的 B 點附近徘徊
@@ -54,7 +42,7 @@
   // 體型：畫面上只顯示體型，不顯示格數
   FE.sizeName = (m) => ({ small: '小', mid: '中', big: '巨大' })[m.tier] || '小';
 
-  // 怪物的名字＝（中型、大型）種族（異常），例如「中型哥布林（狂亂）」
+  // 怪物的名字看數值塊（菁英由一群裡最強的升上來時名字前加「菁英」）
   FE.monsterName = (m) => {
     const b = FE.monsterBlock(m.race, FE.blockKey(m));
     const name = b.name || (FE.RACES[m.race] || FE.RACES.goblin).name;
@@ -74,18 +62,6 @@
     const C = FE.CONFIG;
     const base = tier === 'small' ? C.COMPUTE_KILL_SMALL : C.COMPUTE_KILL_MID + scope * C.COMPUTE_KILL_MID_PER_SCOPE;
     return Math.round(base * FE.wlScale(wl, C.WL_BONUS.REWARD) * 10) / 10;
-  };
-
-  // 士兵的數值：以同世界等級、影響範圍 2 的小怪物（哥布林，SRD 的 Goblin Warrior）為準，血量 ×0.9、傷害加值 －1、攻擊力 －1（至少 1）；
-  // AC、攻擊加值、傷害骰跟牠一樣（第三十三版），沒有怪物的特性；不升級
-  FE.soldierStats = (wl) => {
-    const C = FE.CONFIG;
-    const base = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: C.SOLDIER_BASE_SCOPE }, 0, wl);
-    const maxHp = Math.max(1, Math.round(base.maxHp * C.SOLDIER_HP_MUL));
-    return {
-      maxHp, hp: maxHp, atk: Math.max(1, base.atk - C.SOLDIER_ATK_MINUS),
-      ac: base.ac, toHit: base.toHit, die: base.die.slice(), dmgBonus: base.dmgBonus - C.SOLDIER_ATK_MINUS, dmgType: base.dmgType,
-    };
   };
 
   // 傷害骰的平均（顯示攻擊力、合體的難度評級與 BUG 量用）
@@ -157,10 +133,6 @@
     return m;
   };
 
-  // 這一擊會不會被抗性減半。clear 是主手武器的清除等級（普通 0 ～ 傑作 5、傳說物 6，空手 0）
-  // 第三十三版之二：異常種類不再給怪物抗性，抗不抗只看數值塊（易傷見 combat.js）
-  FE.isResisted = () => false;
-
   // wl 是生成當下的世界等級：血量、傷害、打倒時的經驗值與算力照等級加成，之後不再變。
   // 第三十三版：血量、AC、攻擊加值、傷害照種族與分級的 SRD 數值塊（statMonster）；影響範圍只決定分級、經驗值與算力。
   // 種族沒給先當哥布林，dressMonster 看環境換種族時數值跟著換
@@ -205,8 +177,6 @@
     return m;
   };
 
-  FE.progress = (m) => Math.round((1 - m.hp / m.maxHp) * 100);
-
   // 把被生成器刪掉的村民放回給任務那個人的村莊裡
   function restoreVillager(game, giver, id, name) {
     const w = game.world;
@@ -214,8 +184,9 @@
     if (!v) return null;
     // 村莊住滿了就不放，改由現有的村民接手，不然事件一直補人，村莊會擠滿
     const cap = v.kind === 'city' ? 2 * FE.CONFIG.TOWN_MAX_NPC : v.kind === 'town' ? FE.CONFIG.TOWN_MAX_NPC : FE.CONFIG.VILLAGE_MAX_NPC; // 城市是兩座城鎮（第三十四版）
-    if (w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n)).length >= cap) return null;
-    // 每個村民有自己的家：沒有空床也不放
+    if (w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n) && n.role !== 'recruit').length >= cap) return null;
+    // 每個村民有自己的家：沒有空床也不放；人口裡沒有名字的人用完了也不放（第三十六版之一）
+    if (game.unnamed && game.unnamed(v) < 1) return null;
     const h = FE.Steading.freeHome(w, game.rng, v);
     if (!h) return null;
     const open = (x, y) =>
@@ -238,10 +209,6 @@
     const w = game.world;
     if (m.members) return m.members.map((o) => FE.repairBug(game, o, opts)).join('');
     switch (m.type) {
-      case 'TERRAIN':
-        // 地貌上的斷牆、立石只改生態區，不抹掉
-        for (const [x, y] of m.cells) w.setCell(x, y, w.landmarkAt(x, y) ? w.cell(x, y).t : '"', 'grassland');
-        return '扭曲的冷熱散去，這片土地成了溫和的草原。';
       case 'UNREACHABLE': {
         // 聚落出入口不足：在外牆上打開一個寬 3 格的出入口
         if (m.data.villageId) {
@@ -292,7 +259,7 @@
         // 冒險者手上如果正拿著這個任務，那份也要跟著改，不然會送不出去
         const c = game.player && game.player.jobs ? game.player.jobs.deliver : null;
         const mine = !!c && c.giverId === n.id;
-        const others = w.npcs.filter((o) => o.id !== n.id && !FE.Gear.isShopkeeper(o));
+        const others = w.npcs.filter((o) => o.id !== n.id && !FE.Gear.isShopkeeper(o) && o.role !== 'recruit');
         if (others.length) {
           const t = FE.pick(game.rng, others);
           const v = w.villageById(t.villageId);
@@ -313,40 +280,6 @@
           game.earn(n.quest.compute || 0);
         }
         return `${n.name}的委託再也送不到了，${n.name}還是謝謝你：經驗值 +${n.quest.exp}。`;
-      }
-      case 'CLIFF': {
-        // 斷崖是高度算錯了：把附近（3 格內）的高度改回正確的值，再把剩下的落差修成坡。
-        // 村莊外圍三圈是刻意修過的坡，不改回原值、只參與修坡；村莊本身完全不動。
-        const nearVillage = (x, y) =>
-          w.villages.some((v) => {
-            const f = v.flat || v; // 整平過的工作範圍，外牆縮小之後外圍的坡還是繞著它
-            return x >= f.x0 - 3 && x <= f.x1 + 3 && y >= f.y0 - 3 && y <= f.y1 + 3;
-          });
-        const area = new Map();
-        for (const [cx, cy] of m.cells) {
-          for (let y = cy - 3; y <= cy + 3; y++) {
-            for (let x = cx - 3; x <= cx + 3; x++) {
-              if (w.inBounds(x, y) && !w.inVillage(x, y) && !w.landmarkAt(x, y)) area.set(x + ',' + y, [x, y]);
-            }
-          }
-        }
-        for (const [x, y] of area.values()) if (!nearVillage(x, y)) w.setHeight(x, y, FE.heightAt(w.seed, x, y));
-        for (let iter = 0; iter < 10; iter++) {
-          let changed = false;
-          for (const [x, y] of area.values()) {
-            const hs = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => w.cell(x + dx, y + dy)).filter(Boolean).map((n) => n.h);
-            const lo = Math.max(...hs) - 1;
-            const hi = Math.min(...hs) + 1;
-            const h = w.cell(x, y).h;
-            const nh = lo <= hi ? Math.max(lo, Math.min(hi, h)) : Math.round((lo + hi) / 2);
-            if (nh !== h) {
-              w.setHeight(x, y, nh);
-              changed = true;
-            }
-          }
-          if (!changed) break;
-        }
-        return '崩落的地面恢復成平緩的坡。';
       }
       case 'RUNTIME':
         // 錯誤報告已經在開發者面板裡，遊戲訊息只寫看得到的現象

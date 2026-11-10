@@ -43,7 +43,9 @@
       worldState: game.worldState,
       soldiers: game.soldiers,
       log: game.log.slice(0, 20),
-      player: game.player,
+      player: game.hero || game.player, // 冒險者本人（玩家操作的那一位另外記在 ctl）
+      mates: game.mates,                // 隊友（第三十六版之一）
+      ctl: game.hero && game.player !== game.hero ? game.mates.indexOf(game.player) + 1 : 0, // 玩家操作的是隊伍的第幾位（0 是冒險者）
       lastSafe: game.lastSafe,
       monsters: game.allMonsters(), // 怪物遮蔽時收起來的也存（讀檔後照設定再收起來）
       world: {
@@ -85,7 +87,10 @@
     for (const k of ['turn', 'ticks', 'exp', 'level', 'creation', 'nextChunkAt', 'compute', 'nextMonsterId', 'nextGearId', 'tickAcc', 'battle', 'worldState', 'soldiers', 'log', 'player', 'lastSafe', 'monsters']) {
       game[k] = data[k];
     }
-    const p = game.player;
+    game.hero = game.player;
+    game.mates = Array.isArray(data.mates) ? data.mates : [];
+    if (data.ctl > 0 && game.mates[data.ctl - 1]) game.player = game.mates[data.ctl - 1];
+    const p = game.hero;
     const oldEquip = p.equip || {};
     p.equip = Object.assign({ main: null, off: null, body: null, pick: null, sickle: null }, oldEquip);
     p.bag = p.bag || [];

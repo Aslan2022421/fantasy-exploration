@@ -16,7 +16,7 @@
   const PAL_NAMES = [
     't-plain', 't-grass', 't-forest', 't-snow', 't-sand', 't-mount', 't-water', 't-rock', 't-stonewall', 't-woodwall', 't-house', 't-road', 't-market', 't-temple', 't-door', 't-bed', 't-furniture', 't-ruin', 't-relic',
     'void', 'hp', 'hp-mid', 'hp-low', 'bug', 'good', 'bad', 'world',
-    'map-node-ore', 'map-node-herb', 'map-chest', 'map-item', 'map-ol-aim', 'map-aim-area', 'map-npc', 'map-smith', 'map-armorer', 'map-soldier', 'map-player-fg', 'map-player-bg',
+    'map-node-ore', 'map-node-herb', 'map-chest', 'map-item', 'map-ol-aim', 'map-aim-area', 'map-npc', 'map-smith', 'map-armorer', 'map-merchant', 'map-soldier', 'map-mate-fg', 'map-player-fg', 'map-player-bg',
     'map-mon-fg', 'map-mon-bg', 'map-mid-fg', 'map-mid-bg', 'map-boss-bg', 'map-glitch-fg', 'map-glitch-bg', 'map-ol-target', 'map-ol-hunt', 'map-ol-chase', 'map-walk', 'map-walk-bg',
     'map-h0', 'map-h1', 'map-h2', 'map-h3', 'map-h4', 'map-village', 'map-town', 'map-indoor', 'map-road', 'map-quest', 'map-recipient',
     'm-plain', 'm-grassland', 'm-shrubland', 'm-forest', 'm-taiga', 'm-tundra', 'm-glacier', 'm-jungle', 'm-savanna', 'm-desert', 'm-marsh', 'm-swamp', 'm-mountain', 'm-lake', 'm-rock',
@@ -110,6 +110,7 @@
     // 先把實體和 BUG 的效果整理成查表，畫每一格時直接查
     const npcs = new Map(W.npcs.map((n) => [key(n.x, n.y), n]));
     const soldiers = new Map(game.soldiers.map((s) => [key(s.x, s.y), s]));
+    const partyMap = new Map(game.party().filter((c) => c !== p).map((c) => [key(c.x, c.y), c])); // 隊伍裡沒被操作的那幾位
     const chests = new Map(W.chests.map((c) => [key(c.x, c.y), c]));
     // 地上的東西（擲出去的武器）
     const items = new Map(W.items.map((it) => [key(it.x, it.y), it]));
@@ -210,6 +211,8 @@
           alpha = 1;
           if (n.role === 'smith') fg = P['map-smith'];
           else if (n.role === 'armorer') fg = P['map-armorer'];
+          else if (n.role === 'merchant') fg = P['map-merchant'];
+          else if (n.role === 'recruit') fg = P['map-mate-fg']; // 想找同伴的人（第三十六版之二）：用隊友的顏色
           else {
             fg = P['map-npc'];
             if (handIn(n)) bg = P['map-recipient'];
@@ -225,6 +228,16 @@
           bg = baseBg;
           alpha = 1;
           hpPct = Math.round((sol.hp / sol.maxHp) * 100);
+        }
+        // 隊友（與沒被操作的冒險者）：另一個顏色的 @，格子底下有血條
+        const pm = partyMap.get(k);
+        if (pm) {
+          glyph = '@';
+          fg = P['map-mate-fg'];
+          bold = true;
+          bg = baseBg;
+          alpha = 1;
+          hpPct = Math.round((pm.hp / pm.maxHp) * 100);
         }
         const m = monsters.get(k);
         if (m) {
@@ -401,9 +414,10 @@
     for (const d of W.locks) dot(d.x, d.y, P['map-item'], Math.max(2, S));
     for (const n of W.npcs) {
       const target = handIn(n);
-      dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : P['map-npc'], target ? big : Math.max(2, S));
+      dot(n.x, n.y, target ? P.good : n.role === 'smith' ? P['map-smith'] : n.role === 'armorer' ? P['map-armorer'] : n.role === 'merchant' ? P['map-merchant'] : n.role === 'recruit' ? P['map-mate-fg'] : P['map-npc'], target ? big : Math.max(2, S));
     }
     for (const sd of game.soldiers) dot(sd.x, sd.y, P['map-soldier'], Math.max(2, S));
+    for (const c of game.party()) if (c !== p) dot(c.x, c.y, P['map-mate-fg'], Math.max(3, S + 1));
     for (const m of game.monsters) dot(m.x, m.y, m.tier !== 'small' ? P['m-boss'] : P['m-mon'], m.tier !== 'small' ? big : Math.max(3, S + 1));
     // 冒險者：白點加深色外框，一眼找得到
     ctx.fillStyle = '#000';
@@ -527,11 +541,11 @@
     const p = game.player;
     const W = game.world;
     // 名字與職業、時間（第幾天幾時）、世界狀態、錢（金銀銅），後面是戰鬥數字：攻擊力、物理／魔法減傷、閃避 %、格擋機率；最右邊是所在的地方
-    $('stName').innerHTML = `<b>${esc(p.name)}</b>（${esc(FE.Char.cls(p).name)}）`;
+    $('stName').innerHTML = `<b>${esc(p.name)}</b>（${esc(FE.Char.cls(p).name)}${p === game.hero ? '' : `，隊友 Lv${p.lv}`}）`;
     $('stTime').textContent = FE.clockText(game.ticks);
     const lvl = FE.Stability.state(game);
     $('stWorld').innerHTML = `世界 <b class="ws-${lvl}">${FE.Stability.names[lvl]}</b>${game.veil ? '<span class="dim">（怪物遮蔽）</span>' : ''}`; // 怪物遮蔽中（第三十四版）在狀態列標出來
-    $('stGold').textContent = FE.money(p.copper);
+    $('stGold').textContent = FE.money(game.hero.copper);
     const d = FE.Gear.playerDefense(p);
     $('stAtk').textContent = `傷害 ${game.attackText()}`;
     $('stPhys').textContent = `物理減傷 ${FE.Gear.physReduce(p)}`;
@@ -552,11 +566,12 @@
     setBar('hpFill', p.hp, p.maxHp);
     const lo = FE.levelExp(game.level);
     const hi = FE.levelExp(game.level + 1);
+    const who = p === game.hero ? '' : '冒險者 ';
     if (game.level >= C.LEVEL_MAX) {
-      $('cpText').textContent = `Lv ${game.level} 經驗 ${game.exp}（最高等級）`;
+      $('cpText').textContent = `${who}Lv ${game.level} 經驗 ${game.exp}（最高等級）`;
       setBar('cpFill', 1, 1);
     } else {
-      $('cpText').textContent = `Lv ${game.level} 經驗 ${game.exp - lo} / ${hi - lo}`;
+      $('cpText').textContent = `${who}Lv ${game.level} 經驗 ${game.exp - lo} / ${hi - lo}`;
       setBar('cpFill', game.exp - lo, hi - lo);
     }
   }
@@ -582,7 +597,7 @@
     return game.aimTarget() || game.targetMonster() || game.reachTarget() || game.monsters.find((m) => m.id === game.battle.targetId) || null;
   }
 
-  // 目標那一行：目前的目標（名字、血條、生命，後面是狀態、體型、異常、抗性）；瞄準中多寫距離與按鍵；沒有就寫「無」
+  // 目標那一行：目前的目標（名字、血條、生命，後面是狀態與體型）；瞄準中多寫距離與按鍵；沒有就寫「無」
   function drawTarget() {
     const p = game.player;
     const m = focusMonster();
@@ -646,7 +661,7 @@
 
   // 這個村民現在可以交件或回報（地圖上綠底、小地圖上大綠點）：清完了的清除委託的委託人、送貨的收貨人、採藥採礦湊夠了的委託人
   function handIn(n) {
-    const j = game.player.jobs;
+    const j = game.hero.jobs;
     if (j.hunt && j.hunt.giverId === n.id && game.huntRemaining(j.hunt.monsterIds) === 0) return true;
     if (j.deliver && j.deliver.targetId === n.id) return true;
     return ['herb', 'ore'].some((k) => j[k] && j[k].giverId === n.id && game.bagCount(k) >= j[k].n);
@@ -654,7 +669,7 @@
 
   // 委託視窗（Q，第三十一版從右側欄搬進視窗）：手上的委託，有的才列
   function drawQuest() {
-    const j = game.player.jobs;
+    const j = game.hero.jobs;
     const pay = (c) => `獎勵 經驗值 ${c.exp}、${FE.money(game.questPay(c, c.villageId))}`;
     const line = (k) => {
       const c = j[k];
@@ -673,6 +688,25 @@
     };
     const have = FE.JOB_KINDS.filter((k) => j[k]);
     $('questText').innerHTML = have.length ? have.map((k) => `<p>${line(k)}</p>`).join('') : '<p class="dim">手上沒有委託。紫底的 &amp; 有委託可以接。</p>';
+  }
+
+  // 隊員欄（第三十六版之一，照 Blood & Chaos 的做法）：右側訊息欄上方，每位隊員一行：名字、職業、等級、生命條；正在操作的那位標出來，點一下就換成操作他（Tab 也行）。沒有隊友就不顯示
+  function drawParty() {
+    const el = $('party');
+    const list = game.party();
+    el.classList.toggle('hidden', list.length < 2);
+    if (list.length < 2) {
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = list
+      .map((c, i) => {
+        const lv = c === game.hero ? game.level : c.lv;
+        const pct = Math.max(0, Math.min(100, Math.round((c.hp / c.maxHp) * 100)));
+        const cls = pct <= 25 ? 'low' : pct <= 50 ? 'mid' : '';
+        return `<button class="pm${c === game.player ? ' on' : ''}" data-party="${i}" title="點一下換成操作${esc(c.name)}（Tab 換下一位）"><span class="pm-name">${c === game.player ? '▶ ' : ''}${esc(c.name)}</span><span class="pm-cls">${esc(FE.Char.cls(c).name)} Lv${lv}${c !== game.hero && c.points > 0 ? `<b class="over" title="有 ${c.points} 點屬性沒加，按 C 在角色視窗裡加"> ＋${c.points}</b>` : ''}</span><span class="pm-bar ${cls}"><i style="width:${pct}%"></i></span><span class="pm-hp">${c.hp}/${c.maxHp}</span></button>`;
+      })
+      .join('');
   }
 
   // 右側欄的訊息紀錄：由上到下，最新的在最下面（放不下的從最上面切掉）
@@ -704,19 +738,20 @@
     const page = game.talkPage || 'main';
     const family = shop ? ['buy', 'sell', 'repair', 'craft'].find((name) => page === name) : null;
     const t = game.talkOptions(npc);
-    const trade = (o) => /^(buyItem|sellItem|repairItem|craftItem):/.test(o.id) || o.id === 'sellOre';
+    const trade = (o) => /^(buyItem|sellItem|repairItem|craftItem):/.test(o.id) || o.id === 'sellOre' || o.id === 'sellHerb';
     if (!shop || !family || (ui.shopSelection && (ui.shopSelection.page !== page || ui.shopSelection.npcId !== npc.id))) ui.shopSelection = null;
     const selected = ui.shopSelection && t.options.find((o) => o.id === ui.shopSelection.id);
     if (ui.shopSelection && !selected) ui.shopSelection = null;
     const items = shop ? t.options.map((o, i) => ({ o, i })).filter(({ o }) => trade(o)) : [];
     const actions = shop ? t.options.map((o, i) => ({ o, i })).filter(({ o }) => !trade(o)) : t.options.map((o, i) => ({ o, i }));
+    const tabsOf = shop ? FE.Gear.SHOPS[shop].tabs || ['buy', 'sell', 'repair', 'craft'] : [];
     const tabs = shop && family
-      ? `<nav class="shop-tabs" aria-label="工匠服務">${['buy', 'sell', 'repair', 'craft']
+      ? `<nav class="shop-tabs" aria-label="工匠服務">${tabsOf
           .map((tab) => `<button data-shop-tab="${tab}" class="${family === tab ? 'on' : ''}">${{ buy: '買', sell: '賣', repair: '修理', craft: '打造' }[tab]}</button>`)
           .join('')}</nav>`
       : '';
     const balance = shop
-      ? `<div class="shop-balance">持有 ${FE.money(game.player.copper)}　｜　礦石 ${game.bagCount('ore')} 顆</div>`
+      ? `<div class="shop-balance">持有 ${FE.money(game.player.copper)}　｜　${shop === 'merchant' ? `藥草 ${game.bagCount('herb')} 份` : `礦石 ${game.bagCount('ore')} 顆`}</div>`
       : '';
     const grid = items.length
       ? `<div class="shop-grid">${items
@@ -726,10 +761,10 @@
           )
           .join('')}</div>`
       : family
-        ? `<p class="shop-empty">${family === 'buy' ? '目前沒有可購買的物品。' : family === 'sell' ? '沒有可出售的裝備或礦石。' : family === 'repair' ? '沒有需要修理的裝備。' : '目前沒有可打造的裝備。'}</p>`
+        ? `<p class="shop-empty">${family === 'buy' ? '目前沒有可購買的物品。' : family === 'sell' ? (shop === 'merchant' ? '沒有藥草可以賣。' : '沒有可出售的裝備或礦石。') : family === 'repair' ? '沒有需要修理的裝備。' : '目前沒有可打造的裝備。'}</p>`
         : '';
     const detail = selected
-      ? `<section class="shop-detail"><h3>${esc(selected.label)}</h3><p>${esc(selected.info || selected.note || '')}</p><div class="shop-detail-actions"><button data-shop-confirm ${selected.disabled ? 'disabled' : ''}>${selected.id === 'sellOre' ? '賣出' : { buyItem: '購買', sellItem: '賣出', repairItem: '修理', craftItem: '打造' }[selected.id.split(':')[0]]}</button><button data-shop-cancel>取消</button></div></section>`
+      ? `<section class="shop-detail"><h3>${esc(selected.label)}</h3><p>${esc(selected.info || selected.note || '')}</p><div class="shop-detail-actions"><button data-shop-confirm ${selected.disabled ? 'disabled' : ''}>${selected.id === 'sellOre' || selected.id === 'sellHerb' ? '賣出' : { buyItem: '購買', sellItem: '賣出', repairItem: '修理', craftItem: '打造' }[selected.id.split(':')[0]]}</button><button data-shop-cancel>取消</button></div></section>`
       : '';
     const content = selected
       ? `<div class="shop-content has-selection">${detail}${grid}</div>`
@@ -746,17 +781,17 @@
     el.classList.toggle('shop-dialog', !!shop);
     el.innerHTML = shop
       ? `<div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
-        <p class="dlg-text">${esc(t.text)}</p>
-        <header class="shop-head"><b>交易</b><button data-shop-close>離開</button></header>${tabs}${balance}${content}<p class="dim dlg-hint">${selected ? '確認交易或取消' : '點選商品查看資訊'}</p>`
+        <div class="dlg-body"><p class="dlg-text">${esc(t.text)}</p>
+        <header class="shop-head"><b>交易</b><button data-shop-close>離開</button></header>${tabs}${balance}${content}<p class="dim dlg-hint">${selected ? '確認交易或取消' : '點選商品查看資訊'}</p></div>`
       : `<div class="dlg-head"><b>${esc(t.name)}</b><span class="dim">${esc(t.role)}｜${esc(t.village)}</span></div>
-        <p class="dlg-text">${esc(t.text)}</p>
+        <div class="dlg-body"><p class="dlg-text">${esc(t.text)}</p>
         <div class="dlg-opts">${t.options
           .map(
             (o, i) =>
               `<button data-opt="${i}" ${o.disabled ? 'disabled' : ''}><kbd>${i + 1}</kbd>${esc(o.label)}${o.note ? ` <span class="dim">（${esc(o.note)}）</span>` : ''}</button>`
           )
           .join('')}</div>
-        <p class="dim dlg-hint">按數字鍵選擇，Esc 關閉</p>`;
+        <p class="dim dlg-hint">按數字鍵選擇，Esc 關閉</p></div>`;
   }
 
   // ---- 按鍵視窗：同時只開一個 ----
@@ -766,7 +801,9 @@
     $('history').innerHTML = list.length
       ? list
           .map((h) =>
-            h.kind === 'campaign'
+            h.kind === 'death'
+              ? `<li>${esc(h.time)}｜第 ${h.day} 天，${esc(h.village)}的${esc(h.role)}${esc(h.name)}（${esc(h.cls)}）在${esc(h.where)}陣亡</li>`
+              : h.kind === 'campaign'
               ? `<li>${esc(h.time)}｜第 ${h.seg} 段戰役（${esc(h.place)}，第 ${h.day} 天出現、第 ${h.cleared} 天清光）：${esc(h.player)}清除了${esc(h.content)}</li>`
               : `<li>${esc(h.time)}｜${esc(h.player)}擊敗了${esc(h.bug)}（第 ${h.chunk} 塊世界，影響 ${h.scope} 格）</li>`
           )
@@ -799,7 +836,7 @@
 
   // 聚落裡的人（村民、工匠、士兵）與種族，例如「艾德（鐵匠，矮人）、蜜拉（人類）⋯⋯」
   function residents(v) {
-    const role = (n) => (n.role === 'smith' ? (FE.Steading.townish(v) ? '武器匠，' : '鐵匠，') : n.role === 'armorer' ? '盔甲匠，' : n.role === 'soldier' ? '士兵，' : '');
+    const role = (n) => (n.role === 'smith' ? (FE.Steading.shopTown(v) ? '武器匠，' : '鐵匠，') : n.role === 'armorer' ? '盔甲匠，' : n.role === 'merchant' ? '商人，' : n.role === 'soldier' ? `士兵・${FE.Char.cls(n).name}，` : n.role === 'recruit' ? `${FE.RECRUIT_BACKGROUNDS[n.bg].name}・${FE.Char.cls(n).name}，` : '');
     const list = game.world.npcs.filter((n) => n.villageId === v.id).concat(game.soldiers.filter((s) => s.villageId === v.id));
     return list.map((n) => `${n.name}（${role(n)}${FE.PLAYER_RACES[FE.npcRace(game.world, n)].name}）`).join('、') || '沒有人';
   }
@@ -854,10 +891,10 @@
     const reserve = '<li class="reserved" aria-hidden="true"></li>'.repeat(6);
     $('bagInfo').innerHTML = `
       <p>負重 <b class="${tier ? 'over' : ''}">${game.weight()} / ${game.carryLimit()} 磅</b>（推拖上限 ${game.pushLimit()} 磅）${
-        tier === 1 ? '　超過能背的重量：走一步要 60 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
+        tier === 1 ? '　超過能背的重量：走一步要 36 刻' : tier === 2 ? '　超過推拖上限：不能移動、不能撤退，先丟掉東西' : ''
       }</p>
       <ul class="equipped">${slot('主手', p.equip.main, 'main', 1)}${slot('副手', p.equip.off, 'off', 2)}${slot('身上', p.equip.body, 'body', 3)}${slot('礦鎬', p.equip.pick, 'pick', 4)}${slot('鐮刀', p.equip.sickle, 'sickle', 5)}${reserve}</ul>
-      <p class="dim">雙持：副手只能放以你的體型能單手拿的武器。主手、副手各出手一次時，副手不加屬性修正值；副手拿非輕型武器時有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 5 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
+      <p class="dim">雙持：副手只能放以你的體型能單手拿的武器。主手、副手各出手一次時，副手不加屬性修正值；副手拿非輕型武器時有劣勢、傷害骰降成 1d4；沒有迅切時這個動作多花 3 刻。重擊只用主手。副手拿了武器就不能拿盾牌；弓箭、輕弩要用兩手，體型不夠單手的武器也要用兩手。</p>`;
 
     let detail = '<p class="dim">選一件物品查看資訊與可用操作。</p>';
     if (selected) {
@@ -904,17 +941,45 @@
   }
 
   // 角色視窗（C）：職業與等級、生命與負重上限、六項屬性與修正值、各技能的等級與到下一級的進度、目前的加成
+  // 角色視窗看的是隊伍裡的第幾位（第三十六版之三）：null 是目前操作的那位；換看的人不換操作，在聚落裡也能看
+  function charViewed() {
+    const list = game.party();
+    if (ui.charView != null && list[ui.charView]) return list[ui.charView];
+    ui.charView = null;
+    return game.player;
+  }
+
+  // 畫看的那位：負重、出手數字這些函式都看 game.player，畫的時候暫時把 player 換成他（同隊友自動出手的 asActor），畫完換回來
   function drawCharacter() {
-    const p = game.player;
+    const who = charViewed();
+    const keep = game.player;
+    game.player = who;
+    try {
+      drawCharacterOf(who, keep);
+    } finally {
+      game.player = keep;
+    }
+  }
+
+  // p 是看的那位，ctl 是目前操作的那位
+  function drawCharacterOf(p, ctl) {
     const Ch = FE.Char;
     const c = Ch.cls(p);
     const sign = (n) => (n > 0 ? '+' : '') + n;
     const lo = FE.levelExp(game.level);
     const hi = FE.levelExp(game.level + 1);
+    // 隊友還有沒加的屬性點：屬性表多一欄「加 1」（冒險者的點數照舊跳升級加點視窗）
+    const canAdd = p !== game.hero && p.points > 0;
     const attrRows = FE.ATTRS.map((a) => {
       const v = p.attr[a.key];
-      return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td></tr>`;
+      const add = canAdd ? `<td><button data-mate-attr="${a.key}"${v >= C.ATTR_CAP ? ' disabled' : ''}>加 1</button></td>` : '';
+      return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td>${add}</tr>`;
     }).join('');
+    // 隊員頁籤：隊伍有兩人以上才有；▶ 是目前操作的那位，＋N 是還有幾點屬性沒加
+    const list = game.party();
+    const tabs = list.length > 1
+      ? `<div class="char-tabs">${list.map((m, i) => `<button class="char-tab${m === p ? ' on' : ''}" data-charview="${i}" title="${m === ctl ? '目前操作的人' : '看這一位（不換操作）'}">${m === ctl ? '▶ ' : ''}${esc(m.name)}<span class="dim">　${esc(Ch.cls(m).name)} Lv${m === game.hero ? game.level : m.lv}</span>${m !== game.hero && m.points > 0 ? `<b class="over">　＋${m.points}</b>` : ''}</button>`).join('')}<span class="dim char-tabs-hint">← → 換人看（不換操作）</span></div>`
+      : '';
     // 這項武器技能管哪些武器、學會哪些精通（一律要 5 級才會）
     const weaponsOf = (id) => Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon' && (FE.GEAR[k].skill === id || FE.GEAR[k].meleeSkill === id));
     const effect = (id, lv) => {
@@ -951,17 +1016,21 @@
     const tired = p.exhaust ? `　<b class="over">力竭 ${p.exhaust}</b>` : '';
     const R = FE.PLAYER_RACES[p.race] || FE.PLAYER_RACES.human;
     const body = `${R.name}　身高${FE.HEIGHTS[(p.height || 4) - 1]}、體格${FE.BUILDS[(p.build || 4) - 1]}　體型 ${Ch.sizeOf(p).toLocaleString('en-US')}`;
-    $('charInfo').innerHTML = `
-      <p><b>${esc(p.name)}</b>　${esc(c.name)}　Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}${p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加</b>` : ''}</p>
+    // 隊友：背景與來自哪個聚落（第三十六版之二起招來的人有背景）
+    const home = p !== game.hero ? game.world.villageById(p.villageId) : null;
+    const origin = p !== game.hero ? `　${p.bg && FE.RECRUIT_BACKGROUNDS[p.bg] ? FE.RECRUIT_BACKGROUNDS[p.bg].name + '，' : ''}${home ? `來自${esc(home.name)}` : ''}` : '';
+    const pointsNote = p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加${canAdd ? '（在下面的屬性表點「加 1」）' : ''}</b>` : '';
+    $('charInfo').innerHTML = `${tabs}
+      <p><b>${esc(p.name)}</b>　${esc(c.name)}　${p !== game.hero ? `隊友 Lv${p.lv}（冒險者每升一級，隊友跟著升一級）${origin}` : `Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}`}${p === ctl ? '' : '　<span class="dim">（只是在看，沒有換操作）</span>'}${pointsNote}</p>
       <p>${esc(body)}${p.skillPack ? `　起始技能組合：${esc(p.skillPack)}` : ''}</p>
       <p>主手 ${p.equip.main ? esc(FE.Gear.name(p.equip.main)) : '空著'}　副手 ${p.equip.off ? esc(FE.Gear.name(p.equip.off)) : '空著'}${p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''}　身上 ${p.equip.body ? esc(FE.Gear.name(p.equip.body)) : '空著'}</p>
       <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Math.round(Ch.moveTicks(p) * Ch.exhaustMoveMul(p))} 刻　野外歇一小時回 ${heal}（最少 1）${tired}</p>
       <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
-      <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th></tr>${attrRows}</table>
+      <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th>${canAdd ? '<th></th>' : ''}</tr>${attrRows}</table>
       <h3>技能（用了就累積經驗，升到第 N 級要 ${C.SKILL_NEED_BASE}＋${C.SKILL_NEED_STEP}N 點，沒有上限；經驗倍率 ×${Ch.expFactor(p).toFixed(1)}）</h3>
       <table class="stats"><tr><th>技能</th><th>等級</th><th>到下一級</th><th>目前的效果</th></tr>${skillRows}</table>
       <h3>目前的數字</h3>
-      <p>主手傷害 ${esc(game.attackText())}　近戰出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　暴擊 ${Ch.critMin(p, p.equip.main)}～20　攻擊一次 ${Ch.attackTicks(p, p.equip.main)} 刻${masteryLine()}　閃避 ${Math.round(d.dodge * 100)}%　物理傷害再減 ${Ch.conCut(p)}（體質）${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}</p>`;
+      <p>主手傷害 ${esc(game.attackText())}　近戰出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　暴擊 ${Ch.critMin(p, p.equip.main)}～20　攻擊一次 ${Ch.attackTicks(p, p.equip.main)} 刻${masteryLine()}　閃避 ${Math.round(d.dodge * 100)}%　物理傷害再減 ${Ch.conCut(p)}（體質）${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}${p === game.hero ? `　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}` : ''}</p>`;
   }
 
   // ---- 模態視窗：開新世界選職業與起始裝備、升級加點。開著的時候不能做別的事 ----
@@ -1233,8 +1302,8 @@
 
   // 升級加點：還有沒分配的屬性點就跳出來，選一項還沒到上限的屬性加 1 點（按 1～6 或點一下）
   function drawLevelUp() {
-    const p = game.player;
-    $('modalBody').className = 'win';
+    const p = game.hero;
+    $('modalBody').className = 'win win-small'; // 小視窗，固定大小（第三十六版前整理）
     $('modal').classList.remove('full');
     $('modalBody').innerHTML = `
       <h2>升到 Lv${game.level}　<span class="dim">選一項屬性加 1 點${p.points > 1 ? `（還有 ${p.points} 點）` : ''}</span></h2>
@@ -1268,7 +1337,7 @@
   function drawRestAsk() {
     const p = game.player;
     const { v, k, out } = restOptions();
-    $('modalBody').className = 'win';
+    $('modalBody').className = 'win win-small'; // 小視窗，固定大小（第三十六版前整理）
     $('modal').classList.remove('full');
     $('modalBody').innerHTML = `
       <h2>住一晚（8 小時）</h2>
@@ -1292,13 +1361,13 @@
     return out;
   }
   function drawSpellMenu() {
-    $('modalBody').className = 'win';
+    $('modalBody').className = 'win win-small'; // 小視窗，固定大小（第三十六版前整理）
     $('modal').classList.remove('full');
     $('modalBody').innerHTML = `<h2>施法 <span class="dim">（F）</span></h2><div class="winbody"><div class="dlg-opts">${spellMenu().map((o, i) => `<button data-spell="${o.id}" ${o.ok ? '' : 'disabled'}><kbd>${i + 1}</kbd><b>${esc(o.label)}</b>${o.note ? `　<span class="dim">${esc(o.note)}</span>` : ''}<br><span class="dim">${esc(o.desc)}</span></button>`).join('')}</div><p class="dim dlg-hint">按數字選，Esc 取消</p></div>`;
   }
 
   function drawModal() {
-    const open = !!ui.start || !!ui.restAsk || !!ui.spellMenu || (game && game.player && game.player.points > 0);
+    const open = !!ui.start || !!ui.restAsk || !!ui.spellMenu || (game && game.hero && game.hero.points > 0);
     $('modal').classList.toggle('hidden', !open);
     if (!open) return;
     if (ui.start) drawStart();
@@ -1336,9 +1405,9 @@
       const chasing = game.battle.targetId === m.id ? '你的目標' : m.chase > 0 ? '正在追你' : '還沒發現你';
       el.innerHTML = `<p><b class="tname">${esc(m.name)}</b>　<span class="dim">${chasing}</span></p><dl><dt>生命</dt><dd>${m.hp} / ${m.maxHp}</dd><dt>體型</dt><dd>${FE.sizeName(m)}</dd><dt>AC</dt><dd>${m.ac}</dd><dt>攻擊</dt><dd>${esc(monAttackText(m))}</dd>${monTraitText(m) ? `<dt>特性</dt><dd>${esc(monTraitText(m))}</dd>` : ''}${st.length ? `<dt>狀態</dt><dd>${esc(st.join('、'))}</dd>` : ''}</dl><div class="dlg-opts"><button data-look="target,${m.x},${m.y}">設成目標</button></div>`;
     } else if (n) {
-      const role = n.role === 'smith' ? (FE.Steading.townish(W.villageAt(n.x, n.y)) ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'soldier' ? '士兵' : '村民';
+      const role = n.role === 'smith' ? (FE.Steading.shopTown(W.villageById(n.villageId)) ? '武器匠' : '鐵匠') : n.role === 'armorer' ? '盔甲匠' : n.role === 'merchant' ? '商人' : n.role === 'soldier' ? `士兵（${FE.Char.cls(n).name}，Lv${n.lv}）` : n.role === 'recruit' ? `${FE.RECRUIT_BACKGROUNDS[n.bg].name}（${FE.Char.cls(n).name}）` : '村民';
       const race = FE.PLAYER_RACES[FE.npcRace(W, n)];
-      const quest = handIn(n) ? '可以交件或回報' : n.quest && !n.quest.accepted && !n.quest.done ? '有委託可以接' : '';
+      const quest = handIn(n) ? '可以交件或回報' : n.role === 'recruit' ? '想找同伴' : n.quest && !n.quest.accepted && !n.quest.done ? '有委託可以接' : '';
       const home = W.villageById ? W.villageById(n.villageId) : null;
       el.innerHTML = `<p><b>${esc(n.name)}</b>　<span class="dim">${role}・${race ? race.name : ''}${home ? `・${esc(home.name)}` : ''}</span></p>${quest ? `<p>${quest}</p>` : ''}<div class="dlg-opts"><button data-look="talk,${n.x},${n.y}">走過去對話</button></div>`;
     } else {
@@ -1384,6 +1453,7 @@
     drawTarget();
     drawPlace();
     drawLog();
+    drawParty();
     drawDialog();
     drawWindow();
     drawModal();
@@ -1495,7 +1565,7 @@
       }
     },
     // 有沒有跳出必須先處理的視窗（選職業、升級加點）
-    modal: () => !!ui.start || !!(game && game.player && game.player.points > 0),
+    modal: () => !!ui.start || !!(game && game.hero && game.hero.points > 0),
     selectShopItem(i) {
       const npc = game.talking != null ? game.talkTarget(game.talking) : null;
       const o = npc && game.talkOptions(npc).options[i];
@@ -1561,8 +1631,24 @@
         ui.bagDropConfirm = false;
       }
       if (name === 'reports' && game.reports.length) FE.store.save('fe.reportSeen', reportId(game.reports[0]));
+      if (name === 'character') ui.charView = null; // 打開時先看目前操作的那位
       update();
     },
+    // 角色視窗換看隊伍裡的第 i 位（第三十六版之三），或往前後 d 位（← →）；不換操作
+    charView(i) {
+      const list = game.party();
+      if (!list[i]) return;
+      ui.charView = i;
+      update();
+    },
+    charStep(d) {
+      const list = game.party();
+      if (list.length < 2) return;
+      const now = list.indexOf(charViewed());
+      ui.charView = (now + d + list.length) % list.length;
+      update();
+    },
+    charViewed: () => charViewed(),
     closeWindow() {
       ui.win = null;
       update();

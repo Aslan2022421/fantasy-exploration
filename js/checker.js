@@ -30,67 +30,6 @@
     return out;
   }
 
-  function pickStandable(world, cells) {
-    const ok = cells.filter(([x, y]) => world.passable(x, y) && !world.npcAt(x, y) && !world.chestAt(x, y));
-    const list = ok.length ? ok : cells;
-    return list[Math.floor(list.length / 2)];
-  }
-
-  const isConflict = FE.isClimateConflict;
-
-  // 範圍 r 再往外一圈的每一格（新區塊四邊都可能跟舊區塊接縫），沒創出來的格子跳過
-  function eachCellAround(world, r, fn) {
-    for (let y = r.y0 - 1; y <= r.y1; y++) {
-      for (let x = r.x0 - 1; x <= r.x1; x++) {
-        const c = world.cell(x, y);
-        if (c) fn(x, y, c);
-      }
-    }
-  }
-
-  // 地形錯位：冷的生態區跟熱的直接接在一起（例如苔原貼著沙漠）
-  function findTerrain(world, r, covered) {
-    const conflict = new Set();
-    eachCellAround(world, r, (x, y, c) => {
-      {
-        for (const [dx, dy] of DIRS4) {
-          const n = world.cell(x + dx, y + dy);
-          if (n && isConflict(c.biome, n.biome)) {
-            conflict.add(key(x, y));
-            break;
-          }
-        }
-      }
-    });
-    for (const k of covered) conflict.delete(k);
-    return components(conflict, DIRS8).map((cells) => {
-      const [x, y] = pickStandable(world, cells);
-      return { type: 'TERRAIN', x, y, cells, scope: cells.length, data: {} };
-    });
-  }
-
-  // 斷崖：兩格都能站，高度卻差 2 階以上（自然地形只有坡，斷崖一定是算錯了）
-  function findCliffs(world, r, covered) {
-    const bad = new Set();
-    eachCellAround(world, r, (x, y) => {
-      if (!world.passable(x, y)) return;
-      for (const [dx, dy] of DIRS4) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (world.passable(nx, ny) && !world.heightOk(x, y, nx, ny)) {
-          bad.add(key(x, y));
-          break;
-        }
-      }
-    });
-    for (const k of covered) bad.delete(k);
-    return components(bad, DIRS8).map((cells) => {
-      const [x, y] = pickStandable(world, cells);
-      // 斷崖兩側的格子都會被抓到，影響範圍只算一半，不然每片斷崖都成了大型怪物
-      return { type: 'CLIFF', x, y, cells, scope: Math.ceil(cells.length / 2), data: {} };
-    });
-  }
-
   // 從出生點走得到的格子（全世界一格一格走，舊做法；第二十五版起只給測試對照新做法用，見 FE.Checker.full）。
   // 回傳的物件跟 reachable() 一樣有 at(x, y) 與 has('x,y')
   function reachableFull(world) {
@@ -459,13 +398,9 @@
 
   // r 是新解出來那一塊的範圍。unreachable(covered) 找斷層：遊戲用只看新的一塊附近的做法，測試的 full.scan 換成全世界的舊做法
   function scanWith(world, r, monsters, unreachable) {
-    // 被斷崖圍住的區域交給斷崖怪物負責（修好斷崖就接通了），不再另外算成斷層
-    const cliffs = findCliffs(world, r, coveredBy(monsters, 'CLIFF'));
-    const cliffCells = cliffs.flatMap((d) => d.cells.map(([x, y]) => key(x, y)));
+    // 第三十六版前整理：地形錯位與斷崖不再找（第三十三版之三起不生怪物，第三十四版起地形全是坡）
     return [].concat(
-      findTerrain(world, r, coveredBy(monsters, 'TERRAIN')),
-      cliffs,
-      unreachable(coveredBy(monsters, 'UNREACHABLE', coveredBy(monsters, 'CLIFF', cliffCells))),
+      unreachable(coveredBy(monsters, 'UNREACHABLE')),
       findGates(world, r, monsters),
       findValue(world, r),
       findReference(world, r)

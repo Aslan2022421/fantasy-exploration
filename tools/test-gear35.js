@@ -20,7 +20,7 @@ function testGear35() {
   FE.MASTERY_SKILL = oldMastery;
 
   const village = g.world.villages.find((v) => v.kind === 'village');
-  const smith = g.world.npcs.find((n) => n.villageId === village.id && n.role === 'smith');
+  const smith = g.world.npcs.find((n) => n.villageId === village.id && n.role === 'merchant'); // 補給包在商人那裡（第三十六版之一）
   const p = g.player;
   p.copper = 100000;
   const packPrice = FE.Gear.shopPrice('pack_supply', 0, village, g.chaMod());
@@ -50,7 +50,7 @@ function testGear35() {
   p.x = spot.x;
   p.y = spot.y;
   const makeTarget = (id, x, race) => {
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x, y: spot.y, cells: [[x, spot.y]], scope: 2, data: {} }, id, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x, y: spot.y, cells: [[x, spot.y]], scope: 2, data: {} }, id, 1), g.world);
     Object.assign(m, { race: race || m.race, maxHp: 10000, hp: 10000, ac: 1 });
     g.monsters = [m];
     return m;

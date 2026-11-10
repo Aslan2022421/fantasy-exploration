@@ -1,46 +1,19 @@
 // 競技場量測：等級 L 角色與怪物在空地對打（第二十九版）
 // ---- 等級 L 角色與競技場（第二十九版）----
-// 技能等級取多少算「合理」：看機器人實際打出來的比例（戰士、法師單人 1500 個動作與四人等效 8000 個動作，各 2 個種子）：
-// 主武器技能的經驗約是角色累計經驗值的 2.5 倍、格鬥（近戰）或射擊（遠程）約 3 倍、穿甲約 2.5 倍（有穿中甲或重甲才算）、
-// 閃避約 0.5 倍、盾牌使用約 0.6 倍（有拿盾牌才算）。等級 L 的角色就拿 `FE.levelExp(L)` 乘這些倍率，換成技能等級
-const SKILL_PER_EXP = { main: 2.5, fight: 3, armor: 2.5, dodge: 0.5, shield: 0.6 };
-// 累積這麼多技能經驗是幾級
-function skillLevelFor(exp) {
-  let lv = 0;
-  while (exp >= FE.Char.skillNeed(lv)) exp -= FE.Char.skillNeed(lv++);
-  return lv;
-}
-// 世界等級對應的裝備品質（機器人的武器靠買、打造、掉落，品質大約隨世界等級升到做工好～優秀）：1→普通、2～3→做工好、4～5→精良、6 以上→優秀
-const qualityForWL = (wl) => Math.min(3, Math.floor(wl / 2));
-// 建立「等級 L 角色」：開新世界時挑職業的機器人起始裝備與種族，屬性點照職業主屬性與體質輪流分配（L−1 點，同 botPoints），
-// 技能練到合理等級，裝備（武器、身上的防具、盾牌）照世界等級給對應品質。回傳新遊戲；level 1、wl 1 就是剛開局的角色
+// 第三十六版之一：建「等級 L 角色」的做法（屬性點照職業主屬性與體質輪流分配、技能照累計經驗換算、裝備品質照世界等級）搬進遊戲程式
+// （js/char.js 的 applyTemplate、makeLevelChar，士兵與隊友也用；起始裝備與種族在 config.js 的 FE.TEMPLATE_PICKS、FE.TEMPLATE_BODY，技能經驗比例在 FE.TEMPLATE_PER_EXP），
+// 這裡只剩開新世界、呼叫遊戲裡的版本
+const SKILL_PER_EXP = FE.TEMPLATE_PER_EXP;
+const skillLevelFor = FE.Char.skillLevelFor;
+const qualityForWL = FE.qualityForWL;
+// 建立「等級 L 角色」：開新世界時挑職業的機器人起始裝備與種族，再套上等級與世界等級。回傳新遊戲；level 1、wl 1 就是剛開局的角色
 function makeLevelChar(cls, level, wl, seed) {
   const game = new FE.Game(seed || 9001);
   const picks = FE.Char.validPicks(cls, BOT_PICKS[cls]) ? BOT_PICKS[cls] : FE.Char.defaultPicks(cls); // 舊職業定義下（場景檢查）機器人的挑法不一定合法
   game.start({ cls, picks, body: BOT_BODY[cls] });
   game.level = level;
   game.exp = FE.levelExp(level);
-  const p = game.player;
-  p.points = C.LEVEL_POINT_AT.filter((l) => l <= level).length * C.LEVEL_POINTS; // 升到 4、8、12、16、19 級才有點數
-  botPoints(game);
-  p.hp = p.maxHp;
-  const q = qualityForWL(wl);
-  for (const g of FE.Gear.equipped(p)) g.q = q;
-  const c = FE.CLASSES[cls];
-  const E = FE.levelExp(level);
-  // 技能照累計經驗換算；第三十三版之一起，量競技場時另外保底出手用的技能（見 arenaGame）
-  const lvOf = (id, k) => ({ lv: skillLevelFor(E * SKILL_PER_EXP[k]), n: 0 });
-  const w = p.equip.main ? FE.GEAR[p.equip.main.type] : null;
-  p.skills.dodge = lvOf('dodge', 'dodge');
-  if (p.equip.off && FE.GEAR[p.equip.off.type].cat === 'shield') p.skills.shield = lvOf('shield', 'shield');
-  const aid = FE.Char.armorSkillId(p);
-  if (aid && aid !== 'light') p.skills[aid] = lvOf(aid, 'armor'); // 輕甲幾乎擋不下傷害（皮甲物理減傷 0），機器人也練不起來，不給
-  if (w) {
-    p.skills[w.skill] = lvOf(w.skill, 'main');
-    if (w.ammo) p.skills.shoot = lvOf('shoot', 'fight');
-    else p.skills.fight = lvOf('fight', 'fight');
-  }
-  if (c.spell) p.skills.staff = lvOf('staff', 'main');
+  FE.Char.applyTemplate(game.player, level, wl);
   return game;
 }
 // 競技場：把冒險者放在一塊整平的空地上（聚落的圈外），怪物也直接放上去對打；關掉創世、掉落、經驗值，免得量測途中角色變了
@@ -74,7 +47,7 @@ function arenaGame(cls, level, wl, seed) {
   game.defeat = (m) => { game.monsters = game.monsters.filter((o) => o !== m); if (game.battle.targetId === m.id) game.battle.targetId = null; };
   return game;
 }
-const ARENA_TYPES = process.env.FE_ARENA_TYPES ? process.env.FE_ARENA_TYPES.split(',') : ['TERRAIN', 'UNREACHABLE', 'VALUE', 'REFERENCE', 'CLIFF']; // 各種異常輪流，不含碎裂；FE_ARENA_TYPES 可以指定只量哪幾種（查哪一種異常拖慢下數用）
+const ARENA_TYPES = ['DECAY']; // 第三十六版前整理：錯的種類不再影響怪物怎麼打，競技場一律用衰敗
 const ARENA_SCOPE = { small: [2, 4], mid: [6, 10] };
 // 第三十三版起種族決定數值塊：競技場一律用同一個種族（預設哥布林，整平的空地本來就是哥布林；FE_ARENA_RACE 可以指定別的種族）。
 // 原本看腳下的生態區，對打途中怪物侵蝕地面（苔原、沙漠）之後，後面生的怪物會變成雪怪、骷髏

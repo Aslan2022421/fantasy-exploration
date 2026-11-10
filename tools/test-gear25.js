@@ -96,43 +96,12 @@ function testGear() {
     ok(G.extraTicks(q) === 0, '輕甲不該多花刻');
   }
 
-  // 2. 清除等級與抗性門檻：狂亂、虛影從清除等級 1 起不再減半，斷層從清除等級 2 起；其他沒有抗性
-  {
-    const mk = (type) => FE.makeMonster({ type, x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
-    // 第三十三版之二：異常種類不再給怪物抗性
-    for (const t of Object.keys(FE.BUG_TYPES)) ok(!FE.isResisted(mk(t), 'attack', 0) && !FE.isResisted(mk(t), 'deep', 0), `${t} 不該有抗性`);
-    // 真的出手：主手武器品質 0 打狂亂會減半，品質 1 起不會；斷層要品質 2
-    const g = newGame(13);
-    const p = g.player;
-    const px = p.x, py = p.y;
-    const arena = (type) => {
-      const m = FE.dressMonster(FE.makeMonster({ type, x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 900, 1), g.world);
-      m.home = { x: px + 1, y: py };
-      m.maxHp = m.hp = 1e9;
-      g.monsters = [m];
-      return m;
-    };
-    let resisted = 0;
-    FE.Combat.hook = (e) => { if (e.resisted) resisted++; };
-    const run = (type, q) => {
-      const m = arena(type);
-      p.equip.main = G.make('sword', q, g.nextGearId++);
-      p.equip.main.dur = p.equip.main.max = 1e9;
-      p.hp = p.maxHp = 1e9;
-      resisted = 0;
-      for (let i = 0; i < 300; i++) FE.Combat.resolveAttack(g, p, m, 'attack', { noCounter: true });
-      return resisted;
-    };
-    ok(run('VALUE', 0) === 0 && run('UNREACHABLE', 0) === 0 && run('TERRAIN', 0) === 0, '第三十三版之二：異常種類不再給怪物抗性，實際出手也不該減半');
-    FE.Combat.hook = hook0;
-  }
-
   // 3. 防具減傷：固定扣點，扣完至少吃 1 點；魔法減傷本版用不到（怪物都是物攻）
   {
     const g = newGame(14);
     const p = g.player;
     const px = p.x, py = p.y;
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 901, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 901, 1), g.world);
     Object.assign(m, { home: { x: px + 1, y: py }, atk: 3, die: null, maxHp: 1e9, hp: 1e9 }); // die: null：照固定的攻擊力算傷害（第三十三版起怪物用 SRD 的傷害骰）
     g.monsters = [m];
     const sample = (body, n) => {
@@ -211,7 +180,7 @@ function testGear() {
     ok(ax.warned === false, '修好之後該能再提醒');
     // 實際打鬥：出手一次磨武器一次、格擋成功一次磨盾牌、護甲減傷有作用一次磨身上防具
     const px = p.x, py = p.y;
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 902, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: px + 1, y: py, cells: [[px + 1, py]], scope: 2, data: {} }, 902, 1), g.world);
     Object.assign(m, { home: { x: px + 1, y: py }, atk: 5, maxHp: 1e9, hp: 1e9 });
     g.monsters = [m];
     p.equip.main = G.make('sword', 0, g.nextGearId++);
@@ -258,6 +227,7 @@ function testGear() {
     const smith = w.npcs.find((n) => n.villageId === vil.id && n.role === 'smith');
     const wsmith = w.npcs.find((n) => n.villageId === town.id && n.role === 'smith');
     const armorer = w.npcs.find((n) => n.villageId === town.id && n.role === 'armorer');
+    const merchant = w.npcs.find((n) => n.villageId === town.id && n.role === 'merchant');
     ok(!!smith && !!wsmith && !!armorer && !w.npcs.some((n) => n.villageId === vil.id && n.role === 'armorer'), '村莊該只有鐵匠，城鎮有武器匠和盔甲匠');
     const role = (n) => { g.talking = n.id; g.talkPage = 'main'; return g.talkOptions(n).role.split('・')[0]; }; // 第三十版起身分後面寫種族
     ok(role(smith) === '鐵匠' && role(wsmith) === '武器匠' && role(armorer) === '盔甲匠', `工匠的身分 ${role(smith)}／${role(wsmith)}／${role(armorer)}`);
@@ -289,9 +259,12 @@ function testGear() {
     const sSmith = dump(smith);
     const sW = dump(wsmith);
     const sA = dump(armorer);
+    const sM = dump(merchant);
+    // 第三十六版之一：消耗品、陷阱、開鎖工具、裝備包搬到商人那裡
+    const MERCHANT = ['potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower'];
     const has = (list, t, q) => list.includes(`buyItem:${t}:${q}`);
-    const BLACKSMITH = ['sword', 'shortsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'club', 'warhammer', 'handaxe', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'arrow', 'sling', 'slingBullet', 'potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower', 'padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield', 'pick', 'sickle'];
-    const WEAPONSMITH = ['sword', 'shortsword', 'greatsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'greataxe', 'handaxe', 'club', 'warhammer', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'whip', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'crossbow', 'handcrossbow', 'heavycrossbow', 'sling', 'arrow', 'bolt', 'slingBullet', 'musket', 'pistol', 'blowgun', 'bullet', 'needle', 'potion', 'acid', 'alchemistFire', 'holyWater', 'oil', 'caltrops', 'bearings', 'huntingTrap', 'lock', 'thievesTools', 'crowbar', 'pack_gathering', 'pack_supply', 'pack_archer', 'pack_thrower', 'pick', 'sickle'];
+    const BLACKSMITH = ['sword', 'shortsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'club', 'warhammer', 'handaxe', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'arrow', 'sling', 'slingBullet', 'padded', 'light', 'hide', 'chainshirt', 'ringmail', 'robe', 'shield', 'pick', 'sickle'];
+    const WEAPONSMITH = ['sword', 'shortsword', 'greatsword', 'dagger', 'scimitar', 'rapier', 'waraxe', 'greataxe', 'handaxe', 'club', 'warhammer', 'lightHammer', 'woodclub', 'greatclub', 'flail', 'morningstar', 'warpick', 'maul', 'spear', 'shortspear', 'staff', 'whip', 'javelin', 'glaive', 'halberd', 'trident', 'lance', 'bow', 'longbow', 'crossbow', 'handcrossbow', 'heavycrossbow', 'sling', 'arrow', 'bolt', 'slingBullet', 'musket', 'pistol', 'blowgun', 'bullet', 'needle', 'pick', 'sickle'];
     const ARMORER = ['padded', 'light', 'studded', 'robe', 'hide', 'chainshirt', 'medium', 'breastplate', 'halfplate', 'ringmail', 'heavy', 'splint', 'plate', 'shield'];
     const exactTypes = (list) => [...new Set(list.map((id) => id.split(':')[1]))].sort();
     const allQ = (list, types, qualities) => types.every((t) => qualities.every((q) => has(list, t, q)));
@@ -300,6 +273,7 @@ function testGear() {
     const weaponTools = WEAPONSMITH.filter((t) => FE.GEAR[t] && FE.GEAR[t].cat === 'tool');
     ok(exactTypes(sW).join() === WEAPONSMITH.slice().sort().join() && sW.length === weaponGear.length * 2 + weaponTools.length + WEAPONSMITH.filter((t) => !FE.GEAR[t]).length && allQ(sW, weaponGear, [0, 1]) && allQ(sW, WEAPONSMITH.filter((t) => !weaponGear.includes(t) || weaponTools.includes(t)), [0]), `武器匠賣的東西 ${sW}`);
     ok(exactTypes(sA).join() === ARMORER.slice().sort().join() && sA.length === ARMORER.length * 2 && allQ(sA, ARMORER, [0, 1]), `盔甲匠賣的東西 ${sA}`);
+    ok(exactTypes(sM).join() === MERCHANT.slice().sort().join() && sM.length === MERCHANT.length, `商人賣的東西 ${sM}`);
     ok(![...sSmith, ...sW, ...sA].some((id) => /:(mrobe):/.test(id)), '商店不該賣魔法衣袍');
     ok(![...sSmith, ...sW, ...sA].some((id) => /:[3-6]$/.test(id) || /:[2]$/.test(id)), '商店只賣普通與做工好');
     // 買：價錢＝原價×品質×經濟，扣金幣、東西進背包、不花動作
@@ -447,7 +421,7 @@ function testGear() {
   }
 
   // 6. 負重（第二十九版，《D&D》2024 的磅數）：能背＝力量值×15 磅，推拖上限＝力量值×30 磅，範圍內沒有減值；
-  //    超過能背：移動一步 60 刻；超過推拖上限：不能移動、不能撤退（還能丟東西、出手）；拿掉原本兩段超重的出手減值與多花的刻
+  //    超過能背：移動一步 36 刻；超過推拖上限：不能移動、不能撤退（還能丟東西、出手）；拿掉原本兩段超重的出手減值與多花的刻
   {
     const g = newGame(16);
     const p = g.player;
@@ -474,15 +448,15 @@ function testGear() {
     g.bagAdd('ore', 14);
     g.bagAdd('herb', 14);
     ok(g.weight() === 150 && g.loadTier() === 0, `礦石 14＋藥草 14 共 3＋140＋7＝${g.weight()}`);
-    // 第一段：走一步 60 刻（其他動作照常 10 刻）
+    // 第一段：走一步 36 刻（其他動作照常 6 刻）
     setOre(160);
     const side = DIRS.find(([dx, dy]) => g.world.canStep(p.x, p.y, p.x + dx, p.y + dy) && !g.world.npcAt(p.x + dx, p.y + dy) && !g.nodeAt(p.x + dx, p.y + dy));
     const t0 = g.ticks, x0 = p.x, y0 = p.y;
     g.move(side[0], side[1]);
-    ok(g.ticks - t0 === 60 && (p.x !== x0 || p.y !== y0), `超過能背走一步花 ${g.ticks - t0} 刻（應該 60）`);
+    ok(g.ticks - t0 === 36 && (p.x !== x0 || p.y !== y0), `超過能背走一步花 ${g.ticks - t0} 刻（應該 36）`);
     const t1 = g.ticks;
     g.beginAction(); g.endTurn(false); // 一般的動作（第三十一版起沒有主動閃避，直接過一個動作）
-    ok(g.ticks - t1 === 10, `超過能背其他動作還是 ${g.ticks - t1} 刻（應該 10）`);
+    ok(g.ticks - t1 === 6, `超過能背其他動作還是 ${g.ticks - t1} 刻（應該 6）`);
     p.equip.main = G.make('sword', 3, g.nextGearId++);
     ok(G.hitMod(p) === 3, `超重第一段、優秀劍的出手加減 ${G.hitMod(p)}（應該 +3，沒有減值）`);
     p.equip.main = G.make('sword', 0, g.nextGearId++);
@@ -491,7 +465,7 @@ function testGear() {
     const px = p.x, py = p.y, turn0 = g.turn, tk0 = g.ticks;
     g.move(-side[0], -side[1]);
     ok(p.x === px && p.y === py && g.turn === turn0 && g.ticks === tk0 && g.log[0].text.includes('丟掉'), `超重太多還是走動了或沒提示（${g.log[0].text}）`);
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: px + side[0], y: py + side[1], cells: [], scope: 2, data: {} }, 903, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: px + side[0], y: py + side[1], cells: [], scope: 2, data: {} }, 903, 1), g.world);
     Object.assign(m, { home: { x: m.x, y: m.y }, atk: 0, maxHp: 1e6, hp: 1e6 });
     g.monsters = [m];
     g.flee();
@@ -522,7 +496,7 @@ function testGear() {
     ok(p.bag.some((e) => e.id === 'goods') && g.log[0].text.includes('不能丟'), '送貨的東西被丟掉了');
   }
 
-  // 7. 防具多花的刻真的讓怪物多動（刻數累積，湊滿 10 刻才多動一次）
+  // 7. 防具多花的刻真的讓怪物多動（刻數累積，湊滿 6 刻才多動一次）
   {
     const countTurns = (body, actions) => {
       const g = newGame(17);
@@ -539,10 +513,10 @@ function testGear() {
     const heavy = countTurns('heavy', 20);
     const medium = countTurns('medium', 20);
     const light = countTurns('light', 20);
-    ok(none.turns === 20 && none.ticks === 200, `沒防具 20 個動作 怪物動 ${none.turns} 次、${none.ticks} 刻`);
-    ok(heavy.ticks === 240 && heavy.turns === 24, `重甲 20 個動作 ${heavy.ticks} 刻、怪物動 ${heavy.turns} 次（應該 240 刻、24 次）`);
-    ok(medium.ticks === 220 && medium.turns === 22, `中甲 20 個動作 ${medium.ticks} 刻、怪物動 ${medium.turns} 次（應該 220 刻、22 次）`);
-    ok(light.turns === 20 && light.ticks === 200, `輕甲不該多花刻（${light.ticks} 刻）`);
+    ok(none.turns === 20 && none.ticks === 120, `沒防具 20 個動作 怪物動 ${none.turns} 次、${none.ticks} 刻`);
+    ok(heavy.ticks === 160 && heavy.turns === 26, `重甲 20 個動作 ${heavy.ticks} 刻、怪物動 ${heavy.turns} 次（應該 160 刻、26 次）`);
+    ok(medium.ticks === 140 && medium.turns === 23, `中甲 20 個動作 ${medium.ticks} 刻、怪物動 ${medium.turns} 次（應該 140 刻、23 次）`);
+    ok(light.turns === 20 && light.ticks === 120, `輕甲不該多花刻（${light.ticks} 刻）`);
   }
 
   // 8. 穿上、丟掉、弓箭佔兩手、存檔
@@ -624,7 +598,7 @@ function testGear() {
   {
     const g = newGame(19);
     const p = g.player;
-    const mid = () => { const m = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 6 }, 1, 1); return m; };
+    const mid = () => { const m = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 6 }, 1, 1); return m; };
     // 箭矢掉一捆，疊進背包的箭矢裡（當成 { type: 'arrow', q } 算）
     const bagGear = () => p.bag.filter((e) => e.id === 'gear' || e.id === 'arrow' || e.id === 'bolt').map((e) => (e.id === 'arrow' || e.id === 'bolt' ? { type: e.id, q: e.q, n: e.n } : e.gear));
     // 創世時的中型怪物（small=false）與合體怪物（small=false、有 members）都會掉；事件生的 small、小怪物不掉
@@ -648,7 +622,7 @@ function testGear() {
       ok(arrows && arrows.n === 20 && arrows.q >= 1 && arrows.q <= 3 && g.log.some((l) => l.text.includes('一捆 20 支的')), `掉落的箭矢該是一捆 20 支：${JSON.stringify(arrows)}`);
     }
     const small = mid(); small.small = true;
-    const tiny = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
+    const tiny = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 2 }, 1, 1);
     let extra = 0;
     for (let i = 0; i < 1000; i++) { p.bag = []; g.dropGear(small); g.dropGear(tiny); extra += bagGear().length; }
     ok(extra === 0, `事件生的中型怪物或小怪物不該掉裝備（掉了 ${extra} 件）`);
@@ -705,7 +679,7 @@ function testGear() {
       p.skills = JSON.parse(q.skills);
       p.attr.dex = q.dex;
     }
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 904, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 904, 1), g.world);
     Object.assign(m, { home: { x: m.x, y: m.y }, atk: 1, maxHp: 1e9, hp: 1e9 });
     g.monsters = [m];
     let counters = 0;
@@ -741,7 +715,7 @@ function testGear() {
   {
     const g = newGame(21);
     const p = g.player;
-    const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 905, 1), g.world);
+    const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x: p.x + 1, y: p.y, cells: [[p.x + 1, p.y]], scope: 2, data: {} }, 905, 1), g.world);
     Object.assign(m, { home: { x: m.x, y: m.y }, atk: 3 });
     g.monsters = [m];
     const before = { turn: g.turn, ticks: g.ticks, creation: g.creation, compute: g.compute, hp: m.hp, php: p.hp, x: p.x, y: p.y, dur: p.equip.main.dur, mx: m.x, my: m.y };
@@ -776,7 +750,7 @@ function testGear() {
     ok(!!spot, '找不到 8×5 的空地'); // 第三十二版：加寬一格，往後退到第 4 步還在空地裡
     if (spot) {
       const mk = (id, x, y) => {
-        const m = FE.dressMonster(FE.makeMonster({ type: 'TERRAIN', x, y, cells: [[x, y]], scope: 2, data: {} }, id, 1), w);
+        const m = FE.dressMonster(FE.makeMonster({ type: 'DECAY', x, y, cells: [[x, y]], scope: 2, data: {} }, id, 1), w);
         Object.assign(m, { home: { x, y }, atk: 3, maxHp: 1e9, hp: 1e9 });
         return m;
       };
@@ -875,8 +849,8 @@ function testGear() {
       }
       return out;
     };
-    const mid = FE.makeMonster({ type: 'TERRAIN', x: g.player.x + 3, y: g.player.y, cells: [], scope: 6 }, 1, 1);
-    const small = FE.makeMonster({ type: 'TERRAIN', x: g.player.x + 3, y: g.player.y, cells: [], scope: 2 }, 2, 1);
+    const mid = FE.makeMonster({ type: 'DECAY', x: g.player.x + 3, y: g.player.y, cells: [], scope: 6 }, 1, 1);
+    const small = FE.makeMonster({ type: 'DECAY', x: g.player.x + 3, y: g.player.y, cells: [], scope: 2 }, 2, 1);
     small.small = true;
     const dm = drop(mid, 300);
     const ds = drop(small, 600);
@@ -912,7 +886,7 @@ function testGear() {
       if (spot || Math.abs(x - p.x) + Math.abs(y - p.y) < 4 || w.inBuffer(x, y) || !w.passable(x, y)) return;
       if ([[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => w.passable(x + dx, y + dy))) spot = { x, y };
     });
-    const m = g.spawnMonster({ type: 'TERRAIN', x: spot.x, y: spot.y, cells: [], scope: 2, data: {} }, null);
+    const m = g.spawnMonster({ type: 'DECAY', x: spot.x, y: spot.y, cells: [], scope: 2, data: {} }, null);
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) w.setHeight(m.x + dx, m.y + dy, 0);
     w.setHeight(m.x, m.y, 2);
     g.unstrand();

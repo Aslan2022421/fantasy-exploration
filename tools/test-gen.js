@@ -47,19 +47,24 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
     if (gap < 4) fail(`生成 seed${seed} 兩座城鎮只隔了 ${gap} 段`);
   }
   if (w.villages[0].kind !== 'village') fail(`生成 seed${seed} 開局不是村莊`);
-  // 士兵：每座城鎮固定 3 位，站在自己城鎮的室外，數值以同世界等級的小怪物為準
+  // 士兵：城鎮、堡壘各 3 位，城市、要塞各 6 位，站在自己聚落的室外，是職業角色套版（第三十六版之一）；每個聚落有隱形人口數，落在範圍的人口標籤那一段
   for (const v of w.villages) {
     const mine = game.soldiers.filter((s) => s.villageId === v.id);
-    if (!FE.Steading.townish(v)) { if (mine.length) fail(`生成 seed${seed} ${v.kind} ${v.name} 有士兵`); continue; }
-    const want = v.kind === 'city' ? 6 : 3; // 城市是兩座城鎮（第三十四版）
-    if (C.SOLDIER_PER_TOWN !== 3 || mine.length !== want) fail(`生成 seed${seed} ${v.name} 有 ${mine.length} 位士兵，應該固定是 ${want}`);
+    if (!C.SOLDIER_COUNT[v.kind]) { if (mine.length) fail(`生成 seed${seed} ${v.kind} ${v.name} 有士兵`); continue; }
+    const want = C.SOLDIER_COUNT[v.kind];
+    if (mine.length !== want && !(v.kind === 'fortress' && mine.length >= 3 && mine.length <= 6)) fail(`生成 seed${seed} ${v.name} 有 ${mine.length} 位士兵，應該固定是 ${want}`); // 堡壘加蓋成要塞時原有的 3 位，另 3 位照補員規則慢慢補
     stats.soldiers += mine.length;
     for (const s of mine) {
       if (w.villageAt(s.x, s.y) !== v || FE.Steading.roomAt(v, s.x, s.y) >= 0 || !w.passable(s.x, s.y)) fail(`生成 seed${seed} ${v.name} 士兵站的位置不對 (${s.x},${s.y})`);
-      const wl = s.wl;
-      const base = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 2 }, 0, wl);
-      if (s.maxHp !== Math.max(1, Math.round(base.maxHp * 0.9)) || s.atk !== Math.max(1, base.atk - 1) || s.hp !== s.maxHp || s.ac !== base.ac || s.toHit !== base.toHit || s.dmgBonus !== base.dmgBonus - 1) fail(`生成 seed${seed} 士兵數值不對 hp ${s.hp}/${s.maxHp} atk ${s.atk}（基準 ${base.maxHp}/${base.atk}）`);
+      if (!s.equip || !FE.CLASSES[s.cls] || s.lv !== FE.soldierLevel(s.wl) || s.hp !== s.maxHp || s.maxHp !== FE.Char.maxHp(s, s.lv) || s.die) fail(`生成 seed${seed} 士兵不是職業角色套版 cls ${s.cls} lv ${s.lv} hp ${s.hp}/${s.maxHp}`);
     }
+  }
+  for (const v of w.villages) {
+    const [lo, hi] = C.POP_RANGE[v.kind];
+    const a = lo + ((hi - lo) * v.steading.population) / 5;
+    const b = lo + ((hi - lo) * (v.steading.population + 1)) / 5;
+    const named = w.npcs.filter((n) => n.villageId === v.id).length + game.soldiers.filter((s) => s.villageId === v.id).length;
+    if (!(v.pop >= named && v.pop <= hi && ((v.pop >= Math.round(a) && v.pop <= Math.round(b)) || v.pop === named))) fail(`生成 seed${seed} ${v.name}（${v.kind}）人口 ${v.pop} 不在 ${a}～${b}（範圍 ${lo}～${hi}，有名字的 ${named}）`);
   }
   stats.ruins += w.landmarks.filter((l) => l.kind === 'fort').length;
   for (const v of w.villages) {
@@ -77,11 +82,12 @@ for (let seed = seedLo; seed <= seedHi; seed++) {
       armory: v.kind !== 'town' || kinds.includes('armory'),
       entrances: v.entrances, villagers: w.npcs.filter((n) => n.villageId === v.id && !FE.Gear.isShopkeeper(n)).length,
     };
-    // 工匠：每個聚落一位鐵匠（城鎮裡叫武器匠），城鎮另有一位盔甲匠；村莊沒有盔甲匠
+    // 工匠：每個聚落一位鐵匠（城鎮、城市、堡壘、要塞裡叫武器匠），這四種另有一位盔甲匠；村莊沒有盔甲匠；每個聚落一位商人（第三十六版之一）
     const smiths = w.npcs.filter((n) => n.villageId === v.id && n.role === 'smith').length;
     const armorers = w.npcs.filter((n) => n.villageId === v.id && n.role === 'armorer').length;
-    if (smiths !== 1 || armorers !== (FE.Steading.townish(v) ? 1 : 0)) fail(`生成 seed${seed} ${v.name} 工匠 ${smiths} 位鐵匠／武器匠、${armorers} 位盔甲匠`);
-    if (FE.Steading.townish(v)) {
+    const merchants = w.npcs.filter((n) => n.villageId === v.id && n.role === 'merchant').length;
+    if (smiths !== 1 || armorers !== (FE.Steading.shopTown(v) ? 1 : 0) || merchants !== 1) fail(`生成 seed${seed} ${v.name} 工匠 ${smiths} 位鐵匠／武器匠、${armorers} 位盔甲匠、${merchants} 位商人`);
+    if (FE.Steading.shopTown(v)) {
       const am = w.npcs.find((n) => n.villageId === v.id && n.role === 'armorer');
       const bi = v.buildings.findIndex((b) => b.kind === 'armory');
       if (am && bi >= 0 && FE.Steading.roomAt(v, am.x, am.y) !== bi) fail(`生成 seed${seed} ${v.name} 盔甲匠沒站在盔甲匠工坊裡`);

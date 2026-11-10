@@ -186,14 +186,14 @@ function testCharacter() {
     // 舊版本的存檔讀不了
     FE.store.save('fe.save', { version: C.SAVE_VERSION - 1, data: {} });
     const old = FE.Save.load();
-    ok(C.SAVE_VERSION === 25 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
+    ok(C.SAVE_VERSION === 27 && old && old.stale === true && FE.store.load('fe.save', null) === null, '舊版本的存檔該清掉、回報 stale');
   }
 
   // 6. 力量：近戰傷害加修正值（可為負，最少 1）；長劍 1d8（副手空著 1d10）；短刀靈巧取力量與敏捷較高者，不再減半；重擊傷害骰擲兩次
   {
     const g = mk(30, 'warrior', ['sword', 'herb', 'gold']);
     const p = g.player;
-    const m = arena(g, 'CLIFF');
+    const m = arena(g, 'DECAY');
     m.type = 'RUNTIME'; // 碎裂：沒有閃避、格擋、抗性
     const range = (n, kind) => {
       const seen = [];
@@ -680,15 +680,15 @@ function testCharacter() {
       g.endTurn(false);
       return g.ticks - t0;
     };
-    ok(ticksOf('medium', 0) === 11 && ticksOf('medium', 4) === 11 && ticksOf('medium', 5) === 10 && ticksOf('medium', 20) === 10, '中甲：0～4 級多 1 刻，5 級起不多花');
-    ok(ticksOf('heavy', 0) === 12 && ticksOf('heavy', 4) === 12 && ticksOf('heavy', 5) === 11 && ticksOf('heavy', 9) === 11 && ticksOf('heavy', 10) === 10 && ticksOf('heavy', 20) === 10, '重甲：0～4 級多 2 刻、5～9 級多 1 刻、10 級起不多花');
-    ok(ticksOf('light', 0) === 10, '輕甲不多花刻');
-    ok(ticksOf('hide', 0) === 11 && ticksOf('hide', 5) === 10 && ticksOf('ringmail', 0) === 12 && ticksOf('ringmail', 10) === 10, '厚皮甲照中甲、環甲照重甲算多花的刻');
+    ok(ticksOf('medium', 0) === 7 && ticksOf('medium', 4) === 7 && ticksOf('medium', 5) === 6 && ticksOf('medium', 20) === 6, '中甲：0～4 級多 1 刻，5 級起不多花');
+    ok(ticksOf('heavy', 0) === 8 && ticksOf('heavy', 4) === 8 && ticksOf('heavy', 5) === 7 && ticksOf('heavy', 9) === 7 && ticksOf('heavy', 10) === 6 && ticksOf('heavy', 20) === 6, '重甲：0～4 級多 2 刻、5～9 級多 1 刻、10 級起不多花');
+    ok(ticksOf('light', 0) === 6, '輕甲不多花刻');
+    ok(ticksOf('hide', 0) === 7 && ticksOf('hide', 5) === 6 && ticksOf('ringmail', 0) === 8 && ticksOf('ringmail', 10) === 6, '厚皮甲照中甲、環甲照重甲算多花的刻');
     // 一種穿甲技能的等級不影響另一種：中甲 20 級穿重甲照樣多 2 刻
     p.equip.body = G.make('heavy', 0, 93);
     p.skills.medium = { lv: 20, n: 0 };
     p.skills.heavy = { lv: 0, n: 0 };
-    { const t0 = g.ticks || 0; g.endTurn(false); ok(g.ticks - t0 === 12, `中甲 20 級穿重甲該多 2 刻：${g.ticks - t0}`); }
+    { const t0 = g.ticks || 0; g.endTurn(false); ok(g.ticks - t0 === 8, `中甲 20 級穿重甲該多 2 刻：${g.ticks - t0}`); }
     p.skills.medium = { lv: 0, n: 0 };
     p.skills.dodge = { lv: 0, n: 0 };
     ok(near(G.playerDefense(p).dodge, C.PLAYER_DODGE) && (p.skills.heavy.lv = 15, near(G.playerDefense(p).dodge, C.PLAYER_DODGE)), '重甲不加也不扣敏捷的閃避（穿甲技能不影響）');
@@ -822,7 +822,7 @@ function testCharacter() {
     // 一個動作內擲出 6～10 的「必定反擊」最多觸發一次：主手觸發過，副手擲出 6～10 只算命中；主手沒觸發，副手照常觸發
     {
       const { g, p, m } = setup();
-      m.type = 'CLIFF'; // 沒有自己的反擊機率，反擊只可能來自必定反擊
+      m.type = 'DECAY'; // 沒有自己的反擊機率，反擊只可能來自必定反擊
       m.ac = 10 + G.hitMod(p); // 讓擲 0～4 落在勉強命中（第三十三版之一有熟練加值後勉強命中變少，量不到兩下都勉強命中）
       p.equip.off = G.make('dagger', 0, g.nextGearId++);
       let ev = [];

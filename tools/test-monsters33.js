@@ -28,7 +28,7 @@ function testMonsters33() {
   };
   // 指定種族與分級的怪物（不看環境）
   const mon = (g, x, y, race, tier, type) => {
-    const m = FE.makeMonster({ type: type || 'TERRAIN', x, y, cells: [], scope: tier === 'mid' ? 6 : 2, data: {}, race: race || 'goblin' }, g.nextMonsterId++, 1);
+    const m = FE.makeMonster({ type: type || 'DECAY', x, y, cells: [], scope: tier === 'mid' ? 6 : 2, data: {}, race: race || 'goblin' }, g.nextMonsterId++, 1);
     Object.assign(m, { home: { x, y } });
     g.monsters.push(m);
     return m;
@@ -99,12 +99,12 @@ function testMonsters33() {
     for (const r of Object.values(FE.MONSTER_BLOCKS)) for (const b of Object.values(r)) ok(b.ac >= 5 && b.hd[0] >= 1 && b.die[0] >= 1 && Number.isInteger(b.hit) && FE.DMG_TYPES[b.type] && FE.monsterHp(b) > 0, `${b.srd} 的欄位不齊`);
     // 套到怪物身上：AC、攻擊加值、傷害、生命乘異常倍率與世界等級加成
     const g = mk(3301);
-    const t = mon(g, 0, 0, 'troll', 'mid', 'CLIFF');
-    ok(t.ac === 15 && t.toHit === 7 && t.die.join() === '2,6' && t.dmgBonus === 4 && t.regen === 15 && t.maxHp === 125 && t.hp === t.maxHp, `沼澤巨魔（斷崖）：AC ${t.ac}、+${t.toHit}、${t.die}+${t.dmgBonus}、生命 ${t.maxHp}`);
+    const t = mon(g, 0, 0, 'troll', 'mid', 'DECAY');
+    ok(t.ac === 15 && t.toHit === 7 && t.die.join() === '2,6' && t.dmgBonus === 4 && t.regen === 6 && t.maxHp === 125 && t.hp === t.maxHp, `沼澤巨魔（斷崖）：AC ${t.ac}、+${t.toHit}、${t.die}+${t.dmgBonus}、生命 ${t.maxHp}`);
     const k = FE.makeMonster({ type: 'UNREACHABLE', x: 0, y: 0, cells: [], scope: 2, race: 'kobold' }, 1, 4);
     ok(k.maxHp === Math.round(26 * (1 + 3 * C.WL_BONUS.HP)) && k.dmgBonus === 2 && k.ac === 14, `狗頭人（斷層、世界等級 4；第三十三版之二異常不改數值）：生命 ${k.maxHp}、傷害加值 ${k.dmgBonus}`);
     // 看環境換種族：數值塊跟著換
-    const m = FE.makeMonster({ type: 'TERRAIN', x: 0, y: 0, cells: [], scope: 2 }, 2, 1);
+    const m = FE.makeMonster({ type: 'DECAY', x: 0, y: 0, cells: [], scope: 2 }, 2, 1);
     m.race = 'skeleton';
     FE.statMonster(m);
     ok(m.ac === 14 && m.toHit === 5 && m.vuln.join() === 'blunt' && m.maxHp === 40, `換成骷髏：AC ${m.ac}、生命 ${m.maxHp}`);
@@ -230,14 +230,14 @@ function testMonsters33() {
     const t = mon(g, g.player.x + 3, g.player.y, 'troll', 'mid');
     t.hp = t.maxHp - 40;
     FE.AI.regenerate(g, t);
-    ok(t.hp === t.maxHp - 25, `沼澤巨魔每回合回 15：${t.maxHp - t.hp}`);
+    ok(t.hp === t.maxHp - 34, `沼澤巨魔每回合回 6：${t.maxHp - t.hp}`);
     t.hp = t.maxHp - 3;
     FE.AI.regenerate(g, t);
     ok(t.hp === t.maxHp, '回到上限為止');
     const limb = mon(g, g.player.x + 3, g.player.y + 2, 'troll', 'small');
     limb.hp -= 10;
     FE.AI.regenerate(g, limb);
-    ok(limb.maxHp - limb.hp === 5, '小沼澤巨魔（Troll Limb）每回合回 5');
+    ok(limb.maxHp - limb.hp === 8, '小沼澤巨魔（Troll Limb）每回合回 2（少 10 點回 2 點剩 8）');
     // 火：拿一隻傷害種類設成火的怪物去打牠
     const fire = mon(g, t.x + 1, t.y, 'goblin', 'small');
     Object.assign(fire, { dmgType: 'fire', toHit: 100 });
@@ -248,7 +248,7 @@ function testMonsters33() {
     FE.AI.regenerate(g, t);
     ok(t.hp === hp0 && !t.noRegen, '被火打到的下一回合不回');
     FE.AI.regenerate(g, t);
-    ok(t.hp === hp0 + 15, '再下一回合照常回');
+    ok(t.hp === hp0 + 6, '再下一回合照常回');
     fire.dmgType = 'slash';
     t.noRegen = false;
     for (let i = 0; i < 20; i++) FE.Combat.resolveAttack(g, fire, t, 'attack', { noCounter: true });
@@ -257,7 +257,7 @@ function testMonsters33() {
     t.hp = t.maxHp - 30;
     g.monsters = [t];
     FE.AI.worldTurn(g);
-    ok(t.hp === t.maxHp - 15, `世界的回合裡再生：${t.maxHp - t.hp}`);
+    ok(t.hp === t.maxHp - 24, `世界的回合裡再生：${t.maxHp - t.hp}`);
   }
 
   // 8. 易傷：骷髏被鈍擊打中傷害加倍，揮砍、穿刺不加倍

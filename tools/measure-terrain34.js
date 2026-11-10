@@ -31,7 +31,7 @@ const VARIANTS = process.env.FE_ROOT
       { name: '湖多', cfg: { LAKE_CUT: 0.69 } },
       { name: '湖小而多', cfg: { LAKE_SCALE: 22 } },
       { name: '丘陵多', cfg: { HILL_FLOOR: 0.3 } },
-      { name: '有巨石', cfg: { ROCKS_MUL: 1 } },
+      { name: '有巨石', cfg: { ROCKS_MUL: 1 } }, // 巨石的生成還留著，ROCKS_MUL 0 是不放
       { name: '隘口寬 3', cfg: { PASS_GAP: 3, PASS_LEN: [56, 80] } },
     ];
 
@@ -149,14 +149,9 @@ function passDetour(w, p) {
 function measureSeed(seed) {
   const t0 = Date.now();
   const w = new FE.World(seed * 7919);
-  // 每段創完時，檢查器在這一段找到的地形錯位與斷崖（怪物地點的候選，game.js 的 pickSites）；量這個的時間不算進生成時間
-  const sites = [];
-  let scanMs = 0;
-  const scan = (rect) => {
-    const t = Date.now();
-    sites.push(FE.Checker.scan(w, rect, []).filter((d) => d.type === 'TERRAIN' || d.type === 'CLIFF').length);
-    scanMs += Date.now() - t;
-  };
+  // 第三十六版前整理：怪物地點不再從檢查器找到的地形錯位與斷崖挑，原本量候選數的那段拿掉
+  const scanMs = 0;
+  const scan = () => {};
   scan(w.addRegion(null).rect);
   for (let i = 0; i < 16; i++) {
     const seg = w.nextSegment(w.spawn.x, w.spawn.y);
@@ -164,7 +159,7 @@ function measureSeed(seed) {
     scan(w.addRegion(seg).rect);
   }
   const ms = Date.now() - t0 - scanMs;
-  const m = { ms, sites0: sites[0], sites: sites.slice(1), total: 0, pass: 0, biome: {}, hist: [0, 0, 0, 0, 0], cliff: 0, walls: 0, rocks: 0 };
+  const m = { ms, total: 0, pass: 0, biome: {}, hist: [0, 0, 0, 0, 0], cliff: 0, walls: 0, rocks: 0 };
   w.forEachCell((x, y, c) => {
     m.total++;
     m.biome[c.biome] = (m.biome[c.biome] || 0) + 1;
@@ -272,8 +267,6 @@ row('長滿後仍走不出去的出口／出口總數', (per) => `${sum(per, (m)
 row('採集點走不到／總數', (per) => `${sum(per, (m) => m.nodesBad)}／${sum(per, (m) => m.nodes)}`);
 row('能走但從出生點走不到的格子', (per) => pct(sum(per, (m) => m.unreach), sum(per, (m) => m.pass)));
 row('能走的格子佔比', (per) => pct(sum(per, (m) => m.pass), sum(per, (m) => m.total)));
-row('怪物地點的候選（地形錯位＋斷崖）：開局／之後每段（平均）', (per) => `${avg(per.map((m) => m.sites0)).toFixed(1)}／${avg(per.flatMap((m) => m.sites)).toFixed(1)}`);
-row('　其中一處都沒有的段', (per) => `${sum(per, (m) => m.sites.filter((n) => n === 0).length + (m.sites0 === 0 ? 1 : 0))}／${sum(per, (m) => m.sites.length + 1)}`);
 row('生成一個世界（毫秒，平均）', (per) => avg(per.map((m) => m.ms)).toFixed(0));
 
 console.log(`種子 ${SEEDS} 個（各開局＋16 段，長滿 288×288）\n`);

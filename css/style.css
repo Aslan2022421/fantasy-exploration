@@ -308,6 +308,10 @@ b { font-weight: bold; }
 .st-list button { width: 100%; text-align: left; padding: 6px 8px; font-size: 13px; line-height: 1.4; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 3px; cursor: pointer; }
 .st-list button.on { border-color: var(--map-mate-fg); background: rgba(127, 224, 160, 0.12); }
 .st-list .st-sub { display: block; font-size: 12px; color: var(--dim); }
+.st-detail .row { display: grid; grid-template-columns: 8em minmax(0, 1fr); gap: 2px 12px; justify-content: start; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.st-detail .row > span:first-child { color: var(--dim); }
+.st-detail .row > span:last-child { overflow-wrap: anywhere; }
+.st-detail .tags { margin: 8px 0; padding-left: 1.2em; }
 @media (max-width: 720px) { .st-layout { grid-template-columns: 1fr; } }
 .winbody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 20px 16px 14px; }
 .win h3 { margin: 12px 0 4px; font-size: 14px; color: var(--head); }

@@ -170,7 +170,7 @@ function checkResidents(game, tag) {
     const v = w.villageById(n.villageId);
     const reach = reaches.get(v.id);
     if (!DIRS.some(([dx, dy]) => reach.has(key(n.x + dx, n.y + dy)) && w.heightOk(n.x, n.y, n.x + dx, n.y + dy))) fail(`${tag} ${v.name} ${n.name}(${n.role}) 碰不到`);
-    if (FE.Gear.isShopkeeper(n)) continue;
+    if (FE.Gear.isShopkeeper(n) || n.role === 'recruit') continue; // 想找同伴的人（第三十六版之二）只待幾天，沒有家
     if (!n.home) { fail(`${tag} ${v.name} ${n.name} 沒有家`); continue; }
     if (!reach.has(key(n.home.spot[0], n.home.spot[1]))) fail(`${tag} ${v.name} ${n.name} 家裡站的格子走不到`);
     if (FE.Steading.roomAt(v, n.x, n.y) >= 0 && FE.Steading.roomAt(v, n.x, n.y) !== n.home.b) fail(`${tag} ${v.name} ${n.name} 跑進別人的建築`);

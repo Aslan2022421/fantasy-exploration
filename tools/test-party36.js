@@ -305,14 +305,24 @@ function testParty36() {
       g.addExp(FE.levelExp(6) - g.exp);
       ok(g.level === 6 && g.mates.every((m) => m.lv === 5), `冒險者升到 6 級，隊友跟著升到 5 級：${g.mates.map((m) => m.lv)}`);
       ok(mm.maxHp > hp0 && mm.hp === mm.maxHp && mm.maxHp === Ch.maxHp(mm, 5), `隊友升級生命上限增加（${hp0} → ${mm.maxHp}），照職業算法`);
-      // 隊友的屬性點：到了 8 級才加 1 點（照主屬性與體質輪流分配）
+      // 隊友的屬性點：到了 8 級才有 1 點（第三十六版之三：留給玩家在角色視窗裡加，不自動分配）
       g.level = 8;
       g.mates = g.mates.map((m) => Object.assign(Ch.makeLevelChar(g, m.cls, 7, 1, m.name), { id: m.id, role: 'mate', villageId: m.villageId, x: m.x, y: m.y }));
       const attrSum = (a) => FE.ATTRS.reduce((s, x) => s + a[x.key], 0);
       const before = g.mates.map((m) => attrSum(m.attr));
       g.exp = FE.levelExp(9) - 1;
       g.addExp(1);
-      ok(g.level === 9 && g.mates.every((m, i) => m.lv === 8 && attrSum(m.attr) === before[i] + 1), `8 級加 1 點屬性（隊友也加）：${before} → ${g.mates.map((m) => attrSum(m.attr))}`);
+      ok(g.level === 9 && g.mates.every((m, i) => m.lv === 8 && attrSum(m.attr) === before[i] && m.points === 1), `8 級多 1 點屬性、留著給玩家加：${g.mates.map((m) => `點數 ${m.points}`)}`);
+      ok(/有 1 點屬性可以加/.test(g.log.slice(0, 8).map((x) => x.text).join('')), '隊友升級時提示有點數可以加');
+      // 玩家替隊友加：加體質生命上限跟著重算；沒點數、別人的隊友、到上限都不能加
+      const mp = g.mates[0];
+      const con0 = mp.attr.con, hpMax0 = mp.maxHp;
+      ok(g.spendMatePoint(mp, 'con') && mp.attr.con === con0 + 1 && mp.points === 0 && mp.maxHp === Ch.maxHp(mp, mp.lv), `替隊友加體質：${con0} → ${mp.attr.con}，生命上限 ${hpMax0} → ${mp.maxHp}`);
+      ok(!g.spendMatePoint(mp, 'str'), '沒點數就不能加');
+      ok(!g.spendMatePoint({ points: 1, attr: { str: 10 } }, 'str'), '不是隊友就不能加');
+      const m2p = g.mates[1];
+      m2p.attr.str = C.ATTR_CAP;
+      ok(!g.spendMatePoint(m2p, 'str') && m2p.points === 1, '到上限的屬性不能加，點數留著');
       // 第三十六版之二：村莊沒有士兵，但招得到人（基本機率 20%）
       ok(g.soldierQuota({ kind: 'village' }) === 0 && C.RECRUIT_BASE.village === 0.2, '村莊沒有士兵，但想找同伴的人照樣會來');
     }

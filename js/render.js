@@ -704,7 +704,7 @@
         const lv = c === game.hero ? game.level : c.lv;
         const pct = Math.max(0, Math.min(100, Math.round((c.hp / c.maxHp) * 100)));
         const cls = pct <= 25 ? 'low' : pct <= 50 ? 'mid' : '';
-        return `<button class="pm${c === game.player ? ' on' : ''}" data-party="${i}" title="點一下換成操作${esc(c.name)}（Tab 換下一位）"><span class="pm-name">${c === game.player ? '▶ ' : ''}${esc(c.name)}</span><span class="pm-cls">${esc(FE.Char.cls(c).name)} Lv${lv}</span><span class="pm-bar ${cls}"><i style="width:${pct}%"></i></span><span class="pm-hp">${c.hp}/${c.maxHp}</span></button>`;
+        return `<button class="pm${c === game.player ? ' on' : ''}" data-party="${i}" title="點一下換成操作${esc(c.name)}（Tab 換下一位）"><span class="pm-name">${c === game.player ? '▶ ' : ''}${esc(c.name)}</span><span class="pm-cls">${esc(FE.Char.cls(c).name)} Lv${lv}${c !== game.hero && c.points > 0 ? `<b class="over" title="有 ${c.points} 點屬性沒加，按 C 在角色視窗裡加"> ＋${c.points}</b>` : ''}</span><span class="pm-bar ${cls}"><i style="width:${pct}%"></i></span><span class="pm-hp">${c.hp}/${c.maxHp}</span></button>`;
       })
       .join('');
   }
@@ -941,17 +941,45 @@
   }
 
   // 角色視窗（C）：職業與等級、生命與負重上限、六項屬性與修正值、各技能的等級與到下一級的進度、目前的加成
+  // 角色視窗看的是隊伍裡的第幾位（第三十六版之三）：null 是目前操作的那位；換看的人不換操作，在聚落裡也能看
+  function charViewed() {
+    const list = game.party();
+    if (ui.charView != null && list[ui.charView]) return list[ui.charView];
+    ui.charView = null;
+    return game.player;
+  }
+
+  // 畫看的那位：負重、出手數字這些函式都看 game.player，畫的時候暫時把 player 換成他（同隊友自動出手的 asActor），畫完換回來
   function drawCharacter() {
-    const p = game.player;
+    const who = charViewed();
+    const keep = game.player;
+    game.player = who;
+    try {
+      drawCharacterOf(who, keep);
+    } finally {
+      game.player = keep;
+    }
+  }
+
+  // p 是看的那位，ctl 是目前操作的那位
+  function drawCharacterOf(p, ctl) {
     const Ch = FE.Char;
     const c = Ch.cls(p);
     const sign = (n) => (n > 0 ? '+' : '') + n;
     const lo = FE.levelExp(game.level);
     const hi = FE.levelExp(game.level + 1);
+    // 隊友還有沒加的屬性點：屬性表多一欄「加 1」（冒險者的點數照舊跳升級加點視窗）
+    const canAdd = p !== game.hero && p.points > 0;
     const attrRows = FE.ATTRS.map((a) => {
       const v = p.attr[a.key];
-      return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td></tr>`;
+      const add = canAdd ? `<td><button data-mate-attr="${a.key}"${v >= C.ATTR_CAP ? ' disabled' : ''}>加 1</button></td>` : '';
+      return `<tr><td>${a.name}</td><td><b>${v}</b>${v >= C.ATTR_CAP ? ' <span class="dim">（上限）</span>' : ''}</td><td>${sign(Ch.mod(v))}</td><td class="dim">${esc(a.info)}</td>${add}</tr>`;
     }).join('');
+    // 隊員頁籤：隊伍有兩人以上才有；▶ 是目前操作的那位，＋N 是還有幾點屬性沒加
+    const list = game.party();
+    const tabs = list.length > 1
+      ? `<div class="char-tabs">${list.map((m, i) => `<button class="char-tab${m === p ? ' on' : ''}" data-charview="${i}" title="${m === ctl ? '目前操作的人' : '看這一位（不換操作）'}">${m === ctl ? '▶ ' : ''}${esc(m.name)}<span class="dim">　${esc(Ch.cls(m).name)} Lv${m === game.hero ? game.level : m.lv}</span>${m !== game.hero && m.points > 0 ? `<b class="over">　＋${m.points}</b>` : ''}</button>`).join('')}<span class="dim char-tabs-hint">← → 換人看（不換操作）</span></div>`
+      : '';
     // 這項武器技能管哪些武器、學會哪些精通（一律要 5 級才會）
     const weaponsOf = (id) => Object.keys(FE.GEAR).filter((k) => FE.GEAR[k].cat === 'weapon' && (FE.GEAR[k].skill === id || FE.GEAR[k].meleeSkill === id));
     const effect = (id, lv) => {
@@ -988,17 +1016,21 @@
     const tired = p.exhaust ? `　<b class="over">力竭 ${p.exhaust}</b>` : '';
     const R = FE.PLAYER_RACES[p.race] || FE.PLAYER_RACES.human;
     const body = `${R.name}　身高${FE.HEIGHTS[(p.height || 4) - 1]}、體格${FE.BUILDS[(p.build || 4) - 1]}　體型 ${Ch.sizeOf(p).toLocaleString('en-US')}`;
-    $('charInfo').innerHTML = `
-      <p><b>${esc(p.name)}</b>　${esc(c.name)}　${p !== game.hero ? `隊友 Lv${p.lv}（冒險者每升一級，隊友跟著升一級）` : `Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}`}${p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加</b>` : ''}</p>
+    // 隊友：背景與來自哪個聚落（第三十六版之二起招來的人有背景）
+    const home = p !== game.hero ? game.world.villageById(p.villageId) : null;
+    const origin = p !== game.hero ? `　${p.bg && FE.RECRUIT_BACKGROUNDS[p.bg] ? FE.RECRUIT_BACKGROUNDS[p.bg].name + '，' : ''}${home ? `來自${esc(home.name)}` : ''}` : '';
+    const pointsNote = p.points > 0 ? `　<b class="over">還有 ${p.points} 點屬性沒加${canAdd ? '（在下面的屬性表點「加 1」）' : ''}</b>` : '';
+    $('charInfo').innerHTML = `${tabs}
+      <p><b>${esc(p.name)}</b>　${esc(c.name)}　${p !== game.hero ? `隊友 Lv${p.lv}（冒險者每升一級，隊友跟著升一級）${origin}` : `Lv${game.level}　${game.level >= C.LEVEL_MAX ? `經驗值 ${game.exp}（最高等級）` : `經驗值 ${game.exp - lo} / ${hi - lo}`}`}${p === ctl ? '' : '　<span class="dim">（只是在看，沒有換操作）</span>'}${pointsNote}</p>
       <p>${esc(body)}${p.skillPack ? `　起始技能組合：${esc(p.skillPack)}` : ''}</p>
       <p>主手 ${p.equip.main ? esc(FE.Gear.name(p.equip.main)) : '空著'}　副手 ${p.equip.off ? esc(FE.Gear.name(p.equip.off)) : '空著'}${p.equip.off && FE.Gear.def(p.equip.off).cat === 'weapon' ? '（雙持）' : ''}　身上 ${p.equip.body ? esc(FE.Gear.name(p.equip.body)) : '空著'}</p>
       <p>生命 ${p.hp} / ${p.maxHp}　能背 ${game.carryLimit()} 磅、推拖上限 ${game.pushLimit()} 磅（目前 ${game.weight()} 磅）　走一步 ${Math.round(Ch.moveTicks(p) * Ch.exhaustMoveMul(p))} 刻　野外歇一小時回 ${heal}（最少 1）${tired}</p>
       <h3>屬性（修正值＝(屬性－10)÷2 無條件捨去，上限 ${C.ATTR_CAP}）</h3>
-      <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th></tr>${attrRows}</table>
+      <table class="stats"><tr><th>屬性</th><th>數值</th><th>修正值</th><th>用處</th>${canAdd ? '<th></th>' : ''}</tr>${attrRows}</table>
       <h3>技能（用了就累積經驗，升到第 N 級要 ${C.SKILL_NEED_BASE}＋${C.SKILL_NEED_STEP}N 點，沒有上限；經驗倍率 ×${Ch.expFactor(p).toFixed(1)}）</h3>
       <table class="stats"><tr><th>技能</th><th>等級</th><th>到下一級</th><th>目前的效果</th></tr>${skillRows}</table>
       <h3>目前的數字</h3>
-      <p>主手傷害 ${esc(game.attackText())}　近戰出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　暴擊 ${Ch.critMin(p, p.equip.main)}～20　攻擊一次 ${Ch.attackTicks(p, p.equip.main)} 刻${masteryLine()}　閃避 ${Math.round(d.dodge * 100)}%　物理傷害再減 ${Ch.conCut(p)}（體質）${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}</p>`;
+      <p>主手傷害 ${esc(game.attackText())}　近戰出手加減（不含地形與高處）${sign(FE.Gear.hitMod(p))}　暴擊 ${Ch.critMin(p, p.equip.main)}～20　攻擊一次 ${Ch.attackTicks(p, p.equip.main)} 刻${masteryLine()}　閃避 ${Math.round(d.dodge * 100)}%　物理傷害再減 ${Ch.conCut(p)}（體質）${d.blockMax ? `　格擋 ${Math.round(d.block * 100)}%、格擋值 ${d.blockMax}` : '　沒拿盾牌，不能格擋'}${p === game.hero ? `　向工匠買東西 ×${FE.Gear.buyFactor(game.chaMod()).toFixed(2)}、賣東西 ×${FE.Gear.sellFactor(game.chaMod()).toFixed(2)}` : ''}</p>`;
   }
 
   // ---- 模態視窗：開新世界選職業與起始裝備、升級加點。開著的時候不能做別的事 ----
@@ -1599,8 +1631,24 @@
         ui.bagDropConfirm = false;
       }
       if (name === 'reports' && game.reports.length) FE.store.save('fe.reportSeen', reportId(game.reports[0]));
+      if (name === 'character') ui.charView = null; // 打開時先看目前操作的那位
       update();
     },
+    // 角色視窗換看隊伍裡的第 i 位（第三十六版之三），或往前後 d 位（← →）；不換操作
+    charView(i) {
+      const list = game.party();
+      if (!list[i]) return;
+      ui.charView = i;
+      update();
+    },
+    charStep(d) {
+      const list = game.party();
+      if (list.length < 2) return;
+      const now = list.indexOf(charViewed());
+      ui.charView = (now + d + list.length) % list.length;
+      update();
+    },
+    charViewed: () => charViewed(),
     closeWindow() {
       ui.win = null;
       update();

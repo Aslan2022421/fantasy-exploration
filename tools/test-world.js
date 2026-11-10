@@ -352,8 +352,16 @@ function testSoldiers() {
   ok(g.exp === exp0 && g.creation === cr0 && w.chests.length === chests0, '士兵打倒的怪物給了冒險者經驗值、創世力或寶箱');
   ok(g.monsters.includes(bystander) && bystander.hp === bystander.maxHp, '士兵碰了創世時的怪物');
   ok(stat.soldierKills >= (g.monsters.includes(prey) ? 0 : 1), '士兵清掉的數量沒有記下來');
-  // 公平的一戰：滿血的小怪物，看整隊士兵打不打得贏（只統計，不算錯）
+  // 第三十六版之三：小怪物合成的中型怪物（m.members）士兵也打；血量 1，看出城後打不打得倒
   if (g.monsters.includes(bystander)) g.monsters = g.monsters.filter((m) => m !== bystander);
+  w.calm = [];
+  const merged = put(cand[1] || cand[0], false);
+  merged.members = [];
+  merged.hp = 1;
+  town.sortieUntil = g.ticks + 1e6;
+  for (let i = 0; i < 300 && g.monsters.includes(merged) && mine().length; i++) wait();
+  ok(!g.monsters.includes(merged) || !mine().length, '出城的士兵沒有打小怪物合成的中型怪物');
+  // 公平的一戰：滿血的小怪物，看整隊士兵打不打得贏（只統計，不算錯）
   w.calm = []; // 上一輪士兵清掉的地方成了冷卻區（5～7 天不生怪物），這一場要放在同一帶
   const fair = put(cand[2] || cand[0], true);
   C.STATE_CUTS = [0.5, 1];

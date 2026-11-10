@@ -478,6 +478,12 @@ input {
 .npc.recruit { color: var(--map-mate-fg); }
 .player.mate { color: var(--map-mate-fg); }
 
+/* 角色視窗的隊員頁籤（第三十六版之三）：換看的人、不換操作；看的那位標亮 */
+.char-tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.char-tab { padding: 3px 8px; font-size: 13px; background: transparent; border: 1px solid var(--line); border-radius: 3px; color: inherit; cursor: pointer; }
+.char-tab.on { border-color: var(--map-mate-fg); background: rgba(127, 224, 160, 0.12); }
+.char-tabs-hint { font-size: 12px; }
+
 /* 隊員欄（第三十六版之一）：右側訊息欄上方，每位隊員一行，正在操作的那位標亮，點一下換人 */
 #party { flex: none; padding: 6px 8px 4px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
 #party.hidden { display: none; }

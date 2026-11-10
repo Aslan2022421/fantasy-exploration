@@ -259,10 +259,11 @@ FE.Combat.hook = (e) => {
     r.dmg += e.dmg;
     if (e.dmg > 0) r.hit++;
   }
-  // 士兵：只打事件與侵蝕生的小怪物（m.small），從不碰創世時的怪物（被打時照冒險者那一套可以反擊，第三十六版之一）；怪物打士兵也走同一套判定
+  // 士兵：只打衰敗生的小怪物（m.small）與牠們合成的中型怪物、營地（m.members，第三十六版之三），從不碰創世時與戰役的怪物
+  // （被打時照冒險者那一套可以反擊，第三十六版之一）；怪物打士兵也走同一套判定
   if (e.by === 'soldier') {
     combat.soldierHits++;
-    if (!e.counter && (!e.d.small || e.d.role === 'soldier')) fail(`士兵攻擊了不該碰的對象：${e.d.name}（small=${e.d.small}）`);
+    if (!e.counter && (!(e.d.small || e.d.members) || e.d.role === 'soldier')) fail(`士兵攻擊了不該碰的對象：${e.d.name}（small=${e.d.small}，members=${!!e.d.members}）`);
   }
   if (e.d && e.d.role === 'soldier') combat.onSoldier++;
 };

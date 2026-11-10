@@ -301,6 +301,20 @@
     if (game.cycleControl(i)) FE.Save.save(game);
     FE.UI.update();
   }
+  // 角色視窗（第三十六版之三）：點頁籤換看的人；點「加 1」替那位隊友加屬性點
+  document.getElementById('charInfo').addEventListener('click', (e) => {
+    if (!ready) return;
+    const tab = e.target.closest && e.target.closest('[data-charview]');
+    if (tab) {
+      FE.UI.charView(Number(tab.dataset.charview));
+      return;
+    }
+    const add = e.target.closest && e.target.closest('[data-mate-attr]');
+    if (add && !add.disabled) {
+      const m = FE.UI.charViewed();
+      dispatch('隊友加點', () => game.spendMatePoint(m, add.dataset.mateAttr));
+    }
+  });
   document.getElementById('party').addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-party]');
     if (b && ready && game.talking == null && !FE.UI.win() && !game.aim) switchParty(Number(b.dataset.party));
@@ -457,6 +471,12 @@
     if (FE.UI.win() === 'backpack' && k === 'delete') {
       e.preventDefault();
       bagAction('drop');
+      return;
+    }
+    // 角色視窗開著：← → 換看隊伍裡的另一位（第三十六版之三，不換操作）
+    if (FE.UI.win() === 'character' && (k === 'arrowleft' || k === 'arrowright')) {
+      e.preventDefault();
+      FE.UI.charStep(k === 'arrowleft' ? -1 : 1);
       return;
     }
     // 視窗開著時，方向鍵與戰鬥鍵都不作用

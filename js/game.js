@@ -277,14 +277,38 @@
       return this.player.cd || (this.player.cd = { cooldown: 0, healCd: 0, spellCd: {} });
     }
 
-    // 隊友升級：冒險者每升一級，隊友的等級＝冒險者等級－1（最少 1）；屬性點照 Char.autoPoints 分配，生命照職業算法加
+    // 隊友升級：冒險者每升一級，隊友的等級＝冒險者等級－1（最少 1）；生命照職業算法加。
+    // 屬性點（4、8、12、16、19 級）留給玩家在角色視窗（C）裡加（第三十六版之三，使用者選的；原本照 Char.autoPoints 自動分配），不跳視窗
     syncMates() {
       for (const m of this.mates) {
         const target = Math.max(1, this.level - 1);
         if ((m.lv || 1) >= target) continue;
-        const gain = FE.Char.levelUpTo(m, target);
-        this.say(`${m.name}也升到 Lv${m.lv}，生命上限 +${gain}（現在 ${m.maxHp}）。`, 'world');
+        const pts = m.points || 0;
+        const gain = FE.Char.levelUpTo(m, target, { manual: true });
+        const more = (m.points || 0) - pts;
+        this.say(`${m.name}也升到 Lv${m.lv}，生命上限 +${gain}（現在 ${m.maxHp}）${more > 0 ? `，有 ${m.points} 點屬性可以加（按 C 打開角色視窗）` : ''}。`, 'world');
       }
+    }
+
+    // 替隊友 m 加 1 點屬性（角色視窗裡點的）：跟冒險者一樣上限 18，體質加了生命上限照公式重算。回傳有沒有加成功
+    spendMatePoint(m, key) {
+      const a = FE.ATTRS.find((x) => x.key === key);
+      if (!m || !this.mates.includes(m) || !a || !(m.points > 0)) return false;
+      if (m.attr[key] >= C.ATTR_CAP) {
+        this.say(`${m.name}的${a.name}已經到 ${C.ATTR_CAP} 了，不能再加。`, 'sys');
+        return false;
+      }
+      m.attr[key]++;
+      m.points--;
+      const max = FE.Char.maxHp(m, m.lv || 1) + (m.ward ? m.ward.hp || 0 : 0);
+      const gain = max - m.maxHp;
+      m.maxHp = max;
+      if (gain > 0) m.hp += gain;
+      m.hp = Math.min(m.hp, m.maxHp);
+      const mod = FE.Char.mod(m.attr[key]);
+      this.say(`${m.name}的${a.name}加到 ${m.attr[key]}（修正值 ${mod > 0 ? '+' : ''}${mod}）${gain > 0 ? `，生命上限 +${gain}（現在 ${m.maxHp}）` : ''}。`, 'good');
+      if (m.points > 0 && FE.ATTRS.every((x) => m.attr[x.key] >= C.ATTR_CAP)) m.points = 0;
+      return true;
     }
 
     // 隊友倒下就是死了：寫進歷史紀錄，原本聚落的人口 −1，從隊伍拿掉；正被操作的話換回冒險者

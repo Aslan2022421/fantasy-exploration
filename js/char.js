@@ -529,13 +529,14 @@
     if (opts && opts.skillCap) soldierSkills(p, opts.skillCap, opts.rng || game.rng);
     return p;
   }
-  // 隊友升級：升到 level 級（p.lv），新到的屬性點照 autoPoints 分配，生命上限照公式重算、多出來的部分同時補到目前的生命。回傳生命上限多了幾點
-  function levelUpTo(p, level) {
+  // 隊友升級：升到 level 級（p.lv），生命上限照公式重算、多出來的部分同時補到目前的生命。回傳生命上限多了幾點。
+  // 新到的屬性點：opts.manual（第三十六版之三，使用者選的）留在 p.points 給玩家在角色視窗裡加；沒給（測試、競技場）照 autoPoints 分配
+  function levelUpTo(p, level, opts) {
     const from = p.lv || 1;
     if (level <= from) return 0;
     for (let l = from + 1; l <= level; l++) if (C.LEVEL_POINT_AT.includes(l)) p.points = (p.points || 0) + C.LEVEL_POINTS;
     p.lv = level;
-    autoPoints(p);
+    if (!(opts && opts.manual)) autoPoints(p);
     const max = maxHp(p, level);
     const gain = max - p.maxHp;
     p.maxHp = max;

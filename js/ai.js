@@ -353,8 +353,9 @@
   // ---- 士兵 ----
   // 士兵跟怪物照同一個時鐘（第三十版）：每 6 刻做一個動作（移動、出手或站著不動）；失序時冒險者的動作花兩倍的刻，士兵跟怪物一樣多動一次。
   // 平常：在自己的城鎮裡室外走動（跟村民一樣，不進建築）；在城外就走回城鎮。
-  // 出城（第三十六版之二：每天照世界狀態擲，見 game.sortieDay；原本是失序就一律出城）：追打城外 16 格內衰敗生的小怪物（m.small），
-  // 創世時的怪物一律不碰，免得冒險者解不出下一塊。附近沒有這種小怪物（打完了或本來就沒有）就結束出城、走回城裡。
+  // 出城（第三十六版之二：每天照世界狀態擲，見 game.sortieDay；原本是失序就一律出城）：追打城外 16 格內衰敗生的小怪物（m.small）
+  // 與牠們合成的中型怪物、營地（m.members，第三十六版之三），創世時與戰役的怪物一律不碰，免得冒險者解不出下一塊。
+  // 附近沒有這些怪物（打完了或本來就沒有）就結束出城、走回城裡。
   // 士兵可以走進聚落周圍的圈，怪物不行。
   const inBuilding = (w, x, y) => {
     const v = w.villageAt(x, y);
@@ -374,9 +375,11 @@
     for (const c of w.chests) occ.add(k(c.x, c.y));
     for (const c of game.party()) occ.add(k(c.x, c.y));
     const mates = new Set(game.soldiers.map((s) => k(s.x, s.y)));
-    // 創世時的怪物、合體怪物不歸士兵打，牠們旁邊的格子也不走（不然路過就被打倒）
+    // 士兵打的：衰敗生的小怪物（m.small），以及小怪物沒清掉合成的中型怪物、失序聚成的營地（m.members；第三十六版之三，使用者選的：
+    // 失序時小怪物幾乎一出現就合體，只打小怪物的話士兵出城就找不到目標）。創世時的怪物、戰役的怪物不歸士兵打，牠們旁邊的格子也不走（不然路過就被打倒）
+    const isPrey = (m) => m.small || !!m.members;
     const danger = new Set();
-    for (const m of game.monsters) if (!m.small) for (const [dx, dy] of DIRS8) danger.add(k(m.x + dx, m.y + dy)); // 八方向（第三十五版之四）
+    for (const m of game.monsters) if (!isPrey(m)) for (const [dx, dy] of DIRS8) danger.add(k(m.x + dx, m.y + dy)); // 八方向（第三十五版之四）
     const open = (x, y) => w.passable(x, y) && !occ.has(k(x, y)) && !inBuilding(w, x, y) && !danger.has(k(x, y));
     const free = (x, y) => open(x, y) && !mates.has(k(x, y));
 
@@ -427,7 +430,7 @@
       let prey = null;
       if (game.sortieOn(v)) {
         const around = (m) => m.x >= v.x0 - 16 && m.x <= v.x1 + 16 && m.y >= v.y0 - 16 && m.y <= v.y1 + 16;
-        if (!preyCache.has(v)) preyCache.set(v, game.monsters.filter((m) => m.small && around(m)));
+        if (!preyCache.has(v)) preyCache.set(v, game.monsters.filter((m) => isPrey(m) && around(m)));
         prey = preyCache.get(v).filter((m) => game.monsters.includes(m));
         if (!prey.length) v.sortieUntil = 0; // 打完了或附近沒有：結束出城，走回城裡
       }

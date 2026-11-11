@@ -246,7 +246,8 @@ function testWorldLevel() {
   ok(a.compute === 3 && mk(1, 6).compute === 11, `等級 1 的算力 ${a.compute}／${mk(1, 6).compute}（小怪物 3、影響範圍 6 的中型怪物 8＋3）`);
   const da = FE.monsterDef(a);
   const db = FE.monsterDef(b);
-  ok(Math.abs(db.dodge - da.dodge - 0.03) < 1e-9 && Math.abs(db.block - da.block - 0.03) < 1e-9 && db.blockMax - da.blockMax === 3, '防禦的世界等級加成不對');
+  // V37.1 試玩後：怪物的閃避一律 0（SRD 的 AC 已經含敏捷），世界等級只加格擋
+  ok(da.dodge === 0 && db.dodge === 0 && Math.abs(db.block - da.block - 0.03) < 1e-9 && db.blockMax - da.blockMax === 3, '防禦的世界等級加成不對');
   const g = new FE.Game(31337);
   g.start();
   g.worldState = 0;

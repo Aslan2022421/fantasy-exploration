@@ -835,7 +835,8 @@ function testGear() {
       max = Math.max(max, v);
     }
     // 第三十版：寶箱的錢存成銅（數字照舊是銀，乘 10）
-    ok(max <= 250 && max >= 200 && max % 10 === 0 && bad > 800 && bad < 2400 && neg > 2000, `創世寶箱的錢：最大 ${max} 銅（減半後應該 ≤25 銀）、NaN ${bad}、負數 ${neg}`);
+    // V37.1 試玩後：寶箱的錢不再算壞（沒有 NaN、沒有負數）
+    ok(max <= 260 && max >= 200 && max % 10 === 0 && bad === 0 && neg === 0, `創世寶箱的錢：最大 ${max} 銅（減半後應該 ≤26 銀）、NaN ${bad}、負數 ${neg}`);
     const g = newGame(22);
     const drop = (m, n) => {
       const out = [];

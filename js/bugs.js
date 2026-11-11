@@ -264,7 +264,7 @@
         const c = w.chests.find((o) => o.id === m.data.chestId);
         if (!c) return '';
         c.copper = Number.isFinite(c.copper) ? Math.abs(c.copper) : 20 * FE.CONFIG.SILVER;
-        return '牠守著的寶箱恢復了原樣。';
+        return c.bug != null ? '' : '牠守著的寶箱恢復了原樣。'; // V37.1 試玩後寶箱不再被封住，只修錢、不出訊息
       }
       case 'REFERENCE': {
         const n = w.npcById(m.data.npcId);

@@ -11,13 +11,14 @@ function testVeil34() {
     g.setVeil(true);
     g.start();
     ok(g.allMonsters().length === 0 && !Object.keys(g.world.campaigns).length, `開局生了 ${g.allMonsters().length} 隻怪物`);
-    const t0 = FE.Stability.total(g);
+    const chestBug = () => g.world.chests.reduce((s, c) => s + (c.bug || 0), 0); // V37.1 試玩後：新寶箱帶的 BUG 值不算在這條檢查裡
+    const t0 = FE.Stability.total(g) - chestBug();
     for (let i = 0; i < 4; i++) g.createChunk(false);
     ok(g.allMonsters().length === 0, `創世生了 ${g.allMonsters().length} 隻怪物`);
-    const t1 = FE.Stability.total(g);
+    const t1 = FE.Stability.total(g) - chestBug();
     ok(t1 <= t0, `創世之後整體 BUG 值從 ${t0} 變 ${t1}`);
     for (let h = 0; h < 72; h++) FE.Events.tick(g);
-    ok(g.allMonsters().length === 0 && FE.Stability.total(g) <= t1, `三天後怪物 ${g.allMonsters().length} 隻、整體 BUG 值 ${t1} → ${FE.Stability.total(g)}`);
+    ok(g.allMonsters().length === 0 && FE.Stability.total(g) - chestBug() <= t1, `三天後怪物 ${g.allMonsters().length} 隻、整體 BUG 值 ${t1} → ${FE.Stability.total(g) - chestBug()}`);
     // 一個動作最多長一段（門檻只剩任務的算力）
     const n0 = g.world.regions;
     g.creation = g.nextChunkAt + 1e6;

@@ -358,8 +358,9 @@
   }
 
   // 數值暴走：寶箱的錢（銅）是負數或 NaN；影響範圍照算壞了幾銀算（每 4 銀 1 格）
+  // V37.1 試玩後：寶箱的錢不再算壞，「被怪物的力量封住」併進開鎖（寶箱自己帶的 BUG 值），所以舊存檔裡算壞的寶箱也不再當成錯
   function checkChest(c) {
-    if (Number.isFinite(c.copper) && c.copper >= 0) return null;
+    if (c.bug != null || (Number.isFinite(c.copper) && c.copper >= 0)) return null;
     const scope = Number.isFinite(c.copper) ? Math.min(10, Math.max(1, Math.ceil(-c.copper / FE.CONFIG.SILVER / 4))) : 8;
     return { type: 'VALUE', x: c.x, y: c.y, cells: [[c.x, c.y]], scope, data: { chestId: c.id, value: c.copper } };
   }

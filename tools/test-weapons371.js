@@ -371,19 +371,37 @@ function testTools371() {
     p.equip.tool2 = null;
     p.bag = [];
 
-    // 2. 寶箱的 DC：世界等級 1～2 基準 10，60% 照基準、25% 低一階、15% 高一階
+    // 2. 寶箱自己帶 BUG 值（V37.1 試玩後）：世界等級 1 時 50～400、每級 +10%；DC＝5＋5×ceil(值÷200)，5～30；算進世界的 BUG 值
+    ok(FE.chestDc(50) === 10 && FE.chestDc(200) === 10 && FE.chestDc(201) === 15 && FE.chestDc(400) === 15 && FE.chestDc(600) === 20 && FE.chestDc(800) === 25 && FE.chestDc(5000) === 30 && FE.chestDc(0) === 5, 'BUG 值換算 DC');
     w.chests = [];
     for (let i = 0; i < 3000; i++) w.chests.push({ id: 500000 + i, x: 0, y: 0, copper: 10 });
     w.ringsDone = 0;
-    g.lockChests();
+    const comp1 = g.lockChests();
+    const bugs1 = w.chests.map((c) => c.bug);
     const cnt = {};
     for (const c of w.chests) cnt[c.dc] = (cnt[c.dc] || 0) + 1;
-    ok(Object.keys(cnt).sort().join() === '10,15,5' && Math.abs(cnt[10] / 3000 - 0.6) < 0.04 && Math.abs(cnt[5] / 3000 - 0.25) < 0.04 && Math.abs(cnt[15] / 3000 - 0.15) < 0.04, `世界等級 1 的寶箱 DC 分布 ${JSON.stringify(cnt)}`);
+    ok(Math.min(...bugs1) >= 50 && Math.max(...bugs1) <= 400 && Object.keys(cnt).sort().join() === '10,15' && Math.abs(cnt[10] / 3000 - 150 / 350) < 0.04 && comp1 > 0, `世界等級 1：BUG 值 ${Math.min(...bugs1)}～${Math.max(...bugs1)}，DC 分布 ${JSON.stringify(cnt)}，算力 ${comp1}`);
+    w.chests = [];
+    const before = FE.Stability.total(g);
     w.chests = [{ id: 600000, x: 0, y: 0, copper: 10 }, { id: 600001, x: 0, y: 0, copper: 10 }];
-    w.ringsDone = 6; // 世界等級 7
+    w.ringsDone = 6; // 世界等級 7：×1.6
     g.lockChests();
-    ok(w.chests.every((c) => [20, 25, 30].includes(c.dc)), `世界等級 7 起基準 25：${w.chests.map((c) => c.dc)}`);
+    ok(w.chests.every((c) => c.bug >= 80 && c.bug <= 640 && c.dc === FE.chestDc(c.bug)), `世界等級 7 的寶箱 BUG 值放大 1.6 倍：${w.chests.map((c) => c.bug + '/DC' + c.dc)}`);
+    ok(FE.Stability.total(g) - before === w.chests[0].bug + w.chests[1].bug, '寶箱的 BUG 值算進世界的 BUG 值');
     w.ringsDone = 0;
+    // 寶箱不擋路：長 6 段之後，世界上沒有一個寶箱放在一擋就斷路的格子上；舊寶箱（沒有 BUG 值）讀檔時補擲
+    {
+      const g2 = new FE.Game(4242);
+      g2.start();
+      for (let i = 0; i < 6; i++) g2.createChunk(false);
+      const w2 = g2.world;
+      const blocking = w2.chests.filter((c) => FE.chestBlocksPath(w2, c.x, c.y));
+      ok(w2.chests.length > 0 && blocking.length === 0 && w2.chests.every((c) => c.bug >= 50 && c.dc === FE.chestDc(c.bug)), `寶箱 ${w2.chests.length} 個，擋路的 ${blocking.map((c) => c.x + ',' + c.y)}`);
+      for (const c of w2.chests) delete c.bug;
+      FE.Save.save(g2);
+      const back = FE.Save.load();
+      ok(back && back.game.world.chests.every((c) => c.bug >= 50), '讀檔時沒有 BUG 值的寶箱補擲');
+    }
 
     // 3. 撞上上鎖的寶箱：沒工具只出訊息；開鎖器到 DC 就開、練開鎖；撬棍擲力量有優勢、不練開鎖
     const chest = { id: 700000, x: spot.x + 1, y: spot.y, copper: 50, dc: 15 };

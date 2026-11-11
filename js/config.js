@@ -373,6 +373,12 @@ FE.CONFIG = {
 
 // 世界等級每升一級加 per（比例）：等級 1 是 1 倍，等級 3 是 1＋2×per
 FE.wlScale = (wl, per) => 1 + per * ((wl || 1) - 1);
+// 寶箱的 DC：5＋5×ceil(BUG 值÷200)，5～30（V37.1 試玩後）
+FE.chestDc = (bug) => {
+  const C = FE.CONFIG;
+  const dc = C.CHEST_DC_STEP + C.CHEST_DC_STEP * Math.ceil((bug || 0) / C.CHEST_DC_PER);
+  return Math.max(C.CHEST_DC_RANGE[0], Math.min(C.CHEST_DC_RANGE[1], dc));
+};
 // 錢（內部用銅記帳）的寫法：「3 金 5 銀 2 銅」，零的省略；一毛都沒有寫「0 銅」
 FE.money = (copper) => {
   const C = FE.CONFIG;
@@ -923,8 +929,10 @@ Object.assign(FE.CONFIG, {
   CHARGE_STEPS: 2,          // 衝刺：這一下之前連續走了 2 格以上
   POISON_DIE: [1, 4],       // 毒針命中多擲的毒傷
   POISON_TURNS: 2,          // 中毒幾次行動（出手有劣勢）
-  CHEST_DC: [[2, 10], [4, 15], [6, 20], [Infinity, 25]], // 寶箱的 DC 基準：生成當下世界等級 1～2 是 10、3～4 是 15、5～6 是 20、7 起 25
-  CHEST_DC_ODDS: [0.6, 0.25, 0.15], // 每個寶箱再擲：60% 照基準、25% 低一階、15% 高一階
+  // 寶箱的鎖是 BUG 套的皮（V37.1 試玩後，使用者定的）：每個寶箱自己帶一份 BUG 值（chest.bug，世界等級 1 時 50～400，每級 +10%，照 WL_BONUS.DEBT），
+  // 算進世界的 BUG 值；DC＝5＋5×ceil(BUG 值÷200)，5～30。開鎖成功就清掉這份，給同值怪物的算力
+  CHEST_BUG: [50, 400],
+  CHEST_DC_PER: 200,
   CHEST_DC_STEP: 5,
   CHEST_DC_RANGE: [5, 30],
   DOOR_DC: 15,              // 玩家裝的門鎖

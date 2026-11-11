@@ -124,6 +124,7 @@
     w.locks = d.locks || [];
     if (!Array.isArray(w.items)) w.items = [];
     w.recountDebt();
+    game.fixChests(); // V37.1 試玩後：舊寶箱補 BUG 值、擋路的挪開
     return game;
   }
 

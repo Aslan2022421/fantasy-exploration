@@ -101,18 +101,42 @@
     // 創世時替這塊世界的每隻怪物配好「打倒時給的算力」、每個任務配好「完成時給的算力」，
     // 加總後乘 PLAYER_COMPUTE_SCALE 與 CREATION_SHARE，就是到下一塊要累積的創世力。
     // 清光這塊世界，一定解得出下一塊；途中的移動、出手、清掉衰敗生的怪物，都會讓它更快。
-    // 寶箱都上鎖（第三十七版之一）：剛生出來、還沒有 DC 的寶箱照生成當下的世界等級定基準（1～2 是 10、3～4 是 15、5～6 是 20、7 起 25），
-    // 每個再擲：60% 照基準、25% 低一階、15% 高一階（一階 5，最低 5、最高 30）。用世界種子與寶箱編號雜湊擲，不動遊戲的亂數序列
+    // 寶箱都上鎖（第三十七版之一；試玩後改成 BUG 值換算）：寶箱的鎖是 BUG 套的皮，每個寶箱自己帶一份 BUG 值（chest.bug），
+    // 剛生出來、還沒有 BUG 值的寶箱照當下的世界等級擲（世界等級 1 時 50～400，每級 +10%），DC＝5＋5×ceil(BUG 值÷200)（5～30）。
+    // 用世界種子與寶箱編號雜湊擲，不動遊戲的亂數序列。回傳這次新擲的寶箱打開時給的算力加總（創世門檻要算進去）
     lockChests() {
       const wl = FE.Stability.worldLevel(this);
-      const base = C.CHEST_DC.find(([top]) => wl <= top)[1];
+      let compute = 0;
       for (const c of this.world.chests) {
-        if (c.dc != null) continue;
-        const r = FE.hash01(this.seed, c.id, 371);
-        const [same, lower] = C.CHEST_DC_ODDS;
-        const step = r < same ? 0 : r < same + lower ? -1 : 1;
-        c.dc = Math.max(C.CHEST_DC_RANGE[0], Math.min(C.CHEST_DC_RANGE[1], base + step * C.CHEST_DC_STEP));
+        if (c.bug != null) continue;
+        const [lo, hi] = C.CHEST_BUG;
+        c.bug = Math.round((lo + FE.hash01(this.seed, c.id, 371) * (hi - lo)) * FE.wlScale(wl, C.WL_BONUS.DEBT));
+        c.dc = FE.chestDc(c.bug);
+        compute += this.chestCompute(c);
       }
+      return compute;
+    }
+
+    // 創世每長一段、以及讀檔時（V37.1 試玩後）：還沒有 BUG 值的寶箱照現在的世界等級擲；擋在一擋就斷路的格子上的寶箱
+    // （舊世界的，或後來蓋的山壁、城牆把它變成走道的），挪到附近不擋路、冒險者走得到的空格（找不到就留在原地）
+    fixChests() {
+      this.lockChests();
+      const w = this.world;
+      let reach = null;
+      for (const c of w.chests) {
+        if (!FE.chestBlocksPath(w, c.x, c.y)) continue;
+        reach = reach || FE.Checker.reachable(w);
+        const at = { x: c.x, y: c.y };
+        c.x = c.y = Infinity; // 先拿開，量附近的格子時不算它（不改寶箱的順序）
+        const free = this.findFreeNear(at.x, at.y, (x, y) => reach.at(x, y) && !w.nodes.some((o) => o.x === x && o.y === y) && !FE.chestBlocksPath(w, x, y));
+        Object.assign(c, free || at);
+      }
+    }
+
+    // 打開這個寶箱給的算力：照同值怪物的換算（每 REWARD_VALUE_PER_SCOPE 一份，到 MID_BUDGET 算中怪物）
+    chestCompute(c) {
+      const scope = Math.max(1, Math.round((c.bug || 0) / C.REWARD_VALUE_PER_SCOPE));
+      return FE.killCompute((c.bug || 0) >= C.MID_BUDGET ? 'mid' : 'small', scope, FE.Stability.worldLevel(this));
     }
 
     // 新的一塊長在離冒險者最近的邊界上（第一塊在原點）
@@ -125,7 +149,7 @@
         if (!seg) return false;
       }
       const { index, rect, village, landmarks } = this.world.addRegion(seg);
-      this.lockChests();
+      this.fixChests(); // 新寶箱擲 BUG 值、擋路的挪開；寶箱打開時給的算力不算進創世門檻（門檻只看怪物與委託），是額外的
       // 新聚落的周圍那一圈可能伸進舊的區塊：已經在那裡的怪物挪到圈外
       // （站在圈外、但生成點在圈內的，生成點改成現在站的位置）。
       // 第三十四版：堡壘廢墟、堡壘兩側的山壁、城市與要塞也可能蓋到舊的區塊上，站在變得不能走的格子上的怪物一樣挪開
@@ -985,7 +1009,7 @@
         this.say(`${what}上了鎖，需要開鎖器或撬棍（裝在工具欄）才打得開。`, 'sys');
         return;
       }
-      const dc = lock.chest ? lock.chest.dc || C.CHEST_DC[0][1] : C.DOOR_DC;
+      const dc = lock.chest ? lock.chest.dc || FE.chestDc(lock.chest.bug) : C.DOOR_DC;
       this.beginAction();
       const a = FE.randInt(this.rng, 1, 20);
       const b = pick ? a : FE.randInt(this.rng, 1, 20);
@@ -1562,8 +1586,7 @@
       // 隊友走過寶箱不開（照常走過去）。數值暴走體徘徊離開後，寶箱還是壞的，要打倒牠才修得好
       const chest = this.player === this.hero ? this.world.chestAt(nx, ny) : null;
       if (chest) {
-        if (FE.Checker.checkChest(chest)) this.say('寶箱被怪物的力量封住了，打不開。', 'sys');
-        else this.tryUnlock({ chest });
+        this.tryUnlock({ chest });
         return;
       }
       // 採集點：工具欄有對的工具時撞上去就採，不移動；沒有工具就照常走過去
@@ -2351,12 +2374,14 @@
     }
 
     // 開寶箱：錢拆成三種幣（總值不變，見 coins），硬幣沒有重量
+    // V37.1 試玩後：寶箱的鎖是 BUG 套的皮，打開就清掉它帶的 BUG 值，給同值怪物的算力（不給經驗值）
     openChest(chest) {
       const p = this.player;
       const copper = Math.max(0, chest.copper | 0);
       p.copper += copper;
       this.world.chests = this.world.chests.filter((c) => c !== chest);
       this.say(`打開寶箱：${this.coins(copper, chest.small)}。`, 'good');
+      if (chest.bug) this.earn(this.chestCompute(chest));
       // 25% 機率多開出一件裝備（品質普通～傑作，每高一級機率減半），放進背包
       if (this.rng() < C.CHEST_GEAR) {
         const g = FE.Gear.randomDrop(this, 0, 5);

@@ -275,7 +275,8 @@ function testWorldLevel() {
   g.monsters = [{ bug: Math.round(cut0 * 1.45) - owe(g), x: 0, y: 0 }];
   FE.Stability.update(g, true);
   ok(g.worldState === 1, `等級 5 整體 BUG 值是第一個分界的 1.45 倍，應該動盪，狀態 ${g.worldState}`);
-  ok(FE.Stability.total(g) === Math.round(cut0 * 1.45), `整體 BUG 值＝怪物的 bug 加全世界欠的量：${FE.Stability.total(g)}`);
+  const chestBug = g.world.chests.reduce((s, c) => s + (c.bug || 0), 0); // V37.1 試玩後：還沒打開的寶箱帶的 BUG 值也算
+  ok(FE.Stability.total(g) - chestBug === Math.round(cut0 * 1.45), `整體 BUG 值＝怪物的 bug 加全世界欠的量加寶箱的：${FE.Stability.total(g)}（寶箱 ${chestBug}）`);
   g.monsters = [];
   FE.Stability.update(g, true);
 }

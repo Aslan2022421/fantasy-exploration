@@ -35,7 +35,8 @@
   const worldLevel = (game) => 1 + (game.world.ringsDone || 0);
   const mult = (game, key) => C['STATE_' + key][state(game)];
   // 整體 BUG 值：怪物身上的 bug（寫著 m.bug；合體怪物是合進去的加總）＋全世界負的穩定值
-  const total = (game) => game.allMonsters().reduce((s, m) => s + (m.bug || 0), 0) + game.world.debt; // 怪物遮蔽時收起來的也算（第三十四版）
+  // V37.1 試玩後：還沒打開的寶箱帶的 BUG 值（chest.bug）也算進去
+  const total = (game) => game.allMonsters().reduce((s, m) => s + (m.bug || 0), 0) + game.world.debt + game.world.chests.reduce((s, c) => s + (c.bug || 0), 0); // 怪物遮蔽時收起來的也算（第三十四版）
   // 世界等級的加成倍率，例如 scale(game, 'CUTS')
   const scale = (game, key) => FE.wlScale(worldLevel(game), C.WL_BONUS[key]);
 

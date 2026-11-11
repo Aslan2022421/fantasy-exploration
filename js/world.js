@@ -1384,9 +1384,11 @@
   // 粗糙的掉落公式：約四分之一會算出負數，少數會除以零變成 NaN。所有寶箱的金幣減半（CHEST_GOLD_MUL），算壞的公式套在減半後的數字上。
   // 算出來的是銀，換成銅（第三十版）；算壞的 NaN 乘完還是 NaN
   FE.roughGold = function (rng) {
-    let gold = Math.floor((25 + (rng() - 0.62) * 70) * C.CHEST_GOLD_MUL);
-    if (rng() < 0.08) gold = Math.floor((gold / 0) * 0);
-    return gold * C.SILVER;
+    // V37.1 試玩後：寶箱的錢不再算壞（原本負數就是數值暴走、8% 算成 NaN），負的取絕對值、最少 1 銀；
+    // 原本決定 NaN 的那一擲照樣擲，不動亂數序列
+    const gold = Math.floor((25 + (rng() - 0.62) * 70) * C.CHEST_GOLD_MUL);
+    rng();
+    return Math.max(1, Math.abs(gold)) * C.SILVER;
   };
 
   // 創世時固定放幾個寶箱，拿了就沒有，不會重生
@@ -1398,21 +1400,37 @@
     const art = FE.landmarkArt(landmark);
     const at = (dx, dy) => (dy >= 0 && dy < art.length && dx >= 0 && dx < art[dy].length ? art[dy][dx] : '.');
     const inside = (dx, dy) => at(dx, dy) === 'o' || (at(dx, dy) === '░' && [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([ax, ay]) => at(dx + ax, dy + ay) !== '.'));
+    // V37.1 試玩後：寶箱上了鎖會擋路，不放在門（+）、城門（╪）上與旁邊的格子
+    const nearDoor = (dx, dy) => FE.DIRS8.concat([[0, 0]]).some(([ax, ay]) => at(dx + ax, dy + ay) === '+' || at(dx + ax, dy + ay) === '╪');
     const spots = [];
     for (let y = landmark.y0; y <= landmark.y1; y++) {
       for (let x = landmark.x0; x <= landmark.x1; x++) {
-        if (!inside(x - landmark.x0, y - landmark.y0)) continue;
+        if (!inside(x - landmark.x0, y - landmark.y0) || nearDoor(x - landmark.x0, y - landmark.y0)) continue;
         if (!world.passable(x, y) || world.npcAt(x, y) || world.chestAt(x, y)) continue;
         if (world.nodes.some((o) => o.x === x && o.y === y)) continue;
         spots.push([x, y]);
       }
     }
+    // 也不放在一擋就斷路的格子上（FE.chestBlocksPath，看已經放好的寶箱）；擋路的那一格跳過，再挑下一格
     const n = Math.min(spots.length, FE.randInt(rng, C.CHESTS[0], C.CHESTS[1]));
-    for (let i = 0; i < n; i++) {
+    let placed = 0;
+    while (placed < n && spots.length) {
       const [x, y] = spots.splice(Math.floor(rng() * spots.length), 1)[0];
+      if (FE.chestBlocksPath(world, x, y)) continue;
       world.chests.push({ id: world.nextId++, x, y, copper: FE.roughGold(rng) });
+      placed++;
     }
   }
+
+  // 這一格放了寶箱會不會擋路（V37.1 試玩後）：看周圍八格（別的寶箱算擋住）能走的格子是不是連成一整段；
+  // 斷成兩段以上（走道、門口這種一擋就斷的地方），或四周都不能走，就算擋路。只看周圍一圈，寧可多擋掉幾格
+  FE.chestBlocksPath = (world, x, y) => {
+    const ring = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]].map(([dx, dy]) => world.passable(x + dx, y + dy) && !world.chestAt(x + dx, y + dy));
+    if (ring.every(Boolean)) return false;
+    let runs = 0;
+    for (let i = 0; i < 8; i++) if (ring[i] && !ring[(i + 7) % 8]) runs++;
+    return runs !== 1;
+  };
 
   // 採集點：礦坑的空地上 3～5 處礦脈；溫帶森林、針葉林、熱帶雨林裡約 2% 的格子長藥草。
   // 藥草不放在聚落、路、地貌、寶箱與出生點上。第三十四版：只放在從出生點走得到的格子（原本藥草會長在斷崖上拿不到）

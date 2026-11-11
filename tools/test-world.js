@@ -547,7 +547,10 @@ function testBackpack() {
     p.equip[slot] = tool;
     p.x = node.x + dx; p.y = node.y + dy;
     const t0 = g.turn, c0 = g.creation, n0 = g.bagCount(def.item), steps0 = p.steps;
+    // V37.1 試玩後：撞上去只設成目標，按 1 才採
     g.move(-dx, -dy);
+    ok(g.turn === t0 && g.bagCount(def.item) === n0 && p.x === node.x + dx && g.objTarget() && g.objTarget().node === node, `有${toolName}撞上${def.name}：只設成目標`);
+    g.act('attack');
     const got = g.bagCount(def.item) - n0;
     ok(p.x === node.x + dx && p.y === node.y + dy && got >= 1 && got <= 2 && g.turn === t0 + 1 && p.steps === steps0, `有${toolName}時：得到 ${got} 份、回合 ${g.turn - t0}、位置 (${p.x},${p.y})`);
     ok(Math.abs(g.creation - c0 - C.COMPUTE_PER_GATHER * S) < 1e-9 && C.COMPUTE_PER_GATHER === 0.15, `採集的創世力 ${g.creation - c0}`);

@@ -17,7 +17,7 @@
     't-plain', 't-grass', 't-forest', 't-snow', 't-sand', 't-mount', 't-water', 't-rock', 't-stonewall', 't-woodwall', 't-house', 't-road', 't-market', 't-temple', 't-door', 't-bed', 't-furniture', 't-ruin', 't-relic',
     'void', 'hp', 'hp-mid', 'hp-low', 'bug', 'good', 'bad', 'world',
     'map-node-ore', 'map-node-herb', 'map-chest', 'map-item', 'map-ol-aim', 'map-aim-area', 'map-npc', 'map-smith', 'map-armorer', 'map-merchant', 'map-soldier', 'map-mate-fg', 'map-player-fg', 'map-player-bg',
-    'map-mon-fg', 'map-mon-bg', 'map-mid-fg', 'map-mid-bg', 'map-boss-bg', 'map-glitch-fg', 'map-glitch-bg', 'map-ol-target', 'map-ol-hunt', 'map-ol-chase', 'map-walk', 'map-walk-bg',
+    'map-mon-fg', 'map-mon-bg', 'map-mid-fg', 'map-mid-bg', 'map-boss-bg', 'map-glitch-fg', 'map-glitch-bg', 'map-ol-target', 'map-ol-hunt', 'map-ol-chase', 'map-ol-obj', 'map-walk', 'map-walk-bg',
     'map-h0', 'map-h1', 'map-h2', 'map-h3', 'map-h4', 'map-village', 'map-town', 'map-indoor', 'map-road', 'map-quest', 'map-recipient',
     'm-plain', 'm-grassland', 'm-shrubland', 'm-forest', 'm-taiga', 'm-tundra', 'm-glacier', 'm-jungle', 'm-savanna', 'm-desert', 'm-marsh', 'm-swamp', 'm-mountain', 'm-lake', 'm-rock',
     'm-stonewall', 'm-woodwall', 'm-building', 'm-village', 'm-town', 'm-relic', 'm-mon', 'm-boss', 'm-view', 'm-slot',
@@ -127,6 +127,9 @@
       }
     }
     const target = game.targetMonster();
+    // 設成目標的寶箱、上鎖的門、採集點（V37.1 試玩後）：橘色外框，跟怪物的白框分開
+    const objT = game.objTarget();
+    const objKey = objT ? key(objT.x, objT.y) : null;
     // 瞄準中的怪物（白框之外另一種顏色），範圍魔攻會波及的格子塗上底色
     const aimed = game.aimTarget();
     const area = new Set();
@@ -180,7 +183,7 @@
             bg = P['map-glitch-bg'];
           } else if (o.cls === 'faded') alpha = 0.35;
         }
-        let outline = null;
+        let outline = k === objKey ? P['map-ol-obj'] : null;
         let hpPct = -1;
         const nd = nodes.get(k);
         if (nd && FE.TERRAIN[c.t].pass) {
@@ -259,7 +262,7 @@
           bg = P['map-player-bg'];
           bold = true;
           alpha = 1;
-          outline = null;
+          outline = k === objKey ? P['map-ol-obj'] : null; // 站在設成目標的採集點上：框照畫
           hpPct = -1;
         }
 
@@ -602,7 +605,9 @@
   // 目標那一行：目前的目標（名字、血條、生命，後面是狀態與體型）；瞄準中多寫距離與按鍵；沒有就寫「無」
   function drawTarget() {
     const p = game.player;
-    const m = focusMonster();
+    // V37.1 試玩後：設成目標的寶箱、上鎖的門、採集點優先（按 1 也是先對它；瞄準中照舊顯示瞄準的怪物）
+    const objT = !game.aim ? game.objTarget() : null;
+    const m = objT ? null : focusMonster();
     if (m) {
       const st = monStates(m);
       let aim = '';
@@ -613,16 +618,21 @@
         aim = `<span class="aim">瞄準（${game.aim.i + 1}/${game.aim.ids.length}）距離 ${d} 格${far ? '，超出正常射程（劣勢）' : ''}${game.adjacentMonsters().length ? '，貼著怪物（劣勢）' : ''}：Tab 換目標，F 或 Enter 出手，Esc 取消</span>`;
       }
       $('tgtText').innerHTML = `<span class="tname">${esc(m.name)}</span><span class="t-hp"><span class="bar"><i style="width:${Math.round((m.hp / m.maxHp) * 100)}%"></i></span>生命 ${m.hp} / ${m.maxHp}</span>${aim}${st.length ? `<span class="t-state">${esc(st.join('、'))}</span>` : ''}<span class="dim t-extra">體型 ${FE.sizeName(m)}　AC ${m.ac}</span>`;
+    } else if (objT) {
+      // V37.1 試玩後：目標是寶箱、上鎖的門、採集點
+      const d = Math.max(Math.abs(objT.x - p.x), Math.abs(objT.y - p.y));
+      $('tgtText').innerHTML = `<span class="tname t-obj">${esc(game.objName(objT))}</span><span class="dim">${esc(game.objHint(objT))}${game.objTargetNear() ? '' : `（距離 ${d} 格，要走到旁邊）`}</span>`;
     } else $('tgtText').textContent = '無';
-    $('tgtText').className = m ? 'tgt' : '';
+    $('tgtText').className = m || objT ? 'tgt' : '';
     // 快捷列：攻擊 <1>、重擊 <2>（冷卻中顯示剩幾回合、變暗）、撤退 <3>、射擊／施法 <F>、治療 <4>（牧師、聖騎士）、盾擊 <5>（戰士）
     const adj = game.targetMonster();
     const cls = FE.Char.cls(p);
     const cd = game.battle.cooldown;
     const hcd = game.battle.healCd || 0;
     const ranged = game.rangedMode(true);
+    const objNear = game.objTargetNear();
     const can = {
-      attack: !!adj || !!game.reachTarget(),
+      attack: !!adj || !!game.reachTarget() || !!objNear,
       deep: !!adj && cd <= 0,
       flee: !!adj,
       fire: !!ranged,
@@ -641,6 +651,8 @@
     if (game.spellsOf().length) document.querySelector('#quick [data-act="fire"]').classList.remove('hidden');
     document.querySelector('#quick [data-act="fire"]').disabled = false;
     document.querySelector('#quick [data-act="fire"] .qn').textContent = game.spellsOf().length ? '施法' : ranged && ranged.mode === 'spell' ? '施法' : ranged && ranged.mode === 'light' ? '神聖之光' : ranged && ranged.mode === 'throw' ? '投擲' : '射擊';
+    // 快捷鍵 1：目標是貼著的寶箱或門寫「開鎖」，採集點寫「挖礦」「採藥」，其他時候是「攻擊」
+    document.querySelector('#quick [data-act="attack"] .qn').textContent = objNear ? (objNear.kind === 'node' ? (objNear.node.kind === 'ore' ? '挖礦' : '採藥') : '開鎖') : '攻擊';
     document.querySelector('#quick [data-act="deep"] .qcd').textContent = adj && cd > 0 ? `冷卻 ${cd}` : '';
     document.querySelector('#quick [data-act="heal"] .qcd').textContent = hcd > 0 ? `冷卻 ${hcd}` : '';
     // 右下角的視窗按鈕：開著的那顆亮起來
@@ -1607,6 +1619,11 @@
       const quest = handIn(n) ? '可以交件或回報' : n.role === 'recruit' ? '想找同伴' : n.quest && !n.quest.accepted && !n.quest.done ? '有委託可以接' : '';
       const home = W.villageById ? W.villageById(n.villageId) : null;
       el.innerHTML = `<p><b>${esc(n.name)}</b>　<span class="dim">${role}・${race ? race.name : ''}${home ? `・${esc(home.name)}` : ''}</span></p>${quest ? `<p>${quest}</p>` : ''}<div class="dlg-opts"><button data-look="talk,${n.x},${n.y}">走過去對話</button></div>`;
+    } else if (game.objAt(L.x, L.y)) {
+      // V37.1 試玩後：寶箱、上鎖的門、採集點可以設成目標
+      const o = game.objAt(L.x, L.y);
+      const t = game.battle.obj && game.battle.obj.x === o.x && game.battle.obj.y === o.y;
+      el.innerHTML = `<p><b class="tname">${esc(game.objName(o))}</b>${t ? '　<span class="dim">你的目標</span>' : ''}</p><p>${esc(game.objHint(o))}</p><div class="dlg-opts"><button data-look="obj,${o.x},${o.y}">設成目標</button></div>`;
     } else {
       const b = FE.BIOMES[c.biome];
       el.innerHTML = `<p><b>${esc(b.name)}</b>　<span class="dim">高度 ${c.h}</span></p><p>${b.hit ? `站在這裡出手 ${b.hit > 0 ? '+' : ''}${b.hit}` : '站在這裡出手沒有加減'}</p>`;

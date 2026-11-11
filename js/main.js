@@ -123,9 +123,10 @@
     if (clearRoute()) FE.UI.update();
   }
   // 第一段：算出最短路，畫出來，先不走
-  function showRoute(tx, ty, npc) {
+  // adj：走到它旁邊就算到（寶箱、上鎖的門這種站不上去的目標用）
+  function showRoute(tx, ty, npc, adj) {
     stopWalk();
-    const path = findPath(tx, ty, !!npc);
+    const path = findPath(tx, ty, !!npc || !!adj);
     if (!path) {
       clearRoute();
       game.say('走不到那裡。', 'sys');
@@ -612,10 +613,18 @@
     }
     if (walk) stopWalk();
     const same = !!(route && route.tx === c.x && route.ty === c.y);
+    const o = !m && !n ? game.objAt(c.x, c.y) : null;
     if (m) {
       // 點怪物只是設成目標（不出手、不算動作），順手把路線收掉
       cancelRoute();
       game.battle.targetId = m.id;
+      game.battle.obj = null;
+      FE.UI.update();
+    } else if (o && !same) {
+      // V37.1 試玩後：點寶箱、上鎖的門、採集點：設成目標，同時畫出走到它旁邊的路線（再點一次出發），到了按 1 開鎖或採集
+      game.setObjTarget(o);
+      if (game.objTargetNear()) cancelRoute();
+      else showRoute(c.x, c.y, null, o.kind !== 'node');
       FE.UI.update();
     } else if (n) {
       // 村民、工匠、士兵：第一段畫路線，點同一個人第二段才走過去開對話
@@ -637,7 +646,13 @@
       if (n) walkTo(n.x, n.y, n);
     } else if (kind === 'target') {
       const m = game.monsterAt(+x, +y);
-      if (m) game.battle.targetId = m.id;
+      if (m) {
+        game.battle.targetId = m.id;
+        game.battle.obj = null;
+      }
+      FE.UI.update();
+    } else if (kind === 'obj') {
+      game.setObjTarget(game.objAt(+x, +y)); // V37.1 試玩後：寶箱、上鎖的門、採集點
       FE.UI.update();
     }
   });

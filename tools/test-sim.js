@@ -139,6 +139,14 @@ function botStep(game, rng, goal, lazy) {
         let step = null;
         while (prev.get(k) !== null) { step = k; k = prev.get(k); }
         const [sx, sy] = step ? step.split(',').map(Number) : [tgt.x, tgt.y];
+        // V37.1 試玩後：採集點不再撞上去就採，要設成目標再按 1
+        if (!step) {
+          const o = game.objAt(tgt.x, tgt.y);
+          if (o && o.kind === 'node' && game.toolOf(FE.NODES[o.node.kind].tool)) {
+            game.battle.obj = { x: o.x, y: o.y };
+            return game.act('attack');
+          }
+        }
         return game.move(sx - p.x, sy - p.y);
       }
       for (const [dx, dy] of DIRS) {

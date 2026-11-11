@@ -135,15 +135,19 @@ function testGear35() {
   p.equip.tool2 = null;
   p.x = spot.x;
   p.y = spot.y;
+  // V37.1 試玩後：撞上去只設成目標，按 1 才開鎖
   g.move(1, 0);
-  ok(g.world.isLocked(door.x, door.y) && p.x === spot.x && /需要開鎖器或撬棍/.test(g.log[0].text), '沒有工具撞上上鎖的門該只出訊息');
+  ok(g.world.isLocked(door.x, door.y) && p.x === spot.x && g.objTarget() && g.objTarget().kind === 'door', '撞上上鎖的門該只設成目標');
+  g.act('attack');
+  ok(g.world.isLocked(door.x, door.y) && p.x === spot.x && /需要開鎖器或撬棍/.test(g.log[0].text), '沒有工具按 1 該只出訊息');
   p.equip.tool1 = FE.Gear.make('crowbar', 0, g.nextGearId++);
   g.rng = () => 0.999;
-  g.move(1, 0);
+  g.act('attack');
   ok(!g.world.isLocked(door.x, door.y) && g.world.canStep(spot.x, spot.y, door.x, door.y) && p.equip.tool1 && p.equip.tool1.dur === 49 && p.x === spot.x, '撬棍沒有撬開門鎖，或沒有磨損一次');
   g.world.lockDoor(door.x, door.y);
   p.equip.tool2 = FE.Gear.make('lockpick', 0, g.nextGearId++);
-  g.move(1, 0);
+  g.move(1, 0); // 上一次開了鎖，目標收掉了，再撞一次設成目標
+  g.act('attack');
   ok(!g.world.isLocked(door.x, door.y) && p.equip.tool2.dur === 24 && p.equip.tool1.dur === 49 && /開鎖器/.test(g.log.map((l) => l.text).join('')), '兩把都有時該先用開鎖器');
   p.equip.tool1 = null;
   p.equip.tool2 = null;

@@ -1022,6 +1022,7 @@
       const name = FE.Gear.def(tool).name;
       if (pick) FE.Char.useSkill(this, 'picklock', ok ? C.SKILL_EXP_HIT : C.SKILL_EXP_MISS, p);
       if (ok) {
+        this.battle.obj = null; // 打開了，目標跟著收掉
         this.say(`你用${name}${pick ? '打開' : '撬開'}了${what}的鎖（${roll}）。`, 'good');
         if (lock.chest) this.openChest(lock.chest);
         else this.world.unlockDoor(lock.door.x, lock.door.y);
@@ -1030,6 +1031,68 @@
       }
       FE.Gear.wear(this, tool);
       this.endTurn(false);
+    }
+
+    // ---- 寶箱、上鎖的門、採集點也能設成目標（V37.1 試玩後，使用者定的）----
+    // 撞上去、滑鼠點、或在查看視窗裡選「設成目標」；外框跟怪物的目標不同顏色。按 1 才開鎖或採集（要貼著，採集點可以站在上面）
+    // 這一格能設成目標的東西：寶箱、上鎖的門、長著的採集點；回傳 { kind, x, y, chest?, node? }，沒有就 null
+    objAt(x, y) {
+      const chest = this.world.chestAt(x, y);
+      if (chest) return { kind: 'chest', x, y, chest };
+      if (this.world.isLocked(x, y)) return { kind: 'door', x, y };
+      const node = this.nodeAt(x, y);
+      if (node) return { kind: 'node', x, y, node };
+      return null;
+    }
+
+    // 目前設成目標的東西（還在才算）
+    objTarget() {
+      const t = this.battle.obj;
+      return t ? this.objAt(t.x, t.y) : null;
+    }
+
+    // 目標的東西貼著（八方向、高度接得上；採集點站在上面也算）才回傳
+    objTargetNear() {
+      const o = this.objTarget();
+      const p = this.player;
+      if (!o) return null;
+      const d = Math.max(Math.abs(o.x - p.x), Math.abs(o.y - p.y));
+      if (d > 1 || (d === 0 && o.kind !== 'node') || (d === 1 && !this.world.heightOk(p.x, p.y, o.x, o.y))) return null;
+      return o;
+    }
+
+    objName(o) {
+      return o.kind === 'chest' ? '寶箱' : o.kind === 'door' ? '上鎖的門' : FE.NODES[o.node.kind].name;
+    }
+
+    // 按 1 會做什麼，與要用的工具（底部目標列、訊息用）
+    objHint(o) {
+      if (o.kind === 'node') {
+        const def = FE.NODES[o.node.kind];
+        return `按 1 ${def.verb}，工具欄要有${FE.GEAR[def.tool].name}`;
+      }
+      const dc = o.kind === 'chest' ? o.chest.dc || FE.chestDc(o.chest.bug) : C.DOOR_DC;
+      return `DC ${dc}，按 1 開鎖，工具欄要有開鎖器或撬棍`;
+    }
+
+    // 設成目標：不花動作；改盯這個東西，就不再盯著怪物
+    setObjTarget(o) {
+      if (!o) return;
+      this.battle.obj = { x: o.x, y: o.y };
+      this.battle.targetId = null;
+      this.say(`你把${this.objName(o)}設成目標（${this.objHint(o)}）。`, 'sys');
+    }
+
+    // 按 1 對目標的東西：寶箱、門開鎖，採集點採集
+    useObj(o) {
+      if (o.kind === 'chest') return this.tryUnlock({ chest: o.chest });
+      if (o.kind === 'door') return this.tryUnlock({ door: { x: o.x, y: o.y } });
+      const def = FE.NODES[o.node.kind];
+      if (!this.toolOf(def.tool)) {
+        this.say(`要把${FE.GEAR[def.tool].name}裝進工具欄才${def.verb}得了。`, 'sys');
+        return;
+      }
+      this.gather(o.node);
     }
 
     // ---- 採集點 ----
@@ -1543,12 +1606,13 @@
         this.say('那個斜角過不去。', 'sys');
         return;
       }
-      // 上鎖的門：撞上去自動用工具欄的開鎖器或撬棍（第三十七版之一）
+      // 上鎖的門：撞上去只把它設成目標（V37.1 試玩後：不再撞上去就開鎖），按 1 才用工具欄的開鎖器或撬棍
       if (this.world.isLocked(nx, ny)) {
-        this.tryUnlock({ door: { x: nx, y: ny } });
+        this.setObjTarget(this.objAt(nx, ny));
         return;
       }
       const m = this.monsterAt(nx, ny);
+      if (m) this.battle.obj = null; // 盯上怪物就不再盯著寶箱、採集點
       if (m) {
         // 撞上怪物只把牠設成目前的目標，不出手，也不算動作（不花刻、怪物不動、不產生算力）；要按 1 一般攻擊、2 重擊才出手。
         // 目標會纏上冒險者（見 ai.js 的 worldTurn）。已經有貼著的目標時換目標算一個動作，原本的目標趁隙出手一下（只看閃避）
@@ -1582,17 +1646,17 @@
         this.openTalk(npc);
         return;
       }
-      // 寶箱（第三十七版之一：都上了鎖）：冒險者撞上去自動用工具欄的開鎖器或撬棍，打開就拿到裡面的東西，人不移動；
-      // 隊友走過寶箱不開（照常走過去）。數值暴走體徘徊離開後，寶箱還是壞的，要打倒牠才修得好
+      // 寶箱（第三十七版之一：都上了鎖）：冒險者撞上去只把它設成目標，人不移動（V37.1 試玩後：不再撞上去就開鎖），按 1 才開鎖；
+      // 隊友走過寶箱不開（照常走過去）
       const chest = this.player === this.hero ? this.world.chestAt(nx, ny) : null;
       if (chest) {
-        this.tryUnlock({ chest });
+        this.setObjTarget(this.objAt(nx, ny));
         return;
       }
-      // 採集點：工具欄有對的工具時撞上去就採，不移動；沒有工具就照常走過去
+      // 採集點：工具欄有對的工具時，第一次撞上去只把它設成目標、不移動（按 1 才採）；已經是目標再撞就走上去。沒有工具照常走過去
       const node = this.nodeAt(nx, ny);
-      if (node && this.toolOf(FE.NODES[node.kind].tool)) {
-        this.gather(node);
+      if (node && this.toolOf(FE.NODES[node.kind].tool) && !(this.battle.obj && this.battle.obj.x === nx && this.battle.obj.y === ny)) {
+        this.setObjTarget(this.objAt(nx, ny));
         return;
       }
       if (!this.world.passable(nx, ny)) return;
@@ -2956,6 +3020,12 @@
       }
       if (kind === 'throw') {
         this.aimStart('throw');
+        return;
+      }
+      // V37.1 試玩後：目標是寶箱、上鎖的門或採集點，而且貼著，按 1 就開鎖或採集
+      const obj = kind === 'attack' ? this.objTargetNear() : null;
+      if (obj) {
+        this.useObj(obj);
         return;
       }
       let m = this.targetMonster();

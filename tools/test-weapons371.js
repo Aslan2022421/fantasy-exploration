@@ -408,16 +408,21 @@ function testTools371() {
     w.chests = [chest];
     home();
     const t0 = g.turn;
+    // V37.1 試玩後：撞上去只設成目標（不花動作、不開鎖），按 1 才開鎖
     g.move(1, 0);
-    ok(w.chests.includes(chest) && p.x === spot.x && g.turn === t0 && /需要開鎖器或撬棍/.test(g.log[0].text), '沒有工具撞上寶箱：只出訊息、不算動作');
+    ok(w.chests.includes(chest) && p.x === spot.x && g.turn === t0 && g.objTarget() && g.objTarget().chest === chest && /設成目標/.test(g.log[0].text), '撞上寶箱：只設成目標、不算動作');
+    g.act('attack');
+    ok(w.chests.includes(chest) && p.x === spot.x && g.turn === t0 && /需要開鎖器或撬棍/.test(g.log[0].text), '沒有工具按 1：只出訊息、不算動作');
     p.equip.tool1 = G.make('lockpick', 0, g.nextGearId++);
     p.skills.picklock = { lv: 0, n: 0 };
     g.rng = () => 0; // d20 擲 1
     g.move(1, 0);
+    ok(g.turn === t0 && w.chests.includes(chest), '有工具再撞：還是不開鎖、不算動作');
+    g.act('attack');
     ok(w.chests.includes(chest) && g.turn === t0 + 1 && p.skills.picklock.n === C.SKILL_EXP_MISS && /沒有成功/.test(g.log.map((l) => l.text).slice(0, 4).join('')), `開鎖失敗：算一個動作、開鎖 +5 經驗（${p.skills.picklock.n}）`);
     const c0 = p.copper;
     g.rng = () => 0.999; // d20 擲 20
-    g.move(1, 0);
+    g.act('attack');
     ok(!w.chests.includes(chest) && p.copper === c0 + 50 && p.skills.picklock.n === C.SKILL_EXP_MISS + C.SKILL_EXP_HIT && p.x === spot.x, `開鎖成功：拿到寶箱的錢、開鎖 +10 經驗、人不移動（${p.copper - c0}）`);
     p.attr.dex = 14;
     p.skills.picklock.lv = 5;
@@ -425,7 +430,8 @@ function testTools371() {
     const chest2 = { id: 700001, x: spot.x + 1, y: spot.y, copper: 10, dc: 30 };
     w.chests = [chest2];
     g.rng = () => 0.999;
-    g.move(1, 0);
+    g.move(1, 0); // 上一個寶箱打開時目標收掉了，再撞一次設成目標
+    g.act('attack');
     ok(/擲出 20\+6 對 DC 30/.test(g.log.map((l) => l.text).slice(0, 4).join('')), `開鎖器：d20＋敏捷 2＋開鎖 5 級 2＋精良 2：${g.log.slice(0, 3).map((l) => l.text).join('／')}`);
     p.attr.dex = 10;
     p.equip.tool1 = G.make('crowbar', 0, g.nextGearId++);
@@ -434,7 +440,7 @@ function testTools371() {
     let k = 0;
     g.rng = () => (k++ % 2 ? 0.999 : 0); // 兩顆 d20：1 和 20，取高的
     chest2.dc = 23;
-    g.move(1, 0);
+    g.act('attack');
     ok(!w.chests.includes(chest2) && p.skills.picklock.n === n0 && /優勢：1、20/.test(g.log.map((l) => l.text).join('')), '撬棍：力量檢定有優勢（20＋3 到 DC 23）、不練開鎖');
     p.attr.str = 10;
     p.equip.tool1 = null;
@@ -449,11 +455,15 @@ function testTools371() {
     const chaos = FE.Stability.state(g) === 2 ? C.CHAOS_TIME : 1;
     const got = [];
     const ticks = [];
+    // V37.1 試玩後：有工具撞上採集點只設成目標、不移動；按 1 才採
+    const tm = g.turn;
+    g.move(1, 0);
+    ok(g.turn === tm && p.x === spot.x && g.objTarget() && g.objTarget().node === node && g.bagCount('ore') === 0, '有礦鎬撞上礦脈：只設成目標、不採、不移動');
     for (let i = 0; i < 40; i++) {
       node.regrowAt = 0;
       const o0 = g.bagCount('ore');
       const tk = g.ticks;
-      g.move(1, 0);
+      g.act('attack');
       got.push(g.bagCount('ore') - o0);
       ticks.push(g.ticks - tk);
     }
@@ -462,7 +472,7 @@ function testTools371() {
     p.equip.tool1.q = 5; // 傑作：品質倍率 2
     node.regrowAt = 0;
     const tq = g.ticks;
-    g.move(1, 0);
+    g.act('attack');
     ok(g.ticks - tq === 2 * chaos, `傑作礦鎬再快一倍：${g.ticks - tq} 刻`);
     node.kind = 'herb';
     p.equip.tool2 = G.make('sickle', 0, g.nextGearId++);
@@ -471,7 +481,7 @@ function testTools371() {
     for (let i = 0; i < 30; i++) {
       node.regrowAt = 0;
       const h0 = g.bagCount('herb');
-      g.move(1, 0);
+      g.act('attack');
       hg.push(g.bagCount('herb') - h0);
     }
     ok(Math.min(...hg) === 2 && Math.max(...hg) === 3 && p.skills.herbalism.n > 0, `採藥 5 級一次 2～3 份：${Math.min(...hg)}～${Math.max(...hg)}`);

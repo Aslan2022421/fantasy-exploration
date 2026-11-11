@@ -68,6 +68,7 @@
   --map-ol-hunt: #a99cc0;
   --map-ol-chase: #d4bd7a;
   --map-ol-aim: #7fd0d8;       /* 按 F 瞄準中的怪物 */
+  --map-ol-obj: #e8a35a;       /* 設成目標的寶箱、上鎖的門、採集點（V37.1 試玩後，跟怪物的目標不同色） */
   --map-aim-area: #24464a;     /* 範圍魔攻會波及的格子 */
   --map-walk: #8fd8a8;         /* 滑鼠點出來的路線（虛線、目的地框與步數） */
   --map-walk-bg: #0d2b26;      /* 步數那個小方塊的底色 */
@@ -202,6 +203,7 @@ b { font-weight: bold; }
 .tgt { display: inline-flex; align-items: center; gap: 14px; min-width: 0; }
 .t-hp { display: inline-flex; align-items: center; gap: 6px; }
 .tgt .aim { color: var(--map-ol-aim); }
+.tgt .t-obj { color: var(--map-ol-obj); }
 .tgt .t-state { color: var(--head); }
 .bar { width: 110px; height: 8px; overflow: hidden; background: var(--void); border: 1px solid var(--line); }
 .bar > i { display: block; height: 100%; background: var(--bad); transition: width 0.2s; }

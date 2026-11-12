@@ -1,4 +1,4 @@
-// 瀏覽器入口：載入字元表與字型，畫地圖與狀態列，處理按鍵
+// 瀏覽器入口：載入字元表與字型，畫地圖與狀態列，處理按鍵與滑鼠
 // 網址加 ?nosave 時用記憶體存檔，不碰使用者的存檔
 
 import fontUrl from '../../assets/fonts/fusion-pixel-12px-proportional-zh_tw.ttf';
@@ -9,16 +9,21 @@ import { cameraOrigin, layout } from '../view/screen.js';
 import { createTileset } from '../view/tiles.js';
 import { createMap, startPosition, tileAt, WALL } from '../world/map.js';
 import { tryMove } from '../world/move.js';
+import { findPath, stepDirection } from '../world/path.js';
 import { directionFor } from './input.js';
 
 const VERSION = '0.1.0';
 const SAVE_KEY = 'stage0';
 const SEED = 20261112;
+const STEP_MS = 70; // 滑鼠點擊後自動走，每一步間隔
 const COLORS = {
   background: '#0e2424',
   floor: '#365452',
   wall: '#8a9692',
   player: '#ffffff',
+  path: '#e0bc62',
+  target: '#4d4220',
+  blocked: '#5c2424',
   text: '#cfdad7',
   dim: '#7f9592',
 };
@@ -43,6 +48,9 @@ const map = createMap(80, 50, SEED);
 const saved = store.load(SAVE_KEY, null);
 let player = saved?.player ?? startPosition(map);
 let screen;
+let hover = null; // 滑鼠指著的地圖格
+let walking = []; // 自動走剩下的路線
+let walkTimer = null;
 
 function resize() {
   screen = layout(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -50,8 +58,19 @@ function resize() {
   canvas.height = screen.height;
   canvas.style.width = `${screen.width / screen.dpr}px`;
   canvas.style.height = `${screen.height / screen.dpr}px`;
-  ctx.imageSmoothingEnabled = false;
   render();
+}
+
+function camera() {
+  return cameraOrigin(player.x, player.y, map.width, map.height, screen.cols, screen.rows);
+}
+
+// 要畫的路線：走路中顯示剩下的路，否則顯示滑鼠指著的地方怎麼走
+function shownPath() {
+  if (walking.length) return { steps: walking, reachable: true };
+  if (!hover) return null;
+  const steps = findPath(map, player, hover);
+  return { steps, reachable: steps.length > 0 };
 }
 
 function render() {
@@ -59,15 +78,26 @@ function render() {
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const cam = cameraOrigin(player.x, player.y, map.width, map.height, cols, rows);
+  const cam = camera();
+  const route = shownPath();
+  const onRoute = new Set(route?.steps.map((s) => `${s.x},${s.y}`));
+  const target = walking.at(-1) ?? hover;
   for (let vy = 0; vy < rows; vy++) {
     for (let vx = 0; vx < cols; vx++) {
       const x = cam.x + vx;
       const y = cam.y + vy;
       if (x >= map.width || y >= map.height) continue;
-      const t = tileAt(map, x, y);
-      const isWall = t === WALL;
-      tiles.draw(ctx, isWall ? '#' : '·', vx * tile, vy * tile, tile, isWall ? COLORS.wall : COLORS.floor);
+      const isWall = tileAt(map, x, y) === WALL;
+      const isTarget = target && target.x === x && target.y === y;
+      let bg = null;
+      if (isTarget) bg = route?.reachable ? COLORS.target : COLORS.blocked;
+      const px = vx * tile;
+      const py = vy * tile;
+      if (onRoute.has(`${x},${y}`) && !isTarget) {
+        tiles.draw(ctx, '•', px, py, tile, COLORS.path, bg);
+      } else {
+        tiles.draw(ctx, isWall ? '#' : '·', px, py, tile, isWall ? COLORS.wall : COLORS.floor, bg);
+      }
     }
   }
   tiles.draw(ctx, '@', (player.x - cam.x) * tile, (player.y - cam.y) * tile, tile, COLORS.player);
@@ -76,22 +106,81 @@ function render() {
   const pad = textScale;
   font.drawText(
     ctx,
-    `幻想探索 v${VERSION}｜位置 ${player.x}, ${player.y}`,
+    `Fantasy Exploration v${VERSION}｜位置 ${player.x}, ${player.y}`,
     pad * 4,
     statusTop + pad,
     textScale,
     COLORS.text,
   );
-  font.drawText(ctx, '方向鍵四方向、數字鍵盤八方向移動', pad * 4, statusTop + lineHeight + pad, textScale, COLORS.dim);
+  font.drawText(
+    ctx,
+    '方向鍵四方向、數字鍵盤八方向，或用滑鼠點地圖走過去',
+    pad * 4,
+    statusTop + lineHeight + pad,
+    textScale,
+    COLORS.dim,
+  );
+}
+
+function moveTo(next) {
+  if (next.x === player.x && next.y === player.y) return false;
+  player = next;
+  store.save(SAVE_KEY, { player });
+  return true;
+}
+
+function stopWalking() {
+  clearInterval(walkTimer);
+  walkTimer = null;
+  walking = [];
+}
+
+function startWalking(steps) {
+  stopWalking();
+  walking = steps.slice();
+  walkTimer = setInterval(() => {
+    const step = walking.shift();
+    const moved = step && moveTo(tryMove(map, player, stepDirection(player, step)));
+    if (!moved || walking.length === 0) stopWalking();
+    render();
+  }, STEP_MS);
+}
+
+// 滑鼠位置 → 地圖格；不在地圖區域內回傳 null
+function cellAt(e) {
+  const rect = canvas.getBoundingClientRect();
+  const vx = Math.floor(((e.clientX - rect.left) * screen.dpr) / screen.tile);
+  const vy = Math.floor(((e.clientY - rect.top) * screen.dpr) / screen.tile);
+  if (vx < 0 || vy < 0 || vx >= screen.cols || vy >= screen.rows) return null;
+  const cam = camera();
+  const x = cam.x + vx;
+  const y = cam.y + vy;
+  return x < map.width && y < map.height ? { x, y } : null;
 }
 
 window.addEventListener('keydown', (e) => {
   const dir = directionFor(e.code);
   if (!dir) return;
   e.preventDefault();
-  player = tryMove(map, player, dir);
-  store.save(SAVE_KEY, { player });
+  stopWalking();
+  moveTo(tryMove(map, player, dir));
   render();
+});
+canvas.addEventListener('mousemove', (e) => {
+  const cell = cellAt(e);
+  if (cell?.x === hover?.x && cell?.y === hover?.y) return;
+  hover = cell;
+  if (!walking.length) render();
+});
+canvas.addEventListener('mouseleave', () => {
+  hover = null;
+  if (!walking.length) render();
+});
+canvas.addEventListener('click', (e) => {
+  const cell = cellAt(e);
+  if (!cell) return;
+  const steps = findPath(map, player, cell);
+  if (steps.length) startWalking(steps);
 });
 window.addEventListener('resize', resize);
 resize();
@@ -103,6 +192,9 @@ window.__fe = {
   },
   get screen() {
     return screen;
+  },
+  get walking() {
+    return walking.length;
   },
   version: VERSION,
 };

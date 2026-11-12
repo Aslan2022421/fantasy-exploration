@@ -139,6 +139,7 @@ function moveTo(next) {
   if (next.x === player.x && next.y === player.y) return false;
   player = next;
   message = null;
+  examined = null;
   store.save(SAVE_KEY, { player });
   return true;
 }
@@ -196,11 +197,25 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => keyboard.keyup(e.code));
 window.addEventListener('blur', () => keyboard.clear());
+// 右鍵查看：再右鍵同一格、或左鍵點一下，就收起查看結果、回到操作說明
+let examined = null; // 正在顯示查看結果的那一格
+function closeExamine() {
+  if (!examined) return false;
+  examined = null;
+  message = null;
+  render();
+  return true;
+}
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   const cell = cellAt(e);
   if (!cell) return;
   stopWalking();
+  if (examined && examined.x === cell.x && examined.y === cell.y) {
+    closeExamine();
+    return;
+  }
+  examined = cell;
   message = `查看 (${cell.x}, ${cell.y})：${describe(cell)}`;
   render();
 });
@@ -215,6 +230,7 @@ canvas.addEventListener('mouseleave', () => {
   if (!walking.length) render();
 });
 canvas.addEventListener('click', (e) => {
+  if (closeExamine()) return; // 查看結果還開著時，這一下只是收起來，不走路
   const cell = cellAt(e);
   if (!cell) return;
   const steps = findPath(map, player, cell);

@@ -85,5 +85,19 @@ function createPixelFont(family) {
     return cx - x;
   }
 
-  return { drawText, rows };
+  // 一行字畫出來有多寬（實體像素）
+  function measure(text, scale) {
+    let w = 0;
+    for (const ch of text) {
+      let white = glyphs.get(ch);
+      if (!white) {
+        white = bake(ch);
+        glyphs.set(ch, white);
+      }
+      w += white.width * scale;
+    }
+    return w;
+  }
+
+  return { drawText, measure, rows };
 }

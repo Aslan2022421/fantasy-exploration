@@ -10,7 +10,7 @@ import { createTileset } from '../view/tiles.js';
 import { createMap, startPosition, tileAt, WALL } from '../world/map.js';
 import { tryMove } from '../world/move.js';
 import { findPath, stepDirection } from '../world/path.js';
-import { directionFor } from './input.js';
+import { createKeyboard } from './input.js';
 
 const VERSION = '0.1.0';
 const SAVE_KEY = 'stage0';
@@ -51,6 +51,8 @@ let screen;
 let hover = null; // 滑鼠指著的地圖格
 let walking = []; // 自動走剩下的路線
 let walkTimer = null;
+let message = null; // 狀態列第二行的訊息（查看、被擋住）；沒有訊息時顯示操作說明
+const HELP = '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向｜左鍵走過去、空白鍵停｜右鍵查看';
 
 function resize() {
   screen = layout(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -104,6 +106,17 @@ function render() {
 
   const { textScale, lineHeight, statusTop } = screen;
   const pad = textScale;
+  // 路線終點旁標出步數（舊專案兩段式走路的第一段，現在滑鼠指著就顯示）
+  if (route && target) {
+    const label = route.reachable ? `${route.steps.length} 步` : '走不到';
+    const w = font.measure(label, textScale);
+    let lx = (target.x - cam.x + 1) * tile + pad * 2;
+    const ly = (target.y - cam.y) * tile - lineHeight;
+    if (lx + w + pad * 4 > screen.cols * tile) lx = (target.x - cam.x) * tile - w - pad * 6;
+    ctx.fillStyle = COLORS.background;
+    ctx.fillRect(lx - pad * 2, ly, w + pad * 4, lineHeight);
+    font.drawText(ctx, label, lx, ly + pad, textScale, route.reachable ? COLORS.path : COLORS.text);
+  }
   font.drawText(
     ctx,
     `Fantasy Exploration v${VERSION}｜位置 ${player.x}, ${player.y}`,
@@ -114,17 +127,18 @@ function render() {
   );
   font.drawText(
     ctx,
-    '方向鍵四方向、數字鍵盤八方向，或用滑鼠點地圖走過去',
+    message ?? HELP,
     pad * 4,
     statusTop + lineHeight + pad,
     textScale,
-    COLORS.dim,
+    message ? COLORS.text : COLORS.dim,
   );
 }
 
 function moveTo(next) {
   if (next.x === player.x && next.y === player.y) return false;
   player = next;
+  message = null;
   store.save(SAVE_KEY, { player });
   return true;
 }
@@ -141,6 +155,7 @@ function startWalking(steps) {
   walkTimer = setInterval(() => {
     const step = walking.shift();
     const moved = step && moveTo(tryMove(map, player, stepDirection(player, step)));
+    if (step && !moved) message = '有東西擋住了路，停了下來。';
     if (!moved || walking.length === 0) stopWalking();
     render();
   }, STEP_MS);
@@ -158,12 +173,35 @@ function cellAt(e) {
   return x < map.width && y < map.height ? { x, y } : null;
 }
 
-window.addEventListener('keydown', (e) => {
-  const dir = directionFor(e.code);
-  if (!dir) return;
-  e.preventDefault();
+// 右鍵查看那一格
+function describe(cell) {
+  if (cell.x === player.x && cell.y === player.y) return '你自己';
+  return tileAt(map, cell.x, cell.y) === WALL ? '岩石，過不去' : '空地';
+}
+
+const keyboard = createKeyboard((dx, dy) => {
   stopWalking();
-  moveTo(tryMove(map, player, dir));
+  moveTo(tryMove(map, player, stepDirection(player, { x: player.x + dx, y: player.y + dy })));
+  render();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'Escape') {
+    e.preventDefault();
+    stopWalking();
+    render();
+    return;
+  }
+  if (keyboard.keydown(e.code, e.repeat)) e.preventDefault();
+});
+window.addEventListener('keyup', (e) => keyboard.keyup(e.code));
+window.addEventListener('blur', () => keyboard.clear());
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const cell = cellAt(e);
+  if (!cell) return;
+  stopWalking();
+  message = `查看 (${cell.x}, ${cell.y})：${describe(cell)}`;
   render();
 });
 canvas.addEventListener('mousemove', (e) => {
@@ -195,6 +233,9 @@ window.__fe = {
   },
   get walking() {
     return walking.length;
+  },
+  get message() {
+    return message;
   },
   version: VERSION,
 };

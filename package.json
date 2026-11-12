@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "biome check . && vitest run",
+    "check": "biome check . && vitest run --reporter=agent",
     "play": "vite",
     "tiles": "node tools/cp437/make.mjs"
   },

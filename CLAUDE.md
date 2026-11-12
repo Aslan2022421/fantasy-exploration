@@ -10,9 +10,10 @@
 ## 指令
 
 - `npm run check`：Biome 檢查＋全部測試。交出前必須通過。
-- `npm run play`：開發伺服器（port 8765）。網址加 `?nosave` 用記憶體存檔，不碰使用者的存檔。
+- `npm run play`：開發伺服器（http://127.0.0.1:8765）。網址加 `?nosave` 用記憶體存檔，不碰使用者的存檔。
 - `npm run tiles`：重新產生 CP437 字元表。
-- 開發途中只跑相關的測試：`npx vitest run <檔名>`。
+- 開發途中只跑跟改動有關的測試：`npx vitest run --sinceLastRun`（上次之後改過的，加上次失敗的）；只跑某個檔：`npx vitest run <檔名>`。
+- 用之前先讀已裝套件實際提供的功能（`node_modules` 裡的型別定義、README、`--help`），有現成的就不自己寫。
 
 ## 程式
 

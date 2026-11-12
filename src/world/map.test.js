@@ -1,9 +1,16 @@
+import { RNG } from 'rot-js';
 import { expect, test } from 'vitest';
 import { createMap, isPassable, startPosition, tileAt, WALL } from './map.js';
 import { tryMove } from './move.js';
 
 test('同一個種子生出同一張地圖', () => {
   expect(createMap(30, 20, 7).cells).toEqual(createMap(30, 20, 7).cells);
+});
+
+test('生地圖不會動到全域亂數', () => {
+  const before = RNG.getState().join();
+  createMap(30, 20, 7);
+  expect(RNG.getState().join()).toBe(before);
 });
 
 test('邊界都是牆，地圖外也算牆', () => {

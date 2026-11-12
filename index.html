@@ -20,6 +20,17 @@
   </head>
   <body>
     <canvas id="screen"></canvas>
+    <!-- 開發用的頁面直接雙擊打開時遊戲跑不起來（要開發伺服器）；兩秒內沒啟動就提示該開哪個檔 -->
+    <p id="hint" style="display: none; color: #c9bb7a; font: 20px sans-serif; padding: 24px; line-height: 1.6">
+      這是開發用的頁面，直接打開跑不起來。<br />
+      要玩請開打包好的檔：<b>dist\index.html</b>（在專案資料夾執行 <code>npm run build</code> 產生）。<br />
+      或在專案資料夾執行 <code>npm run play</code>，再用瀏覽器開 http://127.0.0.1:8765/
+    </p>
+    <script>
+      setTimeout(() => {
+        if (!window.__fe) document.getElementById('hint').style.display = 'block';
+      }, 2000);
+    </script>
     <script type="module" src="/src/app/main.js"></script>
   </body>
 </html>

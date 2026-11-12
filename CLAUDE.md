@@ -11,7 +11,7 @@
 
 - `npm run check`：Biome 檢查＋全部測試。交出前必須通過。
 - `npm run play`：開發伺服器（http://127.0.0.1:8765）。網址加 `?nosave` 用記憶體存檔，不碰使用者的存檔。
-- `npm run build`：打包成單一檔 `dist/index.html`（字型、字元表、程式全內嵌，約 10 MB），任何瀏覽器雙擊就能開，不需要伺服器。改完程式要給使用者玩時重跑一次。
+- `npm run build`：打包成單一檔 `dist/Fantasy Exploration.html`（檔名使用者定）（字型、字元表、程式全內嵌，約 10 MB），任何瀏覽器雙擊就能開，不需要伺服器。改完程式要給使用者玩時重跑一次。
 - `npm run tiles`：重新產生 CP437 字元表。
 - 已知限制：ROT.js 的 Display 每畫一格就重新染色，整張地圖重畫比自己的 `tiles.js` 慢 15～40 倍，地圖不用它。
 - 開發途中只跑跟改動有關的測試：`npx vitest run --sinceLastRun`（上次之後改過的，加上次失敗的）；只跑某個檔：`npx vitest run <檔名>`。

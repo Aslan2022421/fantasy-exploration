@@ -1,4 +1,4 @@
-// 瀏覽器入口：地圖用 ROT.js Display（#stage 裡的 canvas），文字面板畫在上面那張 #overlay
+// 瀏覽器入口：地圖與文字面板都畫在同一張畫布（#screen）
 // 回合由 ROT.js 的排程與引擎管：輪到冒險者時才接受花時間的動作。網址加 ?nosave 用記憶體存檔
 
 import fontUrl from '../../assets/fonts/fusion-pixel-12px-proportional-zh_tw.ttf';
@@ -28,8 +28,8 @@ const HELP = [
 
 const params = new URLSearchParams(location.search);
 const store = params.has('nosave') ? memoryStore() : browserStore();
-const overlay = document.getElementById('overlay');
-const ctx = overlay.getContext('2d');
+const canvas = document.getElementById('screen');
+const ctx = canvas.getContext('2d');
 
 function loadImage(url) {
   return new Promise((resolve, reject) => {
@@ -41,8 +41,7 @@ function loadImage(url) {
 }
 
 const [image, font] = await Promise.all([loadImage(tilesUrl), loadPixelFont(fontUrl, 'FusionPixel12TW')]);
-const mapView = createMapView(image);
-document.getElementById('stage').appendChild(mapView.canvas);
+const mapView = createMapView(image, ctx);
 const panels = createPanels(font);
 
 store.remove('stage0'); // 階段 0 的舊存檔格式不同，不再讀
@@ -94,16 +93,11 @@ function entries() {
 
 function resize() {
   screen = layout(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
-  overlay.width = screen.width;
-  overlay.height = screen.height;
-  overlay.style.width = `${screen.width / screen.dpr}px`;
-  overlay.style.height = `${screen.height / screen.dpr}px`;
-  mapView.resize(screen.tile, screen.cols, screen.rows);
-  const c = mapView.canvas.style;
-  c.left = '0px';
-  c.top = `${screen.map.y / screen.dpr}px`;
-  c.width = `${screen.map.w / screen.dpr}px`;
-  c.height = `${screen.map.h / screen.dpr}px`;
+  canvas.width = screen.width;
+  canvas.height = screen.height;
+  canvas.style.width = `${screen.width / screen.dpr}px`;
+  canvas.style.height = `${screen.height / screen.dpr}px`;
+  mapView.resize(screen);
   render();
 }
 
@@ -121,6 +115,8 @@ function render() {
   const route = shownPath();
   const onRoute = new Set(route?.steps.map((s) => `${s.x},${s.y}`));
   const target = walking.at(-1) ?? (route ? hover : null);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (let vy = 0; vy < rows; vy++) {
     for (let vx = 0; vx < cols; vx++) {
       const x = cam.x + vx;
@@ -140,7 +136,6 @@ function render() {
   const p = player();
   mapView.draw(p.x - cam.x, p.y - cam.y, '@', COLORS.player, COLORS.bg);
 
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
   panels.status(ctx, screen, `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}`);
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
   if (route && target && !historyOpen) {

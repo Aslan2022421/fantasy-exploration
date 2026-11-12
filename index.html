@@ -12,22 +12,14 @@
         overflow: hidden;
         background: #0d2a2c;
       }
-      #stage canvas {
-        position: absolute;
-        image-rendering: pixelated;
-      }
-      #overlay {
-        position: absolute;
-        left: 0;
-        top: 0;
-        pointer-events: none;
+      canvas {
+        display: block;
         image-rendering: pixelated;
       }
     </style>
   </head>
   <body>
-    <div id="stage"></div>
-    <canvas id="overlay"></canvas>
+    <canvas id="screen"></canvas>
     <script type="module" src="/src/app/main.js"></script>
   </body>
 </html>

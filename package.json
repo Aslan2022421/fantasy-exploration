@@ -1,7 +1,13 @@
 {
   "name": "fantasy-exploration",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "check": "biome check . && vitest run",
+    "play": "vite",
+    "tiles": "node tools/cp437/make.mjs"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.6.7",
     "playwright": "1.65.0",

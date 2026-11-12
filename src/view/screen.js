@@ -1,11 +1,12 @@
 // 畫面配置：格子大小用實體螢幕像素算，地圖格永遠是 8 的整數倍、文字永遠是 12 的整數倍，
-// 不跟著 Windows 125%／150% 的縮放比例走，像素才不會糊
+// 不跟著 Windows 125%／150% 的縮放比例走，像素才不會糊。
+// 版面：頂部一行狀態；下面左邊是地圖，右邊是訊息欄
 
 const TILE_BASE = 8; // 字元表一格 8px
 const TEXT_BASE = 12; // Fusion Pixel 的設計格 12px
 const TILE_TARGET = 16; // 希望地圖格在畫面上大約多大（CSS px）
 const TEXT_TARGET = 24; // 希望文字在畫面上大約多大（CSS px）
-const STATUS_LINES = 2;
+export const SIDE_CHARS = 20; // 右側訊息欄寬幾個全形字
 
 // 在這個縮放比例下，基準大小要放大幾倍（至少 1 倍）
 export function pixelScale(base, cssTarget, dpr) {
@@ -17,11 +18,15 @@ export function layout(cssWidth, cssHeight, dpr) {
   const height = Math.floor(cssHeight * dpr);
   const tile = TILE_BASE * pixelScale(TILE_BASE, TILE_TARGET, dpr);
   const textScale = pixelScale(TEXT_BASE, TEXT_TARGET, dpr);
+  const pad = 4 * textScale;
   const lineHeight = (TEXT_BASE + 2) * textScale;
-  const statusHeight = STATUS_LINES * lineHeight + 4 * textScale; // 底部留白，最後一行才不會貼邊被切
-  const cols = Math.max(1, Math.floor(width / tile));
-  const rows = Math.max(1, Math.floor((height - statusHeight) / tile));
-  return { dpr, width, height, tile, textScale, lineHeight, cols, rows, statusTop: height - statusHeight };
+  const top = { x: 0, y: 0, w: width, h: lineHeight + pad };
+  const sideW = Math.min(SIDE_CHARS * TEXT_BASE * textScale + pad * 2, Math.floor(width / 2));
+  const cols = Math.max(1, Math.floor((width - sideW) / tile));
+  const rows = Math.max(1, Math.floor((height - top.h) / tile));
+  const map = { x: 0, y: top.h, w: cols * tile, h: rows * tile };
+  const side = { x: map.w, y: top.h, w: width - map.w, h: height - top.h };
+  return { dpr, width, height, tile, textScale, lineHeight, pad, cols, rows, top, map, side };
 }
 
 // 畫面跟著冒險者：盡量讓冒險者在中間，但不捲出地圖邊界

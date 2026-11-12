@@ -1,0 +1,4 @@
+# Biome 一律寫 LF；工作目錄也用 LF，避免每次排版後所有檔案都顯示被改過
+* text=auto eol=lf
+*.png binary
+*.ttf binary

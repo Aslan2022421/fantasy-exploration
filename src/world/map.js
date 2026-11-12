@@ -1,13 +1,10 @@
-// 階段 0 的空地圖：邊界是牆，中間撒一些石頭，讓捲動看得出來
-// 亂數用 ROT.js 的 clone 複製出獨立的一份，不動全域亂數；階段 1 的亂數分流照這個做法
-
-import { RNG } from 'rot-js';
+// 階段 0～1 的空地圖：邊界是牆，中間撒一些石頭，讓捲動看得出來
+// 亂數由呼叫端給（世界生成那一條），不動全域亂數
 
 export const FLOOR = '.';
 export const WALL = '#';
 
-export function createMap(width, height, seed) {
-  const rng = RNG.clone().setSeed(seed);
+export function createMap(width, height, rng) {
   const cells = [];
   for (let y = 0; y < height; y++) {
     const row = [];

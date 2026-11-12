@@ -1,0 +1,22 @@
+// 配色：沿用舊專案（old-v37.1 的 css/style.css :root）
+
+export const COLORS = {
+  void: '#06181a', // 最深：地圖外的空白、條的底
+  bg: '#0d2a2c', // 地圖與面板的底
+  panel2: '#143a3d', // 按鈕、游標那一行
+  line: '#2b5558', // 細框線
+  line2: '#3f7377', // 視窗與面板的外框
+  text: '#a8c3bd',
+  dim: '#6c8e8a',
+  head: '#c9bb7a', // 標題（淡黃）
+  good: '#7fa874',
+  bad: '#b8675c',
+  // 地圖
+  floor: '#5f7f7c', // 舊版平地
+  rock: '#9fb0ac', // 舊版山地
+  player: '#ffffff',
+  path: '#c9bb7a',
+  target: '#3d3a1f',
+  blocked: '#4a2422',
+  examined: '#143a3d',
+};

@@ -19,9 +19,18 @@ describe('畫面配置', () => {
     }
   });
 
-  test('地圖區域不壓到狀態列', () => {
-    const s = layout(1280, 800, 1);
-    expect(s.rows * s.tile).toBeLessThanOrEqual(s.statusTop);
+  test('頂部、地圖、訊息欄不重疊，也不超出畫面', () => {
+    const s = layout(1280, 800, 1.25);
+    expect(s.map.y).toBe(s.top.h);
+    expect(s.side.x).toBe(s.map.w);
+    expect(s.map.w + s.side.w).toBe(s.width);
+    expect(s.map.y + s.map.h).toBeLessThanOrEqual(s.height);
+    expect(s.side.w).toBeGreaterThan(0);
+  });
+
+  test('畫面很窄時訊息欄最多佔一半', () => {
+    const s = layout(400, 600, 1);
+    expect(s.side.w).toBeLessThan(200 + s.tile); // 地圖取整格後剩下的零頭也歸訊息欄
   });
 
   test('畫面跟著冒險者，但不捲出地圖', () => {

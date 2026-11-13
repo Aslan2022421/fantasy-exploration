@@ -12,6 +12,7 @@ export const COLORS = {
   good: '#7fa874',
   bad: '#b8675c',
   // 地圖（地形的顏色在 data/terrain）
+  dark: '#080a0c', // 視野外壓暗的顏色、地圖外的空白（接近純黑，使用者定）
   player: '#ffffff',
   path: '#c9bb7a',
   target: '#3d3a1f',

@@ -34,6 +34,16 @@ export function mixColor(a, b, f) {
   return Color.toHex(Color.interpolate(Color.fromString(a), Color.fromString(b), f));
 }
 
+// 幾個顏色的平均（柔化交界用）
+export function averageColor(hexes) {
+  const sum = [0, 0, 0];
+  for (const h of hexes) {
+    const c = Color.fromString(h);
+    for (let i = 0; i < 3; i++) sum[i] += c[i];
+  }
+  return Color.toHex(sum.map((v) => Math.round(v / hexes.length)));
+}
+
 // 往同亮度的灰色拉，彩度剩 SATURATION
 export function desaturate(rgb) {
   const gray = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];

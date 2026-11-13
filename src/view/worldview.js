@@ -14,7 +14,7 @@ import { inShadow, sideSource } from './extrude.js';
 import { lookAt } from './glyphs.js';
 import { createParallaxView } from './parallaxview.js';
 import { mountainRingFactor } from './perspective.js';
-import { buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
+import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 import { createStackView } from './stackview.js';
 
 const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
@@ -22,6 +22,8 @@ const SHADOW_DIM = 0.6; // 影子裡的亮度
 const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_TRUNK]: 0.8 }; // 樹冠各側的亮度
 export const TRUNK_GLYPH = 'Φ'; // 樹幹：走不過去的那一格，跟樹冠分得出來
 const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
+const SOFTEN = 0.6; // 交界的底色往周圍平均靠幾成
+const ROCK_INK = 0.65; // 山上岩石、碎石字元的亮度
 
 // mode：'perspective' 往上疊（預設）、'parallax' 多層次視差堆疊、'leftdown' 往左下拉側面與影子、'flat' 不畫側面
 export function createWorldView(mapView, world, data, { mode = 'perspective' } = {}) {
@@ -37,12 +39,37 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
 
   // 一格地面的樣子：字形與字元色看四層（glyphs.js），背景是地面的顏色，亮暗輔助高低與深淺
   // 山地的底色逐圈變亮、往山腳變深（perspective.js 的 RING）；只調背景，字元顏色不多出新的染色表
+  function rawBg(x, y) {
+    const bg = shades.bg[world.groundAt(x, y)][world.shadeAt(x, y)][FLAT];
+    return isMountain[world.landformAt(x, y)] ? dimColor(bg, mountainRingFactor(world.heightAt(x, y))) : bg;
+  }
+
+  // 交界柔化（使用者要柔化山脈邊緣的白色方塊）：周圍八格的底色跟自己不一樣時，往九格的平均靠 SOFTEN，
+  // 雪線、山的一圈一圈、湖岸就不會是一格一格的方塊。只在疊層畫法用（結果存進分塊，只算一次）
+  function softBg(x, y) {
+    const own = rawBg(x, y);
+    const all = [own];
+    let differs = false;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if ((!dx && !dy) || !world.inside(x + dx, y + dy)) continue;
+        const b = rawBg(x + dx, y + dy);
+        if (b !== own) differs = true;
+        all.push(b);
+      }
+    }
+    return differs ? mixColor(own, averageColor(all), SOFTEN) : own;
+  }
+
+  // 山上的岩石 ■、碎石 ° 字元調暗（ROCK_INK），山腳那圈才不會是一排亮白的方塊
+  const isStone = surfaces.map((s) => s.style === 'rock' || s.style === 'gravel');
   function groundLook(x, y) {
     const level = world.shadeAt(x, y);
     const { glyph, ink } = lookAt(world, data, x, y);
-    let bg = shades.bg[world.groundAt(x, y)][level][FLAT];
-    if (isMountain[world.landformAt(x, y)]) bg = dimColor(bg, mountainRingFactor(world.heightAt(x, y)));
-    return { glyph, fg: shades.fg[ink][level][FLAT], bg, level };
+    const bg = stacked ? softBg(x, y) : rawBg(x, y);
+    let fg = shades.fg[ink][level][FLAT];
+    if (stacked && isMountain[world.landformAt(x, y)] && isStone[world.surfaceAt(x, y)]) fg = dimColor(fg, ROCK_INK);
+    return { glyph, fg, bg, level };
   }
 
   // 物件的字元顏色（山上的樹往腳下材質靠）

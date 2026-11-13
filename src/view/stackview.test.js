@@ -24,16 +24,41 @@ const mapView = {
     return { tile: 16, drawShifted() {} };
   },
   blit: (_layer, gx, gy) => drawn.push({ blit: true, gx, gy }),
+  line: (x1, y1, x2, y2, color) => drawn.push({ line: true, x1, y1, x2, y2, color }),
+  vignette: (cx, cy, r0, r1) => drawn.push({ vignette: true, cx, cy, r0, r1 }),
   drawShifted: (_vx, _vy, px, py, ch, _fg, bg) => drawn.push({ px, py, ch, bg }),
 };
 const look = { ground: () => ({ glyph: '.', fg: '#ffffff', bg: '#000000' }), object: () => null };
 let clock = 0;
 const view = createStackView(mapView, world, [], look, { now: () => clock });
 const screen = { cols: 20, rows: 20 };
-const draw = (cam, player) => {
+const draw = (cam, player, route = null) => {
   drawn.length = 0;
-  return view.draw(screen, cam, { player });
+  return view.draw(screen, cam, { player, route });
 };
+
+test('路線是線：從冒險者連到每一步，跟著地面高度錯開，爬上台地那段比較亮', () => {
+  const steps = [
+    { x: 10, y: 18 },
+    { x: 10, y: 19 },
+    { x: 10, y: 20 },
+  ];
+  draw({ x: 0, y: 0 }, { x: 10, y: 17 }, { steps, reachable: true });
+  const lines = drawn.filter((d) => d.line);
+  expect(lines).toHaveLength(3);
+  expect(drawn.some((d) => d.ch === '•')).toBe(false);
+  const s4 = shiftUp(groundHeight(4));
+  expect(lines[2].y2).toBe(20 * 8 + s4.oy + 4); // 終點在台地頂面錯開後的中心
+  expect(lines[2].color).not.toBe(lines[0].color);
+});
+
+test('視野外壓暗：以冒險者為中心', () => {
+  draw({ x: 0, y: 0 }, { x: 10, y: 10 });
+  const v = drawn.find((d) => d.vignette);
+  const s1 = shiftUp(groundHeight(1));
+  expect(v).toMatchObject({ cx: 10 * 8 + s1.ox + 4, cy: 10 * 8 + s1.oy + 4 });
+  expect(v.r1).toBeGreaterThan(v.r0);
+});
 
 test('分塊只畫一次：相機沒動時再畫，不再重畫分塊，只貼圖', () => {
   draw({ x: 0, y: 0 }, { x: 10, y: 10 });

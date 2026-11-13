@@ -18,11 +18,13 @@ import {
   UP_SHIFT_CELLS,
   wallSouth,
 } from './perspective.js';
-import { mixColor } from './shades.js';
+import { dimColor, mixColor } from './shades.js';
 
 const CHUNK = 16; // 分塊邊長（格）
 const BELOW = UP_SHIFT_CELLS + 1; // 畫一塊時往下、往左多畫幾格
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
+const SIGHT = { near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 }; // 視野外壓暗：COLORS.dark 的 RGB
+const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5 }; // 路線的亮度隨高度、線寬（字元像素）
 
 const fadeCache = new Map();
 // a 往 b 壓淡 f（0 不變、1 變成 b）
@@ -107,25 +109,34 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
-  // 路線、目標、查看中的格子：畫在那格地面錯開後的位置
+  // 目標、查看中的格子：整格標底色，畫在那格地面錯開後的位置
   function drawMarks(f, { route, target, examined }) {
-    const marks = new Map();
-    for (const s of route?.steps ?? []) marks.set(`${s.x},${s.y}`, s);
-    for (const c of [examined, target]) if (c) marks.set(`${c.x},${c.y}`, c);
-    for (const { x, y } of marks.values()) {
-      if (!world.inside(x, y)) continue;
-      const { px, py } = placeOf(f, x, y);
-      const isTarget = target?.x === x && target?.y === y;
-      const isExamined = examined?.x === x && examined?.y === y;
-      let bg = look.ground(x, y).bg;
-      if (isExamined) bg = COLORS.examined;
-      if (isTarget) bg = route?.reachable ? COLORS.target : COLORS.blocked;
-      if (isTarget || isExamined) {
-        const o = world.objectAt(x, y);
-        const g = o >= 0 ? look.object(x, y, o) : look.ground(x, y);
-        const trunk = o >= 0 && g.isTrunk;
-        mapView.drawShifted(0, 0, px, py, trunk ? g.trunkGlyph : g.glyph, trunk ? g.trunkFg : g.fg, bg);
-      } else mapView.drawShifted(0, 0, px, py, '•', COLORS.path, bg);
+    for (const c of [examined, target]) {
+      if (!c || !world.inside(c.x, c.y)) continue;
+      const { px, py } = placeOf(f, c.x, c.y);
+      const isTarget = target?.x === c.x && target?.y === c.y;
+      const bg = isTarget ? (route?.reachable ? COLORS.target : COLORS.blocked) : COLORS.examined;
+      const o = world.objectAt(c.x, c.y);
+      const g = o >= 0 ? look.object(c.x, c.y, o) : look.ground(c.x, c.y);
+      const trunk = o >= 0 && g.isTrunk;
+      mapView.drawShifted(0, 0, px, py, trunk ? g.trunkGlyph : g.glyph, trunk ? g.trunkFg : g.fg, bg);
+    }
+  }
+
+  // 路線（使用者要線狀，不要點狀）：從冒險者連到每一步的中心，跟著每格地面的高度錯開，
+  // 越高的那段越亮（PATH_LIGHT），上下坡看得出來
+  function drawRoute(f, route, player) {
+    if (!route?.steps.length) return;
+    const pts = [player, ...route.steps].map((c) => {
+      const h = groundHeight(world.tierAt(c.x, c.y));
+      const { px, py } = placeOf(f, c.x, c.y, h);
+      return { x: px + 4, y: py + 4, h };
+    });
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const k = Math.min(PATH_LIGHT.max, PATH_LIGHT.base + PATH_LIGHT.perLayer * Math.max(a.h, b.h));
+      mapView.line(a.x, a.y, b.x, b.y, dimColor(COLORS.path, k), PATH_LIGHT.width);
     }
   }
 
@@ -138,7 +149,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     view = { x: approach(view.x, cam.x, dt), y: approach(view.y, cam.y, dt), t };
     const f = view;
     mapView.clipped(() => {
-      mapView.fill(COLORS.void);
+      mapView.fill(COLORS.dark);
       const cx0 = Math.max(0, Math.floor(f.x / CHUNK));
       const cy0 = Math.max(0, Math.floor(f.y / CHUNK));
       const cx1 = Math.min(Math.ceil(world.width / CHUNK) - 1, Math.floor((f.x + screen.cols) / CHUNK));
@@ -147,10 +158,15 @@ export function createStackView(mapView, world, objects, look, { now = () => per
         for (let cx = cx0; cx <= cx1; cx++)
           mapView.blit(chunkAt(cx, cy), (cx * CHUNK - f.x) * 8, (cy * CHUNK - f.y) * 8);
       }
-      drawMarks(f, overlay);
+      // 視野外壓暗（使用者定）：以冒險者為中心，SIGHT.near 格內不變，到 SIGHT.far 格漸漸蓋上接近純黑的顏色；
+      // 不完全蓋死，亮的山脊與牆還留一點輪廓。還沒有真的視野計算，先用距離
+      const p0 = groundHeight(world.tierAt(player.x, player.y));
+      const pc = placeOf(f, player.x, player.y, p0);
+      mapView.vignette(pc.px + 4, pc.py + 4, SIGHT.near * 8, SIGHT.far * 8, SIGHT.rgb, SIGHT.alpha);
+      drawMarks(f, overlay); // 目標、查看與路線畫在壓暗之上，遠處也看得到
+      drawRoute(f, overlay.route, player);
       // 冒險者：從腳下地面往上疊 PLAYER_LAYERS 層，只畫字，下層往腳下底色壓淡
       const pg = look.ground(player.x, player.y).bg;
-      const p0 = groundHeight(world.tierAt(player.x, player.y));
       for (let dh = 1; dh <= PLAYER_LAYERS; dh++) {
         const fg = fade(COLORS.player, pg, fadeAt(PLAYER_LAYERS - dh));
         const { px, py } = placeOf(f, player.x, player.y, p0 + dh);

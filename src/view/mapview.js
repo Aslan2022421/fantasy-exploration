@@ -59,6 +59,28 @@ export function createMapView(image, ctx) {
       ctx.drawImage(layer.canvas, Math.round(s.map.x + gx * k), Math.round(s.map.y + gy * k));
     },
     tile: () => s.tile,
+    // 畫一條線段：兩端是地圖區的字元像素，寬 width 個字元像素
+    line(x1, y1, x2, y2, color, width) {
+      const k = s.tile / 8;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, Math.round(width * k));
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(s.map.x + x1 * k, s.map.y + y1 * k);
+      ctx.lineTo(s.map.x + x2 * k, s.map.y + y2 * k);
+      ctx.stroke();
+    },
+    // 視野外壓暗：以 (cx, cy)（字元像素）為中心，r0 以內不變，到 r1 漸漸蓋上 rgb 顏色、不透明度 alpha
+    vignette(cx, cy, r0, r1, rgb, alpha) {
+      const k = s.tile / 8;
+      const x = s.map.x + cx * k;
+      const y = s.map.y + cy * k;
+      const g = ctx.createRadialGradient(x, y, r0 * k, x, y, r1 * k);
+      g.addColorStop(0, `rgba(${rgb}, 0)`);
+      g.addColorStop(1, `rgba(${rgb}, ${alpha})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(s.map.x, s.map.y, s.map.w, s.map.h);
+    },
     // 整個地圖區塗成一個顏色
     fill(color) {
       ctx.fillStyle = color;

@@ -17,6 +17,11 @@ export function createMapView(image, ctx) {
     draw(vx, vy, ch, fg, bg) {
       tiles.draw(ctx, ch, s.map.x + vx * s.tile, s.map.y + vy * s.tile, s.tile, fg, bg);
     },
+    // 同上，但再錯開 (ox, oy) 個字元像素（一格 8 個；放大時跟著放大，點陣不糊）。bg 可省略，只畫字
+    drawShifted(vx, vy, ox, oy, ch, fg, bg) {
+      const k = s.tile / 8;
+      tiles.draw(ctx, ch, s.map.x + vx * s.tile + ox * k, s.map.y + vy * s.tile + oy * k, s.tile, fg, bg);
+    },
     // 滑鼠 → 地圖區第幾格；不在地圖區回傳 null
     cellAt(e) {
       const rect = ctx.canvas.getBoundingClientRect();

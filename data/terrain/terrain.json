@@ -36,7 +36,7 @@
     "color": "#c2b07a",
     "passable": true,
     "shade": true,
-    "ramp": [" ", ".", ".·", "·,", ",:", ":∙"],
+    "ramp": [" ", ".", ".·", "·∙", "∙÷", "÷="],
     "tile": null
   },
   {
@@ -46,7 +46,7 @@
     "color": "#d8e0e0",
     "passable": true,
     "shade": true,
-    "ramp": [" ", ".", ".·", "·,", ",:", ":∙"],
+    "ramp": [" ", " ", ".", ".·", "·'", "'°"],
     "tile": null
   },
   {

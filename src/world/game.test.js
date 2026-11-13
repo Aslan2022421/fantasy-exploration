@@ -22,9 +22,10 @@ describe('世界紀錄', () => {
     expect(rec.verb).toBe('move');
     expect(g.state.time).toBe(1);
     expect(g.state.player).toEqual(rec.data.to);
+    // 一直往北走，總會撞到東西或走到世界邊緣，之後的移動不記
     const size = g.log.size;
-    for (let i = 0; i < 60; i++) g.move('n');
-    expect(g.log.size).toBeLessThan(size + 60);
+    for (let i = 0; i < 400; i++) g.move('n');
+    expect(g.log.size).toBeLessThan(size + 400);
   });
 
   test('自動走的每一步都指回那次決定，順著起因找得到', () => {

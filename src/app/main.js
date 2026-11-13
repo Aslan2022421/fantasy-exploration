@@ -12,7 +12,6 @@ import { createPanels } from '../view/panels.js';
 import { cameraOrigin, layout } from '../view/screen.js';
 import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
-import { tileAt, WALL } from '../world/map.js';
 import { findPath, stepDirection } from '../world/path.js';
 import { createKeyboard } from './input.js';
 
@@ -63,7 +62,8 @@ let maxHistoryScroll = 0;
 
 const player = () => game.state.player;
 const save = () => store.save(SAVE_KEY, game.serialize());
-const camera = () => cameraOrigin(player().x, player().y, game.map.width, game.map.height, screen.cols, screen.rows);
+const world = game.world;
+const camera = () => cameraOrigin(player().x, player().y, world.width, world.height, screen.cols, screen.rows);
 
 // 花時間的動作：輪到冒險者才做，做完把回合交回排程
 function act(fn) {
@@ -105,7 +105,7 @@ function resize() {
 function shownPath() {
   if (walking.length) return { steps: walking, reachable: true };
   if (!hover || historyOpen) return null;
-  const steps = findPath(game.map, player(), hover);
+  const steps = findPath(world, player(), hover);
   return { steps, reachable: steps.length > 0 };
 }
 
@@ -121,11 +121,11 @@ function render() {
     for (let vx = 0; vx < cols; vx++) {
       const x = cam.x + vx;
       const y = cam.y + vy;
-      if (x >= game.map.width || y >= game.map.height) {
+      if (!world.inside(x, y)) {
         mapView.draw(vx, vy, ' ', COLORS.bg, COLORS.void);
         continue;
       }
-      const isWall = tileAt(game.map, x, y) === WALL;
+      const isWall = !world.isPassable(x, y);
       let bg = COLORS.bg;
       if (examined?.x === x && examined?.y === y) bg = COLORS.examined;
       if (target?.x === x && target?.y === y) bg = route?.reachable ? COLORS.target : COLORS.blocked;
@@ -183,12 +183,12 @@ function mapCellAt(e) {
   if (!v) return null;
   const cam = camera();
   const cell = { x: cam.x + v.x, y: cam.y + v.y };
-  return cell.x < game.map.width && cell.y < game.map.height ? cell : null;
+  return world.inside(cell.x, cell.y) ? cell : null;
 }
 
 function describeCell(cell) {
   if (cell.x === player().x && cell.y === player().y) return '你自己';
-  return tileAt(game.map, cell.x, cell.y) === WALL ? '岩石，過不去' : '空地';
+  return world.isPassable(cell.x, cell.y) ? '空地' : '岩石，過不去';
 }
 
 const keyboard = createKeyboard((dx, dy) => {
@@ -268,7 +268,7 @@ mapView.canvas.addEventListener('click', (e) => {
   if (historyOpen || closeExamine()) return; // 查看還開著時，這一下只是收起來
   const cell = mapCellAt(e);
   if (!cell) return;
-  const steps = findPath(game.map, player(), cell);
+  const steps = findPath(world, player(), cell);
   if (steps.length) startWalking(steps, cell);
 });
 window.addEventListener('resize', resize);

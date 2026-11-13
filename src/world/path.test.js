@@ -2,7 +2,10 @@ import { expect, test } from 'vitest';
 import { tryMove } from './move.js';
 import { findPath, stepDirection } from './path.js';
 
-const map = (rows) => ({ width: rows[0].length, height: rows.length, cells: rows.map((r) => [...r]) });
+// 測試用的小地圖：只要有 isPassable，跟真正的世界一樣用
+const map = (rows) => ({
+  isPassable: (x, y) => y >= 0 && y < rows.length && x >= 0 && x < rows[0].length && rows[y][x] !== '#',
+});
 
 test('空地斜走，步數是兩軸距離的較大者', () => {
   const m = map(['.....', '.....', '.....', '.....', '.....']);

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "tundra",
+    "name": "凍原",
+    "temperature": "cold",
+    "moisture": "dry",
+    "ground": "snow",
+    "flora": [{ "terrain": "shrub", "density": 0.08 }]
+  },
+  {
+    "id": "taiga",
+    "name": "針葉林",
+    "temperature": "cold",
+    "moisture": "normal",
+    "ground": "snow",
+    "flora": [{ "terrain": "conifer", "density": 0.5 }, { "terrain": "shrub", "density": 0.05 }]
+  },
+  {
+    "id": "cold-wetland",
+    "name": "寒帶濕地",
+    "temperature": "cold",
+    "moisture": "wet",
+    "ground": "mud",
+    "flora": [{ "terrain": "conifer", "density": 0.15 }, { "terrain": "shrub", "density": 0.15 }]
+  },
+  {
+    "id": "grassland",
+    "name": "草原",
+    "temperature": "mild",
+    "moisture": "dry",
+    "ground": "grass",
+    "flora": [{ "terrain": "shrub", "density": 0.1 }, { "terrain": "broadleaf", "density": 0.04 }]
+  },
+  {
+    "id": "temperate-forest",
+    "name": "溫帶森林",
+    "temperature": "mild",
+    "moisture": "normal",
+    "ground": "grass",
+    "flora": [{ "terrain": "broadleaf", "density": 0.5 }, { "terrain": "shrub", "density": 0.08 }]
+  },
+  {
+    "id": "swamp",
+    "name": "沼澤",
+    "temperature": "mild",
+    "moisture": "wet",
+    "ground": "mud",
+    "flora": [{ "terrain": "broadleaf", "density": 0.2 }, { "terrain": "shrub", "density": 0.15 }]
+  },
+  {
+    "id": "desert",
+    "name": "沙漠",
+    "temperature": "hot",
+    "moisture": "dry",
+    "ground": "sand",
+    "flora": [{ "terrain": "shrub", "density": 0.04 }]
+  },
+  {
+    "id": "savanna",
+    "name": "疏林草原",
+    "temperature": "hot",
+    "moisture": "normal",
+    "ground": "grass",
+    "flora": [{ "terrain": "broadleaf", "density": 0.1 }, { "terrain": "shrub", "density": 0.12 }]
+  },
+  {
+    "id": "rainforest",
+    "name": "雨林",
+    "temperature": "hot",
+    "moisture": "wet",
+    "ground": "grass",
+    "flora": [{ "terrain": "jungle", "density": 0.6 }, { "terrain": "shrub", "density": 0.1 }]
+  }
+]

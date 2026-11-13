@@ -1,13 +1,12 @@
-// 尋路：八方向的 A*（ROT.js），用在滑鼠點地圖時走過去
+// 尋路：八方向的 A*（ROT.js），用在滑鼠點地圖時走過去。跨區照走，路過的區用到才生
 
 import { Path } from 'rot-js';
-import { isPassable } from './map.js';
 
 // 回傳從起點（不含）到終點（含）的每一步；走不到或點在原地回傳空陣列
-export function findPath(map, from, to) {
+export function findPath(world, from, to) {
   if (from.x === to.x && from.y === to.y) return [];
-  if (!isPassable(map, to.x, to.y)) return [];
-  const astar = new Path.AStar(to.x, to.y, (x, y) => isPassable(map, x, y), { topology: 8 });
+  if (!world.isPassable(to.x, to.y)) return [];
+  const astar = new Path.AStar(to.x, to.y, (x, y) => world.isPassable(x, y), { topology: 8 });
   const steps = [];
   astar.compute(from.x, from.y, (x, y) => steps.push({ x, y }));
   if (steps.length === 0) return [];

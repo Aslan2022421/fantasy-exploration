@@ -1,17 +1,17 @@
 // 遊戲世界：狀態只由「種子＋紀錄」決定。
 // 每個動作先寫成一筆紀錄，再用 apply 套到狀態上；讀檔時把紀錄照做一遍，結果一定跟當初一樣。
-// 每隔 CHECKPOINT_EVERY 筆存一次檢查點（狀態＋各條亂數），讀檔從最近的檢查點接著做
+// 每隔 CHECKPOINT_EVERY 筆存一次檢查點（狀態＋各條亂數），讀檔從最近的檢查點接著做。
+// 地圖不存：世界用種子重生（world.js），所以存檔只有種子、紀錄與檢查點
 
 import { z } from 'zod';
 import { createLog, RecordSchema } from '../core/records.js';
 import { createStreams } from '../core/rng.js';
-import { createMap, startPosition } from './map.js';
+import { DATA } from '../data/load.js';
 import { tryMove } from './move.js';
+import { createWorld, startPosition } from './world.js';
 
-export const SAVE_FORMAT = 1;
+export const SAVE_FORMAT = 2; // 階段 2：地圖換成兩層世界，舊存檔不再讀
 export const CHECKPOINT_EVERY = 100;
-const MAP_WIDTH = 80;
-const MAP_HEIGHT = 50;
 const PLAYER = 'player';
 
 const StateSchema = z.object({ player: z.object({ x: z.number(), y: z.number() }), time: z.number() });
@@ -37,12 +37,10 @@ export function apply(state, rec) {
 }
 
 function build(seed) {
-  const rng = createStreams(seed);
-  const map = createMap(MAP_WIDTH, MAP_HEIGHT, rng.get('world'));
-  return { rng, map };
+  return { rng: createStreams(seed), world: createWorld(seed, DATA) };
 }
 
-function makeGame(seed, rng, map, log, initialState, checkpoint) {
+function makeGame(seed, rng, world, log, initialState, checkpoint) {
   let state = initialState;
   let lastCheckpoint = checkpoint;
 
@@ -57,16 +55,16 @@ function makeGame(seed, rng, map, log, initialState, checkpoint) {
 
   return {
     seed,
-    map,
+    world,
     log,
     rng,
     get state() {
       return state;
     },
-    // 移動一步；撞牆回傳 null，不記錄
+    // 移動一步；擋住回傳 null，不記錄
     move(dir, cause = null) {
       const from = state.player;
-      const to = tryMove(map, from, dir);
+      const to = tryMove(world, from, dir);
       if (to.x === from.x && to.y === from.y) return null;
       return record({ verb: 'move', data: { from, to, dir, duration: 1 }, cause });
     },
@@ -86,10 +84,10 @@ function makeGame(seed, rng, map, log, initialState, checkpoint) {
 }
 
 export function newGame(seed) {
-  const { rng, map } = build(seed);
+  const { rng, world } = build(seed);
   const log = createLog();
-  const rec = log.append({ time: 0, actor: PLAYER, verb: 'start', data: { at: startPosition(map) } });
-  return makeGame(seed, rng, map, log, apply({ player: { x: 0, y: 0 }, time: 0 }, rec), null);
+  const rec = log.append({ time: 0, actor: PLAYER, verb: 'start', data: { at: startPosition(world) } });
+  return makeGame(seed, rng, world, log, apply({ player: { x: 0, y: 0 }, time: 0 }, rec), null);
 }
 
 // 讀檔：格式不對回傳 null（呼叫端開新遊戲）。fromCheckpoint 為 false 時一律從頭重放（測試用）
@@ -97,7 +95,7 @@ export function loadGame(saved, { fromCheckpoint = true } = {}) {
   const parsed = SaveSchema.safeParse(saved);
   if (!parsed.success) return null;
   const { seed, records, checkpoint } = parsed.data;
-  const { rng, map } = build(seed);
+  const { rng, world } = build(seed);
   let state = { player: { x: 0, y: 0 }, time: 0 };
   let from = 0;
   const useCheckpoint = fromCheckpoint && checkpoint && checkpoint.at < records.length;
@@ -107,5 +105,5 @@ export function loadGame(saved, { fromCheckpoint = true } = {}) {
     from = checkpoint.at + 1;
   }
   for (let i = from; i < records.length; i++) state = apply(state, records[i]);
-  return makeGame(seed, rng, map, createLog(records), state, useCheckpoint ? checkpoint : null);
+  return makeGame(seed, rng, world, createLog(records), state, useCheckpoint ? checkpoint : null);
 }

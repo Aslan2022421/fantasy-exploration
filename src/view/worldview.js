@@ -8,11 +8,11 @@
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
 import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
-import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
-import { buildObjectShades, buildShadeTable, dimColor, mixColor, rampGlyph } from './shades.js';
+import { glyphAt } from './glyphs.js';
+import { buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 
 const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
 const SHADOW_DIM = 0.6; // 影子裡的亮度
@@ -22,7 +22,7 @@ const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往山地靠幾成
 
 export function createWorldView(mapView, world, data, { extrude = true } = {}) {
   const { terrains, objects } = data;
-  const shades = buildShadeTable(terrains); // { step, fg, bg }：[地形][明暗級數][立面]
+  const shades = buildShadeTable(terrains); // { fg, bg }：[地形][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
   // 山上的樹：顏色往山地靠（使用者定），用另一張表
   const mountain = terrains.findIndex((t) => t.id === 'mountain');
@@ -31,14 +31,12 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
     ? buildObjectShades(objects.map((o) => ({ ...o, color: mixColor(o.color, mountainColor, MOUNTAIN_TINT) })))
     : objectFg;
 
-  // 一格地面的樣子（字元依亮度從這種地形的階梯選；同一亮度每格用雜湊換字）
+  // 一格地面的樣子：字形看地表長什麼樣（glyphs.js），顏色看材質，亮暗輔助高低與深淺
   function groundLook(x, y) {
     const t = world.terrainAt(x, y);
     const level = world.shadeAt(x, y);
-    const a = hash01(world.seed, x, y, 101);
-    const b = hash01(world.seed, x, y, 102);
     return {
-      glyph: rampGlyph(terrains[t].ramp, shades.step[t][level][FLAT], a, b),
+      glyph: glyphAt(world, data, x, y),
       fg: shades.fg[t][level][FLAT],
       bg: shades.bg[t][level][FLAT],
       level,

@@ -6,7 +6,8 @@
     "color": "#3b6f8f",
     "passable": false,
     "shade": true,
-    "ramp": [" ", "-", "-~", "~", "~≈", "≈"],
+    "style": "deep-water",
+    "glyphs": [" ", "≈"],
     "tile": null
   },
   {
@@ -16,7 +17,8 @@
     "color": "#5f93a8",
     "passable": true,
     "shade": true,
-    "ramp": [" ", "-", "-~", "~", "~≈", "≈"],
+    "style": "shallow-water",
+    "glyphs": ["-", "~"],
     "tile": null
   },
   {
@@ -26,7 +28,8 @@
     "color": "#7f9f62",
     "passable": true,
     "shade": true,
-    "ramp": [" ", ".", ".,", ",'", "'\"", "\"√"],
+    "style": "grass",
+    "glyphs": [",", "'", "\"", ":", ";", ".", "·", "∙"],
     "tile": null
   },
   {
@@ -36,7 +39,8 @@
     "color": "#c2b07a",
     "passable": true,
     "shade": true,
-    "ramp": [" ", ".", ".·", "·∙", "∙÷", "÷="],
+    "style": "sand",
+    "glyphs": [" ", "-", "~", "^"],
     "tile": null
   },
   {
@@ -46,7 +50,8 @@
     "color": "#d8e0e0",
     "passable": true,
     "shade": true,
-    "ramp": [" ", " ", ".", ".·", "·'", "'°"],
+    "style": "snow",
+    "glyphs": [" ", ".", "·", "∙"],
     "tile": null
   },
   {
@@ -56,7 +61,8 @@
     "color": "#8a7a5a",
     "passable": true,
     "shade": true,
-    "ramp": [" ", ".", ".·", "·,", ",:", ":∙"],
+    "style": "mud",
+    "glyphs": [" ", ".", "·", "∙", ",", ":"],
     "tile": null
   },
   {
@@ -66,7 +72,8 @@
     "color": "#9fa8a0",
     "passable": true,
     "shade": true,
-    "ramp": [" ", ".", ".:", ":;", ";^", "^▲"],
+    "style": "mountain",
+    "glyphs": ["^", "▲"],
     "tile": null
   }
 ]

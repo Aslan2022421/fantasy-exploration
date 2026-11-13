@@ -14,10 +14,11 @@ export const TerrainSchema = z.object({
   glyph: Glyph, // 說明與圖例裡的代表字
   color: Color,
   passable: z.boolean(),
-  shade: z.boolean(), // 顏色要不要套明暗（水面不套）
-  // 這種地形自己的字元階梯，由暗（疏）到亮（密）。畫的時候依亮度選一階；
-  // 每一階可以寫好幾個字，各格用雜湊挑一個，同一亮度的地面不會排成規律的網點。空白只畫背景
-  ramp: z.array(z.string().min(1)).min(2),
+  shade: z.boolean(), // 顏色要不要依高低、深淺調亮暗（亮度是輔助）
+  // 字形規則（src/view/glyphs.js）：字形代表地表長什麼樣，顏色代表材質。
+  // grass 植被、mud／snow 起伏、sand 波紋與沙丘、mountain 山地與山坡、deep-water／shallow-water 水面
+  style: z.enum(['grass', 'mud', 'snow', 'sand', 'mountain', 'deep-water', 'shallow-water']),
+  glyphs: z.array(Glyph).min(1), // 這種地形會用到的字元（檢查與圖例用；空白只畫背景）
   tile: z.string().nullable(), // 預留給圖塊模式
 });
 

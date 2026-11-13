@@ -6,7 +6,7 @@ import { PART_TRUNK } from './footprint.js';
 import { bandOf, createTerrainGen, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 4; // 4：山地長樹、樹冠只在樹幹同一層
+export const WORLD_VERSION = 5; // 5：每格存坡度（字形看地表起伏）
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;
@@ -113,6 +113,16 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     shadeAt(x, y) {
       const i = locate(x, y);
       return i < 0 ? 0 : last.shade[i];
+    },
+    // 生態編號（data.biomes 的索引）；世界外是 -1
+    biomeAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? -1 : last.biome[i];
+    },
+    // 坡度（terrain.js 的 SLOPE_SCALE 倍，0～255）；水面與世界外是 0
+    slopeAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? 0 : last.slope[i];
     },
     // 高度層：水 0、陸地 1～4（landform.js）；世界外是 0
     tierAt(x, y) {

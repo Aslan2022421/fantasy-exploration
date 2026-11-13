@@ -10,7 +10,8 @@ const terrain = (id, extra = {}) => ({
   color: '#ffffff',
   passable: true,
   shade: true,
-  ramp: [' ', '.'],
+  style: 'grass',
+  glyphs: [','],
   tile: null,
   ...extra,
 });

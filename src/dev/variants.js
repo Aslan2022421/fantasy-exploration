@@ -2,10 +2,10 @@
 // 每種畫法都是 draw(mapView, cam, cols, rows, centerTier)
 
 import { EDGE_RIM, EDGE_SHADOW, edgeAt, tierLevel } from '../view/elevation.js';
-import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from '../view/shades.js';
+import { glyphAt } from '../view/glyphs.js';
+import { buildObjectShades, buildShadeTable, dimColor } from '../view/shades.js';
 import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
 import { LAND } from '../world/landform.js';
-import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 
 const VOID = '#06181a';
@@ -31,12 +31,7 @@ export function createVariants(world, data) {
   function look(x, y, level) {
     const t = world.terrainAt(x, y);
     const out = {
-      glyph: rampGlyph(
-        terrains[t].ramp,
-        shades.step[t][level][FLAT],
-        hash01(world.seed, x, y, 101),
-        hash01(world.seed, x, y, 102),
-      ),
+      glyph: glyphAt(world, data, x, y),
       fg: shades.fg[t][level][FLAT],
       bg: shades.bg[t][level][FLAT],
     };

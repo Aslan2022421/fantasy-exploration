@@ -18,6 +18,8 @@ export const GEN = {
   waterShadeStep: 0.05, // 水每深這麼多暗一級
 };
 
+export const SLOPE_SCALE = 4000; // 坡度存成整數時放大的倍數
+
 export const TEMP_BANDS = ['cold', 'mild', 'hot'];
 export const WET_BANDS = ['dry', 'normal', 'wet'];
 
@@ -107,6 +109,7 @@ export function createTerrainGen(seed, data) {
     const object = new Uint8Array(n); // 物件層：物件編號＋1，0 是沒有
     const objectPart = new Uint8Array(n); // 這格在樹冠的哪一側（footprint.js 的 PART_*）
     const shade = new Uint8Array(n);
+    const slope = new Uint8Array(n); // 坡度（每格高度差×SLOPE_SCALE，0～255）：決定地表起伏的字形
     const relief = new Uint8Array(n);
     const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 7
     const biome = new Uint8Array(n);
@@ -165,10 +168,11 @@ export function createTerrainGen(seed, data) {
         if (g.water[c] === WATER_NONE) {
           const grad = gradient((dx, dy) => g.h[c + dy * B + dx]);
           shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy), terrain[i] === MOUNTAIN);
+          slope[i] = Math.min(255, Math.round(Math.hypot(grad.dx, grad.dy) * SLOPE_SCALE));
         } else shade[i] = waterLevel(h);
       }
     }
-    return { zx, zy, size, height, terrain, object, objectPart, shade, relief, tier, biome };
+    return { zx, zy, size, height, terrain, object, objectPart, shade, slope, relief, tier, biome };
   }
 
   return { genZone, heightAt: land.heightAt, landform: land, tempAt, wetAt, biomeAt };

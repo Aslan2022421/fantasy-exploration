@@ -1,9 +1,9 @@
 // 地形生成：高度、溫度、濕度三層雜訊 → 每格的生態、地形層與物件層，加上明暗與台地立面。
 // 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
 
-import { gradient, shadeLevel } from './hillshade.js';
+import { gradient, lightLevel, shadeLevel } from './hillshade.js';
 import { fbm, hash01, makeNoise } from './noise.js';
-import { reliefOf } from './relief.js';
+import { reliefOf, tierOf } from './relief.js';
 
 // 生成的參數（調比例時改這裡）
 export const GEN = {
@@ -123,7 +123,7 @@ export function createTerrainGen(seed, data) {
         relief[i] = reliefOf(tat(x, y, -2), tat(x, y, -1), tat(x, y, 0), tat(x, y, 1));
         terrain[i] = classify(h, b, wet);
         object[i] = placeObject(X, Y, b, terrain[i]);
-        shade[i] = shadeLevel(g.dx, g.dy);
+        shade[i] = lightLevel(tierOf(tat(x, y, 0)), shadeLevel(g.dx, g.dy));
       }
     }
     return { zx, zy, size, height, terrain, object, shade, relief, biome };

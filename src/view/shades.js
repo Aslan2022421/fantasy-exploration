@@ -15,11 +15,19 @@ export const RAMP = [' ', '·', '∙', ':', '░', '▒', '▓', '█'];
 const BG_DIM = 0.32; // 背景是地形色的幾成亮
 const RELIEF_FACTOR = { [FLAT]: 1, [RIM]: 1.25, [FACE]: 0.42, [FACE_FAR]: 0.3 };
 const RELIEF_STEP = { [FLAT]: 0, [RIM]: 1, [FACE]: -3, [FACE_FAR]: -4 }; // 地面字元在階梯上往上或往下幾格
-const RAMP_SHIFT = -2; // 整體往暗的那頭移：平地（第 5 級）落在 :，最亮的坡到 ▒，不會整片塗滿
+const RAMP_SHIFT = -2; // 整體往暗的那頭移：最低層落在 ·，最高層到 ▒，不會整片塗滿
 const RELIEFS = [FLAT, RIM, FACE, FACE_FAR];
+// 彩度只留幾成：地形種類仍靠色相分辨，但畫面上最強的差異是亮暗（高低）
+export const SATURATION = 0.55;
 
 function scale(rgb, f) {
   return Color.toHex(rgb.map((c) => Math.max(0, Math.min(255, Math.round(c * f)))));
+}
+
+// 往同亮度的灰色拉，彩度剩 SATURATION
+export function desaturate(rgb) {
+  const gray = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+  return rgb.map((c) => gray + (c - gray) * SATURATION);
 }
 
 // 地面在這個明暗級數與立面下用哪個字元
@@ -34,7 +42,7 @@ export function buildShadeTable(terrains) {
   const fg = [];
   const bg = [];
   for (const t of terrains) {
-    const base = Color.fromString(t.color);
+    const base = desaturate(Color.fromString(t.color));
     const g = [];
     const f = [];
     const b = [];
@@ -63,7 +71,7 @@ export function buildShadeTable(terrains) {
 // 背景用地面的，所以樹底下仍看得到地面的光照
 export function buildObjectShades(objects) {
   return objects.map((o) => {
-    const base = Color.fromString(o.color);
+    const base = desaturate(Color.fromString(o.color));
     return Array.from({ length: LEVELS }, (_, level) => {
       const row = [];
       for (const r of RELIEFS) row[r] = scale(base, levelFactor(level) * RELIEF_FACTOR[r]);

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { LEVELS } from '../world/hillshade.js';
+import { LEVELS, lightLevel } from '../world/hillshade.js';
 import { FACE, FACE_FAR, FLAT, RIM } from '../world/relief.js';
 import { cp437Index } from './cp437.js';
 import { buildShadeTable, RAMP, rampGlyph } from './shades.js';
@@ -51,7 +51,19 @@ test('東西保留自己的字元', () => {
   expect(new Set(glyph[2].flat())).toEqual(new Set(['♣']));
 });
 
-test('不套明暗的地形每一級、每種立面都是同一個顏色', () => {
+test('不套明暗的地形每一級、每種立面都是同一個顏色（降過彩度的原色）', () => {
   const { fg } = buildShadeTable(terrains);
-  expect(new Set(fg[1].flat())).toEqual(new Set(['#3b6f8f']));
+  const colors = new Set(fg[1].flat());
+  expect(colors.size).toBe(1);
+  const [hex] = colors;
+  const rgb = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+  // 原色 #3b6f8f 的藍比紅多 84；降彩度後差距變小，但還是偏藍
+  expect(rgb[2] - rgb[0]).toBeGreaterThan(0);
+  expect(rgb[2] - rgb[0]).toBeLessThan(0x8f - 0x3b);
+});
+
+test('高度層越高越亮；坡向只微調', () => {
+  expect(lightLevel(0, 5)).toBeLessThan(lightLevel(4, 5));
+  expect(Math.abs(lightLevel(2, 0) - lightLevel(2, 5))).toBeLessThanOrEqual(2);
+  expect(Math.abs(lightLevel(2, 7) - lightLevel(2, 5))).toBeLessThanOrEqual(1);
 });

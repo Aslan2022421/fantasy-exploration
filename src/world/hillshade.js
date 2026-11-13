@@ -1,6 +1,7 @@
 // 地形明暗（hillshade）：看一格周圍 3×3 的高度算出坡度與坡向，再跟光的方向合成亮度。
 // 做法照 GIS 的 Horn 法（ArcGIS〈How Hillshade works〉、GDAL hillshade），光從左上照下來
-// （方位角 315°、高度角 45°）。結果量化成 LEVELS 級，畫面依級數調字元顏色的亮度
+// （方位角 315°、高度角 45°）。結果量化成 LEVELS 級。
+// 畫面的亮度主要看高度層（lightLevel），坡向明暗只當微調
 
 export const LEVELS = 8;
 export const Z_FACTOR = 24; // 高度放大倍數：高度是 -1～1，不放大的話坡幾乎看不出來
@@ -33,7 +34,13 @@ export function shadeLevel(dx, dy) {
   return Math.min(LEVELS - 1, Math.floor(Math.max(0, v) * LEVELS));
 }
 
-// 每一級的亮度倍率：最暗 0.55、最亮 1.15，平地（第 5 級）約 0.98
+// 畫面用的亮度級數：主要由高度層決定（越高越亮），坡向明暗只微調 -2～+1 級。
+// tier 是 relief.js 的 tierOf（0～4），hs 是上面的 shadeLevel（平地 5）
+export function lightLevel(tier, hs) {
+  return Math.max(0, Math.min(LEVELS - 1, 3 + tier + Math.round((hs - 5) / 3)));
+}
+
+// 每一級的亮度倍率：最暗 0.3、最亮 1.2，低地暗、高地亮，差距拉大
 export function levelFactor(level) {
-  return 0.55 + level * (0.6 / (LEVELS - 1));
+  return 0.3 + level * (0.9 / (LEVELS - 1));
 }

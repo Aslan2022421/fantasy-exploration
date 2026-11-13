@@ -1,8 +1,8 @@
 import { RNG } from 'rot-js';
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
-import { gradient, shadeLevel } from './hillshade.js';
-import { reliefOf } from './relief.js';
+import { gradient, lightLevel, shadeLevel } from './hillshade.js';
+import { reliefOf, tierOf } from './relief.js';
 import { createTerrainGen } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
@@ -73,7 +73,8 @@ describe('區與區的交界', () => {
       for (const x of [0, Z - 1]) {
         const X = Z + x;
         const g = gradient((dx, dy) => Math.fround(gen.heightAt(X + dx, y + dy)));
-        expect(z.shade[y * Z + x]).toBe(shadeLevel(g.dx, g.dy));
+        const tier = tierOf(Math.fround(gen.terraceHeightAt(X, y)));
+        expect(z.shade[y * Z + x]).toBe(lightLevel(tier, shadeLevel(g.dx, g.dy)));
       }
     }
   });

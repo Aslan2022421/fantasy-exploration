@@ -30,7 +30,7 @@ test('牆：比南邊那一格高才有，從低處那層疊到自己底下一�
   expect(wallRange(w, 6, 1)).toBeNull(); // 台地北邊比它低，但牆只朝南
 });
 
-test('樹：第 1 層地貌、第 2 層留空，樹葉離地 +2、+3，樹幹 +1～+4、頂端高過樹葉；矮叢實心 2 層', () => {
+test('樹：第 1 層地貌、第 2 層留空，樹葉只在離地 +2，樹幹 +1～+4、頂端高過樹葉；矮叢實心 2 層', () => {
   const canopy = objectLayers(obj('broadleaf'), false);
   expect(canopy.map((l) => l.dh)).toEqual(TREE.leaves);
   expect(canopy.every((l) => l.part === 'leaf')).toBe(true);

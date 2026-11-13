@@ -4,7 +4,7 @@
 // - 高度用「層」算：每個高度層（tier）是 tierLayers 層；原點是水面（第 0 層），比原點高幾層就往上錯開幾層
 // - 地形：比南邊那一格高的格子，從低處那一層疊到自己底下一層，看起來是一面朝南的牆。
 //   低窪的水在原點，北岸露出岸壁
-// - 樹（使用者定）：第 1 層是地貌、第 2 層留空，樹葉在第 3、4 層（離地 +2、+3），
+// - 樹（使用者定）：第 1 層是地貌、第 2 層留空，樹葉只在第 3 層（離地 +2），
 //   樹幹 Φ 從離地 +1 疊到 +4，頂端露出樹冠；矮叢實心疊 2 層
 // 畫的時候照高度由低到高，同高時北邊先畫、南邊後畫。這裡只算層與錯開量，不碰畫布，可以在 Node 裡測
 
@@ -16,7 +16,7 @@ export const STACK = {
   dims: [1, 0.85, 0.7, 0.55, 0.45], // 由頂往下各層的亮度
 };
 
-export const TREE = { trunk: [1, 2, 3, 4], leaves: [2, 3] }; // 離地幾層
+export const TREE = { trunk: [1, 2, 3, 4], leaves: [2] }; // 離地幾層（樹葉只留一層，使用者定）
 
 export const dimAt = (j) => STACK.dims[Math.min(j, STACK.dims.length - 1)];
 export const groundHeight = (tier) => tier * STACK.tierLayers;

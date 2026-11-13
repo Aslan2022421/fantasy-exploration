@@ -22,13 +22,25 @@ const view = createStackView(mapView, world, [], look);
 const cam = { x: 0, y: 0 };
 view.draw({ cols: N, rows: N }, cam, { player: { x: 30, y: 30 } });
 
-test('比角色高的台地往外錯開，點畫面上看到台地頂面的那一格，選到的是台地那格', () => {
+test('高的台地往外錯開，點畫面上看到台地頂面的那一格，選到的是台地那格', () => {
   const top = drawn.find((d) => d.vx === 55 && d.vy === 30 && d.bg === '#000');
   expect(top.ox).toBeGreaterThan(0); // 在畫面中心右邊，往右錯開
   expect(view.cellAt(cam, 56, 30)).toEqual({ x: 55, y: 30 });
 });
 
-test('跟角色同一層的格子在原位，點哪格就是哪格', () => {
+test('角色附近的格子幾乎不錯開，點哪格就是哪格', () => {
   expect(view.cellAt(cam, 31, 30)).toEqual({ x: 31, y: 30 });
   expect(view.cellAt(cam, 30, 30)).toEqual({ x: 30, y: 30 });
+});
+
+test('原點固定：角色換到別的高度層，同一格錯開量不變（畫面不會跳）', () => {
+  const at = () => drawn.filter((d) => d.vx === 40 && d.vy === 30 && d.bg === '#000').at(-1);
+  drawn.length = 0;
+  view.draw({ cols: N, rows: N }, cam, { player: { x: 30, y: 30 } });
+  const before = at();
+  tiers[30][30] = 4; // 角色腳下變高
+  drawn.length = 0;
+  view.draw({ cols: N, rows: N }, cam, { player: { x: 30, y: 30 } });
+  tiers[30][30] = 1;
+  expect(at()).toEqual(before);
 });

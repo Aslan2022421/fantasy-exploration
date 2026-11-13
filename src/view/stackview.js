@@ -1,6 +1,6 @@
 // 全俯視透視的畫法（perspective.js 算層與錯開量，這裡照高度由低到高畫上畫布）。
 // 每格收集要畫的東西（地面、牆、物件各層），照高度分桶，低的先畫、高的後畫，高的蓋住低的。
-// 地圖區外多收 MARGIN 格：比角色低的東西往內縮，畫面邊緣才補得滿。
+// 地圖區外多收 MARGIN 格，錯開之後畫面邊緣才補得滿。
 // 滑鼠點格子時，找畫面上那一點最上面的地面是哪一格（錯開後不一定是原位那格）
 
 import { COLORS } from './colors.js';
@@ -8,6 +8,7 @@ import { dimAt, groundHeight, objectLayers, shiftOf, wallRange } from './perspec
 import { dimColor } from './shades.js';
 
 const MARGIN = 2;
+const ORIGIN = groundHeight(0); // 原點：水面那一層（使用者定）
 const PICK = 2; // 點格子時往四周找幾格
 
 // look：{ ground(x, y) → { glyph, fg, bg }, object(x, y, o) → { glyph, fg, trunkGlyph, trunkFg, isTrunk } }
@@ -73,7 +74,7 @@ export function createStackView(mapView, world, objects, look) {
       cam,
       cx: cam.x + Math.floor(screen.cols / 2), // 相機在畫面中心正上方
       cy: cam.y + Math.floor(screen.rows / 2),
-      R: groundHeight(world.tierAt(player.x, player.y)), // 原點：角色所在的高度層
+      R: ORIGIN, // 原點固定，角色換高度層時畫面不會跳
     };
     frame = f;
     const buckets = [];

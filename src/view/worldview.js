@@ -1,9 +1,9 @@
-// 畫地圖區（使用者挑定的樣子：往左下拉側面與影子、影子只調暗那一版）。
+// 畫地圖區。預設是全俯視透視（使用者選定，perspective.js）：相機在畫面中心正上方，
+// 高的地形與物件把側面往中心拉，離中心越遠越長。網址加 ?leftdown 是前一版（光從右上照，
+// 往左下拉側面與物件影子，extrude.js），加 ?flat 不畫側面，留著對照用。
 // - 亮度：生成時算好的亮度級數（陸地看高度層＋坡向明暗，水看深度）
-// - 側面：光從右上照，比較高的地形往左下拉出 2～3 格的側面，用高處的字元、顏色調暗（extrude.js）
-// - 影子：有高度的物件往左下投影子，影子只讓地面變暗；有物件的格子是被照亮的樹冠，不吃影子
 // - 樹冠：多格的樹右上亮、左下暗
-// 頂面都畫在原位，滑鼠點哪格就是哪格。網址加 ?flat 不畫側面與影子，留著對照用。
+// 頂面都畫在原位，滑鼠點哪格就是哪格。
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
@@ -12,6 +12,7 @@ import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
 import { lookAt } from './glyphs.js';
+import { perspectiveSource } from './perspective.js';
 import { buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 
 const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
@@ -20,7 +21,8 @@ const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_
 export const TRUNK_GLYPH = 'Φ'; // 樹幹：走不過去的那一格，跟樹冠分得出來
 const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
 
-export function createWorldView(mapView, world, data, { extrude = true } = {}) {
+// mode：'perspective' 全俯視透視（預設）、'leftdown' 往左下拉側面與影子（前一版）、'flat' 不畫側面
+export function createWorldView(mapView, world, data, { mode = 'perspective' } = {}) {
   const { objects, surfaces } = data;
   const shades = buildShadeTable(data.palette); // { fg, bg }：[顏色來源][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
@@ -42,33 +44,66 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
     };
   }
 
-  // 這一格最後的樣子：側面蓋住整格；不然畫地面（＋物件），落在影子裡就調暗
-  function cellLook(x, y) {
-    if (extrude) {
-      const side = sideSource(world, x, y);
-      if (side) {
+  // 物件的字元顏色（山上的樹往腳下材質靠）
+  function objectFgAt(x, y, o, level) {
+    const table = isMountain[world.landformAt(x, y)] ? objectFgOn[world.surfaceAt(x, y)] : objectFg;
+    return table[o][level][FLAT];
+  }
+
+  // 全俯視透視：(cx, cy) 是畫面中心。被側面蓋到就畫側面，不然畫地面（＋物件）
+  function perspectiveLook(x, y, cx, cy) {
+    const o = world.objectAt(x, y);
+    const side = perspectiveSource(world, objects, cx, cy, x, y, o >= 0);
+    if (side) {
+      const f = SIDE_DIM[side.k];
+      if (side.kind === 'terrain') {
         const src = groundLook(side.x, side.y);
-        const f = SIDE_DIM[side.k];
         return { glyph: src.glyph, fg: dimColor(src.fg, f), bg: dimColor(src.bg, f) };
       }
+      const so = world.objectAt(side.x, side.y);
+      const level = world.shadeAt(side.x, side.y);
+      const look = groundLook(x, y);
+      return { glyph: objects[so].glyph, fg: dimColor(objectFgAt(side.x, side.y, so, level), f), bg: look.bg };
     }
-    const look = groundLook(x, y);
+    return withObject(groundLook(x, y), x, y, o);
+  }
+
+  function withObject(look, x, y, o) {
+    if (o < 0) return look;
+    const part = world.objectPartAt(x, y);
+    look.glyph = part === PART_TRUNK ? TRUNK_GLYPH : objects[o].glyph;
+    look.fg = dimColor(objectFgAt(x, y, o, look.level), PART_FACTOR[part]);
+    return look;
+  }
+
+  // 這一格最後的樣子（往左下拉的舊版）：側面蓋住整格；不然畫地面（＋物件），落在影子裡就調暗
+  function leftDownLook(x, y) {
+    const side = sideSource(world, x, y);
+    if (side) {
+      const src = groundLook(side.x, side.y);
+      const f = SIDE_DIM[side.k];
+      return { glyph: src.glyph, fg: dimColor(src.fg, f), bg: dimColor(src.bg, f) };
+    }
     const o = world.objectAt(x, y);
-    if (o >= 0) {
-      const part = world.objectPartAt(x, y);
-      look.glyph = part === PART_TRUNK ? TRUNK_GLYPH : objects[o].glyph;
-      const table = isMountain[world.landformAt(x, y)] ? objectFgOn[world.surfaceAt(x, y)] : objectFg;
-      look.fg = dimColor(table[o][look.level][FLAT], PART_FACTOR[part]);
-    } else if (extrude && inShadow(world, objects, x, y)) {
+    const look = withObject(groundLook(x, y), x, y, o);
+    if (o < 0 && inShadow(world, objects, x, y)) {
       look.fg = dimColor(look.fg, SHADOW_DIM);
       look.bg = dimColor(look.bg, SHADOW_DIM);
     }
     return look;
   }
 
+  function cellLook(x, y, cx, cy) {
+    if (mode === 'perspective') return perspectiveLook(x, y, cx, cy);
+    if (mode === 'leftdown') return leftDownLook(x, y);
+    return withObject(groundLook(x, y), x, y, world.objectAt(x, y));
+  }
+
   // overlay：{ route: {steps, reachable} | null, target, examined, player }
   function draw(screen, cam, { route, target, examined, player }) {
     const onRoute = new Set(route?.steps.map((s) => `${s.x},${s.y}`));
+    const cx = cam.x + Math.floor(screen.cols / 2); // 相機在畫面中心正上方
+    const cy = cam.y + Math.floor(screen.rows / 2);
     for (let vy = 0; vy < screen.rows; vy++) {
       for (let vx = 0; vx < screen.cols; vx++) {
         const x = cam.x + vx;
@@ -77,7 +112,7 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
           mapView.draw(vx, vy, ' ', COLORS.bg, COLORS.void);
           continue;
         }
-        const look = cellLook(x, y);
+        const look = cellLook(x, y, cx, cy);
         const isTarget = target?.x === x && target?.y === y;
         let bg = look.bg;
         if (examined?.x === x && examined?.y === y) bg = COLORS.examined;

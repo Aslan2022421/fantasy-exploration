@@ -4,7 +4,15 @@
 // 冒險者、路線、目標都畫在那格地面錯開後的位置；滑鼠點格子時，找畫面上那一點最上面的地面是哪一格
 
 import { COLORS } from './colors.js';
-import { dimAt, groundHeight, MAX_SHIFT_CELLS, objectLayers, shiftOf, wallRange } from './perspective.js';
+import {
+  dimAt,
+  groundHeight,
+  MAX_SHIFT_CELLS,
+  objectLayers,
+  PLAYER_LAYERS,
+  shiftOf,
+  wallRange,
+} from './perspective.js';
 import { dimColor } from './shades.js';
 
 const BELOW = MAX_SHIFT_CELLS + 1; // 地圖區下方多收幾列
@@ -79,6 +87,22 @@ export function createStackView(mapView, world, objects, look) {
         if (world.inside(x, y)) collect(x, y, cam, buckets);
       }
     }
+    // 玩家：從腳下地面往上疊 PLAYER_LAYERS 層，跟樹、牆一起照高度排（同高時畫在最後）；
+    // 只畫字、不帶底色（帶底色會把下面那層蓋掉），越往下越暗
+    const p0 = groundHeight(world.tierAt(player.x, player.y));
+    for (let dh = 1; dh <= PLAYER_LAYERS; dh++) {
+      const j = PLAYER_LAYERS - dh;
+      const h = p0 + dh;
+      if (!buckets[h]) buckets[h] = [];
+      buckets[h].push({
+        vx: player.x - cam.x,
+        vy: player.y - cam.y,
+        h,
+        glyph: '@',
+        fg: j ? dimColor(COLORS.player, dimAt(j)) : COLORS.player,
+        bg: null,
+      });
+    }
     mapView.clipped(() => {
       mapView.fill(COLORS.void);
       for (const list of buckets) {
@@ -89,8 +113,6 @@ export function createStackView(mapView, world, objects, look) {
         }
       }
       drawMarks(cam, overlay);
-      const p = groundShift(player.x, player.y);
-      mapView.drawShifted(player.x - cam.x, player.y - cam.y, p.ox, p.oy, '@', COLORS.player, COLORS.bg);
     });
   }
 

@@ -35,10 +35,11 @@ test('同一格的錯開量只看高度：角色走到哪都一樣（畫面不�
   expect(a.oy).toBe(shiftOf(groundHeight(1)).oy);
 });
 
-test('冒險者畫在腳下地面錯開後的位置', () => {
+test('冒險者從腳下地面往上疊兩層，只畫字', () => {
   draw({ x: 15, y: 22 });
-  const p = drawn.find((d) => d.ch === '@');
-  expect(p.oy).toBe(shiftOf(groundHeight(4)).oy);
+  const p = drawn.filter((d) => d.ch === '@');
+  expect(p.map((d) => d.oy)).toEqual([shiftOf(groundHeight(4) + 1).oy, shiftOf(groundHeight(4) + 2).oy]);
+  expect(p.every((d) => d.bg === null)).toBe(true);
 });
 
 test('點畫面上看到台地頂面的那一格，選到的是台地那格；平地點哪格就是哪格', () => {

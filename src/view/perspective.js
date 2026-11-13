@@ -30,6 +30,9 @@ export function mountainRingFactor(height) {
 
 export const TREE = { trunk: [1, 2, 3, 4], leaves: [2] }; // 離地幾層（樹葉只留一層，使用者定）
 
+// 玩家、NPC、怪物依體型疊 2～3 層、佔 1、2、4 格（使用者定）；現在只有玩家，疊 2 層
+export const PLAYER_LAYERS = 2;
+
 export const dimAt = (j) => STACK.dims[Math.min(j, STACK.dims.length - 1)];
 // 地面高度（層）：陸地第 1～4 層每層算 tierLayers 層；再往上是山地一圈一圈加的，每圈算 1 層，
 // 山才疊得起來又不會高到蓋掉北邊一大片

@@ -102,6 +102,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const i = locate(x, y);
       return i < 0 ? 0 : last.shade[i];
     },
+    // 台地立面（relief.js 的 FLAT、RIM、FACE、FACE_FAR）
+    reliefAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? 0 : last.relief[i];
+    },
     isPassable(x, y) {
       const i = locate(x, y);
       return i >= 0 && data.terrains[last.terrain[i]].passable;

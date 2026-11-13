@@ -5,7 +5,7 @@ import { COLORS } from './colors.js';
 import { buildShadeTable } from './shades.js';
 
 export function createWorldView(mapView, world, terrains) {
-  const shades = buildShadeTable(terrains); // [地形][明暗級數] → 顏色
+  const shades = buildShadeTable(terrains); // { fg, bg }：[地形][明暗級數][立面] → 顏色
 
   // overlay：{ route: {steps, reachable} | null, target, examined, player }
   function draw(screen, cam, { route, target, examined, player }) {
@@ -18,16 +18,18 @@ export function createWorldView(mapView, world, terrains) {
           mapView.draw(vx, vy, ' ', COLORS.bg, COLORS.void);
           continue;
         }
+        const t = world.terrainAt(x, y);
+        const level = world.shadeAt(x, y);
+        const relief = world.reliefAt(x, y);
         const isTarget = target?.x === x && target?.y === y;
-        let bg = COLORS.bg;
+        let bg = shades.bg[t][level][relief];
         if (examined?.x === x && examined?.y === y) bg = COLORS.examined;
         if (isTarget) bg = route?.reachable ? COLORS.target : COLORS.blocked;
         if (onRoute.has(`${x},${y}`) && !isTarget) {
           mapView.draw(vx, vy, '•', COLORS.path, bg);
           continue;
         }
-        const t = world.terrainAt(x, y);
-        mapView.draw(vx, vy, terrains[t].glyph, shades[t][world.shadeAt(x, y)], bg);
+        mapView.draw(vx, vy, terrains[t].glyph, shades.fg[t][level][relief], bg);
       }
     }
     mapView.draw(player.x - cam.x, player.y - cam.y, '@', COLORS.player, COLORS.bg);

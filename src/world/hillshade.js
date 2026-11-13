@@ -3,7 +3,7 @@
 // （方位角 315°、高度角 45°）。結果量化成 LEVELS 級，畫面依級數調字元顏色的亮度
 
 export const LEVELS = 8;
-export const Z_FACTOR = 16; // 高度放大倍數：高度是 -1～1，不放大的話坡幾乎看不出來
+export const Z_FACTOR = 24; // 高度放大倍數：高度是 -1～1，不放大的話坡幾乎看不出來
 const ZENITH = Math.PI / 4; // 90° − 高度角 45°
 const AZIMUTH = ((360 - 315 + 90) % 360) * (Math.PI / 180); // 換成數學角度
 

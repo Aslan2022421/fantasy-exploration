@@ -2,6 +2,7 @@ import { RNG } from 'rot-js';
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { gradient, shadeLevel } from './hillshade.js';
+import { reliefOf } from './relief.js';
 import { createTerrainGen } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
@@ -51,6 +52,18 @@ describe('區與區的交界', () => {
     for (let y = 0; y < Z; y += 7) {
       expect(left.height[y * Z + (Z - 1)]).toBe(direct(Z - 1, Z + y));
       expect(right.height[y * Z]).toBe(direct(Z, Z + y));
+    }
+  });
+
+  test('邊上的台地立面等於用全域高度直接算的結果', () => {
+    const z = gen.genZone(1, 1, Z);
+    const t = (x, y) => Math.fround(gen.terraceHeightAt(x, y));
+    for (let x = 0; x < Z; x += 5) {
+      for (const y of [0, 1, Z - 1]) {
+        const X = Z + x;
+        const Y = Z + y;
+        expect(z.relief[y * Z + x]).toBe(reliefOf(t(X, Y - 2), t(X, Y - 1), t(X, Y), t(X, Y + 1)));
+      }
     }
   });
 

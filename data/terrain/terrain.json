@@ -68,15 +68,5 @@
     "shade": true,
     "style": "ramp",
     "tile": null
-  },
-  {
-    "id": "rock-wall",
-    "name": "岩壁",
-    "glyph": "█",
-    "color": "#5c4f46",
-    "passable": false,
-    "shade": true,
-    "style": "cliff",
-    "tile": null
   }
 ]

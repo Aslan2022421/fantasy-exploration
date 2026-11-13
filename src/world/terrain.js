@@ -3,7 +3,7 @@
 
 import { gradient, shadeLevel } from './hillshade.js';
 import { fbm, hash01, makeNoise } from './noise.js';
-import { FACE, FACE_FAR, reliefOf } from './relief.js';
+import { reliefOf } from './relief.js';
 
 // 生成的參數（調比例時改這裡）
 export const GEN = {
@@ -18,8 +18,6 @@ export const GEN = {
   shallowWater: -0.24, // 低於這個是淺水
   wetWaterShift: 0.08, // 越濕水面越高（潮濕 +1 時水線抬高這麼多）
   mountain: 0.42, // 高度高於這個是山地
-  wallSlope: 0.024, // 坡度（每格高度差）超過這個、又在高處，就是岩壁
-  wallMinHeight: 0.18,
   terraceOctaves: 3, // 台地的分階只看高度較粗的幾層，等高線才連成線，不會到處是零碎的立面
 };
 
@@ -43,7 +41,6 @@ export function createTerrainGen(seed, data) {
   const DEEP = id('deep-water');
   const SHALLOW = id('shallow-water');
   const MOUNTAIN = id('mountain');
-  const WALL = id('rock-wall');
 
   // 溫度帶×濕度帶 → 生態（資料裡的編號）；每格都有，九格要齊
   const biomeGrid = [];
@@ -69,14 +66,11 @@ export function createTerrainGen(seed, data) {
   const wetAt = (x, y) => fbm(nWet, x, y, GEN.climateBase, GEN.wetOctaves);
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
 
-  // 地形層：h 高度、slope 坡度、biome 生態編號、wet 濕度、relief 台地立面
-  // 岩壁只長在「高、陡，而且正好是台階立面」的格子：陡坡上成一道道斷崖，不會整片長滿
-  function classify(h, slope, biome, wet, relief) {
+  // 地形層：h 高度、biome 生態編號、wet 濕度
+  function classify(h, biome, wet) {
     const shift = GEN.wetWaterShift * wet;
     if (h < GEN.deepWater + shift) return DEEP;
     if (h < GEN.shallowWater + shift) return SHALLOW;
-    const onFace = relief === FACE || relief === FACE_FAR;
-    if (onFace && h > GEN.wallMinHeight && slope > GEN.wallSlope) return WALL;
     if (h > GEN.mountain) return MOUNTAIN;
     return flora[biome].ground;
   }
@@ -127,7 +121,7 @@ export function createTerrainGen(seed, data) {
         height[i] = Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5);
         biome[i] = b;
         relief[i] = reliefOf(tat(x, y, -2), tat(x, y, -1), tat(x, y, 0), tat(x, y, 1));
-        terrain[i] = classify(h, Math.hypot(g.dx, g.dy), b, wet, relief[i]);
+        terrain[i] = classify(h, b, wet);
         object[i] = placeObject(X, Y, b, terrain[i]);
         shade[i] = shadeLevel(g.dx, g.dy);
       }

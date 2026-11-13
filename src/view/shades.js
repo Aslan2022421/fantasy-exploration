@@ -2,7 +2,6 @@
 // - 地面（ramp）：字元依亮度從密度階梯選，地面是同一種紋理，亮暗才讀得出是光照在表面上
 //   （參考 ASCII 立方體的「依亮度選字元」，換成 CP437 的密度字元）
 // - 東西（樹、水）：保留自己的字元，只調顏色
-// - 斷崖（岩壁）：直紋字元畫成立面，見 cliffLook
 // - 背景也帶光，整格看得出亮暗
 // 顏色有上限（地形數×明暗級數×4），字元表的染色快取（tiles.js 一種顏色一張，用到才染）不會無限長大
 
@@ -21,14 +20,6 @@ const RELIEFS = [FLAT, RIM, FACE, FACE_FAR];
 
 function scale(rgb, f) {
   return Color.toHex(rgb.map((c) => Math.max(0, Math.min(255, Math.round(c * f)))));
-}
-
-// 斷崖：直紋字元一欄一欄交錯，看起來是直立的岩面；最上面一行用台地邊緣的亮度當崖頂，其餘用立面的暗度
-export const CLIFF_GLYPHS = ['║', '│'];
-
-export function cliffLook(shades, t, level, x, isTop) {
-  const r = isTop ? RIM : FACE;
-  return { glyph: CLIFF_GLYPHS[x & 1], fg: shades.fg[t][level][r], bg: shades.bg[t][level][r] };
 }
 
 // 地面在這個明暗級數與立面下用哪個字元

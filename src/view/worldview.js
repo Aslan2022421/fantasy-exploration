@@ -3,17 +3,15 @@
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
 import { COLORS } from './colors.js';
-import { buildObjectShades, buildShadeTable, cliffLook } from './shades.js';
+import { buildObjectShades, buildShadeTable } from './shades.js';
 
 export function createWorldView(mapView, world, data) {
   const { terrains, objects } = data;
   const shades = buildShadeTable(terrains); // { glyph, fg, bg }：[地形][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
-  const cliff = terrains.map((t) => t.style === 'cliff');
 
-  // 地形層這一格的樣子；斷崖的北邊那格不是斷崖，這格就是崖頂
-  function terrainLook(x, y, t, level, relief) {
-    if (cliff[t]) return cliffLook(shades, t, level, x, world.terrainAt(x, y - 1) !== t);
+  // 地形層這一格的樣子
+  function terrainLook(t, level, relief) {
     return { glyph: shades.glyph[t][level][relief], fg: shades.fg[t][level][relief], bg: shades.bg[t][level][relief] };
   }
 
@@ -30,7 +28,7 @@ export function createWorldView(mapView, world, data) {
         }
         const level = world.shadeAt(x, y);
         const relief = world.reliefAt(x, y);
-        const look = terrainLook(x, y, world.terrainAt(x, y), level, relief);
+        const look = terrainLook(world.terrainAt(x, y), level, relief);
         const o = world.objectAt(x, y);
         if (o >= 0) {
           look.glyph = objects[o].glyph;

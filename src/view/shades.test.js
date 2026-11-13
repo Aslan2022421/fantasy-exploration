@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { LEVELS } from '../world/hillshade.js';
 import { FACE, FACE_FAR, FLAT, RIM } from '../world/relief.js';
 import { cp437Index } from './cp437.js';
-import { buildShadeTable, CLIFF_GLYPHS, cliffLook, RAMP, rampGlyph } from './shades.js';
+import { buildShadeTable, RAMP, rampGlyph } from './shades.js';
 
 const terrains = [
   { id: 'grass', color: '#808080', shade: true, style: 'ramp', glyph: '"' },
@@ -49,16 +49,6 @@ test('東西保留自己的字元', () => {
   const { glyph } = buildShadeTable(terrains);
   expect(new Set(glyph[1].flat())).toEqual(new Set(['≈']));
   expect(new Set(glyph[2].flat())).toEqual(new Set(['♣']));
-});
-
-test('斷崖用直紋字元一欄一欄交錯，崖頂比崖面亮', () => {
-  const shades = buildShadeTable(terrains);
-  const a = cliffLook(shades, 0, 5, 10, false);
-  const b = cliffLook(shades, 0, 5, 11, false);
-  const top = cliffLook(shades, 0, 5, 10, true);
-  expect(new Set([a.glyph, b.glyph])).toEqual(new Set(CLIFF_GLYPHS));
-  for (const ch of CLIFF_GLYPHS) expect(cp437Index(ch), ch).toBeGreaterThan(0);
-  expect(lum(top.fg)).toBeGreaterThan(lum(a.fg));
 });
 
 test('不套明暗的地形每一級、每種立面都是同一個顏色', () => {

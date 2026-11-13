@@ -14,11 +14,13 @@ function readKind(kind) {
     if (f.endsWith('.json')) files[f] = JSON.parse(readFileSync(new URL(f, dir), 'utf8'));
   return files;
 }
-const data = buildData({ terrain: readKind('terrain'), biome: readKind('biome') });
+const data = buildData({ terrain: readKind('terrain'), object: readKind('object'), biome: readKind('biome') });
 
 const SEEDS = Number(process.argv[2] ?? 20);
 const T = data.terrains;
+const O = data.objects;
 const counts = new Array(T.length).fill(0);
+const objectCounts = new Array(O.length).fill(0);
 const shade = new Array(8).fill(0);
 const reach = [];
 const biomeKinds = [];
@@ -66,6 +68,7 @@ for (let s = 1; s <= SEEDS; s++) {
       else zoneMs.push(ms);
       for (let i = 0; i < z.terrain.length; i++) {
         counts[z.terrain[i]]++;
+        if (z.object[i]) objectCounts[z.object[i] - 1]++;
         if (T[z.terrain[i]].shade) shade[z.shade[i]]++;
       }
       cells += z.terrain.length;
@@ -84,6 +87,8 @@ console.log('地形比例：');
 for (let i = 0; i < T.length; i++) console.log(`  ${T[i].name}（${T[i].id}）${pct(counts[i], cells)}`);
 const blocked = T.reduce((n, t, i) => n + (t.passable ? 0 : counts[i]), 0);
 console.log(`  不能走 ${pct(blocked, cells)}`);
+console.log('物件比例（佔全部格子）：');
+for (let i = 0; i < O.length; i++) console.log(`  ${O[i].name}（${O[i].id}）${pct(objectCounts[i], cells)}`);
 reach.sort((a, b) => a - b);
 console.log(`\n起點那區走得到的比例：最低 ${pct(reach[0], 1)}、中位 ${pct(reach[Math.floor(reach.length / 2)], 1)}`);
 console.log(`每個世界的生態種類（世界層 9 區）：平均 ${avg(biomeKinds).toFixed(1)}、最少 ${Math.min(...biomeKinds)}`);

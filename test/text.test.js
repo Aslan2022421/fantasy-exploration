@@ -30,6 +30,7 @@ function stringsIn(code) {
 test('畫面上的中文都在介面字型裡', () => {
   const texts = [
     ...DATA.terrains.map((t) => t.name),
+    ...DATA.objects.map((o) => o.name),
     ...DATA.biomes.map((b) => b.name),
     ...Object.values(CLIMATE_NAMES),
     ...sourceFiles('src/').flatMap((f) => stringsIn(readFileSync(new URL(f, root), 'utf8'))),

@@ -5,7 +5,12 @@
     "temperature": "cold",
     "moisture": "dry",
     "ground": "snow",
-    "flora": [{ "terrain": "shrub", "density": 0.08 }]
+    "flora": [
+      {
+        "object": "shrub",
+        "density": 0.08
+      }
+    ]
   },
   {
     "id": "taiga",
@@ -13,7 +18,16 @@
     "temperature": "cold",
     "moisture": "normal",
     "ground": "snow",
-    "flora": [{ "terrain": "conifer", "density": 0.5 }, { "terrain": "shrub", "density": 0.05 }]
+    "flora": [
+      {
+        "object": "conifer",
+        "density": 0.5
+      },
+      {
+        "object": "shrub",
+        "density": 0.05
+      }
+    ]
   },
   {
     "id": "cold-wetland",
@@ -21,7 +35,16 @@
     "temperature": "cold",
     "moisture": "wet",
     "ground": "mud",
-    "flora": [{ "terrain": "conifer", "density": 0.15 }, { "terrain": "shrub", "density": 0.15 }]
+    "flora": [
+      {
+        "object": "conifer",
+        "density": 0.15
+      },
+      {
+        "object": "shrub",
+        "density": 0.15
+      }
+    ]
   },
   {
     "id": "grassland",
@@ -29,7 +52,16 @@
     "temperature": "mild",
     "moisture": "dry",
     "ground": "grass",
-    "flora": [{ "terrain": "shrub", "density": 0.1 }, { "terrain": "broadleaf", "density": 0.04 }]
+    "flora": [
+      {
+        "object": "shrub",
+        "density": 0.1
+      },
+      {
+        "object": "broadleaf",
+        "density": 0.04
+      }
+    ]
   },
   {
     "id": "temperate-forest",
@@ -37,7 +69,16 @@
     "temperature": "mild",
     "moisture": "normal",
     "ground": "grass",
-    "flora": [{ "terrain": "broadleaf", "density": 0.5 }, { "terrain": "shrub", "density": 0.08 }]
+    "flora": [
+      {
+        "object": "broadleaf",
+        "density": 0.5
+      },
+      {
+        "object": "shrub",
+        "density": 0.08
+      }
+    ]
   },
   {
     "id": "swamp",
@@ -45,7 +86,16 @@
     "temperature": "mild",
     "moisture": "wet",
     "ground": "mud",
-    "flora": [{ "terrain": "broadleaf", "density": 0.2 }, { "terrain": "shrub", "density": 0.15 }]
+    "flora": [
+      {
+        "object": "broadleaf",
+        "density": 0.2
+      },
+      {
+        "object": "shrub",
+        "density": 0.15
+      }
+    ]
   },
   {
     "id": "desert",
@@ -53,7 +103,12 @@
     "temperature": "hot",
     "moisture": "dry",
     "ground": "sand",
-    "flora": [{ "terrain": "shrub", "density": 0.04 }]
+    "flora": [
+      {
+        "object": "shrub",
+        "density": 0.04
+      }
+    ]
   },
   {
     "id": "savanna",
@@ -61,7 +116,16 @@
     "temperature": "hot",
     "moisture": "normal",
     "ground": "grass",
-    "flora": [{ "terrain": "broadleaf", "density": 0.1 }, { "terrain": "shrub", "density": 0.12 }]
+    "flora": [
+      {
+        "object": "broadleaf",
+        "density": 0.1
+      },
+      {
+        "object": "shrub",
+        "density": 0.12
+      }
+    ]
   },
   {
     "id": "rainforest",
@@ -69,6 +133,15 @@
     "temperature": "hot",
     "moisture": "wet",
     "ground": "grass",
-    "flora": [{ "terrain": "jungle", "density": 0.6 }, { "terrain": "shrub", "density": 0.1 }]
+    "flora": [
+      {
+        "object": "jungle",
+        "density": 0.6
+      },
+      {
+        "object": "shrub",
+        "density": 0.1
+      }
+    ]
   }
 ]

@@ -67,3 +67,16 @@ export function buildShadeTable(terrains) {
   }
   return { glyph, fg, bg };
 }
+
+// 物件層的字元色：[物件編號][明暗級數][立面]。物件跟它腳下的地面受同一道光，
+// 背景用地面的，所以樹底下仍看得到地面的光照
+export function buildObjectShades(objects) {
+  return objects.map((o) => {
+    const base = Color.fromString(o.color);
+    return Array.from({ length: LEVELS }, (_, level) => {
+      const row = [];
+      for (const r of RELIEFS) row[r] = scale(base, levelFactor(level) * RELIEF_FACTOR[r]);
+      return row;
+    });
+  });
+}

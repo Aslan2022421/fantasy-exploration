@@ -1,4 +1,4 @@
-// 世界分兩層：世界層一格＝一個局部區域。世界層一開始整個算好（每區的氣候與生態標籤），
+// 世界分兩層：世界層一格＝一個局部區域（每格又分地形層與物件層，見 terrain.js）。世界層一開始整個算好（每區的氣候與生態標籤），
 // 局部區域用到才生、生過就留著。全世界共用一套格子座標，跨區時無縫走過去。
 // 地圖不進存檔：讀檔時用種子重生，再把紀錄套回去
 
@@ -76,7 +76,14 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     const i = locate(x, y);
     if (i < 0) return null;
     const t = data.terrains[last.terrain[i]];
-    return { terrain: t, biome: data.biomes[last.biome[i]], height: last.height[i], shade: last.shade[i] };
+    const o = last.object[i];
+    return {
+      terrain: t,
+      object: o ? data.objects[o - 1] : null,
+      biome: data.biomes[last.biome[i]],
+      height: last.height[i],
+      shade: last.shade[i],
+    };
   }
 
   return {
@@ -107,9 +114,17 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const i = locate(x, y);
       return i < 0 ? 0 : last.relief[i];
     },
+    // 物件層：物件編號（data.objects 的索引）；沒有物件或世界外是 -1
+    objectAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? -1 : last.object[i] - 1;
+    },
+    // 地形與物件都走得過去才算
     isPassable(x, y) {
       const i = locate(x, y);
-      return i >= 0 && data.terrains[last.terrain[i]].passable;
+      if (i < 0 || !data.terrains[last.terrain[i]].passable) return false;
+      const o = last.object[i];
+      return !o || data.objects[o - 1].passable;
     },
   };
 }

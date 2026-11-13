@@ -30,8 +30,13 @@ describe('實際的資料', () => {
     expect(DATA.biomes).toHaveLength(9);
   });
 
-  test('每種地形的字元都在 CP437 字元表裡', () => {
-    for (const t of DATA.terrains) expect(cp437Index(t.glyph), `${t.id} 的字元 ${t.glyph}`).toBeGreaterThan(0);
+  test('每種地形與物件的字元都在 CP437 字元表裡', () => {
+    for (const t of [...DATA.terrains, ...DATA.objects])
+      expect(cp437Index(t.glyph), `${t.id} 的字元 ${t.glyph}`).toBeGreaterThan(0);
+  });
+
+  test('物件都有，樹與矮叢在物件層', () => {
+    expect(DATA.objects.map((o) => o.id)).toEqual(expect.arrayContaining(['broadleaf', 'conifer', 'jungle', 'shrub']));
   });
 
   test('溫度帶×濕度帶九格各有一種生態', () => {
@@ -52,6 +57,15 @@ describe('資料檢查抓得到錯', () => {
 
   test('欄位不合規格', () => {
     expect(() => buildData({ terrain: { a: [terrain('grass', { color: 'green' })] }, biome: {} })).toThrow(/#rrggbb/);
+  });
+
+  test('生態的 flora 要引用物件，引用地形不算', () => {
+    const files = {
+      terrain: { a: [terrain('grass')] },
+      object: {},
+      biome: { b: [biome('x', { flora: [{ object: 'grass', density: 0.1 }] })] },
+    };
+    expect(() => buildData(files)).toThrow(/找不到物件：grass/);
   });
 
   test('多個檔案合併、跨檔引用', () => {

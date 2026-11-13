@@ -3,6 +3,7 @@
 import { buildData } from './build.js';
 
 const terrainFiles = import.meta.glob('../../data/terrain/*.json', { eager: true, import: 'default' });
+const objectFiles = import.meta.glob('../../data/object/*.json', { eager: true, import: 'default' });
 const biomeFiles = import.meta.glob('../../data/biome/*.json', { eager: true, import: 'default' });
 
-export const DATA = buildData({ terrain: terrainFiles, biome: biomeFiles });
+export const DATA = buildData({ terrain: terrainFiles, object: objectFiles, biome: biomeFiles });

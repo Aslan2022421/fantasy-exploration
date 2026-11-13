@@ -3,7 +3,7 @@
 // 這裡不讀檔：遊戲由 load.js 用 Vite 載入，Node 的工具腳本自己讀 JSON 再交進來
 
 import { z } from 'zod';
-import { BiomeSchema, TerrainSchema } from './schemas.js';
+import { BiomeSchema, ObjectSchema, TerrainSchema } from './schemas.js';
 
 // files：{ 檔名: 條目陣列 }。回傳 [條目⋯⋯]，順序照檔名再照檔內順序（地形的編號就是這個順序）
 function merge(files, schema, kind, errors) {
@@ -25,16 +25,18 @@ function merge(files, schema, kind, errors) {
   return out;
 }
 
-export function buildData({ terrain, biome }) {
+export function buildData({ terrain, object = {}, biome }) {
   const errors = [];
   const terrains = merge(terrain, TerrainSchema, '地形', errors);
+  const objects = merge(object, ObjectSchema, '物件', errors);
   const biomes = merge(biome, BiomeSchema, '生態', errors);
   const terrainIndex = new Map(terrains.map((t, i) => [t.id, i]));
+  const objectIndex = new Map(objects.map((o, i) => [o.id, i]));
   for (const b of biomes) {
     if (!terrainIndex.has(b.ground)) errors.push(`生態 ${b.id} 的 ground 找不到地形：${b.ground}`);
     for (const f of b.flora)
-      if (!terrainIndex.has(f.terrain)) errors.push(`生態 ${b.id} 的 flora 找不到地形：${f.terrain}`);
+      if (!objectIndex.has(f.object)) errors.push(`生態 ${b.id} 的 flora 找不到物件：${f.object}`);
   }
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
-  return { terrains, terrainIndex, biomes };
+  return { terrains, terrainIndex, objects, objectIndex, biomes };
 }

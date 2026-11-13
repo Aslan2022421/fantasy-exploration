@@ -131,6 +131,23 @@ describe('世界的形狀', () => {
     expect(walls).toBeGreaterThan(0);
   });
 
+  test('物件只撒在該生態的平地上；物件層跟地形層分開', () => {
+    let objects = 0;
+    for (let zy = 0; zy < 3; zy++) {
+      for (let zx = 0; zx < 3; zx++) {
+        const z = world.zone(zx, zy);
+        for (let i = 0; i < z.object.length; i++) {
+          if (!z.object[i]) continue;
+          objects++;
+          const ground = DATA.terrainIndex.get(DATA.biomes[z.biome[i]].ground);
+          expect(z.terrain[i]).toBe(ground);
+        }
+      }
+    }
+    expect(objects).toBeGreaterThan(0);
+    for (const t of DATA.terrains) expect(DATA.objectIndex.has(t.id)).toBe(false);
+  });
+
   test('格子的資訊', () => {
     const p = startPosition(world);
     const c = world.cell(p.x, p.y);

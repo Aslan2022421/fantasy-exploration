@@ -1,4 +1,4 @@
-// 地形生成：高度、溫度、濕度三層雜訊 → 每格的生態與地形，加上明暗與台地立面。
+// 地形生成：高度、溫度、濕度三層雜訊 → 每格的生態、地形層與物件層，加上明暗與台地立面。
 // 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
 
 import { gradient, shadeLevel } from './hillshade.js';
@@ -54,9 +54,13 @@ export function createTerrainGen(seed, data) {
       biomeGrid[t * 3 + w] = b;
     }
   }
+  const objectId = (name) => {
+    if (!data.objectIndex.has(name)) throw new Error(`物件生成需要的物件不在資料裡：${name}`);
+    return data.objectIndex.get(name);
+  };
   const flora = data.biomes.map((b) => ({
     ground: id(b.ground),
-    list: b.flora.map((f) => [id(f.terrain), f.density]),
+    list: b.flora.map((f) => [objectId(f.object), f.density]),
   }));
 
   const heightAt = (x, y) => fbm(nHeight, x, y, GEN.heightBase, GEN.heightOctaves);
@@ -65,22 +69,28 @@ export function createTerrainGen(seed, data) {
   const wetAt = (x, y) => fbm(nWet, x, y, GEN.climateBase, GEN.wetOctaves);
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
 
-  // 一格的地形：h 高度、slope 坡度、biome 生態編號、wet 濕度、relief 台地立面
+  // 地形層：h 高度、slope 坡度、biome 生態編號、wet 濕度、relief 台地立面
   // 岩壁只長在「高、陡，而且正好是台階立面」的格子：陡坡上成一道道斷崖，不會整片長滿
-  function classify(x, y, h, slope, biome, wet, relief) {
+  function classify(h, slope, biome, wet, relief) {
     const shift = GEN.wetWaterShift * wet;
     if (h < GEN.deepWater + shift) return DEEP;
     if (h < GEN.shallowWater + shift) return SHALLOW;
     const onFace = relief === FACE || relief === FACE_FAR;
     if (onFace && h > GEN.wallMinHeight && slope > GEN.wallSlope) return WALL;
     if (h > GEN.mountain) return MOUNTAIN;
+    return flora[biome].ground;
+  }
+
+  // 物件層：只撒在該生態的平地上。回傳物件編號＋1，0 是沒有物件
+  function placeObject(x, y, biome, terrain) {
     const f = flora[biome];
+    if (terrain !== f.ground) return 0;
     const m = Math.min(1, Math.max(0, 0.5 + 1.5 * fbm(nFlora, x, y, GEN.floraBase, 2)));
     for (let i = 0; i < f.list.length; i++) {
-      const [terrain, density] = f.list[i];
-      if (hash01(seed, x, y, i) < Math.min(1, density * 2 * m)) return terrain;
+      const [object, density] = f.list[i];
+      if (hash01(seed, x, y, i) < Math.min(1, density * 2 * m)) return object + 1;
     }
-    return f.ground;
+    return 0;
   }
 
   // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算兩圈高度，明暗、坡度與立面在邊上也正確
@@ -88,6 +98,7 @@ export function createTerrainGen(seed, data) {
     const n = size * size;
     const height = new Uint8Array(n);
     const terrain = new Uint8Array(n);
+    const object = new Uint8Array(n); // 物件層：物件編號＋1，0 是沒有
     const shade = new Uint8Array(n);
     const relief = new Uint8Array(n);
     const biome = new Uint8Array(n);
@@ -116,11 +127,12 @@ export function createTerrainGen(seed, data) {
         height[i] = Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5);
         biome[i] = b;
         relief[i] = reliefOf(tat(x, y, -2), tat(x, y, -1), tat(x, y, 0), tat(x, y, 1));
-        terrain[i] = classify(X, Y, h, Math.hypot(g.dx, g.dy), b, wet, relief[i]);
+        terrain[i] = classify(h, Math.hypot(g.dx, g.dy), b, wet, relief[i]);
+        object[i] = placeObject(X, Y, b, terrain[i]);
         shade[i] = shadeLevel(g.dx, g.dy);
       }
     }
-    return { zx, zy, size, height, terrain, shade, relief, biome };
+    return { zx, zy, size, height, terrain, object, shade, relief, biome };
   }
 
   return { genZone, heightAt, terraceHeightAt, tempAt, wetAt, biomeAt };

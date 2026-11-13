@@ -14,6 +14,14 @@ test('查看一格寫出地形、生態、氣候與高度', () => {
   expect(text).toMatch(/（(寒冷|溫和|炎熱)、(乾燥|普通|潮濕)），高度 \d+$/);
 });
 
+test('有物件時先寫物件，再寫它長在哪種地形上', () => {
+  let found = null;
+  for (let y = 100; y < 200 && !found; y++)
+    for (let x = 100; x < 200 && !found; x++) if (world.objectAt(x, y) >= 0) found = { x, y };
+  const c = world.cell(found.x, found.y);
+  expect(describePlace(world, found.x, found.y)).toMatch(new RegExp(`^${c.object.name}，長在${c.terrain.name}上。`));
+});
+
 test('過不去的地形會註明', () => {
   let found = null;
   for (let y = 0; y < world.height && !found; y++)

@@ -6,9 +6,37 @@
     "color": "#5f8a4a",
     "passable": true,
     "height": 3,
+    "sizes": [2, 2, 2, 3, 3, 4],
     "tile": null
   },
-  { "id": "conifer", "name": "針葉樹", "glyph": "↑", "color": "#5a8a6a", "passable": true, "height": 3, "tile": null },
-  { "id": "jungle", "name": "叢林", "glyph": "♠", "color": "#4f9a4a", "passable": true, "height": 3, "tile": null },
-  { "id": "shrub", "name": "矮叢", "glyph": "τ", "color": "#8a9a5a", "passable": true, "height": 2, "tile": null }
+  {
+    "id": "conifer",
+    "name": "針葉樹",
+    "glyph": "↑",
+    "color": "#5a8a6a",
+    "passable": true,
+    "height": 3,
+    "sizes": [2, 2, 3, 3, 3, 4],
+    "tile": null
+  },
+  {
+    "id": "jungle",
+    "name": "叢林",
+    "glyph": "♠",
+    "color": "#4f9a4a",
+    "passable": true,
+    "height": 3,
+    "sizes": [2, 3, 3, 3, 4],
+    "tile": null
+  },
+  {
+    "id": "shrub",
+    "name": "矮叢",
+    "glyph": "τ",
+    "color": "#8a9a5a",
+    "passable": true,
+    "height": 2,
+    "sizes": [1],
+    "tile": null
+  }
 ]

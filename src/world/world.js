@@ -5,7 +5,7 @@
 import { bandOf, createTerrainGen, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 1;
+export const WORLD_VERSION = 2; // 2：多格物件
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;
@@ -121,6 +121,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     reliefAt(x, y) {
       const i = locate(x, y);
       return i < 0 ? 0 : last.relief[i];
+    },
+    // 這格在樹冠的哪一側（footprint.js 的 PART_MID、PART_LIT、PART_DARK）
+    objectPartAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? 0 : last.objectPart[i];
     },
     // 物件層：物件編號（data.objects 的索引）；沒有物件或世界外是 -1
     objectAt(x, y) {

@@ -56,6 +56,23 @@ describe('區與區的交界', () => {
     }
   });
 
+  test('多格物件跨區也接得上：換一個區的大小去生，重疊的地方地形、物件、樹冠分側完全一樣', () => {
+    const big = gen.genZone(0, 0, 2 * Z); // 0～191
+    const small = gen.genZone(1, 0, Z); // 96～191
+    let objects = 0;
+    for (let y = 0; y < Z; y++) {
+      for (let x = 0; x < Z; x++) {
+        const s = y * Z + x;
+        const b = y * 2 * Z + (Z + x);
+        expect(small.terrain[s]).toBe(big.terrain[b]);
+        expect(small.object[s]).toBe(big.object[b]);
+        expect(small.objectPart[s]).toBe(big.objectPart[b]);
+        if (small.object[s]) objects++;
+      }
+    }
+    expect(objects).toBeGreaterThan(0);
+  });
+
   test('邊上的高度層、水與台地立面，等於單獨算那幾格的結果', () => {
     const z = gen.genZone(1, 1, Z);
     const tierAt = (x, y) => gen.landform.cellAt(x, y).tier;

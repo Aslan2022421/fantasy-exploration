@@ -1,0 +1,39 @@
+// 多格物件的佔地：一棵樹有一個錨點（左上角），從錨點往右下長出直徑 d 格的一團（接近圓形）。
+// 樹冠的哪一側亮：光從右上照，右上那半亮、左下那半暗，中間一條是中間色。
+// 純函式，可以在 Node 裡測
+
+export const MAX_SIZE = 4;
+
+export const PART_MID = 0;
+export const PART_LIT = 1; // 右上，被照到
+export const PART_DARK = 2; // 左下，背光
+
+// (i, j) 是相對錨點的位置（0～d-1）；在不在直徑 d 的那一團裡
+export function inFootprint(i, j, d) {
+  if (i < 0 || j < 0 || i >= d || j >= d) return false;
+  const c = (d - 1) / 2;
+  const r = d / 2 + 0.1;
+  return (i - c) ** 2 + (j - c) ** 2 <= r * r;
+}
+
+// 直徑 d 那一團有幾格
+export function areaOf(d) {
+  let n = 0;
+  for (let j = 0; j < d; j++) for (let i = 0; i < d; i++) if (inFootprint(i, j, d)) n++;
+  return n;
+}
+
+// 一組大小平均佔幾格（用來換算撒錨點的機率，讓樹變大後林子的密度不會跟著暴增）
+export function meanArea(sizes) {
+  return sizes.reduce((s, d) => s + areaOf(d), 0) / sizes.length;
+}
+
+// (i, j) 在直徑 d 的樹冠裡屬於哪一側
+export function partOf(i, j, d) {
+  if (d <= 1) return PART_MID;
+  const c = (d - 1) / 2;
+  const v = i - c - (j - c); // 往右、往上越大
+  if (v > 0.5) return PART_LIT;
+  if (v < -0.5) return PART_DARK;
+  return PART_MID;
+}

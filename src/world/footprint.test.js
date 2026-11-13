@@ -1,0 +1,21 @@
+import { expect, test } from 'vitest';
+import { areaOf, inFootprint, meanArea, PART_DARK, PART_LIT, PART_MID, partOf } from './footprint.js';
+
+test('直徑 1～4 的佔地格數：1、4、9、12（4 格的去掉四個角）', () => {
+  expect([1, 2, 3, 4].map(areaOf)).toEqual([1, 4, 9, 12]);
+  expect(inFootprint(0, 0, 4)).toBe(false);
+  expect(inFootprint(1, 0, 4)).toBe(true);
+  expect(inFootprint(4, 0, 4)).toBe(false);
+});
+
+test('平均佔地照 sizes 裡出現的次數算', () => {
+  expect(meanArea([1])).toBe(1);
+  expect(meanArea([2, 4])).toBe(8);
+});
+
+test('樹冠右上亮、左下暗、對角線上是中間色；一格的物件沒有分側', () => {
+  expect(partOf(2, 0, 3)).toBe(PART_LIT);
+  expect(partOf(0, 2, 3)).toBe(PART_DARK);
+  expect(partOf(1, 1, 3)).toBe(PART_MID);
+  expect(partOf(0, 0, 1)).toBe(PART_MID);
+});

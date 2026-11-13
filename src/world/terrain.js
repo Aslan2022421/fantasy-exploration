@@ -1,6 +1,7 @@
 // 地形生成：大地形與水（landform.js）、溫度、濕度 → 每格的生態、地形層與物件層，加上明暗與台地立面。
 // 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
 
+import { inFootprint, MAX_SIZE, meanArea, partOf } from './footprint.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { fbm, hash01, makeNoise } from './noise.js';
@@ -73,55 +74,88 @@ export function createTerrainGen(seed, data) {
     return flora[biome].ground;
   }
 
-  // 物件層：只撒在該生態的平地上。回傳物件編號＋1，0 是沒有物件
-  function placeObject(x, y, biome, terrain) {
+  // 物件層的錨點：這格是不是一棵物件的左上角。只撒在該生態的平地上。
+  // 回傳 { object, size } 或 null。物件依物種有大小（資料的 sizes），撒的機率除以平均佔地，
+  // 樹變大後林子的密度不會跟著暴增
+  const objectArea = data.objects.map((o) => meanArea(o.sizes));
+  function anchorAt(x, y, biome, terrain) {
     const f = flora[biome];
-    if (terrain !== f.ground) return 0;
+    if (terrain !== f.ground) return null;
     const m = Math.min(1, Math.max(0, 0.5 + 1.5 * fbm(nFlora, x, y, GEN.floraBase, 2)));
     for (let i = 0; i < f.list.length; i++) {
       const [object, density] = f.list[i];
-      if (hash01(seed, x, y, i) < Math.min(1, density * 2 * m)) return object + 1;
+      if (hash01(seed, x, y, i) < Math.min(1, density * 2 * m) / objectArea[object]) {
+        const sizes = data.objects[object].sizes;
+        return { object, size: sizes[Math.floor(hash01(seed, x, y, 50 + i) * sizes.length)] };
+      }
     }
-    return 0;
+    return null;
   }
 
-  // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算兩圈，明暗、坡度與立面在邊上也正確
+  // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算 PAD 圈：明暗、坡度與立面要看鄰格，
+  // 多格物件的錨點可能在區外左上方（最遠 MAX_SIZE-1 格）
   function genZone(zx, zy, size) {
     const n = size * size;
     const height = new Uint8Array(n);
     const terrain = new Uint8Array(n);
     const object = new Uint8Array(n); // 物件層：物件編號＋1，0 是沒有
+    const objectPart = new Uint8Array(n); // 這格在樹冠的哪一側（footprint.js 的 PART_*）
     const shade = new Uint8Array(n);
     const relief = new Uint8Array(n);
-    const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4；亮度與斜投影抬高幾行都看它
+    const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 7
     const biome = new Uint8Array(n);
-    const PAD = 2;
+    const PAD = Math.max(2, MAX_SIZE - 1);
     const B = size + PAD * 2;
     const x0 = zx * size;
     const y0 = zy * size;
     const g = land.grid(x0 - PAD, y0 - PAD, B, B);
-    const k = (x, y) => (y + PAD) * B + (x + PAD);
+    // 先把整片（含外圍）的生態、地形、錨點算好
+    const bAll = new Uint8Array(B * B);
+    const tAll = new Uint8Array(B * B);
+    const anchors = new Array(B * B).fill(null);
+    for (let y = 0; y < B; y++) {
+      for (let x = 0; x < B; x++) {
+        const c = y * B + x;
+        const X = x0 + x - PAD;
+        const Y = y0 + y - PAD;
+        bAll[c] = biomeAt(tempAt(X, Y), wetAt(X, Y));
+        tAll[c] = classify(g.water[c], g.h[c], bAll[c]);
+        anchors[c] = anchorAt(X, Y, bAll[c], tAll[c]);
+      }
+    }
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const c = k(x, y);
+        const c = (y + PAD) * B + (x + PAD);
         const h = g.h[c];
-        const X = x0 + x;
-        const Y = y0 + y;
-        const b = biomeAt(tempAt(X, Y), wetAt(X, Y));
         const i = y * size + x;
         height[i] = Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5);
-        biome[i] = b;
+        biome[i] = bAll[c];
         tier[i] = g.tier[c];
         relief[i] = reliefOf(g.tier[c - 2 * B], g.tier[c - B], g.tier[c], g.tier[c + B]);
-        terrain[i] = classify(g.water[c], h, b);
-        object[i] = placeObject(X, Y, b, terrain[i]);
+        terrain[i] = tAll[c];
+        // 物件：這格要是平地，再往左上找會蓋到這格的錨點；好幾棵重疊時取雜湊最小的那棵
+        if (terrain[i] === flora[biome[i]].ground) {
+          let best = null;
+          for (let j = 0; j < MAX_SIZE; j++) {
+            for (let k = 0; k < MAX_SIZE; k++) {
+              const a = anchors[c - j * B - k];
+              if (!a || !inFootprint(k, j, a.size)) continue;
+              const rank = hash01(seed, x0 + x - k, y0 + y - j, 77);
+              if (!best || rank < best.rank) best = { a, rank, i: k, j };
+            }
+          }
+          if (best) {
+            object[i] = best.a.object + 1;
+            objectPart[i] = partOf(best.i, best.j, best.a.size);
+          }
+        }
         if (g.water[c] === WATER_NONE) {
           const grad = gradient((dx, dy) => g.h[c + dy * B + dx]);
           shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy), terrain[i] === MOUNTAIN);
         } else shade[i] = waterLevel(h);
       }
     }
-    return { zx, zy, size, height, terrain, object, shade, relief, tier, biome };
+    return { zx, zy, size, height, terrain, object, objectPart, shade, relief, tier, biome };
   }
 
   return { genZone, heightAt: land.heightAt, landform: land, tempAt, wetAt, biomeAt };

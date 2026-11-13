@@ -4,6 +4,7 @@
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
+import { PART_DARK, PART_LIT, PART_MID } from '../world/footprint.js';
 import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
@@ -13,6 +14,7 @@ import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from './shade
 export const RIM_GLYPH = '#'; // 崖邊（照參考圖的一排 #）
 const RIM_UP = 1; // 崖邊比所在那層亮幾級
 const SHADOW_DIM = 0.45; // 崖下暗帶的亮度
+const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65 }; // 樹冠各側的亮度
 
 export function createWorldView(mapView, world, data, { edges = true } = {}) {
   const { terrains, objects } = data;
@@ -42,8 +44,9 @@ export function createWorldView(mapView, world, data, { edges = true } = {}) {
     }
     const o = world.objectAt(x, y);
     if (o >= 0) {
+      // 多格的樹冠：右上被照到的一側亮、左下背光的一側暗，看得出是一團鼓起來的東西
       look.glyph = objects[o].glyph;
-      look.fg = objectFg[o][level][FLAT];
+      look.fg = dimColor(objectFg[o][level][FLAT], PART_FACTOR[world.objectPartAt(x, y)]);
       if (edge === EDGE_SHADOW) look.fg = dimColor(look.fg, SHADOW_DIM);
     }
     return look;

@@ -23,7 +23,8 @@ import { dimColor, mixColor } from './shades.js';
 
 const CHUNK = 16; // 分塊邊長（格）
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
-const SIGHT = { near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 }; // 視野外壓暗：COLORS.dark 的 RGB
+// 視野外壓暗：COLORS.dark 的 RGB。使用者說先關閉（on: false），程式留著
+const SIGHT = { on: false, near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 };
 // 路線的亮度隨高度、線寬與虛線的 [畫, 空]（字元像素）
 const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3] };
 
@@ -174,14 +175,15 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       // 不完全蓋死，亮的山脊與牆還留一點輪廓。還沒有真的視野計算，先用距離
       const p0 = groundHeight(world.tierAt(player.x, player.y));
       const pc = placeOf(f, player.x, player.y, p0);
-      mapView.vignette(pc.px + 4, pc.py + 4, SIGHT.near * 8, SIGHT.far * 8, SIGHT.rgb, SIGHT.alpha);
+      if (SIGHT.on) mapView.vignette(pc.px + 4, pc.py + 4, SIGHT.near * 8, SIGHT.far * 8, SIGHT.rgb, SIGHT.alpha);
       drawMarks(f, overlay); // 目標、查看與路線畫在壓暗之上，遠處也看得到
       drawRoute(f, overlay.route, player);
-      // 冒險者：從腳下地面往上疊 PLAYER_LAYERS 層，只畫字，下層往腳下底色壓淡
+      // 冒險者：疊 PLAYER_LAYERS 層，最底層就在腳下那格的地面上，往上每層照地形的間距（4 像素）錯開，
+      // 看得出站在哪一格；不用樹的 8 像素（那樣頂層會跑到隔壁格）。只畫字，下層往腳下底色壓淡
       const pg = look.ground(player.x, player.y).bg;
-      for (let dh = 1; dh <= PLAYER_LAYERS; dh++) {
-        const fg = fade(COLORS.player, pg, fadeAt(PLAYER_LAYERS - dh));
-        const { px, py } = placeOf(f, player.x, player.y, p0, dh);
+      for (let i = 0; i < PLAYER_LAYERS; i++) {
+        const fg = fade(COLORS.player, pg, fadeAt(PLAYER_LAYERS - 1 - i));
+        const { px, py } = placeOf(f, player.x, player.y, p0 + i);
         mapView.drawShifted(0, 0, px, py, '@', fg, null);
       }
     });

@@ -55,18 +55,15 @@ test('路線是線：從冒險者連到每一步，跟著地面高度錯開，�
   expect(lines[1].offset).toBeGreaterThan(lines[0].offset); // 花紋接續上一段
 });
 
-test('樹與冒險者往上每層錯得比地形多：預設大小（一格 16 像素）離地 4 層約兩格', () => {
+test('樹往上每層錯得比地形多：預設大小（一格 16 像素）離地 4 層約兩格', () => {
   const s = liftUp(4, K);
   expect(s.ox * K).toBeCloseTo(32); // 32 螢幕像素＝兩格
   expect(liftUp(4, K).ox).toBeGreaterThan(shiftUp(4, K).ox);
 });
 
-test('視野外壓暗：以冒險者為中心', () => {
+test('視野外壓暗先關閉（使用者定）：不畫', () => {
   draw({ x: 0, y: 0 }, { x: 10, y: 10 });
-  const v = drawn.find((d) => d.vignette);
-  const s1 = shiftUp(groundHeight(1), K);
-  expect(v).toMatchObject({ cx: 10 * 8 + s1.ox + 4, cy: 10 * 8 + s1.oy + 4 });
-  expect(v.r1).toBeGreaterThan(v.r0);
+  expect(drawn.some((d) => d.vignette)).toBe(false);
 });
 
 test('分塊只畫一次：相機沒動時再畫，不再重畫分塊，只貼圖', () => {
@@ -78,12 +75,12 @@ test('分塊只畫一次：相機沒動時再畫，不再重畫分塊，只貼�
   expect(drawn.some((d) => d.blit)).toBe(true);
 });
 
-test('冒險者從腳下地面往右上疊兩層、只畫字，錯開量只看高度', () => {
+test('冒險者疊兩層：最底層在腳下地面上，往上照地形的間距、只畫字', () => {
   draw({ x: 0, y: 0 }, { x: 10, y: 22 });
   const p = drawn.filter((d) => d.ch === '@');
-  const g = shiftUp(groundHeight(4), K);
-  const at = (dh) => ({ px: 10 * 8 + g.ox + liftUp(dh, K).ox, py: 22 * 8 + g.oy + liftUp(dh, K).oy });
-  expect(p.map((d) => ({ px: d.px, py: d.py }))).toEqual([at(1), at(2)]);
+  // 最底層在腳下地面上，往上照地形的間距
+  const at = (h) => ({ px: 10 * 8 + shiftUp(h, K).ox, py: 22 * 8 + shiftUp(h, K).oy });
+  expect(p.map((d) => ({ px: d.px, py: d.py }))).toEqual([at(groundHeight(4)), at(groundHeight(4) + 1)]);
   expect(shiftUp(3, K).ox).toBeGreaterThan(0); // 往右
   expect(shiftUp(3, K).oy).toBeLessThan(0); // 往上
   expect(p.every((d) => d.bg === null)).toBe(true);

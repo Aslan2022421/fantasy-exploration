@@ -5,7 +5,7 @@ import { PART_TRUNK } from './footprint.js';
 import { gradient, lightLevel, shadeLevel } from './hillshade.js';
 import { LAND, landTierOf, MAX_TIER, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { reliefOf } from './relief.js';
-import { createTerrainGen, waterLevel } from './terrain.js';
+import { createTerrainGen, GEN, waterLevel } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
 const SEED = 20261112;
@@ -186,20 +186,33 @@ describe('世界的形狀', () => {
     expect(landTierOf(0.5, LAND.mountain + 0.01)).toBe(LAND.landTiers + 1);
   });
 
-  test('物件只撒在該生態的平地上；物件層跟地形層分開', () => {
+  test('物件只長在該生態的平地或山地上；山地越高樹越少，高過樹線就沒有；物件層跟地形層分開', () => {
+    const mountain = DATA.terrainIndex.get('mountain');
+    const treeline = Math.round((LAND.mountain + GEN.treelineRange + 1) * 127.5); // 換成 0～255 的高度
+    const low = Math.round((LAND.mountain + 0.05 + 1) * 127.5);
     let objects = 0;
+    const band = { lowCells: 0, lowTrees: 0, highCells: 0, highTrees: 0 };
     for (let zy = 0; zy < 3; zy++) {
       for (let zx = 0; zx < 3; zx++) {
         const z = world.zone(zx, zy);
         for (let i = 0; i < z.object.length; i++) {
+          const onMountain = z.terrain[i] === mountain;
+          if (onMountain) {
+            const lowBand = z.height[i] <= low;
+            band[lowBand ? 'lowCells' : 'highCells']++;
+            if (z.object[i]) band[lowBand ? 'lowTrees' : 'highTrees']++;
+          }
           if (!z.object[i]) continue;
           objects++;
           const ground = DATA.terrainIndex.get(DATA.biomes[z.biome[i]].ground);
-          expect(z.terrain[i]).toBe(ground);
+          expect([ground, mountain]).toContain(z.terrain[i]);
+          if (onMountain) expect(z.height[i]).toBeLessThanOrEqual(treeline + 1);
         }
       }
     }
     expect(objects).toBeGreaterThan(0);
+    expect(band.lowTrees).toBeGreaterThan(0); // 山地上有樹
+    expect(band.highTrees / Math.max(1, band.highCells)).toBeLessThan(band.lowTrees / band.lowCells);
     for (const t of DATA.terrains) expect(DATA.objectIndex.has(t.id)).toBe(false);
   });
 
@@ -223,6 +236,28 @@ describe('世界的形狀', () => {
     }
     expect(trunks).toBeGreaterThan(0);
     expect(canopy).toBeGreaterThan(trunks);
+  });
+
+  test('每格樹冠附近 3 格內都有同種、同高度層的樹幹（樹冠不跨層，也不會沒有根）', () => {
+    const z = world.zone(1, 1);
+    let checked = 0;
+    for (let i = 0; i < z.object.length && checked < 400; i++) {
+      const o = z.object[i];
+      if (!o || !DATA.objects[o - 1].trunk || z.objectPart[i] === PART_TRUNK) continue;
+      const x = i % Z;
+      const y = Math.floor(i / Z);
+      if (x < 3 || y < 3 || x > Z - 4 || y > Z - 4) continue; // 邊上的樹幹可能在隔壁區
+      let found = false;
+      for (let dy = -3; dy <= 3 && !found; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          const j = (y + dy) * Z + (x + dx);
+          if (z.object[j] === o && z.objectPart[j] === PART_TRUNK && z.tier[j] === z.tier[i]) found = true;
+        }
+      }
+      expect(found, `(${x}, ${y})`).toBe(true);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(50);
   });
 
   test('格子的資訊', () => {

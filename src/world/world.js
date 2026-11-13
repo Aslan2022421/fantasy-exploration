@@ -6,7 +6,7 @@ import { PART_TRUNK } from './footprint.js';
 import { bandOf, createTerrainGen, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 3; // 3：樹幹擋路
+export const WORLD_VERSION = 4; // 4：山地長樹、樹冠只在樹幹同一層
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;

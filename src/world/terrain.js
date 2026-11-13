@@ -13,6 +13,7 @@ export const GEN = {
   tempOctaves: 2,
   wetOctaves: 3,
   floraBase: 24, // 樹叢成片的大小
+  treelineRange: 0.2, // 山地高出山地門檻這麼多就沒有樹（中間線性變少）
   band: 0.1, // 溫度、濕度超過 ±這個值才算寒冷／炎熱、乾燥／潮濕
   waterShadeStep: 0.05, // 水每深這麼多暗一級
 };
@@ -74,17 +75,22 @@ export function createTerrainGen(seed, data) {
     return flora[biome].ground;
   }
 
-  // 物件層的錨點：這格是不是一棵物件的左上角。只撒在該生態的平地上。
-  // 回傳 { object, size } 或 null。物件依物種有大小（資料的 sizes），撒的機率除以平均佔地，
-  // 樹變大後林子的密度不會跟著暴增
+  // 植物長得出來的地面：該生態的平地，或山地（使用者定：山地上也有樹）
+  const canGrow = (terrain, biome) => terrain === flora[biome].ground || terrain === MOUNTAIN;
+
+  // 物件層的錨點：這格是不是一棵物件的左上角。回傳 { object, size } 或 null。
+  // 物件依物種有大小（資料的 sizes），撒的機率除以平均佔地，樹變大後林子的密度不會跟著暴增。
+  // 山地上越高樹越少，高出山地門檻 treelineRange 就沒有樹（使用者定：山地的高度決定樹多不多）
   const objectArea = data.objects.map((o) => meanArea(o.sizes));
-  function anchorAt(x, y, biome, terrain) {
+  function anchorAt(x, y, biome, terrain, h) {
     const f = flora[biome];
-    if (terrain !== f.ground) return null;
+    if (!canGrow(terrain, biome)) return null;
+    const line = terrain === MOUNTAIN ? Math.max(0, 1 - (h - LAND.mountain) / GEN.treelineRange) : 1;
+    if (line <= 0) return null;
     const m = Math.min(1, Math.max(0, 0.5 + 1.5 * fbm(nFlora, x, y, GEN.floraBase, 2)));
     for (let i = 0; i < f.list.length; i++) {
       const [object, density] = f.list[i];
-      if (hash01(seed, x, y, i) < Math.min(1, density * 2 * m) / objectArea[object]) {
+      if (hash01(seed, x, y, i) < (Math.min(1, density * 2 * m) * line) / objectArea[object]) {
         const sizes = data.objects[object].sizes;
         return { object, size: sizes[Math.floor(hash01(seed, x, y, 50 + i) * sizes.length)] };
       }
@@ -120,7 +126,7 @@ export function createTerrainGen(seed, data) {
         const Y = y0 + y - PAD;
         bAll[c] = biomeAt(tempAt(X, Y), wetAt(X, Y));
         tAll[c] = classify(g.water[c], g.h[c], bAll[c]);
-        anchors[c] = anchorAt(X, Y, bAll[c], tAll[c]);
+        anchors[c] = anchorAt(X, Y, bAll[c], tAll[c], g.h[c]);
       }
     }
     for (let y = 0; y < size; y++) {
@@ -133,22 +139,27 @@ export function createTerrainGen(seed, data) {
         tier[i] = g.tier[c];
         relief[i] = reliefOf(g.tier[c - 2 * B], g.tier[c - B], g.tier[c], g.tier[c + B]);
         terrain[i] = tAll[c];
-        // 物件：這格要是平地，再往左上找會蓋到這格的錨點；好幾棵重疊時取雜湊最小的那棵
-        if (terrain[i] === flora[biome[i]].ground) {
+        // 物件：往左上找會蓋到這格的錨點。使用者定：樹冠底下要是平地（樹幹被破壞後樹冠消失，露出的是平地），
+        // 所以樹冠只長在跟樹幹同一個高度層、而且長得出植物的格子上；樹幹那格本身也要長得出來。
+        // 樹幹永遠露出來（它是樹冠的根）；其餘重疊時取雜湊最小的那棵
+        if (canGrow(terrain[i], biome[i])) {
           let best = null;
           for (let j = 0; j < MAX_SIZE; j++) {
             for (let k = 0; k < MAX_SIZE; k++) {
-              const a = anchors[c - j * B - k];
+              const ac = c - j * B - k;
+              const a = anchors[ac];
               if (!a || !inFootprint(k, j, a.size)) continue;
-              const rank = hash01(seed, x0 + x - k, y0 + y - j, 77);
-              if (!best || rank < best.rank) best = { a, rank, i: k, j };
+              const tc = trunkCell(a.size);
+              const tci = ac + tc.j * B + tc.i;
+              if (!canGrow(tAll[tci], bAll[tci]) || g.tier[tci] !== g.tier[c]) continue;
+              const isTrunk = data.objects[a.object].trunk && k === tc.i && j === tc.j;
+              const rank = isTrunk ? -1 : hash01(seed, x0 + x - k, y0 + y - j, 77);
+              if (!best || rank < best.rank) best = { a, rank, i: k, j, isTrunk };
             }
           }
           if (best) {
             object[i] = best.a.object + 1;
-            const tc = trunkCell(best.a.size);
-            const isTrunk = data.objects[best.a.object].trunk && best.i === tc.i && best.j === tc.j;
-            objectPart[i] = isTrunk ? PART_TRUNK : partOf(best.i, best.j, best.a.size);
+            objectPart[i] = best.isTrunk ? PART_TRUNK : partOf(best.i, best.j, best.a.size);
           }
         }
         if (g.water[c] === WATER_NONE) {

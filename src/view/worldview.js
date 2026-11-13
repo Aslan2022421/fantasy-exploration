@@ -12,17 +12,24 @@ import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
-import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from './shades.js';
+import { buildObjectShades, buildShadeTable, dimColor, mixColor, rampGlyph } from './shades.js';
 
 const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
 const SHADOW_DIM = 0.6; // 影子裡的亮度
 const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_TRUNK]: 0.8 }; // 樹冠各側的亮度
 export const TRUNK_GLYPH = 'Φ'; // 樹幹：走不過去的那一格，跟樹冠分得出來
+const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往山地靠幾成
 
 export function createWorldView(mapView, world, data, { extrude = true } = {}) {
   const { terrains, objects } = data;
   const shades = buildShadeTable(terrains); // { step, fg, bg }：[地形][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
+  // 山上的樹：顏色往山地靠（使用者定），用另一張表
+  const mountain = terrains.findIndex((t) => t.id === 'mountain');
+  const mountainColor = mountain >= 0 ? terrains[mountain].color : null;
+  const objectFgMountain = mountainColor
+    ? buildObjectShades(objects.map((o) => ({ ...o, color: mixColor(o.color, mountainColor, MOUNTAIN_TINT) })))
+    : objectFg;
 
   // 一格地面的樣子（字元依亮度從這種地形的階梯選；同一亮度每格用雜湊換字）
   function groundLook(x, y) {
@@ -53,7 +60,8 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
     if (o >= 0) {
       const part = world.objectPartAt(x, y);
       look.glyph = part === PART_TRUNK ? TRUNK_GLYPH : objects[o].glyph;
-      look.fg = dimColor(objectFg[o][look.level][FLAT], PART_FACTOR[part]);
+      const table = world.terrainAt(x, y) === mountain ? objectFgMountain : objectFg;
+      look.fg = dimColor(table[o][look.level][FLAT], PART_FACTOR[part]);
     } else if (extrude && inShadow(world, objects, x, y)) {
       look.fg = dimColor(look.fg, SHADOW_DIM);
       look.bg = dimColor(look.bg, SHADOW_DIM);

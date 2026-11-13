@@ -11,14 +11,13 @@ const Glyph = z.string().length(1); // 地圖上的字元，必須在 CP437 表�
 export const TerrainSchema = z.object({
   id: Id,
   name: z.string().min(1),
-  glyph: Glyph, // 說明與圖例裡的代表字；style 是 glyph 時也是地圖上畫的字
+  glyph: Glyph, // 說明與圖例裡的代表字
   color: Color,
   passable: z.boolean(),
-  shade: z.boolean(), // 要不要套地形明暗（水面不套）
-  // 畫法：
-  // ramp  地面，依亮度從密度階梯選字元，地面是統一的紋理、光照才讀得出來；
-  // glyph 用自己的字元（水面）
-  style: z.enum(['ramp', 'glyph']),
+  shade: z.boolean(), // 顏色要不要套明暗（水面不套）
+  // 這種地形自己的字元階梯，由暗（疏）到亮（密）。畫的時候依亮度選一階；
+  // 每一階可以寫好幾個字，各格用雜湊挑一個，同一亮度的地面不會排成規律的網點。空白只畫背景
+  ramp: z.array(z.string().min(1)).min(2),
   tile: z.string().nullable(), // 預留給圖塊模式
 });
 

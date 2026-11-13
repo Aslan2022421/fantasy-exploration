@@ -4,14 +4,15 @@
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子畫在頂面上；冒險者最後畫，永遠看得到
 
+import { hash01 } from '../world/noise.js';
 import { FACE, FACE_FAR, FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { MAX_LIFT, pick, screenOf, topRow } from './oblique.js';
-import { buildObjectShades, buildShadeTable, buildWallShades } from './shades.js';
+import { buildObjectShades, buildShadeTable, buildWallShades, rampGlyph } from './shades.js';
 
 export function createWorldView(mapView, world, data, { oblique = true } = {}) {
   const { terrains, objects } = data;
-  const shades = buildShadeTable(terrains); // { glyph, fg, bg }：[地形][明暗級數][立面]
+  const shades = buildShadeTable(terrains); // { step, fg, bg }：[地形][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
   const walls = buildWallShades(terrains); // [地形][側面第幾行]
 
@@ -21,8 +22,11 @@ export function createWorldView(mapView, world, data, { oblique = true } = {}) {
     const level = world.shadeAt(x, y);
     let relief = world.reliefAt(x, y);
     if (oblique && (relief === FACE || relief === FACE_FAR)) relief = FLAT;
+    // 同一亮度的格子也不全用同一個字：每格兩個雜湊值決定偏不偏一階、同一階挑哪個字
+    const a = hash01(world.seed, x, y, 101);
+    const b = hash01(world.seed, x, y, 102);
     const look = {
-      glyph: shades.glyph[t][level][relief],
+      glyph: rampGlyph(terrains[t].ramp, shades.step[t][level][relief], a, b),
       fg: shades.fg[t][level][relief],
       bg: shades.bg[t][level][relief],
     };

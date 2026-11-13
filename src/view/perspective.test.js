@@ -71,13 +71,14 @@ test('牆：比往中心那一格高才有，記下低處那格；水邊遠側�
   expect(wallRange(w, 10, 10, 10, 10)).toBeNull();
 });
 
-test('往斜上方錯開的量是固定螢幕像素：格子放大幾倍，字元像素就除以幾，總量有上限', () => {
+test('往上錯開的量是固定螢幕像素、接近垂直：格子放大幾倍，字元像素就除以幾，總量有上限', () => {
   for (const k of [1, 2, 3, 4]) {
     const s = shiftUp(2, k);
-    expect(s.ox * k).toBeCloseTo(2 * UP.px);
     expect(s.oy * k).toBeCloseTo(-2 * UP.px);
-    expect(shiftUp(999, k).ox * k).toBeCloseTo(UP.maxPx);
+    expect(s.ox * k).toBeCloseTo(2 * UP.px * UP.lean); // 只往右微微偏
+    expect(shiftUp(999, k).oy * k).toBeCloseTo(-UP.maxPx);
   }
+  expect(UP.lean).toBeLessThan(0.5);
   expect(shiftUp(0, 2)).toEqual({ ox: 0, oy: 0 });
 });
 
@@ -91,14 +92,13 @@ test('往斜上方疊的牆：比南、西、西南最低那格高才有，從�
   expect(wallSouth(w, 5, 3)).toBeNull(); // 高台東北那格：南、西一樣高，西南比它高
 });
 
-test('樹：第 1 層地貌、第 2 層留空，樹葉只在離地 +2，樹幹 +1～+4、頂端高過樹葉；矮叢實心 2 層', () => {
+test('樹：樹幹在下、樹葉在最頂層，樹冠其他格只有頂上的樹葉；矮叢實心 2 層', () => {
   const canopy = objectLayers(obj('broadleaf'), false);
-  expect(canopy.map((l) => l.dh)).toEqual(TREE.leaves);
+  expect(canopy.map((l) => [l.dh, l.part])).toEqual(TREE.leaves.map((dh) => [dh, 'leaf']));
   const trunk = objectLayers(obj('broadleaf'), true);
-  expect(Math.max(...trunk.filter((l) => l.part === 'trunk').map((l) => l.dh))).toBeGreaterThan(
-    Math.max(...TREE.leaves),
-  );
-  expect(trunk.filter((l) => l.dh === 2).map((l) => l.part)).toEqual(['trunk', 'leaf']);
+  const top = trunk.at(-1);
+  expect(top.part).toBe('leaf'); // 最上面是樹葉
+  expect(Math.max(...trunk.filter((l) => l.part === 'trunk').map((l) => l.dh))).toBeLessThan(top.dh);
   expect(objectLayers(obj('shrub'), false).map((l) => [l.dh, l.part])).toEqual([
     [1, 'solid'],
     [2, 'solid'],

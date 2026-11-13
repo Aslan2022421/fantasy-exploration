@@ -57,8 +57,8 @@ test('路線是線：從冒險者連到每一步，跟著地面高度錯開，�
 
 test('樹往上每層錯得比地形多：預設大小（一格 16 像素）離地 4 層約兩格', () => {
   const s = liftUp(4, K);
-  expect(s.ox * K).toBeCloseTo(32); // 32 螢幕像素＝兩格
-  expect(liftUp(4, K).ox).toBeGreaterThan(shiftUp(4, K).ox);
+  expect(-s.oy * K).toBeCloseTo(32); // 往上 32 螢幕像素＝兩格
+  expect(-liftUp(4, K).oy).toBeGreaterThan(-shiftUp(4, K).oy);
 });
 
 test('視野外壓暗先關閉（使用者定）：不畫', () => {

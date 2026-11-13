@@ -12,6 +12,7 @@ import {
   shiftOf,
   TREE,
   wallRange,
+  wallSouth,
 } from './perspective.js';
 
 // 測試用的小世界：tiers[y][x] 是高度層
@@ -66,6 +67,16 @@ test('牆：比往中心那一格高才有，記下低處那格；水邊遠側�
   expect(wallRange(w, 10, 10, 4, 10)).toBeNull(); // 近側的岸
   expect(wallRange(w, 10, 10, 16, 10)).toMatchObject({ from: groundHeight(1), to: groundHeight(3) - 1 });
   expect(wallRange(w, 10, 10, 10, 10)).toBeNull();
+});
+
+test('往斜上方疊的牆：比南、西、西南最低那格高才有，從那格的高度疊上來', () => {
+  const t = grid(9, 1);
+  t[4][4] = 3; // 一格高台
+  const w = fakeWorld(t);
+  expect(wallSouth(w, 4, 4)).toEqual({ from: groundHeight(1), to: groundHeight(3) - 1, low: { x: 4, y: 5 } });
+  t[4][3] = 0; // 西邊變成水，比南邊低
+  expect(wallSouth(w, 4, 4)).toMatchObject({ from: 0, low: { x: 3, y: 4 } });
+  expect(wallSouth(w, 5, 3)).toBeNull(); // 高台東北那格：南、西一樣高，西南比它高
 });
 
 test('樹：第 1 層地貌、第 2 層留空，樹葉只在離地 +2，樹幹 +1～+4、頂端高過樹葉；矮叢實心 2 層', () => {

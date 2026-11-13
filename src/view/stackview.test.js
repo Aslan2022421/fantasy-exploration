@@ -44,19 +44,22 @@ test('分塊只畫一次：相機沒動時再畫，不再重畫分塊，只貼�
   expect(drawn.some((d) => d.blit)).toBe(true);
 });
 
-test('冒險者從腳下地面往上疊兩層、只畫字，錯開量只看高度', () => {
+test('冒險者從腳下地面往右上疊兩層、只畫字，錯開量只看高度', () => {
   draw({ x: 0, y: 0 }, { x: 10, y: 22 });
   const p = drawn.filter((d) => d.ch === '@');
-  expect(p.map((d) => d.py)).toEqual([22 * 8 + shiftUp(groundHeight(4) + 1), 22 * 8 + shiftUp(groundHeight(4) + 2)]);
+  const at = (h) => ({ px: 10 * 8 + shiftUp(h).ox, py: 22 * 8 + shiftUp(h).oy });
+  expect(p.map((d) => ({ px: d.px, py: d.py }))).toEqual([at(groundHeight(4) + 1), at(groundHeight(4) + 2)]);
+  expect(shiftUp(3).ox).toBeGreaterThan(0); // 往右
+  expect(shiftUp(3).oy).toBeLessThan(0); // 往上
   expect(p.every((d) => d.bg === null)).toBe(true);
 });
 
 test('點畫面上看到台地頂面的那一點，選到台地那格；平地點哪格就是哪格', () => {
   draw({ x: 0, y: 0 }, { x: 10, y: 10 });
-  const top = 20 * 8 + shiftUp(groundHeight(4)); // 台地 y=20 的頂面畫在這裡
-  expect(view.cellAt({ x: 0, y: 0 }, 5, 0, 5 * 8 + 4, top + 1)).toEqual({ x: 5, y: 20 });
-  const flat = 5 * 8 + shiftUp(groundHeight(1));
-  expect(view.cellAt({ x: 0, y: 0 }, 5, 5, 5 * 8 + 4, flat + 4)).toEqual({ x: 5, y: 5 });
+  const s4 = shiftUp(groundHeight(4)); // 台地 (5, 20) 的頂面畫在這裡
+  expect(view.cellAt({ x: 0, y: 0 }, 0, 0, 5 * 8 + s4.ox + 1, 20 * 8 + s4.oy + 1)).toEqual({ x: 5, y: 20 });
+  const s1 = shiftUp(groundHeight(1));
+  expect(view.cellAt({ x: 0, y: 0 }, 0, 0, 5 * 8 + s1.ox + 4, 5 * 8 + s1.oy + 4)).toEqual({ x: 5, y: 5 });
 });
 
 test('相機平滑緩衝：目標一變先走一段，還沒到位回傳 true，大約半秒內到位', () => {

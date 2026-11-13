@@ -58,23 +58,34 @@ export function shiftOf(dx, dy, dh) {
   return { ox: (dx / dist) * s, oy: (dy / dist) * s };
 }
 
-// 往上疊（預設，使用者選 B：視差會頓、會頭暈）：錯開量只看高度，跟在畫面哪裡、相機在哪都無關，
-// 畫面是 100% 靜止的平行投影，走路時整張圖只平移。每高一層往上 step 個字元像素
-export const UP = { step: 1, maxShift: 24 };
-export const UP_SHIFT_CELLS = Math.ceil(UP.maxShift / 8);
+// 往斜上方疊（預設；使用者選 B 的平行投影，再要斜上方）：錯開量只看高度，跟在畫面哪裡、相機在哪都無關，
+// 畫面是 100% 靜止的平行投影，走路時整張圖只平移。每高一層往右上錯開 (dx, dy) 個字元像素，
+// 高的東西同時露出南面與西面兩面牆（光從右上照，露出的是背光面）
+export const UP = { dx: 1, dy: -1, maxLayers: 24 };
+export const UP_SHIFT_CELLS = Math.ceil(UP.maxLayers / 8);
 
-// 高度 h（層，原點是水面）往上錯開幾個字元像素（負的）
+// 高度 h（層，原點是水面）錯開多少字元像素：{ ox 往右（正）, oy 往上（負）}
 export function shiftUp(h) {
-  return -Math.min(UP.maxShift, Math.max(0, h) * UP.step) || 0; // || 0 把 -0 變 0
+  const s = Math.min(UP.maxLayers, Math.max(0, h));
+  return { ox: s * UP.dx || 0, oy: s * UP.dy || 0 }; // || 0 把 -0 變 0
 }
 
-// 往上疊時的牆：比南邊那一格高才有，回傳 { from, to, low }，不然 null
+// 往斜上方疊時的牆：比南、西、西南三格裡最低的那格高才有，從那格的高度疊上來。
+// 回傳 { from, to, low（最低那格的座標）}，不然 null
 export function wallSouth(world, x, y) {
-  if (!world.inside(x, y + 1)) return null;
+  let low = null;
+  for (const [nx, ny] of [
+    [x, y + 1],
+    [x - 1, y],
+    [x - 1, y + 1],
+  ]) {
+    if (!world.inside(nx, ny)) continue;
+    const h = groundHeight(world.tierAt(nx, ny));
+    if (!low || h < low.h) low = { x: nx, y: ny, h };
+  }
   const top = groundHeight(world.tierAt(x, y));
-  const low = groundHeight(world.tierAt(x, y + 1));
-  if (top <= low) return null;
-  return { from: Math.max(low, top - STACK.maxWall), to: top - 1, low: { x, y: y + 1 } };
+  if (!low || top <= low.h) return null;
+  return { from: Math.max(low.h, top - STACK.maxWall), to: top - 1, low: { x: low.x, y: low.y } };
 }
 
 // 往目標靠近一步：dt 毫秒過去後的新值；離目標夠近或太遠就直接到位

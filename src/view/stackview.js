@@ -1,8 +1,8 @@
-// 往上疊的畫法（預設；使用者選 B）。錯開量只看高度（perspective.js 的 shiftUp），跟相機在哪無關，
+// 往斜上方疊的畫法（預設；使用者選 B 再要斜上方）。錯開量只看高度（perspective.js 的 shiftUp），跟相機在哪無關，
 // 所以地圖可以先畫好存起來：世界切成 CHUNK×CHUNK 的分塊，每塊畫一次存成離屏圖層，之後只貼圖。
 // 相機平滑緩衝：相機位置是小數，每個畫面往目標靠近一點，整張圖只平移（不會頓、畫面裡沒有東西互相錯動）。
 // - 分塊裡照高度由低到高畫（地面、牆、物件各層），同高時北邊先畫、南邊後畫；
-//   東西會往上錯開進上面那塊，所以畫一塊時連它下面幾列也一起畫，超出的部分自然被裁掉
+//   東西會往右上錯開進隔壁的分塊，所以畫一塊時連它下面幾列、左邊幾欄也一起畫，超出的部分自然被裁掉
 // - 牆的下層往低處那格的底色壓淡，物件的下層往腳下的底色壓淡
 // - 冒險者、路線、目標每個畫面另外畫在最上面（不進快取），所以冒險者不會被樹擋住
 // 地圖內容改變（之後砍樹之類）時要呼叫 invalidate() 丟掉快取
@@ -21,7 +21,7 @@ import {
 import { mixColor } from './shades.js';
 
 const CHUNK = 16; // 分塊邊長（格）
-const BELOW = UP_SHIFT_CELLS + 1; // 畫一塊時往下多畫幾列
+const BELOW = UP_SHIFT_CELLS + 1; // 畫一塊時往下、往左多畫幾格
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
 
 const fadeCache = new Map();
@@ -77,11 +77,14 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     const y0 = cy * CHUNK;
     const buckets = [];
     for (let y = y0 - 1; y < y0 + CHUNK + BELOW; y++) {
-      for (let x = x0 - 1; x <= x0 + CHUNK; x++) if (world.inside(x, y)) collect(x, y, buckets);
+      for (let x = x0 - BELOW; x <= x0 + CHUNK; x++) if (world.inside(x, y)) collect(x, y, buckets);
     }
     for (const list of buckets) {
       if (!list) continue;
-      for (const it of list) layer.drawShifted(it.x - x0, it.y - y0, 0, shiftUp(it.h), it.glyph, it.fg, it.bg);
+      for (const it of list) {
+        const { ox, oy } = shiftUp(it.h);
+        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg);
+      }
     }
     return layer;
   }
@@ -99,8 +102,9 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   }
 
   // 世界格 (x, y) 的地面畫在地圖區哪裡（字元像素，左上角）
-  function placeOf(f, x, y) {
-    return { px: (x - f.x) * 8, py: (y - f.y) * 8 + shiftUp(groundHeight(world.tierAt(x, y))) };
+  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y))) {
+    const { ox, oy } = shiftUp(h);
+    return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
   // 路線、目標、查看中的格子：畫在那格地面錯開後的位置
@@ -149,27 +153,30 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       const p0 = groundHeight(world.tierAt(player.x, player.y));
       for (let dh = 1; dh <= PLAYER_LAYERS; dh++) {
         const fg = fade(COLORS.player, pg, fadeAt(PLAYER_LAYERS - dh));
-        mapView.drawShifted(0, 0, (player.x - f.x) * 8, (player.y - f.y) * 8 + shiftUp(p0 + dh), '@', fg, null);
+        const { px, py } = placeOf(f, player.x, player.y, p0 + dh);
+        mapView.drawShifted(0, 0, px, py, '@', fg, null);
       }
     });
     return view.x !== cam.x || view.y !== cam.y;
   }
 
   // 視窗格 → 世界格：滑鼠那一點（fx、fy 是地圖區的字元像素，沒給就用那格中心）最上面的地面是哪一格。
-  // 東西只往上錯開，所以只往下找；找不到就用原位那格；世界外回傳 null
+  // 東西只往右上錯開，所以只往左下找；找不到就用原位那格；世界外回傳 null
   function cellAt(cam, vx, vy, fx = vx * 8 + 4, fy = vy * 8 + 4) {
     const f = view ?? cam;
-    const x = Math.floor(f.x + fx / 8);
+    const gx = Math.floor(f.x + fx / 8);
     const gy = Math.floor(f.y + fy / 8);
     let best = null;
     for (let y = gy; y <= gy + BELOW; y++) {
-      if (!world.inside(x, y)) continue;
-      const { py } = placeOf(f, x, y);
-      if (fy < py || fy >= py + 8) continue;
-      const h = groundHeight(world.tierAt(x, y));
-      if (!best || h >= best.h) best = { x, y, h };
+      for (let x = gx - BELOW; x <= gx; x++) {
+        if (!world.inside(x, y)) continue;
+        const { px, py } = placeOf(f, x, y);
+        if (fx < px || fx >= px + 8 || fy < py || fy >= py + 8) continue;
+        const h = groundHeight(world.tierAt(x, y));
+        if (!best || h >= best.h) best = { x, y, h };
+      }
     }
-    const c = best ?? { x, y: gy };
+    const c = best ?? { x: gx, y: gy };
     return world.inside(c.x, c.y) ? { x: c.x, y: c.y } : null;
   }
 

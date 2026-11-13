@@ -95,6 +95,7 @@ export function createTerrainGen(seed, data) {
     const object = new Uint8Array(n); // 物件層：物件編號＋1，0 是沒有
     const shade = new Uint8Array(n);
     const relief = new Uint8Array(n);
+    const tier = new Uint8Array(n); // 高度層 0～4：亮度與斜投影抬高幾行都看它
     const biome = new Uint8Array(n);
     const PAD = 2;
     const B = size + PAD * 2;
@@ -121,12 +122,13 @@ export function createTerrainGen(seed, data) {
         height[i] = Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5);
         biome[i] = b;
         relief[i] = reliefOf(tat(x, y, -2), tat(x, y, -1), tat(x, y, 0), tat(x, y, 1));
+        tier[i] = tierOf(tat(x, y, 0));
         terrain[i] = classify(h, b, wet);
         object[i] = placeObject(X, Y, b, terrain[i]);
-        shade[i] = lightLevel(tierOf(tat(x, y, 0)), shadeLevel(g.dx, g.dy));
+        shade[i] = lightLevel(tier[i], shadeLevel(g.dx, g.dy));
       }
     }
-    return { zx, zy, size, height, terrain, object, shade, relief, biome };
+    return { zx, zy, size, height, terrain, object, shade, relief, tier, biome };
   }
 
   return { genZone, heightAt, terraceHeightAt, tempAt, wetAt, biomeAt };

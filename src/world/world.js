@@ -109,6 +109,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const i = locate(x, y);
       return i < 0 ? 0 : last.shade[i];
     },
+    // 高度層 0～4（relief.js 的 tierOf）；世界外是 0
+    tierAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? 0 : last.tier[i];
+    },
     // 台地立面（relief.js 的 FLAT、RIM、FACE、FACE_FAR）
     reliefAt(x, y) {
       const i = locate(x, y);

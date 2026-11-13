@@ -67,6 +67,18 @@ export function buildShadeTable(terrains) {
   return { glyph, fg, bg };
 }
 
+// 斜投影的側面：[地形編號][第幾行] → { glyph, fg, bg }。第 0 行緊貼頂面（較亮），往下更暗。
+// 用地形自己的顏色，看得出是哪一種地面的側面
+const WALL_FACTOR = [0.5, 0.36];
+export const WALL_GLYPH = '▓';
+
+export function buildWallShades(terrains) {
+  return terrains.map((t) => {
+    const base = desaturate(Color.fromString(t.color));
+    return WALL_FACTOR.map((k) => ({ glyph: WALL_GLYPH, fg: scale(base, k), bg: scale(base, k * 0.6) }));
+  });
+}
+
 // 物件層的字元色：[物件編號][明暗級數][立面]。物件跟它腳下的地面受同一道光，
 // 背景用地面的，所以樹底下仍看得到地面的光照
 export function buildObjectShades(objects) {

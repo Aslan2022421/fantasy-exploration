@@ -66,7 +66,7 @@ let maxHistoryScroll = 0;
 const player = () => game.state.player;
 const save = () => store.save(SAVE_KEY, game.serialize());
 const world = game.world;
-const worldView = createWorldView(mapView, world, DATA);
+const worldView = createWorldView(mapView, world, DATA, { oblique: !params.has('flat') }); // ?flat 看俯視對照
 const camera = () => cameraOrigin(player().x, player().y, world.width, world.height, screen.cols, screen.rows);
 
 // 花時間的動作：輪到冒險者才做，做完把回合交回排程
@@ -132,8 +132,9 @@ function render() {
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
   if (route && target && !historyOpen) {
     const label = route.reachable ? `${route.steps.length} 步` : '走不到';
-    const px = map.x + (target.x - cam.x) * tile;
-    const py = map.y + (target.y - cam.y) * tile;
+    const at = worldView.screenOf(cam, target.x, target.y);
+    const px = map.x + at.vx * tile;
+    const py = map.y + at.vy * tile;
     panels.routeLabel(ctx, screen, px, py, label, route.reachable ? COLORS.path : COLORS.text);
   }
   if (historyOpen) maxHistoryScroll = panels.history(ctx, screen, entries(), historyScroll);
@@ -169,13 +170,10 @@ function closeExamine() {
   return true;
 }
 
-// 畫面上的格子 → 地圖上的格子
+// 畫面上的格子 → 地圖上的格子（斜投影時抬高的格子由 worldView 換算）
 function mapCellAt(e) {
   const v = mapView.cellAt(e);
-  if (!v) return null;
-  const cam = camera();
-  const cell = { x: cam.x + v.x, y: cam.y + v.y };
-  return world.inside(cell.x, cell.y) ? cell : null;
+  return v ? worldView.cellAt(camera(), v.x, v.y) : null;
 }
 
 function describeCell(cell) {

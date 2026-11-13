@@ -1,7 +1,7 @@
 // 每種地形在畫面上的樣子：字元階梯的哪一階、字元色、背景色都依「明暗級數×台地立面」先算好，畫的時候直接查表。
 // - 字元：每種地形有自己的階梯（data/terrain 的 ramp，由暗到亮），依亮度選一階，
 //   參考 ASCII 立方體「依亮度選字元」的做法。同一階可以有幾個字，畫的時候每格用雜湊挑一個，
-//   不再隨機偏階（JITTER 是 0），同一亮度的地面不會排成規律的網點（rampGlyph）
+//   再隨機往上或往下偏一階，同一亮度的地面不會排成規律的網點（rampGlyph）
 // - 背景也帶光，整格看得出亮暗
 // 顏色有上限（地形數×明暗級數×4），字元表的染色快取（tiles.js 一種顏色一張，用到才染）不會無限長大
 
@@ -9,11 +9,11 @@ import { Color } from 'rot-js';
 import { LEVELS, levelFactor } from '../world/hillshade.js';
 import { FACE, FACE_FAR, FLAT, RIM } from '../world/relief.js';
 
-const BG_DIM = 0.55; // 背景是地形色的幾成亮：跟字元拉近，地面是一片低對比的細紋，崖邊、湖岸與物件才跳得出來
+const BG_DIM = 0.32; // 背景是地形色的幾成亮（使用者挑定的那一版）
 const RELIEF_FACTOR = { [FLAT]: 1, [RIM]: 1.25, [FACE]: 0.42, [FACE_FAR]: 0.3 };
 const RELIEF_STEP = { [FLAT]: 0, [RIM]: 1, [FACE]: -3, [FACE_FAR]: -4 }; // 在階梯上往上或往下幾階
 const RAMP_SHIFT = -2; // 亮度第 2 級對到階梯第 0 階（空白），第 7 級對到最密的那階
-const JITTER = 0; // 不再隨機偏一階：地面明暗起伏會讓高低糊掉（同一階仍用雜湊挑字，避免規律網點）
+const JITTER = 0.2; // 每格有兩成機率往暗偏一階、兩成往亮偏一階（使用者挑定的那一版）
 const RELIEFS = [FLAT, RIM, FACE, FACE_FAR];
 // 彩度只留幾成：地形種類仍靠色相分辨，但畫面上最強的差異是亮暗（高低）
 export const SATURATION = 0.55;

@@ -1,6 +1,9 @@
-// 畫地圖區。亮度只看絕對高度（elevation.js）：高的永遠亮、低的永遠暗，跟冒險者站在哪一層無關；
-// 層界的高側畫一排亮的崖邊、低側緊貼一條暗帶。水看深度，越深越暗；湖岸是比水高的崖邊。
-// 網址加 ?flat 不畫崖邊與暗帶，留著對照用。
+// 畫地圖區（使用者挑定的樣子：往左下拉側面與影子、影子只調暗那一版）。
+// - 亮度：生成時算好的亮度級數（陸地看高度層＋坡向明暗，水看深度）
+// - 側面：光從右上照，比較高的地形往左下拉出 2～3 格的側面，用高處的字元、顏色調暗（extrude.js）
+// - 影子：有高度的物件往左下投影子，影子只讓地面變暗；有物件的格子是被照亮的樹冠，不吃影子
+// - 樹冠：多格的樹右上亮、左下暗
+// 頂面都畫在原位，滑鼠點哪格就是哪格。網址加 ?flat 不畫側面與影子，留著對照用。
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
@@ -8,46 +11,50 @@ import { PART_DARK, PART_LIT, PART_MID } from '../world/footprint.js';
 import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
-import { EDGE_RIM, EDGE_SHADOW, edgeAt, tierLevel } from './elevation.js';
+import { inShadow, sideSource } from './extrude.js';
 import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from './shades.js';
 
-export const RIM_GLYPH = '#'; // 崖邊（照參考圖的一排 #）
-const RIM_UP = 1; // 崖邊比所在那層亮幾級
-const SHADOW_DIM = 0.45; // 崖下暗帶的亮度
+const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
+const SHADOW_DIM = 0.6; // 影子裡的亮度
 const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65 }; // 樹冠各側的亮度
 
-export function createWorldView(mapView, world, data, { edges = true } = {}) {
+export function createWorldView(mapView, world, data, { extrude = true } = {}) {
   const { terrains, objects } = data;
   const shades = buildShadeTable(terrains); // { step, fg, bg }：[地形][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
-  const isWater = terrains.map((t) => t.id.endsWith('water'));
 
-  function cellLook(x, y) {
+  // 一格地面的樣子（字元依亮度從這種地形的階梯選；同一亮度每格用雜湊換字）
+  function groundLook(x, y) {
     const t = world.terrainAt(x, y);
-    // 水看深度（生成時算好的亮度級數）；陸地只看高度層
-    const level = isWater[t] ? world.shadeAt(x, y) : tierLevel(world.tierAt(x, y));
-    const edge = edges ? edgeAt(world, x, y) : 0;
+    const level = world.shadeAt(x, y);
     const a = hash01(world.seed, x, y, 101);
     const b = hash01(world.seed, x, y, 102);
-    const look = {
+    return {
       glyph: rampGlyph(terrains[t].ramp, shades.step[t][level][FLAT], a, b),
       fg: shades.fg[t][level][FLAT],
       bg: shades.bg[t][level][FLAT],
+      level,
     };
-    if (edge === EDGE_RIM) {
-      const up = Math.min(7, level + RIM_UP);
-      look.glyph = RIM_GLYPH;
-      look.fg = shades.fg[t][up][FLAT];
-    } else if (edge === EDGE_SHADOW) {
-      look.fg = dimColor(look.fg, SHADOW_DIM);
-      look.bg = dimColor(look.bg, SHADOW_DIM);
+  }
+
+  // 這一格最後的樣子：側面蓋住整格；不然畫地面（＋物件），落在影子裡就調暗
+  function cellLook(x, y) {
+    if (extrude) {
+      const side = sideSource(world, x, y);
+      if (side) {
+        const src = groundLook(side.x, side.y);
+        const f = SIDE_DIM[side.k];
+        return { glyph: src.glyph, fg: dimColor(src.fg, f), bg: dimColor(src.bg, f) };
+      }
     }
+    const look = groundLook(x, y);
     const o = world.objectAt(x, y);
     if (o >= 0) {
-      // 多格的樹冠：右上被照到的一側亮、左下背光的一側暗，看得出是一團鼓起來的東西
       look.glyph = objects[o].glyph;
-      look.fg = dimColor(objectFg[o][level][FLAT], PART_FACTOR[world.objectPartAt(x, y)]);
-      if (edge === EDGE_SHADOW) look.fg = dimColor(look.fg, SHADOW_DIM);
+      look.fg = dimColor(objectFg[o][look.level][FLAT], PART_FACTOR[world.objectPartAt(x, y)]);
+    } else if (extrude && inShadow(world, objects, x, y)) {
+      look.fg = dimColor(look.fg, SHADOW_DIM);
+      look.bg = dimColor(look.bg, SHADOW_DIM);
     }
     return look;
   }
@@ -77,7 +84,7 @@ export function createWorldView(mapView, world, data, { edges = true } = {}) {
 
   return {
     draw,
-    // 視窗格 → 世界格（點哪格就是哪格）；世界外回傳 null
+    // 視窗格 → 世界格（頂面都在原位，點哪格就是哪格）；世界外回傳 null
     cellAt(cam, vx, vy) {
       const c = { x: cam.x + vx, y: cam.y + vy };
       return world.inside(c.x, c.y) ? c : null;

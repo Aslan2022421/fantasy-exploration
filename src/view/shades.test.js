@@ -47,7 +47,7 @@ test('依亮度選階：越亮越往密的那頭，立面比平地疏、台地�
   expect(rampStep(RAMP.length, 7, RIM)).toBe(RAMP.length - 1);
 });
 
-test('同一階挑字：不會超出階梯，同一階的字都用得到', () => {
+test('同一階挑字、偏一階：不會超出階梯，同一階的字都用得到', () => {
   const seen = new Set();
   for (let i = 0; i < 200; i++) {
     const a = 0.5; // 不偏
@@ -57,9 +57,8 @@ test('同一階挑字：不會超出階梯，同一階的字都用得到', () =>
   expect(seen).toEqual(new Set([',', "'"]));
   expect(rampGlyph(RAMP, 0, 0.01, 0.5)).toBe(' '); // 往暗偏也停在第 0 階
   expect(RAMP.at(-1)).toContain(rampGlyph(RAMP, RAMP.length - 1, 0.99, 0.1)); // 往亮偏也停在最後一階
-  // 不再隨機偏一階（地面明暗起伏會讓高低糊掉）：a 怎麼變都留在同一階
-  expect(RAMP[3]).toContain(rampGlyph(RAMP, 3, 0.01, 0.5));
-  expect(RAMP[3]).toContain(rampGlyph(RAMP, 3, 0.99, 0.5));
+  expect(RAMP[2]).toContain(rampGlyph(RAMP, 3, 0.01, 0.5)); // 往暗偏一階
+  expect(RAMP[4]).toContain(rampGlyph(RAMP, 3, 0.99, 0.5)); // 往亮偏一階
 });
 
 test('不套明暗的地形每一級、每種立面都是同一個顏色（降過彩度的原色）', () => {

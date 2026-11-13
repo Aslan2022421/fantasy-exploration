@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { areaOf, inFootprint, meanArea, PART_DARK, PART_LIT, PART_MID, partOf } from './footprint.js';
+import { areaOf, inFootprint, meanArea, PART_DARK, PART_LIT, PART_MID, partOf, trunkCell } from './footprint.js';
 
 test('直徑 1～4 的佔地格數：1、4、9、12（4 格的去掉四個角）', () => {
   expect([1, 2, 3, 4].map(areaOf)).toEqual([1, 4, 9, 12]);
@@ -11,6 +11,14 @@ test('直徑 1～4 的佔地格數：1、4、9、12（4 格的去掉四個角）
 test('平均佔地照 sizes 裡出現的次數算', () => {
   expect(meanArea([1])).toBe(1);
   expect(meanArea([2, 4])).toBe(8);
+});
+
+test('樹幹在樹冠正中間，一定在樹冠裡', () => {
+  for (const d of [1, 2, 3, 4]) {
+    const t = trunkCell(d);
+    expect(inFootprint(t.i, t.j, d), `直徑 ${d}`).toBe(true);
+  }
+  expect(trunkCell(3)).toEqual({ i: 1, j: 1 });
 });
 
 test('樹冠右上亮、左下暗、對角線上是中間色；一格的物件沒有分側', () => {

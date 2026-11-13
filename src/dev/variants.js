@@ -3,13 +3,13 @@
 
 import { EDGE_RIM, EDGE_SHADOW, edgeAt, tierLevel } from '../view/elevation.js';
 import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from '../view/shades.js';
-import { PART_DARK, PART_LIT, PART_MID } from '../world/footprint.js';
+import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
 import { LAND } from '../world/landform.js';
 import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 
 const VOID = '#06181a';
-const PART = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65 };
+const PART = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_TRUNK]: 0.8 };
 const REL = [1, 3, 5, 7]; // 相對亮度：更低、低一層、同層、高處
 
 export function createVariants(world, data) {

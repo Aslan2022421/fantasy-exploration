@@ -1,7 +1,7 @@
 // 地形生成：大地形與水（landform.js）、溫度、濕度 → 每格的生態、地形層與物件層，加上明暗與台地立面。
 // 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
 
-import { inFootprint, MAX_SIZE, meanArea, partOf } from './footprint.js';
+import { inFootprint, MAX_SIZE, meanArea, PART_TRUNK, partOf, trunkCell } from './footprint.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { fbm, hash01, makeNoise } from './noise.js';
@@ -146,7 +146,9 @@ export function createTerrainGen(seed, data) {
           }
           if (best) {
             object[i] = best.a.object + 1;
-            objectPart[i] = partOf(best.i, best.j, best.a.size);
+            const tc = trunkCell(best.a.size);
+            const isTrunk = data.objects[best.a.object].trunk && best.i === tc.i && best.j === tc.j;
+            objectPart[i] = isTrunk ? PART_TRUNK : partOf(best.i, best.j, best.a.size);
           }
         }
         if (g.water[c] === WATER_NONE) {

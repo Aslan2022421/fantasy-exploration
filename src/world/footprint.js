@@ -7,6 +7,13 @@ export const MAX_SIZE = 4;
 export const PART_MID = 0;
 export const PART_LIT = 1; // 右上，被照到
 export const PART_DARK = 2; // 左下，背光
+export const PART_TRUNK = 3; // 樹幹：樹冠正中間那一格，有樹幹的物件在這格擋路
+
+// 直徑 d 的樹冠，樹幹在哪一格（相對錨點）；偶數直徑取中心偏右下那格
+export function trunkCell(d) {
+  const m = Math.floor(d / 2);
+  return { i: m, j: m };
+}
 
 // (i, j) 是相對錨點的位置（0～d-1）；在不在直徑 d 的那一團裡
 export function inFootprint(i, j, d) {

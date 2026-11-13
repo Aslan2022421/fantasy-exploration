@@ -28,6 +28,7 @@ export const ObjectSchema = z.object({
   color: Color,
   passable: z.boolean(),
   height: z.number().int().min(0).max(3), // 有多高（樹 3、矮叢 2）
+  trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去（使用者定）；樹冠其他格照 passable
   // 佔地多大（直徑幾格），每棵從這裡用雜湊挑一個；重複寫的數字比較常出現（例如 4 格的老樹只寫一次）
   sizes: z.array(z.number().int().min(1).max(4)).min(1),
   tile: z.string().nullable(),

@@ -7,7 +7,7 @@
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
-import { PART_DARK, PART_LIT, PART_MID } from '../world/footprint.js';
+import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
 import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
@@ -16,7 +16,8 @@ import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from './shade
 
 const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
 const SHADOW_DIM = 0.6; // 影子裡的亮度
-const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65 }; // 樹冠各側的亮度
+const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_TRUNK]: 0.8 }; // 樹冠各側的亮度
+export const TRUNK_GLYPH = 'Φ'; // 樹幹：走不過去的那一格，跟樹冠分得出來
 
 export function createWorldView(mapView, world, data, { extrude = true } = {}) {
   const { terrains, objects } = data;
@@ -50,8 +51,9 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
     const look = groundLook(x, y);
     const o = world.objectAt(x, y);
     if (o >= 0) {
-      look.glyph = objects[o].glyph;
-      look.fg = dimColor(objectFg[o][look.level][FLAT], PART_FACTOR[world.objectPartAt(x, y)]);
+      const part = world.objectPartAt(x, y);
+      look.glyph = part === PART_TRUNK ? TRUNK_GLYPH : objects[o].glyph;
+      look.fg = dimColor(objectFg[o][look.level][FLAT], PART_FACTOR[part]);
     } else if (extrude && inShadow(world, objects, x, y)) {
       look.fg = dimColor(look.fg, SHADOW_DIM);
       look.bg = dimColor(look.bg, SHADOW_DIM);

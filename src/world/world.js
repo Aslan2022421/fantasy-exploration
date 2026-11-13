@@ -2,10 +2,11 @@
 // 局部區域用到才生、生過就留著。全世界共用一套格子座標，跨區時無縫走過去。
 // 地圖不進存檔：讀檔時用種子重生，再把紀錄套回去
 
+import { PART_TRUNK } from './footprint.js';
 import { bandOf, createTerrainGen, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 2; // 2：多格物件
+export const WORLD_VERSION = 3; // 3：樹幹擋路
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;
@@ -83,6 +84,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     return {
       terrain: t,
       object: o ? data.objects[o - 1] : null,
+      trunk: o ? last.objectPart[i] === PART_TRUNK : false,
       biome: data.biomes[last.biome[i]],
       height: last.height[i],
       shade: last.shade[i],
@@ -132,12 +134,13 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const i = locate(x, y);
       return i < 0 ? -1 : last.object[i] - 1;
     },
-    // 地形與物件都走得過去才算
+    // 地形與物件都走得過去才算；樹幹那一格走不過去（樹冠其他格照物件的 passable）
     isPassable(x, y) {
       const i = locate(x, y);
       if (i < 0 || !data.terrains[last.terrain[i]].passable) return false;
       const o = last.object[i];
-      return !o || data.objects[o - 1].passable;
+      if (!o) return true;
+      return data.objects[o - 1].passable && last.objectPart[i] !== PART_TRUNK;
     },
   };
 }

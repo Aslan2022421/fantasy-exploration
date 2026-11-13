@@ -1,6 +1,7 @@
 import { RNG } from 'rot-js';
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
+import { PART_TRUNK } from './footprint.js';
 import { gradient, lightLevel, shadeLevel } from './hillshade.js';
 import { LAND, landTierOf, MAX_TIER, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { reliefOf } from './relief.js';
@@ -200,6 +201,28 @@ describe('世界的形狀', () => {
     }
     expect(objects).toBeGreaterThan(0);
     for (const t of DATA.terrains) expect(DATA.objectIndex.has(t.id)).toBe(false);
+  });
+
+  test('樹幹那一格走不過去，樹冠其他格走得過去；矮叢沒有樹幹', () => {
+    const z = world.zone(1, 1);
+    const shrub = DATA.objectIndex.get('shrub');
+    let trunks = 0;
+    let canopy = 0;
+    for (let i = 0; i < z.object.length; i++) {
+      if (!z.object[i]) continue;
+      const x = Z + (i % Z);
+      const y = Z + Math.floor(i / Z);
+      if (z.objectPart[i] === PART_TRUNK) {
+        trunks++;
+        expect(z.object[i] - 1).not.toBe(shrub);
+        expect(world.isPassable(x, y)).toBe(false);
+      } else {
+        canopy++;
+        expect(world.isPassable(x, y)).toBe(true);
+      }
+    }
+    expect(trunks).toBeGreaterThan(0);
+    expect(canopy).toBeGreaterThan(trunks);
   });
 
   test('格子的資訊', () => {

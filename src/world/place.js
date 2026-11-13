@@ -9,9 +9,10 @@ export function describePlace(world, x, y) {
   if (!c) return null;
   const b = c.biome;
   const climate = `${CLIMATE_NAMES[b.temperature]}、${CLIMATE_NAMES[b.moisture]}`;
-  const passable = c.terrain.passable && (!c.object || c.object.passable);
+  const passable = c.terrain.passable && (!c.object || (c.object.passable && !c.trunk));
   const blocked = passable ? '' : '，過不去';
-  const what = c.object ? `${c.object.name}，長在${c.terrain.name}上` : c.terrain.name;
+  const part = c.trunk ? '的樹幹' : '';
+  const what = c.object ? `${c.object.name}${part}，長在${c.terrain.name}上` : c.terrain.name;
   return `${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
 }
 

@@ -6,6 +6,7 @@
     "color": "#5f8a4a",
     "passable": true,
     "height": 3,
+    "trunk": true,
     "sizes": [2, 2, 2, 3, 3, 4],
     "tile": null
   },
@@ -16,6 +17,7 @@
     "color": "#5a8a6a",
     "passable": true,
     "height": 3,
+    "trunk": true,
     "sizes": [2, 2, 3, 3, 3, 4],
     "tile": null
   },
@@ -26,6 +28,7 @@
     "color": "#4f9a4a",
     "passable": true,
     "height": 3,
+    "trunk": true,
     "sizes": [2, 3, 3, 3, 4],
     "tile": null
   },
@@ -36,6 +39,7 @@
     "color": "#8a9a5a",
     "passable": true,
     "height": 2,
+    "trunk": false,
     "sizes": [1],
     "tile": null
   }

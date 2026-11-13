@@ -1,67 +1,57 @@
-// 畫地圖區。每格畫在自己的位置（頂面不移動），立體感靠側面與影子（extrude.js）：
-// 光從右上照，比較高的地形往左下拉出 2～3 格的側面，有高度的物件往左下投影子。
-// 網址加 ?flat 不畫側面與影子，留著對照用。
+// 畫地圖區。照矮人要塞的看法分 Z 高度（zlevel.js）：以冒險者所在的高度層為準，
+// 同一層正常、低一層變暗變疏、再低的最暗；高一層以上是一面實心的牆。
+// 網址加 ?flat 改用絕對高度的亮度（不看冒險者在哪層），留著對照用。
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
 import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
-import { inShadow, sideSource } from './extrude.js';
 import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from './shades.js';
+import { ABOVE, SAME, Z_LEVEL, zClass } from './zlevel.js';
 
-const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
-const SHADOW_DIM = 0.6; // 影子裡的背景亮度（只落在地面上；有物件的格子是被照亮的樹冠，不吃影子）
-const SHADOW_FG = 0.85; // 影子斜線的亮度
-export const SHADOW_GLYPH = '/';
+export const WALL_GLYPH = '█';
+const WALL_FG = 0.55; // 牆用地形色的幾成亮
+const WALL_BG = 0.35;
 
-export function createWorldView(mapView, world, data, { extrude = true } = {}) {
+export function createWorldView(mapView, world, data, { zlevels = true } = {}) {
   const { terrains, objects } = data;
   const shades = buildShadeTable(terrains); // { step, fg, bg }：[地形][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
+  const wallColor = terrains.map((_, i) => shades.fg[i][Z_LEVEL[SAME]][FLAT]); // 牆的基準色：該地形在同一層的亮度
 
-  // 一格地面的樣子（字元依亮度從這種地形的階梯選；同一亮度每格用雜湊換字）
-  function groundLook(x, y) {
+  // 一格在亮度 level 下的樣子（字元依亮度從這種地形的階梯選；同一亮度每格用雜湊換字），有物件就疊上去
+  function lookAt(x, y, level) {
     const t = world.terrainAt(x, y);
-    const level = world.shadeAt(x, y);
     const a = hash01(world.seed, x, y, 101);
     const b = hash01(world.seed, x, y, 102);
-    return {
+    const look = {
       glyph: rampGlyph(terrains[t].ramp, shades.step[t][level][FLAT], a, b),
       fg: shades.fg[t][level][FLAT],
       bg: shades.bg[t][level][FLAT],
-      level,
     };
-  }
-
-  // 這一格最後的樣子：側面蓋住整格；不然畫地面（＋物件），落在影子裡就調暗
-  function cellLook(x, y) {
-    if (extrude) {
-      const side = sideSource(world, x, y);
-      if (side) {
-        const src = groundLook(side.x, side.y);
-        const f = SIDE_DIM[side.k];
-        return { glyph: src.glyph, fg: dimColor(src.fg, f), bg: dimColor(src.bg, f) };
-      }
-    }
-    const look = groundLook(x, y);
     const o = world.objectAt(x, y);
     if (o >= 0) {
       look.glyph = objects[o].glyph;
-      look.fg = objectFg[o][look.level][FLAT];
-    }
-    // 影子畫成斜線，方向對齊往左下的影子（參考圖的影子是一道道斜紋，只變暗的話在暗地面上看不出來）
-    if (extrude && o < 0 && inShadow(world, objects, x, y)) {
-      look.glyph = SHADOW_GLYPH;
-      look.fg = dimColor(look.fg, SHADOW_FG);
-      look.bg = dimColor(look.bg, SHADOW_DIM);
+      look.fg = objectFg[o][level][FLAT];
     }
     return look;
+  }
+
+  function cellLook(x, y, playerTier) {
+    if (!zlevels) return lookAt(x, y, world.shadeAt(x, y));
+    const z = zClass(world.tierAt(x, y), playerTier);
+    if (z === ABOVE) {
+      const base = wallColor[world.terrainAt(x, y)];
+      return { glyph: WALL_GLYPH, fg: dimColor(base, WALL_FG), bg: dimColor(base, WALL_BG) };
+    }
+    return lookAt(x, y, Z_LEVEL[z]);
   }
 
   // overlay：{ route: {steps, reachable} | null, target, examined, player }
   function draw(screen, cam, { route, target, examined, player }) {
     const onRoute = new Set(route?.steps.map((s) => `${s.x},${s.y}`));
+    const playerTier = world.tierAt(player.x, player.y);
     for (let vy = 0; vy < screen.rows; vy++) {
       for (let vx = 0; vx < screen.cols; vx++) {
         const x = cam.x + vx;
@@ -70,7 +60,7 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
           mapView.draw(vx, vy, ' ', COLORS.bg, COLORS.void);
           continue;
         }
-        const look = cellLook(x, y);
+        const look = cellLook(x, y, playerTier);
         const isTarget = target?.x === x && target?.y === y;
         let bg = look.bg;
         if (examined?.x === x && examined?.y === y) bg = COLORS.examined;
@@ -84,7 +74,7 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
 
   return {
     draw,
-    // 視窗格 → 世界格（頂面都在原位，點哪格就是哪格）；世界外回傳 null
+    // 視窗格 → 世界格（點哪格就是哪格）；世界外回傳 null
     cellAt(cam, vx, vy) {
       const c = { x: cam.x + vx, y: cam.y + vy };
       return world.inside(c.x, c.y) ? c : null;

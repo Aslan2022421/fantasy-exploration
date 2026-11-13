@@ -1,24 +1,20 @@
-// 地形生成：高度、溫度、濕度三層雜訊 → 每格的生態、地形層與物件層，加上明暗與台地立面。
+// 地形生成：大地形與水（landform.js）、溫度、濕度 → 每格的生態、地形層與物件層，加上明暗與台地立面。
 // 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
 
-import { gradient, lightLevel, shadeLevel } from './hillshade.js';
+import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
+import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { fbm, hash01, makeNoise } from './noise.js';
-import { reliefOf, tierOf } from './relief.js';
+import { reliefOf } from './relief.js';
 
-// 生成的參數（調比例時改這裡）
+// 生成的參數（調比例時改這裡；大地形與水的參數在 landform.js 的 LAND）
 export const GEN = {
-  heightBase: 128, // 高度最粗那層的波長（格）
-  heightOctaves: 5,
   climateBase: 144, // 溫度、濕度最粗那層的波長，約 1.5 區
   tempOctaves: 2,
   wetOctaves: 3,
   floraBase: 24, // 樹叢成片的大小
   band: 0.1, // 溫度、濕度超過 ±這個值才算寒冷／炎熱、乾燥／潮濕
-  deepWater: -0.34, // 高度低於這個是深水
-  shallowWater: -0.24, // 低於這個是淺水
-  wetWaterShift: 0.08, // 越濕水面越高（潮濕 +1 時水線抬高這麼多）
   mountain: 0.42, // 高度高於這個是山地
-  terraceOctaves: 3, // 台地的分階只看高度較粗的幾層，等高線才連成線，不會到處是零碎的立面
+  waterShadeStep: 0.05, // 水每深這麼多暗一級
 };
 
 export const TEMP_BANDS = ['cold', 'mild', 'hot'];
@@ -28,8 +24,14 @@ export function bandOf(v) {
   return v < -GEN.band ? 0 : v > GEN.band ? 2 : 1;
 }
 
+// 水面的亮度級數：越深越暗（淺灘第 6 級，往下每 waterShadeStep 暗一級，最暗第 1 級）
+export function waterLevel(h) {
+  const depth = LAND.water - h;
+  return Math.max(1, Math.min(LEVELS - 2, LEVELS - 2 - Math.floor(depth / GEN.waterShadeStep)));
+}
+
 export function createTerrainGen(seed, data) {
-  const nHeight = makeNoise(seed, 'terrain:height');
+  const land = createLandform(seed);
   const nTemp = makeNoise(seed, 'terrain:temperature');
   const nWet = makeNoise(seed, 'terrain:moisture');
   const nFlora = makeNoise(seed, 'terrain:flora');
@@ -60,17 +62,14 @@ export function createTerrainGen(seed, data) {
     list: b.flora.map((f) => [objectId(f.object), f.density]),
   }));
 
-  const heightAt = (x, y) => fbm(nHeight, x, y, GEN.heightBase, GEN.heightOctaves);
-  const terraceHeightAt = (x, y) => fbm(nHeight, x, y, GEN.heightBase, GEN.terraceOctaves);
   const tempAt = (x, y) => fbm(nTemp, x, y, GEN.climateBase, GEN.tempOctaves);
   const wetAt = (x, y) => fbm(nWet, x, y, GEN.climateBase, GEN.wetOctaves);
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
 
-  // 地形層：h 高度、biome 生態編號、wet 濕度
-  function classify(h, biome, wet) {
-    const shift = GEN.wetWaterShift * wet;
-    if (h < GEN.deepWater + shift) return DEEP;
-    if (h < GEN.shallowWater + shift) return SHALLOW;
+  // 地形層：water 水的種類、h 高度、biome 生態編號
+  function classify(water, h, biome) {
+    if (water === WATER_DEEP) return DEEP;
+    if (water === WATER_SHALLOW) return SHALLOW;
     if (h > GEN.mountain) return MOUNTAIN;
     return flora[biome].ground;
   }
@@ -87,7 +86,7 @@ export function createTerrainGen(seed, data) {
     return 0;
   }
 
-  // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算兩圈高度，明暗、坡度與立面在邊上也正確
+  // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算兩圈，明暗、坡度與立面在邊上也正確
   function genZone(zx, zy, size) {
     const n = size * size;
     const height = new Uint8Array(n);
@@ -95,41 +94,36 @@ export function createTerrainGen(seed, data) {
     const object = new Uint8Array(n); // 物件層：物件編號＋1，0 是沒有
     const shade = new Uint8Array(n);
     const relief = new Uint8Array(n);
-    const tier = new Uint8Array(n); // 高度層 0～4：亮度與斜投影抬高幾行都看它
+    const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4；亮度與斜投影抬高幾行都看它
     const biome = new Uint8Array(n);
     const PAD = 2;
     const B = size + PAD * 2;
     const x0 = zx * size;
     const y0 = zy * size;
-    const hb = new Float32Array(B * B);
-    for (let y = 0; y < B; y++) for (let x = 0; x < B; x++) hb[y * B + x] = heightAt(x0 + x - PAD, y0 + y - PAD);
-    // 台地用的粗高度：只需要這格與正北兩格、正南一格
-    const tb = new Float32Array(B * B);
-    for (let y = 0; y < B; y++) {
-      for (let x = PAD; x < B - PAD; x++) tb[y * B + x] = terraceHeightAt(x0 + x - PAD, y0 + y - PAD);
-    }
-    const tat = (x, y, dy) => tb[(y + PAD + dy) * B + (x + PAD)];
+    const g = land.grid(x0 - PAD, y0 - PAD, B, B);
+    const k = (x, y) => (y + PAD) * B + (x + PAD);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const at = (dx, dy) => hb[(y + PAD + dy) * B + (x + PAD + dx)];
-        const h = at(0, 0);
-        const g = gradient(at);
+        const c = k(x, y);
+        const h = g.h[c];
         const X = x0 + x;
         const Y = y0 + y;
-        const wet = wetAt(X, Y);
-        const b = biomeAt(tempAt(X, Y), wet);
+        const b = biomeAt(tempAt(X, Y), wetAt(X, Y));
         const i = y * size + x;
         height[i] = Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5);
         biome[i] = b;
-        relief[i] = reliefOf(tat(x, y, -2), tat(x, y, -1), tat(x, y, 0), tat(x, y, 1));
-        tier[i] = tierOf(tat(x, y, 0));
-        terrain[i] = classify(h, b, wet);
+        tier[i] = g.tier[c];
+        relief[i] = reliefOf(g.tier[c - 2 * B], g.tier[c - B], g.tier[c], g.tier[c + B]);
+        terrain[i] = classify(g.water[c], h, b);
         object[i] = placeObject(X, Y, b, terrain[i]);
-        shade[i] = lightLevel(tier[i], shadeLevel(g.dx, g.dy));
+        if (g.water[c] === WATER_NONE) {
+          const grad = gradient((dx, dy) => g.h[c + dy * B + dx]);
+          shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy));
+        } else shade[i] = waterLevel(h);
       }
     }
     return { zx, zy, size, height, terrain, object, shade, relief, tier, biome };
   }
 
-  return { genZone, heightAt, terraceHeightAt, tempAt, wetAt, biomeAt };
+  return { genZone, heightAt: land.heightAt, landform: land, tempAt, wetAt, biomeAt };
 }

@@ -109,7 +109,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const i = locate(x, y);
       return i < 0 ? 0 : last.shade[i];
     },
-    // 高度層 0～4（relief.js 的 tierOf）；世界外是 0
+    // 高度層：水 0、陸地 1～4（landform.js）；世界外是 0
     tierAt(x, y) {
       const i = locate(x, y);
       return i < 0 ? 0 : last.tier[i];

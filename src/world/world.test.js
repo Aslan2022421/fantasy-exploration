@@ -2,8 +2,9 @@ import { RNG } from 'rot-js';
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { gradient, lightLevel, shadeLevel } from './hillshade.js';
-import { reliefOf, tierOf } from './relief.js';
-import { createTerrainGen } from './terrain.js';
+import { LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
+import { reliefOf } from './relief.js';
+import { createTerrainGen, waterLevel } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
 const SEED = 20261112;
@@ -55,26 +56,32 @@ describe('區與區的交界', () => {
     }
   });
 
-  test('邊上的台地立面等於用全域高度直接算的結果', () => {
+  test('邊上的高度層、水與台地立面，等於單獨算那幾格的結果', () => {
     const z = gen.genZone(1, 1, Z);
-    const t = (x, y) => Math.fround(gen.terraceHeightAt(x, y));
+    const tierAt = (x, y) => gen.landform.cellAt(x, y).tier;
     for (let x = 0; x < Z; x += 5) {
       for (const y of [0, 1, Z - 1]) {
         const X = Z + x;
         const Y = Z + y;
-        expect(z.relief[y * Z + x]).toBe(reliefOf(t(X, Y - 2), t(X, Y - 1), t(X, Y), t(X, Y + 1)));
+        const i = y * Z + x;
+        expect(z.tier[i]).toBe(tierAt(X, Y));
+        expect(z.relief[i]).toBe(reliefOf(tierAt(X, Y - 2), tierAt(X, Y - 1), tierAt(X, Y), tierAt(X, Y + 1)));
       }
     }
   });
 
-  test('邊上的明暗等於用全域高度直接算的結果', () => {
+  test('邊上的明暗等於用全域高度直接算的結果（陸地看高度層與坡向，水看深度）', () => {
     const z = gen.genZone(1, 0, Z);
     for (let y = 0; y < Z; y += 5) {
       for (const x of [0, Z - 1]) {
         const X = Z + x;
-        const g = gradient((dx, dy) => Math.fround(gen.heightAt(X + dx, y + dy)));
-        const tier = tierOf(Math.fround(gen.terraceHeightAt(X, y)));
-        expect(z.shade[y * Z + x]).toBe(lightLevel(tier, shadeLevel(g.dx, g.dy)));
+        const c = gen.landform.cellAt(X, y);
+        let want;
+        if (c.water === WATER_NONE) {
+          const g = gradient((dx, dy) => Math.fround(gen.heightAt(X + dx, y + dy)));
+          want = lightLevel(c.tier, shadeLevel(g.dx, g.dy));
+        } else want = waterLevel(c.h);
+        expect(z.shade[y * Z + x]).toBe(want);
       }
     }
   });
@@ -114,6 +121,33 @@ describe('世界的形狀', () => {
       expect(w.isPassable(p.x, p.y)).toBe(true);
       expect(w.regionAt(p.x, p.y)).toBe(w.region(1, 1));
     }
+  });
+
+  test('水面在第 0 層、陸地在第 1 層以上；淺水一定在深水旁邊', () => {
+    const gen = createTerrainGen(SEED, DATA);
+    const R = LAND.shallowRange;
+    const deepId = DATA.terrainIndex.get('deep-water');
+    const shallowId = DATA.terrainIndex.get('shallow-water');
+    let shallow = 0;
+    for (let zy = 0; zy < 3; zy++) {
+      for (let zx = 0; zx < 3; zx++) {
+        const z = world.zone(zx, zy);
+        for (let i = 0; i < z.terrain.length; i++) {
+          const isWater = z.terrain[i] === deepId || z.terrain[i] === shallowId;
+          if (isWater) expect(z.tier[i]).toBe(0);
+          else expect(z.tier[i]).toBeGreaterThanOrEqual(1);
+          if (z.terrain[i] !== shallowId || shallow++ > 50) continue;
+          const X = zx * Z + (i % Z);
+          const Y = zy * Z + Math.floor(i / Z);
+          let near = false;
+          for (let dy = -R; dy <= R && !near; dy++)
+            for (let dx = -R; dx <= R; dx++) if (gen.landform.cellAt(X + dx, Y + dy).water === WATER_DEEP) near = true;
+          expect(near).toBe(true);
+        }
+      }
+    }
+    expect(shallow).toBeGreaterThan(0);
+    expect(WATER_SHALLOW).not.toBe(WATER_DEEP);
   });
 
   test('物件只撒在該生態的平地上；物件層跟地形層分開', () => {

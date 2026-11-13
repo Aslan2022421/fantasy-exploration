@@ -34,10 +34,10 @@ export function shadeLevel(dx, dy) {
   return Math.min(LEVELS - 1, Math.floor(Math.max(0, v) * LEVELS));
 }
 
-// 畫面用的亮度級數：主要由高度層決定（越高越亮），坡向明暗只微調 -2～+1 級。
-// tier 是 relief.js 的 tierOf（0～4），hs 是上面的 shadeLevel（平地 5）
+// 陸地的亮度級數：主要由高度層決定（越高越亮），坡向明暗只微調 -2～+1 級。
+// tier 是 landform.js 的陸地高度層（1～4），hs 是上面的 shadeLevel（平地 5）
 export function lightLevel(tier, hs) {
-  return Math.max(0, Math.min(LEVELS - 1, 3 + tier + Math.round((hs - 5) / 3)));
+  return Math.max(0, Math.min(LEVELS - 1, 2 + tier + Math.round((hs - 5) / 3)));
 }
 
 // 每一級的亮度倍率：最暗 0.3、最亮 1.2，低地暗、高地亮，差距拉大

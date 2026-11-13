@@ -1,25 +1,40 @@
 // 疊層（使用者選定 C）：高的東西同一個字疊好幾層做出體積，全部往畫面上方疊，每高一層往上錯開一樣的量，
 // 跟在畫面哪裡無關。走路時每一格的錯開量都不變，畫面只是平移，不會游動、沒有凹凸鏡感
 // （試過以角色為中心往外錯開的透視，離中心越遠錯越開，看起來像凹凸鏡、會頭暈，已取代）。
-// - 高度用「層」算：每個高度層（tier）是 tierLayers 層；原點是水面（第 0 層），比原點高幾層就往上錯開幾層
+// - 高度用「層」算（groundHeight）：原點是水面（第 0 層），比原點高幾層就往上錯開幾層
 // - 地形：比南邊那一格高的格子，從低處那一層疊到自己底下一層，看起來是一面朝南的牆。
 //   低窪的水在原點，北岸露出岸壁
 // - 樹（使用者定）：第 1 層是地貌、第 2 層留空，樹葉只在第 3 層（離地 +2），
 //   樹幹 Φ 從離地 +1 疊到 +4，頂端露出樹冠；矮叢實心疊 2 層
 // 畫的時候照高度由低到高，同高時北邊先畫、南邊後畫。這裡只算層與錯開量，不碰畫布，可以在 Node 裡測
 
+import { LAND } from '../world/landform.js';
+
 export const STACK = {
   tierLayers: 2, // 每個高度層算幾層
   step: 2, // 每高一層往上錯開幾個字元像素（一格 8 個）
-  maxShift: 32, // 錯開量上限（字元像素，四格）
+  maxShift: 48, // 錯開量上限（字元像素，六格；最高的山頂約 44）
   maxWall: 8, // 牆最多疊幾層
   dims: [1, 0.85, 0.7, 0.55, 0.45], // 由頂往下各層的亮度
 };
 
+// 山地逐圈的底色亮度（使用者要的「逐圈顏色變深」）：山腳那圈 foot、往上每圈變亮，第 full 圈以上全亮
+export const RING = { foot: 0.75, full: 10 };
+
+// 高度 height（0～255）的山地格在第幾圈、底色乘多少；不是山地的呼叫的人自己略過
+export function mountainRingFactor(height) {
+  const h = height / 127.5 - 1;
+  const ring = Math.max(0, Math.floor((h - LAND.mountain) / LAND.mountainStep));
+  return RING.foot + (1 - RING.foot) * Math.min(1, ring / RING.full);
+}
+
 export const TREE = { trunk: [1, 2, 3, 4], leaves: [2] }; // 離地幾層（樹葉只留一層，使用者定）
 
 export const dimAt = (j) => STACK.dims[Math.min(j, STACK.dims.length - 1)];
-export const groundHeight = (tier) => tier * STACK.tierLayers;
+// 地面高度（層）：陸地第 1～4 層每層算 tierLayers 層；再往上是山地一圈一圈加的，每圈算 1 層，
+// 山才疊得起來又不會高到蓋掉北邊一大片
+export const groundHeight = (tier) =>
+  tier <= LAND.landTiers ? tier * STACK.tierLayers : LAND.landTiers * STACK.tierLayers + (tier - LAND.landTiers);
 export const MAX_SHIFT_CELLS = Math.ceil(STACK.maxShift / 8); // 錯開最多幾格
 
 // 高度 h（層）的東西往上錯開幾個字元像素

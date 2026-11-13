@@ -11,6 +11,7 @@ import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
 import { lookAt } from './glyphs.js';
+import { mountainRingFactor } from './perspective.js';
 import { buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 import { createStackView } from './stackview.js';
 
@@ -32,15 +33,13 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
   const isMountain = data.landforms.map((l) => l.style === 'mountain');
 
   // 一格地面的樣子：字形與字元色看四層（glyphs.js），背景是地面的顏色，亮暗輔助高低與深淺
+  // 山地的底色逐圈變亮、往山腳變深（perspective.js 的 RING）；只調背景，字元顏色不多出新的染色表
   function groundLook(x, y) {
     const level = world.shadeAt(x, y);
     const { glyph, ink } = lookAt(world, data, x, y);
-    return {
-      glyph,
-      fg: shades.fg[ink][level][FLAT],
-      bg: shades.bg[world.groundAt(x, y)][level][FLAT],
-      level,
-    };
+    let bg = shades.bg[world.groundAt(x, y)][level][FLAT];
+    if (isMountain[world.landformAt(x, y)]) bg = dimColor(bg, mountainRingFactor(world.heightAt(x, y)));
+    return { glyph, fg: shades.fg[ink][level][FLAT], bg, level };
   }
 
   // 物件的字元顏色（山上的樹往腳下材質靠）

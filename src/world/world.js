@@ -6,7 +6,7 @@ import { PART_TRUNK } from './footprint.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 7; // 7：山地標出山峰
+export const WORLD_VERSION = 8; // 8：山地一圈一圈往上加層、溫度隨高度下降、低地較濕、很冷才積雪
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;
@@ -31,9 +31,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
         for (let sx = 0; sx < SAMPLES; sx++) {
           const x = zx * zoneSize + (sx + 0.5) * step;
           const y = zy * zoneSize + (sy + 0.5) * step;
-          t += gen.tempAt(x, y);
-          w += gen.wetAt(x, y);
-          h += gen.heightAt(x, y);
+          const hh = gen.heightAt(x, y);
+          const c = gen.climateAt(x, y, hh);
+          t += c.t;
+          w += c.w;
+          h += hh;
         }
       }
       const k = SAMPLES * SAMPLES;
@@ -114,6 +116,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     landformAt(x, y) {
       const i = locate(x, y);
       return i < 0 ? -1 : last.landform[i];
+    },
+    // 高度（0～255，-1～1 換算過來）；世界外是 0
+    heightAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? 0 : last.height[i];
     },
     // 是不是山峰（山地裡附近最高的一格）
     peakAt(x, y) {

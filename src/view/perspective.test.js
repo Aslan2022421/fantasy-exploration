@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
-import { groundHeight, objectLayers, STACK, shiftOf, TREE, wallRange } from './perspective.js';
+import { groundHeight, mountainRingFactor, objectLayers, STACK, shiftOf, TREE, wallRange } from './perspective.js';
 
 // 測試用的小世界：tiers[y][x] 是高度層
 function fakeWorld(tiers) {
@@ -17,6 +17,15 @@ test('錯開量只看高度：每高一層往上 step 像素，有上限；水�
   expect(shiftOf(1).oy).toBe(-STACK.step);
   expect(shiftOf(groundHeight(2)).oy).toBe(-4 * STACK.step);
   expect(shiftOf(999).oy).toBe(-STACK.maxShift);
+});
+
+test('地面高度：陸地每層 2 層，山地每圈 1 層；山地底色往上一圈比一圈亮', () => {
+  expect(groundHeight(4)).toBe(8);
+  expect(groundHeight(5)).toBe(9);
+  const at = (h) => Math.round((h + 1) * 127.5);
+  expect(mountainRingFactor(at(0.43))).toBeCloseTo(0.75);
+  expect(mountainRingFactor(at(0.63))).toBeGreaterThan(mountainRingFactor(at(0.5)));
+  expect(mountainRingFactor(255)).toBe(1);
 });
 
 test('牆：比南邊那一格高才有，從低處那層疊到自己底下一層；湖的北岸有岸壁、南岸沒有', () => {

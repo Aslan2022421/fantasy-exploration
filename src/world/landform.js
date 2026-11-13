@@ -20,13 +20,13 @@ export const LAND = {
   tierStep: 0.22, // 大地形每高這麼多算一層
   landTiers: 4, // 陸地第 1～4 層
   mountain: 0.42, // 高度（含細節）高於這個是山地
-  mountainStep: 0.05, // 山地從自己那層往上，用完整高度每這麼多再加一層
-  mountainTiers: 3, // 山地最多再加幾層
+  mountainStep: 0.04, // 山地從自己那層往上，用完整高度每這麼多再加一層
+  mountainTiers: 14, // 山地最多再加幾層（原本 3 層，山頂七成擠在同一層像平台，使用者說不像山）
 };
 
-export const MAX_TIER = LAND.landTiers + LAND.mountainTiers; // 7
+export const MAX_TIER = LAND.landTiers + LAND.mountainTiers; // 18
 
-// 這格的高度層：大地形的陸地層；山地再用完整高度往上加 1～3 層，山才會從高地上一階一階長出去
+// 這格的高度層：大地形的陸地層；山地再用完整高度往上一階一階加，山才會從高地上一圈一圈長出去
 export function landTierOf(macro, h) {
   const base = Math.max(1, Math.min(LAND.landTiers, 1 + Math.floor((macro - LAND.water) / LAND.tierStep)));
   if (h <= LAND.mountain) return base;

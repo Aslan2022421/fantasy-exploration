@@ -5,7 +5,7 @@
     "temperature": "cold",
     "moisture": "dry",
     "flora": [{ "object": "shrub", "density": 0.08 }],
-    "cover": []
+    "cover": [{ "cover": "moss", "density": 0.3 }, { "cover": "sparse-grass", "density": 0.2 }]
   },
   {
     "id": "taiga",
@@ -13,7 +13,7 @@
     "temperature": "cold",
     "moisture": "normal",
     "flora": [{ "object": "conifer", "density": 0.5 }, { "object": "shrub", "density": 0.05 }],
-    "cover": []
+    "cover": [{ "cover": "moss", "density": 0.2 }, { "cover": "sparse-grass", "density": 0.15 }]
   },
   {
     "id": "moss-forest",

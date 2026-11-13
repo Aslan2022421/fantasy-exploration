@@ -1,11 +1,12 @@
 // 地形生成：每格分四層（使用者定）＋物件層。
 // - 地貌：平原、丘陵、高原、山地，看高度、高度層與坡度，山地另標山峰（山谷、盆地、峽谷等河流做了再加）
 // - 水文：深水、淺水（landform.js），沼澤（低窪、平坦、潮濕的地方積水）
-// - 地表材質：泥土、沙地、岩石、碎石、雪、冰，看氣候、坡度與是否在山上
-// - 生態覆蓋：泥土與沙地上長的草、苔、花、樹苗，照生態的 cover；水邊長蘆葦，生態交界是混合植被
+// - 地表材質：泥土、沙地、岩石、碎石、雪、冰，看氣候（climate.js：越高越冷、低地較濕）、坡度與是否在山上
+// - 生態覆蓋：泥土與沙地上長的草、苔、花，照生態的 cover；水邊長蘆葦，生態交界是混合植被
 // 生成順序是地貌 → 水文 → 材質 → 生態（材質要看水與坡度）。
 // 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
 
+import { CLIMATE, createClimate } from './climate.js';
 import { inFootprint, MAX_SIZE, meanArea, PART_TRUNK, partOf, trunkCell } from './footprint.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
@@ -15,9 +16,6 @@ import { reliefOf } from './relief.js';
 
 // 生成的參數（調比例時改這裡；大地形與水的參數在 landform.js 的 LAND）
 export const GEN = {
-  climateBase: 144, // 溫度、濕度最粗那層的波長，約 1.5 區
-  tempOctaves: 2,
-  wetOctaves: 3,
   floraBase: 24, // 樹叢成片的大小
   treelineRange: 0.2, // 山地高出山地門檻這麼多就沒有樹（中間線性變少），也是雪線
   band: 0.1, // 溫度、濕度超過 ±這個值才算寒冷／炎熱、乾燥／潮濕
@@ -53,8 +51,7 @@ const NONE = 255; // 水文、覆蓋沒有東西時存這個
 
 export function createTerrainGen(seed, data) {
   const land = createLandform(seed);
-  const nTemp = makeNoise(seed, 'terrain:temperature');
-  const nWet = makeNoise(seed, 'terrain:moisture');
+  const { climateAt } = createClimate(seed);
   const nFlora = makeNoise(seed, 'terrain:flora');
   const need = (index, kind) => (name) => {
     if (!index.has(name)) throw new Error(`地形生成需要的${kind}不在資料裡：${name}`);
@@ -96,8 +93,6 @@ export function createTerrainGen(seed, data) {
   const flora = data.biomes.map((b) => b.flora.map((f) => [objectId(f.object), f.density]));
   const covers = data.biomes.map((b) => b.cover.map((c) => [cv(c.cover), c.density]));
 
-  const tempAt = (x, y) => fbm(nTemp, x, y, GEN.climateBase, GEN.tempOctaves);
-  const wetAt = (x, y) => fbm(nWet, x, y, GEN.climateBase, GEN.wetOctaves);
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
 
   // 地貌：h 高度、tier 高度層、slope 坡度
@@ -116,15 +111,16 @@ export function createTerrainGen(seed, data) {
     return NONE;
   }
 
-  // 地表材質：t、w 是溫度帶與濕度帶
-  function surfaceOf(water, h, slope, t, w) {
+  // 地表材質：t、w 是溫度帶與濕度帶，temp 是溫度本身（很冷才積雪，climate.js）
+  function surfaceOf(water, h, slope, t, w, temp) {
+    const frozen = temp < CLIMATE.snowTemp;
     if (water === SHALLOW && t === 0) return ICE; // 寒帶的淺水結冰
     if (water !== NONE) return DIRT; // 水底與沼澤的泥
     if (h > LAND.mountain) {
-      if (t === 0 || h > LAND.mountain + GEN.treelineRange) return SNOW;
+      if (frozen || h > LAND.mountain + GEN.treelineRange) return SNOW;
       return slope >= GEN.mountainRock ? ROCK : GRAVEL;
     }
-    if (t === 0) return w === 2 ? DIRT : SNOW;
+    if (t === 0) return frozen ? SNOW : DIRT; // 寒帶沒那麼冷是凍土
     if (t === 2 && w === 0) return SAND;
     if (slope >= GEN.rockSlope) return ROCK;
     if (slope >= GEN.gravelSlope) return GRAVEL;
@@ -169,7 +165,7 @@ export function createTerrainGen(seed, data) {
     const shade = new Uint8Array(n);
     const slope = new Uint8Array(n); // 坡度（每格高度差×SLOPE_SCALE，0～255）
     const relief = new Uint8Array(n);
-    const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 7
+    const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 MAX_TIER
     const biome = new Uint8Array(n);
     const PAD = Math.max(2, MAX_SIZE - 1);
     const E = PAD + 1;
@@ -191,8 +187,7 @@ export function createTerrainGen(seed, data) {
         const c = y * G + x;
         const X = x0 + x - E;
         const Y = y0 + y - E;
-        const t = tempAt(X, Y);
-        const w = wetAt(X, Y);
+        const { t, w } = climateAt(X, Y, g.h[c]);
         bAll[c] = biomeAt(t, w);
         tBand[c] = bandOf(t);
         wBand[c] = bandOf(w);
@@ -200,7 +195,7 @@ export function createTerrainGen(seed, data) {
         const grad = gradient(hAt(c));
         slAll[c] = Math.min(255, Math.round(Math.hypot(grad.dx, grad.dy) * SLOPE_SCALE));
         wAll[c] = waterOf(g.water[c], g.tier[c], slAll[c], w);
-        sAll[c] = surfaceOf(wAll[c], g.h[c], slAll[c], tBand[c], wBand[c]);
+        sAll[c] = surfaceOf(wAll[c], g.h[c], slAll[c], tBand[c], wBand[c], t);
         anchors[c] = anchorAt(X, Y, bAll[c], wAll[c], sAll[c], g.h[c]);
       }
     }
@@ -294,7 +289,7 @@ export function createTerrainGen(seed, data) {
     };
   }
 
-  return { genZone, heightAt: land.heightAt, landform: land, tempAt, wetAt, biomeAt };
+  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt };
 }
 
 export { NONE as LAYER_NONE };

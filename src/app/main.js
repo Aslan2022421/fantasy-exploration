@@ -66,7 +66,7 @@ let maxHistoryScroll = 0;
 const player = () => game.state.player;
 const save = () => store.save(SAVE_KEY, game.serialize());
 const world = game.world;
-const worldView = createWorldView(mapView, world, DATA, { zlevels: !params.has('flat') }); // ?flat 用絕對高度的亮度對照
+const worldView = createWorldView(mapView, world, DATA, { edges: !params.has('flat') }); // ?flat 不畫崖邊與暗帶
 const camera = () => cameraOrigin(player().x, player().y, world.width, world.height, screen.cols, screen.rows);
 
 // 花時間的動作：輪到冒險者才做，做完把回合交回排程

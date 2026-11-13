@@ -1,5 +1,6 @@
-// 畫地圖區。預設是疊層（使用者選定，perspective.js 算層、stackview.js 畫）：高的東西同一個字疊好幾層，
-// 全部往畫面上方錯開，每高一層錯開一樣的量；地形邊緣疊成朝南的牆。網址加 ?leftdown 是前一版
+// 畫地圖區。預設是往上疊（使用者選 B，perspective.js 算層、stackview.js 畫）：高的東西同一個字疊好幾層，
+// 全部往畫面上方錯開，每高一層錯開一樣的量；地形邊緣疊成朝南的牆；相機平滑捲動。
+// 網址加 ?parallax 是多層次視差堆疊（parallaxview.js，會頓、會頭暈，留著對照），?leftdown 是更早的版本
 // （光從右上照，往左下拉側面與物件影子，extrude.js），加 ?flat 不畫側面，這兩種頂面都在原位。
 // - 亮度：生成時算好的亮度級數（陸地看高度層＋坡向明暗，水看深度）
 // - 樹冠：多格的樹右上亮、左下暗
@@ -11,6 +12,7 @@ import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
 import { lookAt } from './glyphs.js';
+import { createParallaxView } from './parallaxview.js';
 import { mountainRingFactor } from './perspective.js';
 import { buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 import { createStackView } from './stackview.js';
@@ -21,8 +23,9 @@ const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_
 export const TRUNK_GLYPH = 'Φ'; // 樹幹：走不過去的那一格，跟樹冠分得出來
 const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
 
-// mode：'perspective' 全俯視透視（預設）、'leftdown' 往左下拉側面與影子（前一版）、'flat' 不畫側面
+// mode：'perspective' 往上疊（預設）、'parallax' 多層次視差堆疊、'leftdown' 往左下拉側面與影子、'flat' 不畫側面
 export function createWorldView(mapView, world, data, { mode = 'perspective' } = {}) {
+  const stacked = mode === 'perspective' || mode === 'parallax';
   const { objects, surfaces } = data;
   const shades = buildShadeTable(data.palette); // { fg, bg }：[顏色來源][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
@@ -61,7 +64,8 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
       isTrunk,
     };
   }
-  const stack = createStackView(mapView, world, objects, { ground: groundLook, object: objectLook });
+  const createStack = mode === 'parallax' ? createParallaxView : createStackView;
+  const stack = createStack(mapView, world, objects, { ground: groundLook, object: objectLook });
 
   function withObject(look, x, y, o) {
     if (o < 0) return look;
@@ -114,7 +118,7 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
 
   // overlay：{ route: {steps, reachable} | null, target, examined, player }
   function draw(screen, cam, overlay) {
-    if (mode === 'perspective') return stack.draw(screen, cam, overlay); // true：相機還在半路上
+    if (stacked) return stack.draw(screen, cam, overlay); // true：相機還在半路上
 
     for (let vy = 0; vy < screen.rows; vy++) {
       for (let vx = 0; vx < screen.cols; vx++) {
@@ -137,13 +141,13 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
     draw,
     // 視窗格 → 世界格；世界外回傳 null。全俯視透視時找畫面上那一點最上面的地面
     cellAt(cam, vx, vy, fx, fy) {
-      if (mode === 'perspective') return stack.cellAt(cam, vx, vy, fx, fy);
+      if (stacked) return stack.cellAt(cam, vx, vy, fx, fy);
       const c = { x: cam.x + vx, y: cam.y + vy };
       return world.inside(c.x, c.y) ? c : null;
     },
     // 世界格 → 視窗格（路線標籤用）
     screenOf(cam, x, y) {
-      if (mode === 'perspective') return stack.screenOf(cam, x, y);
+      if (stacked) return stack.screenOf(cam, x, y);
       return { vx: x - cam.x, vy: y - cam.y };
     },
   };

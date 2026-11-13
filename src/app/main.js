@@ -66,8 +66,9 @@ let maxHistoryScroll = 0;
 const player = () => game.state.player;
 const save = () => store.save(SAVE_KEY, game.serialize());
 const world = game.world;
-// ?leftdown 看前一版（往左下拉側面與影子），?flat 不畫側面
-const viewMode = params.has('flat') ? 'flat' : params.has('leftdown') ? 'leftdown' : 'perspective';
+// ?parallax 看多層次視差堆疊，?leftdown 看往左下拉側面與影子，?flat 不畫側面
+const MODES = ['flat', 'leftdown', 'parallax'];
+const viewMode = MODES.find((m) => params.has(m)) ?? 'perspective';
 const worldView = createWorldView(mapView, world, DATA, { mode: viewMode });
 const camera = () => cameraOrigin(player().x, player().y, world.width, world.height, screen.cols, screen.rows);
 

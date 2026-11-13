@@ -58,6 +58,25 @@ export function shiftOf(dx, dy, dh) {
   return { ox: (dx / dist) * s, oy: (dy / dist) * s };
 }
 
+// 往上疊（預設，使用者選 B：視差會頓、會頭暈）：錯開量只看高度，跟在畫面哪裡、相機在哪都無關，
+// 畫面是 100% 靜止的平行投影，走路時整張圖只平移。每高一層往上 step 個字元像素
+export const UP = { step: 1, maxShift: 24 };
+export const UP_SHIFT_CELLS = Math.ceil(UP.maxShift / 8);
+
+// 高度 h（層，原點是水面）往上錯開幾個字元像素（負的）
+export function shiftUp(h) {
+  return -Math.min(UP.maxShift, Math.max(0, h) * UP.step) || 0; // || 0 把 -0 變 0
+}
+
+// 往上疊時的牆：比南邊那一格高才有，回傳 { from, to, low }，不然 null
+export function wallSouth(world, x, y) {
+  if (!world.inside(x, y + 1)) return null;
+  const top = groundHeight(world.tierAt(x, y));
+  const low = groundHeight(world.tierAt(x, y + 1));
+  if (top <= low) return null;
+  return { from: Math.max(low, top - STACK.maxWall), to: top - 1, low: { x, y: y + 1 } };
+}
+
 // 往目標靠近一步：dt 毫秒過去後的新值；離目標夠近或太遠就直接到位
 export function approach(cur, target, dt) {
   const d = target - cur;

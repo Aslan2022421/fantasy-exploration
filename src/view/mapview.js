@@ -29,6 +29,36 @@ export function createMapView(image, ctx) {
       }
       tiles.draw(ctx, ch, px, py, s.tile, fg, null);
     },
+    // 離屏圖層：寬 w、高 h 格的小畫布，畫法跟 drawShifted 一樣（座標從圖層左上角算），
+    // 畫好之後用 blit 整張貼上來。格子大小（tile）一變，舊圖層就不能用了，呼叫的人看 layer.tile 自己丟掉
+    layer(w, h) {
+      const tile = s.tile;
+      const k = tile / 8;
+      const canvas = document.createElement('canvas');
+      canvas.width = w * tile;
+      canvas.height = h * tile;
+      const g = canvas.getContext('2d');
+      g.imageSmoothingEnabled = false;
+      return {
+        canvas,
+        tile,
+        drawShifted(vx, vy, ox, oy, ch, fg, bg) {
+          const px = Math.round(vx * tile + ox * k);
+          const py = Math.round(vy * tile + oy * k);
+          if (bg) {
+            g.fillStyle = bg;
+            g.fillRect(px - k, py - k, tile + 2 * k, tile + 2 * k);
+          }
+          tiles.draw(g, ch, px, py, tile, fg, null);
+        },
+      };
+    },
+    // 把圖層貼到地圖區，左上角在 (gx, gy) 字元像素（可以是小數，落到整數像素）
+    blit(layer, gx, gy) {
+      const k = s.tile / 8;
+      ctx.drawImage(layer.canvas, Math.round(s.map.x + gx * k), Math.round(s.map.y + gy * k));
+    },
+    tile: () => s.tile,
     // 整個地圖區塗成一個顏色
     fill(color) {
       ctx.fillStyle = color;

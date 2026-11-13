@@ -1,9 +1,8 @@
-// 畫地圖區。預設是全俯視透視（使用者選定，perspective.js）：相機在畫面中心正上方，
-// 高的地形與物件同一個字疊好幾層，往中心錯開幾個像素，離中心越遠錯得越開。網址加 ?leftdown 是前一版（光從右上照，
-// 往左下拉側面與物件影子，extrude.js），加 ?flat 不畫側面，留著對照用。
+// 畫地圖區。預設是全俯視透視（使用者選定，perspective.js 算層、stackview.js 畫）：相機在畫面中心正上方，
+// 以角色所在的高度層為原點，高的往外、低的往內錯開，地形邊緣與物件疊層。網址加 ?leftdown 是前一版
+// （光從右上照，往左下拉側面與物件影子，extrude.js），加 ?flat 不畫側面，這兩種頂面都在原位。
 // - 亮度：生成時算好的亮度級數（陸地看高度層＋坡向明暗，水看深度）
 // - 樹冠：多格的樹右上亮、左下暗
-// 頂面都畫在原位，滑鼠點哪格就是哪格。
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
@@ -12,8 +11,8 @@ import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
 import { lookAt } from './glyphs.js';
-import { layerOffset, MAX_LAYERS, objectLayers, STACK, terrainLayers } from './perspective.js';
 import { buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
+import { createStackView } from './stackview.js';
 
 const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
 const SHADOW_DIM = 0.6; // 影子裡的亮度
@@ -50,36 +49,20 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
     return table[o][level][FLAT];
   }
 
-  // 全俯視透視的第一遍：地面畫在原位（有物件時只畫背景），要疊層的記進 stacks 等第二遍
-  function drawGround(vx, vy, x, y, cx, cy, stacks) {
-    const g = groundLook(x, y);
-    const o = world.objectAt(x, y);
-    const glyph = o >= 0 ? ' ' : g.glyph;
-    mapView.draw(vx, vy, glyph, g.fg, g.bg);
-    const at = { vx, vy, dx: x - cx, dy: y - cy };
-    const tl = terrainLayers(world, cx, cy, x, y);
-    if (tl) stacks.terrain.push({ ...at, layers: tl, glyph, fg: g.fg, bg: g.bg });
-    if (o < 0) return;
-    const look = withObject({ ...g }, x, y, o);
-    const ol = objectLayers(objects[o]);
-    if (ol) stacks.object.push({ ...at, layers: ol, glyph: look.glyph, fg: look.fg, bg: null });
-    else mapView.draw(vx, vy, look.glyph, look.fg);
+  // 物件那格的樣子（疊層用）：樹葉或矮叢的字與顏色、樹幹的字與顏色
+  function objectLook(x, y, o) {
+    const part = world.objectPartAt(x, y);
+    const base = objectFgAt(x, y, o, world.shadeAt(x, y));
+    const isTrunk = part === PART_TRUNK;
+    return {
+      glyph: objects[o].glyph,
+      fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part]),
+      trunkGlyph: TRUNK_GLYPH,
+      trunkFg: dimColor(base, PART_FACTOR[PART_TRUNK]),
+      isTrunk,
+    };
   }
-
-  // 第二遍：先地形再物件，各自由最底層畫到頂層（頂層在原位、最亮），近處的底層不會蓋掉別格的頂
-  function drawStacks(stacks) {
-    for (const list of [stacks.terrain, stacks.object]) {
-      for (let j = MAX_LAYERS - 1; j >= 0; j--) {
-        const f = STACK.dims[j];
-        for (const s of list) {
-          if (s.layers - 1 < j) continue;
-          const { ox, oy } = layerOffset(s.dx, s.dy, j);
-          const bg = s.bg && (j ? dimColor(s.bg, f) : s.bg);
-          mapView.drawShifted(s.vx, s.vy, ox, oy, s.glyph, j ? dimColor(s.fg, f) : s.fg, bg);
-        }
-      }
-    }
-  }
+  const stack = createStackView(mapView, world, objects, { ground: groundLook, object: objectLook });
 
   function withObject(look, x, y, o) {
     if (o < 0) return look;
@@ -132,22 +115,21 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
 
   // overlay：{ route: {steps, reachable} | null, target, examined, player }
   function draw(screen, cam, overlay) {
-    const cx = cam.x + Math.floor(screen.cols / 2); // 相機在畫面中心正上方
-    const cy = cam.y + Math.floor(screen.rows / 2);
-    const stacks = mode === 'perspective' ? { terrain: [], object: [] } : null;
+    if (mode === 'perspective') {
+      stack.draw(screen, cam, overlay);
+      return;
+    }
     for (let vy = 0; vy < screen.rows; vy++) {
       for (let vx = 0; vx < screen.cols; vx++) {
         const x = cam.x + vx;
         const y = cam.y + vy;
         if (!world.inside(x, y)) mapView.draw(vx, vy, ' ', COLORS.bg, COLORS.void);
-        else if (stacks) drawGround(vx, vy, x, y, cx, cy, stacks);
         else {
           const look = cellLook(x, y);
           mapView.draw(vx, vy, look.glyph, look.fg, look.bg);
         }
       }
     }
-    if (stacks) drawStacks(stacks);
     drawMarks(screen, cam, overlay);
     const { player } = overlay;
     mapView.draw(player.x - cam.x, player.y - cam.y, '@', COLORS.player, COLORS.bg);
@@ -155,8 +137,9 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
 
   return {
     draw,
-    // 視窗格 → 世界格（頂面都在原位，點哪格就是哪格）；世界外回傳 null
+    // 視窗格 → 世界格；世界外回傳 null。全俯視透視時找畫面上那一點最上面的地面
     cellAt(cam, vx, vy) {
+      if (mode === 'perspective') return stack.cellAt(cam, vx, vy);
       const c = { x: cam.x + vx, y: cam.y + vy };
       return world.inside(c.x, c.y) ? c : null;
     },

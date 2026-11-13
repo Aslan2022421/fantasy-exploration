@@ -18,9 +18,33 @@ export function createMapView(image, ctx) {
       tiles.draw(ctx, ch, s.map.x + vx * s.tile, s.map.y + vy * s.tile, s.tile, fg, bg);
     },
     // 同上，但再錯開 (ox, oy) 個字元像素（一格 8 個；放大時跟著放大，點陣不糊）。bg 可省略，只畫字
+    // 背景四邊各多塗 1 個字元像素：相鄰兩格錯開量四捨五入不同時，中間才不會露出細縫
     drawShifted(vx, vy, ox, oy, ch, fg, bg) {
       const k = s.tile / 8;
-      tiles.draw(ctx, ch, s.map.x + vx * s.tile + ox * k, s.map.y + vy * s.tile + oy * k, s.tile, fg, bg);
+      const px = s.map.x + vx * s.tile + ox * k;
+      const py = s.map.y + vy * s.tile + oy * k;
+      if (bg) {
+        ctx.fillStyle = bg;
+        ctx.fillRect(px - k, py - k, s.tile + 2 * k, s.tile + 2 * k);
+      }
+      tiles.draw(ctx, ch, px, py, s.tile, fg, null);
+    },
+    // 整個地圖區塗成一個顏色
+    fill(color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(s.map.x, s.map.y, s.map.w, s.map.h);
+    },
+    // 在 fn 裡畫的東西只留在地圖區內（錯開的字不會畫到旁邊的訊息欄）
+    clipped(fn) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(s.map.x, s.map.y, s.map.w, s.map.h);
+      ctx.clip();
+      try {
+        fn();
+      } finally {
+        ctx.restore();
+      }
     },
     // 滑鼠 → 地圖區第幾格；不在地圖區回傳 null
     cellAt(e) {

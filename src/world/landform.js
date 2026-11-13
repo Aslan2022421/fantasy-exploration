@@ -19,7 +19,20 @@ export const LAND = {
   shallowRange: 3, // 淺水要在深水幾格內，不然改回陸地
   tierStep: 0.22, // 大地形每高這麼多算一層
   landTiers: 4, // 陸地第 1～4 層
+  mountain: 0.42, // 高度（含細節）高於這個是山地
+  mountainStep: 0.05, // 山地從自己那層往上，用完整高度每這麼多再加一層
+  mountainTiers: 3, // 山地最多再加幾層
 };
+
+export const MAX_TIER = LAND.landTiers + LAND.mountainTiers; // 7
+
+// 這格的高度層：大地形的陸地層；山地再用完整高度往上加 1～3 層，山才會從高地上一階一階長出去
+export function landTierOf(macro, h) {
+  const base = Math.max(1, Math.min(LAND.landTiers, 1 + Math.floor((macro - LAND.water) / LAND.tierStep)));
+  if (h <= LAND.mountain) return base;
+  const extra = Math.min(LAND.mountainTiers, 1 + Math.floor((h - LAND.mountain) / LAND.mountainStep));
+  return Math.min(MAX_TIER, base + extra);
+}
 
 export const WATER_NONE = 0;
 export const WATER_SHALLOW = 1;
@@ -31,7 +44,6 @@ export function createLandform(seed) {
   const macroAt = (x, y) => fbm(nMacro, x, y, LAND.macroBase, LAND.macroOctaves);
   const heightAt = (x, y) => macroAt(x, y) + LAND.detailAmp * fbm(nDetail, x, y, LAND.detailBase, LAND.detailOctaves);
   const isDeep = (h) => h < LAND.water - LAND.deepDepth;
-  const landTier = (m) => Math.max(1, Math.min(LAND.landTiers, 1 + Math.floor((m - LAND.water) / LAND.tierStep)));
 
   // 一片矩形（左上 gx0, gy0，寬 w、高 hgt）裡每格的 { h 高度, water 水的種類, tier 高度層 }。
   // 為了判斷淺水旁有沒有深水，內部多算外圍 RANGE 格
@@ -64,7 +76,7 @@ export function createLandform(seed) {
             for (let dx = -R; dx <= R; dx++) if (deep[k + dy * W + dx]) kind = WATER_SHALLOW;
         }
         water[i] = kind;
-        tier[i] = kind === WATER_NONE ? landTier(macroAt(gx0 + x, gy0 + y)) : 0;
+        tier[i] = kind === WATER_NONE ? landTierOf(macroAt(gx0 + x, gy0 + y), v) : 0;
       }
     }
     return { h, water, tier };

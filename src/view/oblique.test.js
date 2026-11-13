@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { LIFT, pick, screenOf, topRow } from './oblique.js';
+import { LIFT, liftOf, MOUNTAIN_LIFT, pick, screenOf, topRow } from './oblique.js';
 
 // 測試用的小世界：tiers[y][x] 是高度層
 function fakeWorld(tiers) {
@@ -14,6 +14,13 @@ test('高一層，頂面往上抬 LIFT 行', () => {
   expect(topRow(10, 0, 0)).toBe(10);
   expect(topRow(10, 2, 0)).toBe(10 - 2 * LIFT);
   expect(topRow(10, 1, 4)).toBe(6 - LIFT);
+});
+
+test('山地多出來的層每層只抬 MOUNTAIN_LIFT 行', () => {
+  expect(liftOf(4)).toBe(4 * LIFT);
+  expect(liftOf(5)).toBe(4 * LIFT + MOUNTAIN_LIFT);
+  expect(liftOf(7)).toBe(4 * LIFT + 3 * MOUNTAIN_LIFT);
+  expect(topRow(20, 6, 0)).toBe(20 - liftOf(6));
 });
 
 test('平地：點哪格就是哪格', () => {

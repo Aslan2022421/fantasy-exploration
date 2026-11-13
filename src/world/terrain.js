@@ -13,7 +13,6 @@ export const GEN = {
   wetOctaves: 3,
   floraBase: 24, // 樹叢成片的大小
   band: 0.1, // 溫度、濕度超過 ±這個值才算寒冷／炎熱、乾燥／潮濕
-  mountain: 0.42, // 高度高於這個是山地
   waterShadeStep: 0.05, // 水每深這麼多暗一級
 };
 
@@ -70,7 +69,7 @@ export function createTerrainGen(seed, data) {
   function classify(water, h, biome) {
     if (water === WATER_DEEP) return DEEP;
     if (water === WATER_SHALLOW) return SHALLOW;
-    if (h > GEN.mountain) return MOUNTAIN;
+    if (h > LAND.mountain) return MOUNTAIN;
     return flora[biome].ground;
   }
 
@@ -118,7 +117,7 @@ export function createTerrainGen(seed, data) {
         object[i] = placeObject(X, Y, b, terrain[i]);
         if (g.water[c] === WATER_NONE) {
           const grad = gradient((dx, dy) => g.h[c + dy * B + dx]);
-          shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy));
+          shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy), terrain[i] === MOUNTAIN);
         } else shade[i] = waterLevel(h);
       }
     }

@@ -2,7 +2,7 @@ import { RNG } from 'rot-js';
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { gradient, lightLevel, shadeLevel } from './hillshade.js';
-import { LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
+import { LAND, landTierOf, MAX_TIER, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { reliefOf } from './relief.js';
 import { createTerrainGen, waterLevel } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
@@ -148,6 +148,24 @@ describe('世界的形狀', () => {
     }
     expect(shallow).toBeGreaterThan(0);
     expect(WATER_SHALLOW).not.toBe(WATER_DEEP);
+  });
+
+  test('山地會比它所在的大地形層再高幾層，最高不超過 MAX_TIER', () => {
+    const mountain = DATA.terrainIndex.get('mountain');
+    let above = 0;
+    for (let zy = 0; zy < 3; zy++) {
+      for (let zx = 0; zx < 3; zx++) {
+        const z = world.zone(zx, zy);
+        for (let i = 0; i < z.tier.length; i++) {
+          expect(z.tier[i]).toBeLessThanOrEqual(MAX_TIER);
+          if (z.terrain[i] === mountain && z.tier[i] > LAND.landTiers) above++;
+          if (z.terrain[i] !== mountain) expect(z.tier[i]).toBeLessThanOrEqual(LAND.landTiers);
+        }
+      }
+    }
+    expect(above).toBeGreaterThan(0);
+    expect(landTierOf(0.5, 0.3)).toBeLessThanOrEqual(LAND.landTiers); // 不是山地就不加層
+    expect(landTierOf(0.5, LAND.mountain + 0.01)).toBe(LAND.landTiers + 1);
   });
 
   test('物件只撒在該生態的平地上；物件層跟地形層分開', () => {

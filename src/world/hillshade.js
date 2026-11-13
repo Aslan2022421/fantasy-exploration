@@ -35,9 +35,12 @@ export function shadeLevel(dx, dy) {
 }
 
 // 陸地的亮度級數：主要由高度層決定（越高越亮），坡向明暗只微調 -2～+1 級。
-// tier 是 landform.js 的陸地高度層（1～4），hs 是上面的 shadeLevel（平地 5）
-export function lightLevel(tier, hs) {
-  return Math.max(0, Math.min(LEVELS - 1, 2 + tier + Math.round((hs - 5) / 3)));
+// 山地（steep）坡向明暗加強到 -4～+2 級：向光面亮、背光面暗，看得出坡。
+// tier 是 landform.js 的陸地高度層（1～4，山地最高到 7），hs 是上面的 shadeLevel（平地 5）
+export function lightLevel(tier, hs, steep = false) {
+  const base = 2 + Math.min(tier, 4) + (tier > 4 ? 1 : 0);
+  const delta = steep ? Math.round((hs - 5) * 0.75) : Math.round((hs - 5) / 3);
+  return Math.max(0, Math.min(LEVELS - 1, base + delta));
 }
 
 // 每一級的亮度倍率：最暗 0.3、最亮 1.2，低地暗、高地亮，差距拉大

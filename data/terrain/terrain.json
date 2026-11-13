@@ -6,6 +6,7 @@
     "color": "#3b6f8f",
     "passable": false,
     "shade": false,
+    "ramp": false,
     "tile": null
   },
   {
@@ -15,12 +16,49 @@
     "color": "#5f93a8",
     "passable": true,
     "shade": false,
+    "ramp": false,
     "tile": null
   },
-  { "id": "grass", "name": "草地", "glyph": "\"", "color": "#7f9f62", "passable": true, "shade": true, "tile": null },
-  { "id": "sand", "name": "沙地", "glyph": "·", "color": "#c2b07a", "passable": true, "shade": true, "tile": null },
-  { "id": "snow", "name": "雪地", "glyph": "·", "color": "#d8e0e0", "passable": true, "shade": true, "tile": null },
-  { "id": "mud", "name": "泥地", "glyph": ",", "color": "#8a7a5a", "passable": true, "shade": true, "tile": null },
+  {
+    "id": "grass",
+    "name": "草地",
+    "glyph": "\"",
+    "color": "#7f9f62",
+    "passable": true,
+    "shade": true,
+    "ramp": true,
+    "tile": null
+  },
+  {
+    "id": "sand",
+    "name": "沙地",
+    "glyph": "·",
+    "color": "#c2b07a",
+    "passable": true,
+    "shade": true,
+    "ramp": true,
+    "tile": null
+  },
+  {
+    "id": "snow",
+    "name": "雪地",
+    "glyph": "·",
+    "color": "#d8e0e0",
+    "passable": true,
+    "shade": true,
+    "ramp": true,
+    "tile": null
+  },
+  {
+    "id": "mud",
+    "name": "泥地",
+    "glyph": ",",
+    "color": "#8a7a5a",
+    "passable": true,
+    "shade": true,
+    "ramp": true,
+    "tile": null
+  },
   {
     "id": "broadleaf",
     "name": "闊葉樹",
@@ -28,6 +66,7 @@
     "color": "#5f8a4a",
     "passable": true,
     "shade": true,
+    "ramp": false,
     "tile": null
   },
   {
@@ -37,18 +76,47 @@
     "color": "#5a8a6a",
     "passable": true,
     "shade": true,
+    "ramp": false,
     "tile": null
   },
-  { "id": "jungle", "name": "叢林", "glyph": "♠", "color": "#4f9a4a", "passable": true, "shade": true, "tile": null },
-  { "id": "shrub", "name": "矮叢", "glyph": "τ", "color": "#8a9a5a", "passable": true, "shade": true, "tile": null },
-  { "id": "mountain", "name": "山地", "glyph": "▲", "color": "#9fa8a0", "passable": true, "shade": true, "tile": null },
+  {
+    "id": "jungle",
+    "name": "叢林",
+    "glyph": "♠",
+    "color": "#4f9a4a",
+    "passable": true,
+    "shade": true,
+    "ramp": false,
+    "tile": null
+  },
+  {
+    "id": "shrub",
+    "name": "矮叢",
+    "glyph": "τ",
+    "color": "#8a9a5a",
+    "passable": true,
+    "shade": true,
+    "ramp": false,
+    "tile": null
+  },
+  {
+    "id": "mountain",
+    "name": "山地",
+    "glyph": "▲",
+    "color": "#9fa8a0",
+    "passable": true,
+    "shade": true,
+    "ramp": true,
+    "tile": null
+  },
   {
     "id": "rock-wall",
     "name": "岩壁",
     "glyph": "█",
-    "color": "#6f7a76",
+    "color": "#5c4f46",
     "passable": false,
     "shade": true,
+    "ramp": false,
     "tile": null
   }
 ]

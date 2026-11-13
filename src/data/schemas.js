@@ -13,6 +13,9 @@ export const TerrainSchema = z.object({
   color: Color,
   passable: z.boolean(),
   shade: z.boolean(), // 要不要套地形明暗（水面不套）
+  // 地面（true）：畫面依亮度從密度階梯選字元，地面是統一的紋理、光照才讀得出來；
+  // 東西（false）：樹、水、岩壁這類保留自己的字元，像物件站在地面上。glyph 仍是它在說明與圖例裡的代表字
+  ramp: z.boolean(),
   tile: z.string().nullable(), // 預留給圖塊模式
 });
 

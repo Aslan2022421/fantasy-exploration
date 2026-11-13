@@ -10,7 +10,9 @@ import {
   objectLayers,
   STACK,
   shiftOf,
+  shiftUp,
   TREE,
+  UP,
   wallRange,
   wallSouth,
 } from './perspective.js';
@@ -67,6 +69,16 @@ test('牆：比往中心那一格高才有，記下低處那格；水邊遠側�
   expect(wallRange(w, 10, 10, 4, 10)).toBeNull(); // 近側的岸
   expect(wallRange(w, 10, 10, 16, 10)).toMatchObject({ from: groundHeight(1), to: groundHeight(3) - 1 });
   expect(wallRange(w, 10, 10, 10, 10)).toBeNull();
+});
+
+test('往斜上方錯開的量是固定螢幕像素：格子放大幾倍，字元像素就除以幾，總量有上限', () => {
+  for (const k of [1, 2, 3, 4]) {
+    const s = shiftUp(2, k);
+    expect(s.ox * k).toBeCloseTo(2 * UP.px);
+    expect(s.oy * k).toBeCloseTo(-2 * UP.px);
+    expect(shiftUp(999, k).ox * k).toBeCloseTo(UP.maxPx);
+  }
+  expect(shiftUp(0, 2)).toEqual({ ox: 0, oy: 0 });
 });
 
 test('往斜上方疊的牆：比南、西、西南最低那格高才有，從那格的高度疊上來', () => {

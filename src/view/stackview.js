@@ -15,13 +15,12 @@ import {
   objectLayers,
   PLAYER_LAYERS,
   shiftUp,
-  UP_SHIFT_CELLS,
+  upShiftCells,
   wallSouth,
 } from './perspective.js';
 import { dimColor, mixColor } from './shades.js';
 
 const CHUNK = 16; // 分塊邊長（格）
-const BELOW = UP_SHIFT_CELLS + 1; // 畫一塊時往下、往左多畫幾格
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
 const SIGHT = { near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 }; // 視野外壓暗：COLORS.dark 的 RGB
 const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5 }; // 路線的亮度隨高度、線寬（字元像素）
@@ -78,13 +77,15 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     const x0 = cx * CHUNK;
     const y0 = cy * CHUNK;
     const buckets = [];
-    for (let y = y0 - 1; y < y0 + CHUNK + BELOW; y++) {
-      for (let x = x0 - BELOW; x <= x0 + CHUNK; x++) if (world.inside(x, y)) collect(x, y, buckets);
+    const k = layer.tile / 8;
+    const below = upShiftCells(k) + 1; // 東西往右上錯開，往下、往左多畫幾格
+    for (let y = y0 - 1; y < y0 + CHUNK + below; y++) {
+      for (let x = x0 - below; x <= x0 + CHUNK; x++) if (world.inside(x, y)) collect(x, y, buckets);
     }
     for (const list of buckets) {
       if (!list) continue;
       for (const it of list) {
-        const { ox, oy } = shiftUp(it.h);
+        const { ox, oy } = shiftUp(it.h, k);
         layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg);
       }
     }
@@ -105,7 +106,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
 
   // 世界格 (x, y) 的地面畫在地圖區哪裡（字元像素，左上角）
   function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y))) {
-    const { ox, oy } = shiftUp(h);
+    const { ox, oy } = shiftUp(h, mapView.tile() / 8);
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
@@ -182,9 +183,10 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     const f = view ?? cam;
     const gx = Math.floor(f.x + fx / 8);
     const gy = Math.floor(f.y + fy / 8);
+    const below = upShiftCells(mapView.tile() / 8) + 1;
     let best = null;
-    for (let y = gy; y <= gy + BELOW; y++) {
-      for (let x = gx - BELOW; x <= gx; x++) {
+    for (let y = gy; y <= gy + below; y++) {
+      for (let x = gx - below; x <= gx; x++) {
         if (!world.inside(x, y)) continue;
         const { px, py } = placeOf(f, x, y);
         if (fx < px || fx >= px + 8 || fy < py || fy >= py + 8) continue;

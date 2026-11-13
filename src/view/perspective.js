@@ -59,15 +59,18 @@ export function shiftOf(dx, dy, dh) {
 }
 
 // 往斜上方疊（預設；使用者選 B 的平行投影，再要斜上方）：錯開量只看高度，跟在畫面哪裡、相機在哪都無關，
-// 畫面是 100% 靜止的平行投影，走路時整張圖只平移。每高一層往右上錯開 (dx, dy) 個字元像素，
-// 高的東西同時露出南面與西面兩面牆（光從右上照，露出的是背光面）
-export const UP = { dx: 1, dy: -1, maxLayers: 24 };
-export const UP_SHIFT_CELLS = Math.ceil(UP.maxLayers / 8);
+// 畫面是 100% 靜止的平行投影，走路時整張圖只平移。高的東西同時露出南面與西面兩面牆（光從右上照，露出的是背光面）。
+// 每高一層往右、往上各錯開 px 個「螢幕像素」，不跟著地圖縮放變（使用者定：原本用字元像素，
+// 預設大小每層只錯 2 像素，要放到最大才看得出立體）；總量最多 maxPx 螢幕像素，最高的山頂會被壓平一點
+export const UP = { px: 4, maxPx: 64 };
 
-// 高度 h（層，原點是水面）錯開多少字元像素：{ ox 往右（正）, oy 往上（負）}
-export function shiftUp(h) {
-  const s = Math.min(UP.maxLayers, Math.max(0, h));
-  return { ox: s * UP.dx || 0, oy: s * UP.dy || 0 }; // || 0 把 -0 變 0
+// 格子放大 k 倍（一個字元像素是 k 個螢幕像素）時，錯開最多幾格
+export const upShiftCells = (k) => Math.ceil(UP.maxPx / k / 8);
+
+// 高度 h（層，原點是水面）錯開多少字元像素（可以是小數）：{ ox 往右（正）, oy 往上（負）}；k 是格子放大倍數
+export function shiftUp(h, k = 1) {
+  const s = Math.min(UP.maxPx, Math.max(0, h) * UP.px) / k;
+  return { ox: s || 0, oy: -s || 0 }; // || 0 把 -0 變 0
 }
 
 // 往斜上方疊時的牆：比南、西、西南三格裡最低的那格高才有，從那格的高度疊上來。

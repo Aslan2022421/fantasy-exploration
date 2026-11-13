@@ -71,6 +71,25 @@ describe('存檔與重放', () => {
     expect(loadGame(saved, { fromCheckpoint: false }).state).toEqual(loadGame(saved, { fromCheckpoint: false }).state);
   });
 
+  test('世界版本不同的存檔不讀（地形生成改過，舊紀錄會錯位）', () => {
+    const g = newGame(SEED);
+    walkAround(g, 5);
+    const saved = structuredClone(g.serialize());
+    expect(loadGame(saved)).not.toBeNull();
+    expect(loadGame({ ...saved, world: saved.world + 1 })).toBeNull();
+  });
+
+  test('套完紀錄後冒險者站在走不過去的格子上，當成不相容', () => {
+    const g = newGame(SEED);
+    const saved = structuredClone(g.serialize());
+    // 找一格深水，把起點改到那裡
+    let water = null;
+    for (let y = 0; y < g.world.height && !water; y++)
+      for (let x = 0; x < g.world.width && !water; x++) if (!g.world.isPassable(x, y)) water = { x, y };
+    saved.records[0].data.at = water;
+    expect(loadGame(saved)).toBeNull();
+  });
+
   test('格式不對的存檔回傳 null', () => {
     expect(loadGame(null)).toBeNull();
     expect(loadGame({ format: 999, seed: 1, records: [], checkpoint: null })).toBeNull();

@@ -4,6 +4,9 @@
 
 import { bandOf, createTerrainGen, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
+// 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
+export const WORLD_VERSION = 1;
+
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;
 export const ZONE_SIZE = 96; // 一區的邊長（格）

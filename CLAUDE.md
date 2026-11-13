@@ -24,6 +24,7 @@
 - 依賴只往下走：`view` 可以讀 `world`，`world` 不讀 `view`；`core` 不依賴任何人。模擬層要能在 Node 裡測。
 - 一個檔案管一件事，超過 300 行就拆。測試放在被測檔案旁邊（`x.js` 配 `x.test.js`），跨檔的測試放 `test/`。
 - 存檔只透過 `src/core/store.js` 的介面，不直接碰 `localStorage`。
+- 存檔只存種子＋紀錄，地圖讀檔時重生。改了地形生成（`src/world/landform.js`、`terrain.js`，或 `data/terrain`、`data/biome`、`data/object`）就把 `src/world/world.js` 的 `WORLD_VERSION` 加一，否則舊紀錄會套到新地圖上錯位。
 - 地圖用 `assets/tiles/cp437.png` 蓋印章，介面字用 `src/view/font.js` 烘焙點陣；格子永遠是 8 的整數倍、文字 12 的整數倍。
 - 註解用繁體中文，寫為什麼，不寫顯而易見的事。
 - 不使用區塊鏈、挖礦、虛擬貨幣的概念與用語。

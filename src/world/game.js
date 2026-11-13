@@ -1,22 +1,25 @@
 // 遊戲世界：狀態只由「種子＋紀錄」決定。
 // 每個動作先寫成一筆紀錄，再用 apply 套到狀態上；讀檔時把紀錄照做一遍，結果一定跟當初一樣。
 // 每隔 CHECKPOINT_EVERY 筆存一次檢查點（狀態＋各條亂數），讀檔從最近的檢查點接著做。
-// 地圖不存：世界用種子重生（world.js），所以存檔只有種子、紀錄與檢查點
+// 地圖不存：世界用種子重生（world.js），所以存檔只有種子、紀錄與檢查點。
+// 因此地形生成一改，舊紀錄套到新地圖上就會錯位（例如冒險者被放進湖心）。
+// 存檔記下世界版本（WORLD_VERSION），不同就不讀；讀出來冒險者站在走不過去的格子上，也當成不相容
 
 import { z } from 'zod';
 import { createLog, RecordSchema } from '../core/records.js';
 import { createStreams } from '../core/rng.js';
 import { DATA } from '../data/load.js';
 import { tryMove } from './move.js';
-import { createWorld, startPosition } from './world.js';
+import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
-export const SAVE_FORMAT = 2; // 階段 2：地圖換成兩層世界，舊存檔不再讀
+export const SAVE_FORMAT = 3; // 3：加上世界版本
 export const CHECKPOINT_EVERY = 100;
 const PLAYER = 'player';
 
 const StateSchema = z.object({ player: z.object({ x: z.number(), y: z.number() }), time: z.number() });
 export const SaveSchema = z.object({
   format: z.literal(SAVE_FORMAT),
+  world: z.literal(WORLD_VERSION),
   seed: z.number(),
   records: z.array(RecordSchema),
   checkpoint: z
@@ -78,7 +81,7 @@ function makeGame(seed, rng, world, log, initialState, checkpoint) {
       return record({ verb: 'blocked', data: {}, cause });
     },
     serialize() {
-      return { format: SAVE_FORMAT, seed, records: log.all(), checkpoint: lastCheckpoint };
+      return { format: SAVE_FORMAT, world: WORLD_VERSION, seed, records: log.all(), checkpoint: lastCheckpoint };
     },
   };
 }
@@ -105,5 +108,7 @@ export function loadGame(saved, { fromCheckpoint = true } = {}) {
     from = checkpoint.at + 1;
   }
   for (let i = from; i < records.length; i++) state = apply(state, records[i]);
+  // 保險：套完紀錄後冒險者站在走不過去的格子上，表示紀錄跟這張地圖對不上，當成不相容
+  if (!world.isPassable(state.player.x, state.player.y)) return null;
   return makeGame(seed, rng, world, createLog(records), state, useCheckpoint ? checkpoint : null);
 }

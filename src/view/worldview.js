@@ -2,10 +2,11 @@
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
 
 import { COLORS } from './colors.js';
-import { buildShadeTable } from './shades.js';
+import { buildShadeTable, cliffLook } from './shades.js';
 
 export function createWorldView(mapView, world, terrains) {
   const shades = buildShadeTable(terrains); // { glyph, fg, bg }：[地形][明暗級數][立面]
+  const cliff = terrains.map((t) => t.style === 'cliff');
 
   // overlay：{ route: {steps, reachable} | null, target, examined, player }
   function draw(screen, cam, { route, target, examined, player }) {
@@ -21,15 +22,19 @@ export function createWorldView(mapView, world, terrains) {
         const t = world.terrainAt(x, y);
         const level = world.shadeAt(x, y);
         const relief = world.reliefAt(x, y);
+        // 斷崖：北邊那格不是斷崖，這格就是崖頂
+        const look = cliff[t]
+          ? cliffLook(shades, t, level, x, world.terrainAt(x, y - 1) !== t)
+          : { glyph: shades.glyph[t][level][relief], fg: shades.fg[t][level][relief], bg: shades.bg[t][level][relief] };
         const isTarget = target?.x === x && target?.y === y;
-        let bg = shades.bg[t][level][relief];
+        let bg = look.bg;
         if (examined?.x === x && examined?.y === y) bg = COLORS.examined;
         if (isTarget) bg = route?.reachable ? COLORS.target : COLORS.blocked;
         if (onRoute.has(`${x},${y}`) && !isTarget) {
           mapView.draw(vx, vy, '•', COLORS.path, bg);
           continue;
         }
-        mapView.draw(vx, vy, shades.glyph[t][level][relief], shades.fg[t][level][relief], bg);
+        mapView.draw(vx, vy, look.glyph, look.fg, bg);
       }
     }
     mapView.draw(player.x - cam.x, player.y - cam.y, '@', COLORS.player, COLORS.bg);

@@ -13,9 +13,12 @@ export const TerrainSchema = z.object({
   color: Color,
   passable: z.boolean(),
   shade: z.boolean(), // 要不要套地形明暗（水面不套）
-  // 地面（true）：畫面依亮度從密度階梯選字元，地面是統一的紋理、光照才讀得出來；
-  // 東西（false）：樹、水、岩壁這類保留自己的字元，像物件站在地面上。glyph 仍是它在說明與圖例裡的代表字
-  ramp: z.boolean(),
+  // 畫法：
+  // ramp  地面，依亮度從密度階梯選字元，地面是統一的紋理、光照才讀得出來；
+  // glyph 東西（樹、水），保留自己的字元，像物件站在地面上；
+  // cliff 斷崖，直紋字元畫成直立的立面，最上面一行稍亮當崖頂。
+  // glyph 欄位仍是它在說明與圖例裡的代表字
+  style: z.enum(['ramp', 'glyph', 'cliff']),
   tile: z.string().nullable(), // 預留給圖塊模式
 });
 

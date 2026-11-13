@@ -2,7 +2,7 @@ import { RNG } from 'rot-js';
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { gradient, shadeLevel } from './hillshade.js';
-import { reliefOf } from './relief.js';
+import { FACE, FACE_FAR, reliefOf } from './relief.js';
 import { createTerrainGen } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
@@ -113,6 +113,22 @@ describe('世界的形狀', () => {
       expect(w.isPassable(p.x, p.y)).toBe(true);
       expect(w.regionAt(p.x, p.y)).toBe(w.region(1, 1));
     }
+  });
+
+  test('岩壁只長在台階立面上', () => {
+    const wall = DATA.terrainIndex.get('rock-wall');
+    let walls = 0;
+    for (let zy = 0; zy < 3; zy++) {
+      for (let zx = 0; zx < 3; zx++) {
+        const z = world.zone(zx, zy);
+        for (let i = 0; i < z.terrain.length; i++) {
+          if (z.terrain[i] !== wall) continue;
+          walls++;
+          expect([FACE, FACE_FAR]).toContain(z.relief[i]);
+        }
+      }
+    }
+    expect(walls).toBeGreaterThan(0);
   });
 
   test('格子的資訊', () => {

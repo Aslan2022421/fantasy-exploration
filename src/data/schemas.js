@@ -27,6 +27,7 @@ export const ObjectSchema = z.object({
   glyph: Glyph,
   color: Color,
   passable: z.boolean(),
+  height: z.number().int().min(0).max(3), // 有多高：影子往左下拉幾格（樹 3、矮叢 2）
   tile: z.string().nullable(),
 });
 

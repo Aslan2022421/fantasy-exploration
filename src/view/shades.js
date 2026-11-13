@@ -22,6 +22,18 @@ function scale(rgb, f) {
   return Color.toHex(rgb.map((c) => Math.max(0, Math.min(255, Math.round(c * f)))));
 }
 
+// 把畫面上的顏色再調暗（側面、影子用）。結果快取起來，種類有上限，字元表的染色快取不會無限長大
+const dimCache = new Map();
+export function dimColor(hex, f) {
+  const key = `${hex}:${f}`;
+  let out = dimCache.get(key);
+  if (!out) {
+    out = scale(Color.fromString(hex), f);
+    dimCache.set(key, out);
+  }
+  return out;
+}
+
 // 往同亮度的灰色拉，彩度剩 SATURATION
 export function desaturate(rgb) {
   const gray = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
@@ -74,18 +86,6 @@ export function buildShadeTable(terrains) {
     bg.push(b);
   }
   return { step, fg, bg };
-}
-
-// 斜投影的側面：[地形編號][第幾行] → { glyph, fg, bg }。第 0 行緊貼頂面（較亮），往下更暗。
-// 用地形自己的顏色，看得出是哪一種地面的側面
-const WALL_FACTOR = [0.5, 0.36];
-export const WALL_GLYPH = '▓';
-
-export function buildWallShades(terrains) {
-  return terrains.map((t) => {
-    const base = desaturate(Color.fromString(t.color));
-    return WALL_FACTOR.map((k) => ({ glyph: WALL_GLYPH, fg: scale(base, k), bg: scale(base, k * 0.6) }));
-  });
 }
 
 // 物件層的字元色：[物件編號][明暗級數][立面]。物件跟它腳下的地面受同一道光，

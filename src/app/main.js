@@ -66,7 +66,7 @@ let maxHistoryScroll = 0;
 const player = () => game.state.player;
 const save = () => store.save(SAVE_KEY, game.serialize());
 const world = game.world;
-const worldView = createWorldView(mapView, world, DATA, { oblique: !params.has('flat') }); // ?flat 看俯視對照
+const worldView = createWorldView(mapView, world, DATA, { extrude: !params.has('flat') }); // ?flat 不畫側面與影子
 const camera = () => cameraOrigin(player().x, player().y, world.width, world.height, screen.cols, screen.rows);
 
 // 花時間的動作：輪到冒險者才做，做完把回合交回排程

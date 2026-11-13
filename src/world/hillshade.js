@@ -1,12 +1,13 @@
 // 地形明暗（hillshade）：看一格周圍 3×3 的高度算出坡度與坡向，再跟光的方向合成亮度。
-// 做法照 GIS 的 Horn 法（ArcGIS〈How Hillshade works〉、GDAL hillshade），光從左上照下來
-// （方位角 315°、高度角 45°）。結果量化成 LEVELS 級。
+// 做法照 GIS 的 Horn 法（ArcGIS〈How Hillshade works〉、GDAL hillshade），光從右上照下來
+// （方位角 45°、高度角 45°）。結果量化成 LEVELS 級。
 // 畫面的亮度主要看高度層（lightLevel），坡向明暗只當微調
 
 export const LEVELS = 8;
 export const Z_FACTOR = 24; // 高度放大倍數：高度是 -1～1，不放大的話坡幾乎看不出來
 const ZENITH = Math.PI / 4; // 90° − 高度角 45°
-const AZIMUTH = ((360 - 315 + 90) % 360) * (Math.PI / 180); // 換成數學角度
+// 光從右上照（方位角 45°，使用者給的參考圖是這樣），側面與影子都往左下
+const AZIMUTH = ((360 - 45 + 90) % 360) * (Math.PI / 180); // 換成數學角度
 
 // 坡度的兩個分量（Horn 法的加權差分）；h(dx, dy) 回傳鄰格高度
 export function gradient(h) {

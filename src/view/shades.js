@@ -7,7 +7,7 @@ import { Color } from 'rot-js';
 import { LEVELS, levelFactor } from '../world/hillshade.js';
 import { FACE, FACE_FAR, FLAT, RIM } from '../world/relief.js';
 
-const BG_DIM = 0.32; // 背景是地形色的幾成亮（使用者挑定的那一版）
+const BG_DIM = 0.2; // 背景是地形色的幾成亮（原本 0.32；壓暗讓疊起來的樹和牆突出，使用者同意）
 const RELIEF_FACTOR = { [FLAT]: 1, [RIM]: 1.25, [FACE]: 0.42, [FACE_FAR]: 0.3 };
 const RELIEFS = [FLAT, RIM, FACE, FACE_FAR];
 // 彩度只留幾成：地形種類仍靠色相分辨，但畫面上最強的差異是亮暗（高低）

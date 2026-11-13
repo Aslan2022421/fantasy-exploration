@@ -4,27 +4,77 @@
     "name": "凍原",
     "temperature": "cold",
     "moisture": "dry",
-    "flora": [{ "object": "shrub", "density": 0.08 }],
-    "cover": [{ "cover": "moss", "density": 0.3 }, { "cover": "sparse-grass", "density": 0.2 }]
+    "flora": [
+      {
+        "object": "shrub",
+        "density": 0.08
+      }
+    ],
+    "cover": [
+      {
+        "cover": "moss",
+        "density": 0.09
+      },
+      {
+        "cover": "sparse-grass",
+        "density": 0.06
+      }
+    ]
   },
   {
     "id": "taiga",
     "name": "針葉林",
     "temperature": "cold",
     "moisture": "normal",
-    "flora": [{ "object": "conifer", "density": 0.5 }, { "object": "shrub", "density": 0.05 }],
-    "cover": [{ "cover": "moss", "density": 0.2 }, { "cover": "sparse-grass", "density": 0.15 }]
+    "flora": [
+      {
+        "object": "conifer",
+        "density": 0.275
+      },
+      {
+        "object": "shrub",
+        "density": 0.05
+      }
+    ],
+    "cover": [
+      {
+        "cover": "moss",
+        "density": 0.06
+      },
+      {
+        "cover": "sparse-grass",
+        "density": 0.045
+      }
+    ]
   },
   {
     "id": "moss-forest",
     "name": "苔原林",
     "temperature": "cold",
     "moisture": "wet",
-    "flora": [{ "object": "conifer", "density": 0.2 }, { "object": "shrub", "density": 0.1 }],
+    "flora": [
+      {
+        "object": "conifer",
+        "density": 0.11
+      },
+      {
+        "object": "shrub",
+        "density": 0.1
+      }
+    ],
     "cover": [
-      { "cover": "moss", "density": 0.45 },
-      { "cover": "sparse-grass", "density": 0.15 },
-      { "cover": "deadwood", "density": 0.03 }
+      {
+        "cover": "moss",
+        "density": 0.135
+      },
+      {
+        "cover": "sparse-grass",
+        "density": 0.045
+      },
+      {
+        "cover": "deadwood",
+        "density": 0.009
+      }
     ]
   },
   {
@@ -32,12 +82,33 @@
     "name": "草原",
     "temperature": "mild",
     "moisture": "dry",
-    "flora": [{ "object": "shrub", "density": 0.1 }, { "object": "broadleaf", "density": 0.04 }],
+    "flora": [
+      {
+        "object": "shrub",
+        "density": 0.1
+      },
+      {
+        "object": "broadleaf",
+        "density": 0.022
+      }
+    ],
     "cover": [
-      { "cover": "fine-grass", "density": 0.35 },
-      { "cover": "sparse-grass", "density": 0.25 },
-      { "cover": "tall-grass", "density": 0.08 },
-      { "cover": "flowers", "density": 0.05 }
+      {
+        "cover": "fine-grass",
+        "density": 0.105
+      },
+      {
+        "cover": "sparse-grass",
+        "density": 0.075
+      },
+      {
+        "cover": "tall-grass",
+        "density": 0.024
+      },
+      {
+        "cover": "flowers",
+        "density": 0.015
+      }
     ]
   },
   {
@@ -45,35 +116,103 @@
     "name": "溫帶森林",
     "temperature": "mild",
     "moisture": "normal",
-    "flora": [{ "object": "broadleaf", "density": 0.5 }, { "object": "shrub", "density": 0.08 }],
-    "cover": [{ "cover": "sparse-grass", "density": 0.3 }, { "cover": "fine-grass", "density": 0.2 }]
+    "flora": [
+      {
+        "object": "broadleaf",
+        "density": 0.275
+      },
+      {
+        "object": "shrub",
+        "density": 0.08
+      }
+    ],
+    "cover": [
+      {
+        "cover": "sparse-grass",
+        "density": 0.09
+      },
+      {
+        "cover": "fine-grass",
+        "density": 0.06
+      }
+    ]
   },
   {
     "id": "temperate-rainforest",
     "name": "溫帶雨林",
     "temperature": "mild",
     "moisture": "wet",
-    "flora": [{ "object": "broadleaf", "density": 0.6 }, { "object": "shrub", "density": 0.1 }],
-    "cover": [{ "cover": "tall-grass", "density": 0.35 }, { "cover": "moss", "density": 0.15 }]
+    "flora": [
+      {
+        "object": "broadleaf",
+        "density": 0.33
+      },
+      {
+        "object": "shrub",
+        "density": 0.1
+      }
+    ],
+    "cover": [
+      {
+        "cover": "tall-grass",
+        "density": 0.105
+      },
+      {
+        "cover": "moss",
+        "density": 0.045
+      }
+    ]
   },
   {
     "id": "desert",
     "name": "沙漠",
     "temperature": "hot",
     "moisture": "dry",
-    "flora": [{ "object": "shrub", "density": 0.04 }],
-    "cover": [{ "cover": "sparse-grass", "density": 0.03 }, { "cover": "deadwood", "density": 0.01 }]
+    "flora": [
+      {
+        "object": "shrub",
+        "density": 0.04
+      }
+    ],
+    "cover": [
+      {
+        "cover": "sparse-grass",
+        "density": 0.009
+      },
+      {
+        "cover": "deadwood",
+        "density": 0.003
+      }
+    ]
   },
   {
     "id": "savanna",
     "name": "疏林草原",
     "temperature": "hot",
     "moisture": "normal",
-    "flora": [{ "object": "broadleaf", "density": 0.1 }, { "object": "shrub", "density": 0.12 }],
+    "flora": [
+      {
+        "object": "broadleaf",
+        "density": 0.055
+      },
+      {
+        "object": "shrub",
+        "density": 0.12
+      }
+    ],
     "cover": [
-      { "cover": "sparse-grass", "density": 0.3 },
-      { "cover": "tall-grass", "density": 0.2 },
-      { "cover": "fine-grass", "density": 0.15 }
+      {
+        "cover": "sparse-grass",
+        "density": 0.09
+      },
+      {
+        "cover": "tall-grass",
+        "density": 0.06
+      },
+      {
+        "cover": "fine-grass",
+        "density": 0.045
+      }
     ]
   },
   {
@@ -81,7 +220,25 @@
     "name": "雨林",
     "temperature": "hot",
     "moisture": "wet",
-    "flora": [{ "object": "jungle", "density": 0.6 }, { "object": "shrub", "density": 0.1 }],
-    "cover": [{ "cover": "tall-grass", "density": 0.45 }, { "cover": "moss", "density": 0.05 }]
+    "flora": [
+      {
+        "object": "jungle",
+        "density": 0.33
+      },
+      {
+        "object": "shrub",
+        "density": 0.1
+      }
+    ],
+    "cover": [
+      {
+        "cover": "tall-grass",
+        "density": 0.135
+      },
+      {
+        "cover": "moss",
+        "density": 0.015
+      }
+    ]
   }
 ]

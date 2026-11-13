@@ -14,7 +14,8 @@
 import { hash01 } from '../world/noise.js';
 
 export const RELIEF = [' ', '.', '·', '∙'];
-export const RELIEF_STEPS = [39, 55, 69]; // 坡度門檻（量過：陸地約一半在 39 以下）
+// 坡度門檻：只有比較陡的地方才畫起伏點，平地空著，疊起來的樹和牆才看得出來（使用者同意；原本 39、55、69）
+export const RELIEF_STEPS = [69, 85, 100];
 export const MOUNTAIN_MARK = 0.3; // 非山峰的山地格畫 ^ 的比例
 export const DUNE_STEEP = 55; // 沙地坡度到這裡以上是沙丘 ^
 

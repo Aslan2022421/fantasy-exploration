@@ -6,7 +6,7 @@ import { PART_TRUNK } from './footprint.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 8; // 8：山地一圈一圈往上加層、溫度隨高度下降、低地較濕、很冷才積雪
+export const WORLD_VERSION = 9; // 9：樹冠直徑 1～2、樹變稀、覆蓋乘 0.3（像在森林裡）
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;

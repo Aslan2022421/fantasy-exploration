@@ -7,7 +7,7 @@
     "passable": true,
     "height": 3,
     "trunk": true,
-    "sizes": [2, 2, 2, 3, 3, 4],
+    "sizes": [1, 2, 2],
     "tile": null
   },
   {
@@ -18,7 +18,7 @@
     "passable": true,
     "height": 3,
     "trunk": true,
-    "sizes": [2, 2, 3, 3, 3, 4],
+    "sizes": [1, 1, 2],
     "tile": null
   },
   {
@@ -29,7 +29,7 @@
     "passable": true,
     "height": 3,
     "trunk": true,
-    "sizes": [2, 3, 3, 3, 4],
+    "sizes": [1, 2, 2],
     "tile": null
   },
   {

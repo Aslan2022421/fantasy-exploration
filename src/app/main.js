@@ -5,14 +5,17 @@ import fontUrl from '../../assets/fonts/fusion-pixel-12px-proportional-zh_tw.ttf
 import tilesUrl from '../../assets/tiles/cp437.png';
 import { browserStore, memoryStore } from '../core/store.js';
 import { createTurnLoop } from '../core/turns.js';
+import { DATA } from '../data/load.js';
 import { COLORS } from '../view/colors.js';
 import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
 import { cameraOrigin, layout } from '../view/screen.js';
+import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
 import { findPath, stepDirection } from '../world/path.js';
+import { describePlace, regionLabel } from '../world/place.js';
 import { createKeyboard } from './input.js';
 
 const VERSION = '0.1.0';
@@ -63,6 +66,7 @@ let maxHistoryScroll = 0;
 const player = () => game.state.player;
 const save = () => store.save(SAVE_KEY, game.serialize());
 const world = game.world;
+const worldView = createWorldView(mapView, world, DATA.terrains);
 const camera = () => cameraOrigin(player().x, player().y, world.width, world.height, screen.cols, screen.rows);
 
 // 花時間的動作：輪到冒險者才做，做完把回合交回排程
@@ -110,33 +114,21 @@ function shownPath() {
 }
 
 function render() {
-  const { cols, rows, tile, map } = screen;
+  const { tile, map } = screen;
   const cam = camera();
   const route = shownPath();
-  const onRoute = new Set(route?.steps.map((s) => `${s.x},${s.y}`));
   const target = walking.at(-1) ?? (route ? hover : null);
+  const p = player();
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (let vy = 0; vy < rows; vy++) {
-    for (let vx = 0; vx < cols; vx++) {
-      const x = cam.x + vx;
-      const y = cam.y + vy;
-      if (!world.inside(x, y)) {
-        mapView.draw(vx, vy, ' ', COLORS.bg, COLORS.void);
-        continue;
-      }
-      const isWall = !world.isPassable(x, y);
-      let bg = COLORS.bg;
-      if (examined?.x === x && examined?.y === y) bg = COLORS.examined;
-      if (target?.x === x && target?.y === y) bg = route?.reachable ? COLORS.target : COLORS.blocked;
-      if (onRoute.has(`${x},${y}`) && !(target?.x === x && target?.y === y)) mapView.draw(vx, vy, '•', COLORS.path, bg);
-      else mapView.draw(vx, vy, isWall ? '#' : '·', isWall ? COLORS.rock : COLORS.floor, bg);
-    }
-  }
-  const p = player();
-  mapView.draw(p.x - cam.x, p.y - cam.y, '@', COLORS.player, COLORS.bg);
+  worldView.draw(screen, cam, { route, target, examined, player: p });
 
-  panels.status(ctx, screen, `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}`);
+  const where = regionLabel(world, DATA, p.x, p.y);
+  panels.status(
+    ctx,
+    screen,
+    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}`,
+  );
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
   if (route && target && !historyOpen) {
     const label = route.reachable ? `${route.steps.length} 步` : '走不到';
@@ -188,7 +180,7 @@ function mapCellAt(e) {
 
 function describeCell(cell) {
   if (cell.x === player().x && cell.y === player().y) return '你自己';
-  return world.isPassable(cell.x, cell.y) ? '空地' : '岩石，過不去';
+  return describePlace(world, cell.x, cell.y);
 }
 
 const keyboard = createKeyboard((dx, dy) => {

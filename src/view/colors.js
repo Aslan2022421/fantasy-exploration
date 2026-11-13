@@ -11,9 +11,7 @@ export const COLORS = {
   head: '#c9bb7a', // 標題（淡黃）
   good: '#7fa874',
   bad: '#b8675c',
-  // 地圖
-  floor: '#5f7f7c', // 舊版平地
-  rock: '#9fb0ac', // 舊版山地
+  // 地圖（地形的顏色在 data/terrain）
   player: '#ffffff',
   path: '#c9bb7a',
   target: '#3d3a1f',

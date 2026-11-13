@@ -5,6 +5,16 @@ import { cp437Index } from './cp437.js';
 
 const CELL = 8;
 
+// 載入一張圖（字元表 PNG），載好才 resolve
+export function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 export function createTileset(image) {
   const tinted = new Map();
 

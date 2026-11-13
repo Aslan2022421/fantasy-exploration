@@ -13,10 +13,13 @@ export function pixelScale(base, cssTarget, dpr) {
   return Math.max(1, Math.floor((cssTarget * dpr) / base));
 }
 
-export function layout(cssWidth, cssHeight, dpr) {
+// 地圖縮放（使用者要的縮放鍵）：在預設倍數上加減幾倍，最小 1 倍；文字欄不跟著變
+export const MAP_ZOOM = { min: -3, max: 3 };
+
+export function layout(cssWidth, cssHeight, dpr, zoom = 0) {
   const width = Math.floor(cssWidth * dpr);
   const height = Math.floor(cssHeight * dpr);
-  const tile = TILE_BASE * pixelScale(TILE_BASE, TILE_TARGET, dpr);
+  const tile = TILE_BASE * Math.max(1, pixelScale(TILE_BASE, TILE_TARGET, dpr) + zoom);
   const textScale = pixelScale(TEXT_BASE, TEXT_TARGET, dpr);
   const pad = 4 * textScale;
   const lineHeight = (TEXT_BASE + 2) * textScale;

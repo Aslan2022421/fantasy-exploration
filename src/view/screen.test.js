@@ -19,6 +19,13 @@ describe('畫面配置', () => {
     }
   });
 
+  test('地圖縮放：一次加減一倍，最小 1 倍，文字不跟著變', () => {
+    expect(layout(1280, 800, 1, 1).tile).toBe(24);
+    expect(layout(1280, 800, 1, -1).tile).toBe(8);
+    expect(layout(1280, 800, 1, -3).tile).toBe(8);
+    expect(layout(1280, 800, 1, 2).textScale).toBe(layout(1280, 800, 1).textScale);
+  });
+
   test('頂部、地圖、訊息欄不重疊，也不超出畫面', () => {
     const s = layout(1280, 800, 1.25);
     expect(s.map.y).toBe(s.top.h);

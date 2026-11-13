@@ -11,12 +11,14 @@ import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
 import { cameraOrigin, layout } from '../view/screen.js';
+import { loadImage } from '../view/tiles.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
 import { findPath, stepDirection } from '../world/path.js';
 import { describePlace, regionLabel } from '../world/place.js';
 import { createKeyboard } from './input.js';
+import { createZoom } from './zoom.js';
 
 const VERSION = '0.1.0';
 const SAVE_KEY = 'world';
@@ -25,22 +27,13 @@ const STEP_MS = 70; // 滑鼠點擊後自動走，每一步間隔
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '左鍵點地圖走過去，空白鍵停下；右鍵查看，再點一下收起。',
-  'H 看完整紀錄。',
+  'H 看完整紀錄。＋／－ 放大縮小地圖。',
 ];
 
 const params = new URLSearchParams(location.search);
 const store = params.has('nosave') ? memoryStore() : browserStore();
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d');
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
-}
 
 const [image, font] = await Promise.all([loadImage(tilesUrl), loadPixelFont(fontUrl, 'FusionPixel12TW')]);
 const mapView = createMapView(image, ctx);
@@ -98,8 +91,11 @@ function entries() {
   ];
 }
 
+const layoutAt = (z) => layout(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, z);
+const zoom = createZoom(store, (z) => layoutAt(z).tile);
+
 function resize() {
-  screen = layout(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+  screen = layoutAt(zoom.value);
   canvas.width = screen.width;
   canvas.height = screen.height;
   canvas.style.width = `${screen.width / screen.dpr}px`;
@@ -221,6 +217,11 @@ window.addEventListener('keydown', (e) => {
     render();
     historyScroll = maxHistoryScroll;
     render();
+    return;
+  }
+  if (zoom.isKey(e)) {
+    e.preventDefault();
+    if (zoom.press(e)) resize();
     return;
   }
   if (e.code === 'Space' || e.code === 'Escape') {

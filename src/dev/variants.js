@@ -158,7 +158,7 @@ export function createVariants(world, data) {
     { name: 'C 絕對亮度，不畫層界', draw: absolute('none') },
     { name: 'D 絕對亮度＋細崖線', draw: absolute('thin') },
     { name: 'E 絕對亮度＋只有崖下暗帶', draw: absolute('shadow') },
-    { name: 'F 絕對亮度＋粗崖邊 # 與暗帶（現在的遊戲）', draw: absolute('rim#') },
+    { name: 'F 絕對亮度＋粗崖邊 # 與暗帶', draw: absolute('rim#') },
     { name: 'G 往左下拉側面與影子', draw: flat(extruded) },
   ];
 }

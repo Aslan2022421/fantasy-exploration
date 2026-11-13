@@ -3,6 +3,7 @@
 import tilesUrl from '../../assets/tiles/cp437.png';
 import { DATA } from '../data/load.js';
 import { createMapView } from '../view/mapview.js';
+import { createWorldView } from '../view/worldview.js';
 import { createWorld } from '../world/world.js';
 import { createVariants } from './variants.js';
 
@@ -12,7 +13,27 @@ const ROWS = 28;
 const TILE = 16;
 
 const world = createWorld(SEED, DATA);
-const variants = createVariants(world, DATA);
+
+// 使用者喜歡的那一版：畫法跟現在的遊戲一樣，只是樹一格一棵、沒有樹幹
+const likedData = {
+  ...DATA,
+  objects: DATA.objects.map((o) => ({ ...o, sizes: [1], trunk: false })),
+};
+const likedWorld = createWorld(SEED, likedData);
+
+// 用遊戲本身的畫法（worldview.js）畫一張；冒險者放到畫面外
+function gameDraw(w, data) {
+  return (mv, cam, cols, rows) => {
+    const view = createWorldView(mv, w, data);
+    view.draw({ cols, rows }, cam, { route: null, target: null, examined: null, player: { x: -99, y: -99 } });
+  };
+}
+
+const variants = [
+  { name: 'H 現在的遊戲（多格樹冠、樹幹 Φ）', draw: gameDraw(world, DATA) },
+  { name: 'I 你喜歡的那一版（樹一格一棵、沒有樹幹）', draw: gameDraw(likedWorld, likedData) },
+  ...createVariants(world, DATA),
+];
 
 // 挑幾個地形有變化的地點：高度層種類多、有水、有山、有樹的分數高，彼此不重疊
 function interestingSpots(count) {

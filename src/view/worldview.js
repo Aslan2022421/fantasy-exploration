@@ -1,5 +1,5 @@
-// 畫地圖區。照矮人要塞的看法分 Z 高度（zlevel.js）：以冒險者所在的高度層為準，
-// 同一層正常、低一層變暗變疏、再低的最暗；高一層以上是一面實心的牆。
+// 畫地圖區。分 Z 高度（zlevel.js）：以冒險者所在的高度層為準分四階，越高越亮、越低越暗，
+// 高處照樣畫出地面與物件；層與層的交界在高側畫一道暗色輪廓。
 // 網址加 ?flat 改用絕對高度的亮度（不看冒險者在哪層），留著對照用。
 // 每格先畫地形層，有物件時把物件的字元疊在上面，背景仍用地面的。世界外畫深色。
 // 路線、目標、查看中的格子疊在上面，最後畫冒險者
@@ -8,17 +8,14 @@ import { hash01 } from '../world/noise.js';
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { buildObjectShades, buildShadeTable, dimColor, rampGlyph } from './shades.js';
-import { ABOVE, SAME, Z_LEVEL, zClass } from './zlevel.js';
+import { outlineAt, Z_LEVEL, zClass } from './zlevel.js';
 
-export const WALL_GLYPH = '█';
-const WALL_FG = 0.55; // 牆用地形色的幾成亮
-const WALL_BG = 0.35;
+const OUTLINE_BG = 0.25; // 輪廓：背景調到幾成亮
 
 export function createWorldView(mapView, world, data, { zlevels = true } = {}) {
   const { terrains, objects } = data;
   const shades = buildShadeTable(terrains); // { step, fg, bg }：[地形][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
-  const wallColor = terrains.map((_, i) => shades.fg[i][Z_LEVEL[SAME]][FLAT]); // 牆的基準色：該地形在同一層的亮度
 
   // 一格在亮度 level 下的樣子（字元依亮度從這種地形的階梯選；同一亮度每格用雜湊換字），有物件就疊上去
   function lookAt(x, y, level) {
@@ -40,12 +37,9 @@ export function createWorldView(mapView, world, data, { zlevels = true } = {}) {
 
   function cellLook(x, y, playerTier) {
     if (!zlevels) return lookAt(x, y, world.shadeAt(x, y));
-    const z = zClass(world.tierAt(x, y), playerTier);
-    if (z === ABOVE) {
-      const base = wallColor[world.terrainAt(x, y)];
-      return { glyph: WALL_GLYPH, fg: dimColor(base, WALL_FG), bg: dimColor(base, WALL_BG) };
-    }
-    return lookAt(x, y, Z_LEVEL[z]);
+    const look = lookAt(x, y, Z_LEVEL[zClass(world.tierAt(x, y), playerTier)]);
+    if (outlineAt(world, x, y)) look.bg = dimColor(look.bg, OUTLINE_BG);
+    return look;
   }
 
   // overlay：{ route: {steps, reachable} | null, target, examined, player }

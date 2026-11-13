@@ -1,10 +1,16 @@
-// 地形生成：大地形與水（landform.js）、溫度、濕度 → 每格的生態、地形層與物件層，加上明暗與台地立面。
+// 地形生成：每格分四層（使用者定）＋物件層。
+// - 地貌：平原、丘陵、高原、山地，看高度、高度層與坡度，山地另標山峰（山谷、盆地、峽谷等河流做了再加）
+// - 水文：深水、淺水（landform.js），沼澤（低窪、平坦、潮濕的地方積水）
+// - 地表材質：泥土、沙地、岩石、碎石、雪、冰，看氣候、坡度與是否在山上
+// - 生態覆蓋：泥土與沙地上長的草、苔、花、樹苗，照生態的 cover；水邊長蘆葦，生態交界是混合植被
+// 生成順序是地貌 → 水文 → 材質 → 生態（材質要看水與坡度）。
 // 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
 
 import { inFootprint, MAX_SIZE, meanArea, PART_TRUNK, partOf, trunkCell } from './footprint.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { fbm, hash01, makeNoise } from './noise.js';
+import { isPeak } from './peak.js';
 import { reliefOf } from './relief.js';
 
 // 生成的參數（調比例時改這裡；大地形與水的參數在 landform.js 的 LAND）
@@ -13,9 +19,19 @@ export const GEN = {
   tempOctaves: 2,
   wetOctaves: 3,
   floraBase: 24, // 樹叢成片的大小
-  treelineRange: 0.2, // 山地高出山地門檻這麼多就沒有樹（中間線性變少）
+  treelineRange: 0.2, // 山地高出山地門檻這麼多就沒有樹（中間線性變少），也是雪線
   band: 0.1, // 溫度、濕度超過 ±這個值才算寒冷／炎熱、乾燥／潮濕
   waterShadeStep: 0.05, // 水每深這麼多暗一級
+  // 坡度門檻（SLOPE_SCALE 倍；陸地約一半在 39 以下）
+  hillSlope: 55, // 以上是丘陵
+  gravelSlope: 95, // 山地以外坡度到這裡露出碎石（量過：非山地陸地約 6% 在這以上）
+  rockSlope: 110, // 到這裡露出裸岩（約 2%）
+  mountainRock: 45, // 山上坡度到這裡是岩石（以下是碎石）
+  peakRadius: 3, // 山地格比周圍這麼多格內都高，才算山峰（不能超過 genZone 的外圍 E）
+  swampSlope: 39, // 沼澤要比這個平
+  swampWet: 0.18, // 濕度高於這個、又在最低的陸地層才積水成沼澤
+  reeds: 0.4, // 緊鄰淺水或沼澤的泥土長蘆葦的機率
+  mixed: 0.5, // 生態交界長混合植被的機率
 };
 
 export const SLOPE_SCALE = 4000; // 坡度存成整數時放大的倍數
@@ -33,19 +49,36 @@ export function waterLevel(h) {
   return Math.max(1, Math.min(LEVELS - 2, LEVELS - 2 - Math.floor(depth / GEN.waterShadeStep)));
 }
 
+const NONE = 255; // 水文、覆蓋沒有東西時存這個
+
 export function createTerrainGen(seed, data) {
   const land = createLandform(seed);
   const nTemp = makeNoise(seed, 'terrain:temperature');
   const nWet = makeNoise(seed, 'terrain:moisture');
   const nFlora = makeNoise(seed, 'terrain:flora');
-  const T = data.terrainIndex;
-  const id = (name) => {
-    if (!T.has(name)) throw new Error(`地形生成需要的地形不在資料裡：${name}`);
-    return T.get(name);
+  const need = (index, kind) => (name) => {
+    if (!index.has(name)) throw new Error(`地形生成需要的${kind}不在資料裡：${name}`);
+    return index.get(name);
   };
-  const DEEP = id('deep-water');
-  const SHALLOW = id('shallow-water');
-  const MOUNTAIN = id('mountain');
+  const lf = need(data.landformIndex, '地貌');
+  const sf = need(data.surfaceIndex, '地表材質');
+  const wt = need(data.waterIndex, '水文');
+  const cv = need(data.coverIndex, '生態覆蓋');
+  const PLAIN = lf('plain');
+  const HILLS = lf('hills');
+  const PLATEAU = lf('plateau');
+  const MOUNTAIN = lf('mountain');
+  const DIRT = sf('dirt');
+  const SAND = sf('sand');
+  const ROCK = sf('rock');
+  const GRAVEL = sf('gravel');
+  const SNOW = sf('snow');
+  const ICE = sf('ice');
+  const DEEP = wt('deep-water');
+  const SHALLOW = wt('shallow-water');
+  const SWAMP = wt('swamp');
+  const REEDS = cv('reeds');
+  const MIXED = cv('mixed');
 
   // 溫度帶×濕度帶 → 生態（資料裡的編號）；每格都有，九格要齊
   const biomeGrid = [];
@@ -60,38 +93,59 @@ export function createTerrainGen(seed, data) {
     if (!data.objectIndex.has(name)) throw new Error(`物件生成需要的物件不在資料裡：${name}`);
     return data.objectIndex.get(name);
   };
-  const flora = data.biomes.map((b) => ({
-    ground: id(b.ground),
-    list: b.flora.map((f) => [objectId(f.object), f.density]),
-  }));
+  const flora = data.biomes.map((b) => b.flora.map((f) => [objectId(f.object), f.density]));
+  const covers = data.biomes.map((b) => b.cover.map((c) => [cv(c.cover), c.density]));
 
   const tempAt = (x, y) => fbm(nTemp, x, y, GEN.climateBase, GEN.tempOctaves);
   const wetAt = (x, y) => fbm(nWet, x, y, GEN.climateBase, GEN.wetOctaves);
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
 
-  // 地形層：water 水的種類、h 高度、biome 生態編號
-  function classify(water, h, biome) {
-    if (water === WATER_DEEP) return DEEP;
-    if (water === WATER_SHALLOW) return SHALLOW;
+  // 地貌：h 高度、tier 高度層、slope 坡度
+  function landformOf(h, tier, slope) {
     if (h > LAND.mountain) return MOUNTAIN;
-    return flora[biome].ground;
+    if (slope >= GEN.hillSlope) return HILLS;
+    if (tier >= LAND.landTiers) return PLATEAU;
+    return PLAIN;
   }
 
-  // 植物長得出來的地面：該生態的平地，或山地（使用者定：山地上也有樹）
-  const canGrow = (terrain, biome) => terrain === flora[biome].ground || terrain === MOUNTAIN;
+  // 水文：kind 是 landform.js 的水；沼澤是最低的陸地層裡平坦又潮濕的地方
+  function waterOf(kind, tier, slope, wet) {
+    if (kind === WATER_DEEP) return DEEP;
+    if (kind === WATER_SHALLOW) return SHALLOW;
+    if (tier === 1 && slope < GEN.swampSlope && wet > GEN.swampWet) return SWAMP;
+    return NONE;
+  }
+
+  // 地表材質：t、w 是溫度帶與濕度帶
+  function surfaceOf(water, h, slope, t, w) {
+    if (water === SHALLOW && t === 0) return ICE; // 寒帶的淺水結冰
+    if (water !== NONE) return DIRT; // 水底與沼澤的泥
+    if (h > LAND.mountain) {
+      if (t === 0 || h > LAND.mountain + GEN.treelineRange) return SNOW;
+      return slope >= GEN.mountainRock ? ROCK : GRAVEL;
+    }
+    if (t === 0) return w === 2 ? DIRT : SNOW;
+    if (t === 2 && w === 0) return SAND;
+    if (slope >= GEN.rockSlope) return ROCK;
+    if (slope >= GEN.gravelSlope) return GRAVEL;
+    return DIRT;
+  }
+
+  // 植物長得出來的地方：沒有水、不是岩石或冰
+  const canGrow = (water, surface) => water === NONE && surface !== ROCK && surface !== ICE;
 
   // 物件層的錨點：這格是不是一棵物件的左上角。回傳 { object, size } 或 null。
   // 物件依物種有大小（資料的 sizes），撒的機率除以平均佔地，樹變大後林子的密度不會跟著暴增。
   // 山地上越高樹越少，高出山地門檻 treelineRange 就沒有樹（使用者定：山地的高度決定樹多不多）
   const objectArea = data.objects.map((o) => meanArea(o.sizes));
-  function anchorAt(x, y, biome, terrain, h) {
-    const f = flora[biome];
-    if (!canGrow(terrain, biome)) return null;
-    const line = terrain === MOUNTAIN ? Math.max(0, 1 - (h - LAND.mountain) / GEN.treelineRange) : 1;
+  function anchorAt(x, y, biome, water, surface, h) {
+    if (!canGrow(water, surface)) return null;
+    const line = h > LAND.mountain ? Math.max(0, 1 - (h - LAND.mountain) / GEN.treelineRange) : 1;
     if (line <= 0) return null;
+    const list = flora[biome];
     const m = Math.min(1, Math.max(0, 0.5 + 1.5 * fbm(nFlora, x, y, GEN.floraBase, 2)));
-    for (let i = 0; i < f.list.length; i++) {
-      const [object, density] = f.list[i];
+    for (let i = 0; i < list.length; i++) {
+      const [object, density] = list[i];
       if (hash01(seed, x, y, i) < (Math.min(1, density * 2 * m) * line) / objectArea[object]) {
         const sizes = data.objects[object].sizes;
         return { object, size: sizes[Math.floor(hash01(seed, x, y, 50 + i) * sizes.length)] };
@@ -101,62 +155,87 @@ export function createTerrainGen(seed, data) {
   }
 
   // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算 PAD 圈：明暗、坡度與立面要看鄰格，
-  // 多格物件的錨點可能在區外左上方（最遠 MAX_SIZE-1 格）
+  // 多格物件的錨點可能在區外左上方（最遠 MAX_SIZE-1 格）；再多一圈 E 讓外圍那幾圈的坡度也算得準
   function genZone(zx, zy, size) {
     const n = size * size;
     const height = new Uint8Array(n);
-    const terrain = new Uint8Array(n);
+    const landform = new Uint8Array(n);
+    const peak = new Uint8Array(n); // 1 是山峰（山地裡附近最高的一格）
+    const surface = new Uint8Array(n);
+    const water = new Uint8Array(n).fill(NONE); // 水文編號，NONE 是沒有水
+    const cover = new Uint8Array(n).fill(NONE); // 生態覆蓋編號，NONE 是沒有
     const object = new Uint8Array(n); // 物件層：物件編號＋1，0 是沒有
     const objectPart = new Uint8Array(n); // 這格在樹冠的哪一側（footprint.js 的 PART_*）
     const shade = new Uint8Array(n);
-    const slope = new Uint8Array(n); // 坡度（每格高度差×SLOPE_SCALE，0～255）：決定地表起伏的字形
+    const slope = new Uint8Array(n); // 坡度（每格高度差×SLOPE_SCALE，0～255）
     const relief = new Uint8Array(n);
     const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 7
     const biome = new Uint8Array(n);
     const PAD = Math.max(2, MAX_SIZE - 1);
-    const B = size + PAD * 2;
+    const E = PAD + 1;
+    const G = size + E * 2;
     const x0 = zx * size;
     const y0 = zy * size;
-    const g = land.grid(x0 - PAD, y0 - PAD, B, B);
-    // 先把整片（含外圍）的生態、地形、錨點算好
-    const bAll = new Uint8Array(B * B);
-    const tAll = new Uint8Array(B * B);
-    const anchors = new Array(B * B).fill(null);
-    for (let y = 0; y < B; y++) {
-      for (let x = 0; x < B; x++) {
-        const c = y * B + x;
-        const X = x0 + x - PAD;
-        const Y = y0 + y - PAD;
-        bAll[c] = biomeAt(tempAt(X, Y), wetAt(X, Y));
-        tAll[c] = classify(g.water[c], g.h[c], bAll[c]);
-        anchors[c] = anchorAt(X, Y, bAll[c], tAll[c], g.h[c]);
+    const g = land.grid(x0 - E, y0 - E, G, G);
+    const N = G * G;
+    const bAll = new Uint8Array(N);
+    const tBand = new Uint8Array(N);
+    const wBand = new Uint8Array(N);
+    const slAll = new Uint8Array(N);
+    const wAll = new Uint8Array(N).fill(NONE);
+    const sAll = new Uint8Array(N);
+    const anchors = new Array(N).fill(null);
+    const hAt = (c) => (dx, dy) => g.h[c + dy * G + dx];
+    for (let y = 0; y < G; y++) {
+      for (let x = 0; x < G; x++) {
+        const c = y * G + x;
+        const X = x0 + x - E;
+        const Y = y0 + y - E;
+        const t = tempAt(X, Y);
+        const w = wetAt(X, Y);
+        bAll[c] = biomeAt(t, w);
+        tBand[c] = bandOf(t);
+        wBand[c] = bandOf(w);
+        if (x === 0 || y === 0 || x === G - 1 || y === G - 1) continue; // 最外圈只當鄰格用
+        const grad = gradient(hAt(c));
+        slAll[c] = Math.min(255, Math.round(Math.hypot(grad.dx, grad.dy) * SLOPE_SCALE));
+        wAll[c] = waterOf(g.water[c], g.tier[c], slAll[c], w);
+        sAll[c] = surfaceOf(wAll[c], g.h[c], slAll[c], tBand[c], wBand[c]);
+        anchors[c] = anchorAt(X, Y, bAll[c], wAll[c], sAll[c], g.h[c]);
       }
     }
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const c = (y + PAD) * B + (x + PAD);
+        const c = (y + E) * G + (x + E);
         const h = g.h[c];
         const i = y * size + x;
+        const X = x0 + x;
+        const Y = y0 + y;
         height[i] = Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5);
         biome[i] = bAll[c];
         tier[i] = g.tier[c];
-        relief[i] = reliefOf(g.tier[c - 2 * B], g.tier[c - B], g.tier[c], g.tier[c + B]);
-        terrain[i] = tAll[c];
+        relief[i] = reliefOf(g.tier[c - 2 * G], g.tier[c - G], g.tier[c], g.tier[c + G]);
+        slope[i] = g.water[c] === WATER_NONE ? slAll[c] : 0;
+        landform[i] = landformOf(h, tier[i], slope[i]);
+        peak[i] = landform[i] === MOUNTAIN && isPeak(g.h, c, G, GEN.peakRadius) ? 1 : 0;
+        water[i] = wAll[c];
+        surface[i] = sAll[c];
+        cover[i] = coverAt(c, X, Y);
         // 物件：往左上找會蓋到這格的錨點。使用者定：樹冠底下要是平地（樹幹被破壞後樹冠消失，露出的是平地），
         // 所以樹冠只長在跟樹幹同一個高度層、而且長得出植物的格子上；樹幹那格本身也要長得出來。
         // 樹幹永遠露出來（它是樹冠的根）；其餘重疊時取雜湊最小的那棵
-        if (canGrow(terrain[i], biome[i])) {
+        if (canGrow(wAll[c], sAll[c])) {
           let best = null;
           for (let j = 0; j < MAX_SIZE; j++) {
             for (let k = 0; k < MAX_SIZE; k++) {
-              const ac = c - j * B - k;
+              const ac = c - j * G - k;
               const a = anchors[ac];
               if (!a || !inFootprint(k, j, a.size)) continue;
               const tc = trunkCell(a.size);
-              const tci = ac + tc.j * B + tc.i;
-              if (!canGrow(tAll[tci], bAll[tci]) || g.tier[tci] !== g.tier[c]) continue;
+              const tci = ac + tc.j * G + tc.i;
+              if (!canGrow(wAll[tci], sAll[tci]) || g.tier[tci] !== g.tier[c]) continue;
               const isTrunk = data.objects[a.object].trunk && k === tc.i && j === tc.j;
-              const rank = isTrunk ? -1 : hash01(seed, x0 + x - k, y0 + y - j, 77);
+              const rank = isTrunk ? -1 : hash01(seed, X - k, Y - j, 77);
               if (!best || rank < best.rank) best = { a, rank, i: k, j, isTrunk };
             }
           }
@@ -166,14 +245,56 @@ export function createTerrainGen(seed, data) {
           }
         }
         if (g.water[c] === WATER_NONE) {
-          const grad = gradient((dx, dy) => g.h[c + dy * B + dx]);
-          shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy), terrain[i] === MOUNTAIN);
-          slope[i] = Math.min(255, Math.round(Math.hypot(grad.dx, grad.dy) * SLOPE_SCALE));
+          const grad = gradient(hAt(c));
+          shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy), landform[i] === MOUNTAIN);
         } else shade[i] = waterLevel(h);
       }
     }
-    return { zx, zy, size, height, terrain, object, objectPart, shade, slope, relief, tier, biome };
+
+    // 生態覆蓋：只長在泥土與沙地上。緊鄰淺水或沼澤的泥土長蘆葦；生態交界是混合植被；其餘照生態的 cover
+    function coverAt(c, X, Y) {
+      const s = sAll[c];
+      if (wAll[c] !== NONE || (s !== DIRT && s !== SAND)) return NONE;
+      const a = hash01(seed, X, Y, 101);
+      const b = hash01(seed, X, Y, 102);
+      let wet = false;
+      let edge = false;
+      for (const d of [1, -1, G, -G]) {
+        if (wAll[c + d] === SHALLOW || wAll[c + d] === SWAMP) wet = true;
+        if (bAll[c + d] !== bAll[c]) edge = true;
+      }
+      if (wet && s === DIRT && b < GEN.reeds) return REEDS;
+      const list = covers[bAll[c]];
+      if (edge && list.length && b < GEN.mixed) return MIXED;
+      let sum = 0;
+      for (const [k, density] of list) {
+        sum += density;
+        if (a < sum) return k;
+      }
+      return NONE;
+    }
+
+    return {
+      zx,
+      zy,
+      size,
+      height,
+      landform,
+      peak,
+      surface,
+      water,
+      cover,
+      object,
+      objectPart,
+      shade,
+      slope,
+      relief,
+      tier,
+      biome,
+    };
   }
 
   return { genZone, heightAt: land.heightAt, landform: land, tempAt, wetAt, biomeAt };
 }
+
+export { NONE as LAYER_NONE };

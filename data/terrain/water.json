@@ -1,0 +1,35 @@
+[
+  {
+    "layer": "water",
+    "id": "deep-water",
+    "name": "深水",
+    "glyph": "≈",
+    "color": "#3b6f8f",
+    "passable": false,
+    "style": "deep",
+    "glyphs": [" ", "≈"],
+    "tile": null
+  },
+  {
+    "layer": "water",
+    "id": "shallow-water",
+    "name": "淺水",
+    "glyph": "~",
+    "color": "#5f93a8",
+    "passable": true,
+    "style": "shallow",
+    "glyphs": ["-", "~"],
+    "tile": null
+  },
+  {
+    "layer": "water",
+    "id": "swamp",
+    "name": "沼澤",
+    "glyph": "~",
+    "color": "#4f6b3c",
+    "passable": true,
+    "style": "swamp",
+    "glyphs": ["-", "~"],
+    "tile": null
+  }
+]

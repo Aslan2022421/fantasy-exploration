@@ -1,0 +1,10 @@
+[
+  { "layer": "cover", "id": "fine-grass", "name": "細草", "glyph": ",", "color": "#8fae62", "tile": null },
+  { "layer": "cover", "id": "sparse-grass", "name": "稀疏草叢", "glyph": "'", "color": "#a3ad6a", "tile": null },
+  { "layer": "cover", "id": "tall-grass", "name": "高草叢", "glyph": "\"", "color": "#6f9e4c", "tile": null },
+  { "layer": "cover", "id": "moss", "name": "苔蘚", "glyph": ":", "color": "#6f8f5c", "tile": null },
+  { "layer": "cover", "id": "mixed", "name": "混合植被", "glyph": ";", "color": "#88a05e", "tile": null },
+  { "layer": "cover", "id": "flowers", "name": "花叢", "glyph": "*", "color": "#c9a0c0", "tile": null },
+  { "layer": "cover", "id": "deadwood", "name": "枯木", "glyph": "Γ", "color": "#8f7a5c", "tile": null },
+  { "layer": "cover", "id": "reeds", "name": "蘆葦", "glyph": "|", "color": "#a6a85c", "tile": null }
+]

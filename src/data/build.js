@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { BiomeSchema, ObjectSchema, TerrainSchema } from './schemas.js';
 
-// files：{ 檔名: 條目陣列 }。回傳 [條目⋯⋯]，順序照檔名再照檔內順序（地形的編號就是這個順序）
+// files：{ 檔名: 條目陣列 }。回傳 [條目⋯⋯]，順序照檔名再照檔內順序（編號就是這個順序）
 function merge(files, schema, kind, errors) {
   const out = [];
   for (const name of Object.keys(files).sort()) {
@@ -25,18 +25,46 @@ function merge(files, schema, kind, errors) {
   return out;
 }
 
+const indexOf = (list) => new Map(list.map((t, i) => [t.id, i]));
+
+// 回傳的資料：
+// - terrains：四層全部的條目（文字檢查等用）；landforms、surfaces、waters、covers 各層分開，編號是各層自己的
+// - palette：畫面上有顏色的條目（材質、水文、覆蓋）排成一列，shades.js 依這個建顏色表；
+//   paletteBase 是各層在 palette 裡的起點
 export function buildData({ terrain, object = {}, biome }) {
   const errors = [];
   const terrains = merge(terrain, TerrainSchema, '地形', errors);
   const objects = merge(object, ObjectSchema, '物件', errors);
   const biomes = merge(biome, BiomeSchema, '生態', errors);
-  const terrainIndex = new Map(terrains.map((t, i) => [t.id, i]));
-  const objectIndex = new Map(objects.map((o, i) => [o.id, i]));
+  const layer = (name) => terrains.filter((t) => t.layer === name);
+  const landforms = layer('landform');
+  const surfaces = layer('surface');
+  const waters = layer('water');
+  const covers = layer('cover');
+  const objectIndex = indexOf(objects);
+  const coverIndex = indexOf(covers);
   for (const b of biomes) {
-    if (!terrainIndex.has(b.ground)) errors.push(`生態 ${b.id} 的 ground 找不到地形：${b.ground}`);
     for (const f of b.flora)
       if (!objectIndex.has(f.object)) errors.push(`生態 ${b.id} 的 flora 找不到物件：${f.object}`);
+    for (const c of b.cover)
+      if (!coverIndex.has(c.cover)) errors.push(`生態 ${b.id} 的 cover 找不到生態覆蓋：${c.cover}`);
   }
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
-  return { terrains, terrainIndex, objects, objectIndex, biomes };
+  const palette = [...surfaces, ...waters, ...covers].map((t) => ({ ...t, shade: true }));
+  return {
+    terrains,
+    landforms,
+    landformIndex: indexOf(landforms),
+    surfaces,
+    surfaceIndex: indexOf(surfaces),
+    waters,
+    waterIndex: indexOf(waters),
+    covers,
+    coverIndex,
+    palette,
+    paletteBase: { surface: 0, water: surfaces.length, cover: surfaces.length + waters.length },
+    objects,
+    objectIndex,
+    biomes,
+  };
 }

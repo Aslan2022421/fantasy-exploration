@@ -1,0 +1,68 @@
+[
+  {
+    "layer": "surface",
+    "id": "dirt",
+    "name": "泥土",
+    "glyph": ".",
+    "color": "#8a7356",
+    "passable": true,
+    "style": "relief",
+    "glyphs": [" ", ".", "·", "∙"],
+    "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "sand",
+    "name": "沙地",
+    "glyph": "~",
+    "color": "#c2b07a",
+    "passable": true,
+    "style": "sand",
+    "glyphs": [" ", "-", "~", "^"],
+    "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "rock",
+    "name": "岩石",
+    "glyph": "■",
+    "color": "#8e9490",
+    "passable": true,
+    "style": "rock",
+    "glyphs": ["■", " ", ".", "·", "∙"],
+    "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "gravel",
+    "name": "碎石",
+    "glyph": "°",
+    "color": "#a39d90",
+    "passable": true,
+    "style": "gravel",
+    "glyphs": ["°", " ", ".", "·", "∙"],
+    "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "snow",
+    "name": "雪",
+    "glyph": ".",
+    "color": "#d8e0e0",
+    "passable": true,
+    "style": "relief",
+    "glyphs": [" ", ".", "·", "∙"],
+    "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "ice",
+    "name": "冰",
+    "glyph": "═",
+    "color": "#a9d0dc",
+    "passable": true,
+    "style": "ice",
+    "glyphs": ["═", " "],
+    "tile": null
+  }
+]

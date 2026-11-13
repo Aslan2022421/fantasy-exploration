@@ -1,0 +1,38 @@
+[
+  {
+    "layer": "landform",
+    "id": "plain",
+    "name": "平原",
+    "glyph": ".",
+    "style": "relief",
+    "glyphs": [" ", ".", "·", "∙"],
+    "tile": null
+  },
+  {
+    "layer": "landform",
+    "id": "hills",
+    "name": "丘陵",
+    "glyph": "∙",
+    "style": "relief",
+    "glyphs": [" ", ".", "·", "∙"],
+    "tile": null
+  },
+  {
+    "layer": "landform",
+    "id": "plateau",
+    "name": "高原",
+    "glyph": ".",
+    "style": "relief",
+    "glyphs": [" ", ".", "·", "∙"],
+    "tile": null
+  },
+  {
+    "layer": "landform",
+    "id": "mountain",
+    "name": "山地",
+    "glyph": "^",
+    "style": "mountain",
+    "glyphs": ["^", "▲"],
+    "tile": null
+  }
+]

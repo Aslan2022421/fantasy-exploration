@@ -2,17 +2,27 @@
 
 import { CLIMATE_NAMES } from './labels.js';
 
-// 查看一格：「草地。溫帶森林（溫和、普通），高度 132」；
-// 有物件時寫在地形前面：「闊葉樹，長在草地上。⋯⋯」；世界外回傳 null
+// 地面叫什麼：有水寫水文（結冰的淺水寫冰），不然寫材質
+export function groundName(c) {
+  return c.water && c.surface.style !== 'ice' ? c.water.name : c.surface.name;
+}
+
+// 查看一格，照四層寫：「細草，泥土，平原。溫帶森林（溫和、普通），高度 132」；
+// 有物件時寫在最前面：「闊葉樹，長在泥土上，平原。⋯⋯」；深水、淺水不寫地貌；世界外回傳 null
 export function describePlace(world, x, y) {
   const c = world.cell(x, y);
   if (!c) return null;
   const b = c.biome;
   const climate = `${CLIMATE_NAMES[b.temperature]}、${CLIMATE_NAMES[b.moisture]}`;
-  const passable = c.terrain.passable && (!c.object || (c.object.passable && !c.trunk));
+  const passable =
+    (!c.water || c.water.passable) && c.surface.passable && (!c.object || (c.object.passable && !c.trunk));
   const blocked = passable ? '' : '，過不去';
-  const part = c.trunk ? '的樹幹' : '';
-  const what = c.object ? `${c.object.name}${part}，長在${c.terrain.name}上` : c.terrain.name;
+  const ground = groundName(c);
+  const lake = c.water && c.water.style !== 'swamp';
+  const landform = lake ? '' : `，${c.landform.name}`;
+  let what;
+  if (c.object) what = `${c.object.name}${c.trunk ? '的樹幹' : ''}，長在${ground}上${landform}`;
+  else what = `${c.cover ? `${c.cover.name}，` : ''}${ground}${landform}`;
   return `${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
 }
 

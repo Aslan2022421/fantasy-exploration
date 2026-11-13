@@ -2,7 +2,7 @@
 // 每種畫法都是 draw(mapView, cam, cols, rows, centerTier)
 
 import { EDGE_RIM, EDGE_SHADOW, edgeAt, tierLevel } from '../view/elevation.js';
-import { glyphAt } from '../view/glyphs.js';
+import { lookAt } from '../view/glyphs.js';
 import { buildObjectShades, buildShadeTable, dimColor } from '../view/shades.js';
 import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
 import { LAND } from '../world/landform.js';
@@ -13,15 +13,11 @@ const PART = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_TRUNK]:
 const REL = [1, 3, 5, 7]; // 相對亮度：更低、低一層、同層、高處
 
 export function createVariants(world, data) {
-  const { terrains, objects } = data;
-  const shades = buildShadeTable(terrains);
+  const { objects } = data;
+  const shades = buildShadeTable(data.palette);
   const objectFg = buildObjectShades(objects);
-  const isWater = terrains.map((t) => t.id.endsWith('water'));
 
-  const absLevel = (x, y) => {
-    const t = world.terrainAt(x, y);
-    return isWater[t] ? world.shadeAt(x, y) : tierLevel(world.tierAt(x, y));
-  };
+  const absLevel = (x, y) => (world.tierAt(x, y) === 0 ? world.shadeAt(x, y) : tierLevel(world.tierAt(x, y)));
   const relLevel = (x, y, center) => {
     const r = world.tierAt(x, y) - center;
     return REL[r >= 1 ? 3 : r === 0 ? 2 : r === -1 ? 1 : 0];
@@ -29,11 +25,11 @@ export function createVariants(world, data) {
 
   // 一格在亮度 level 下的樣子（地面字元＋物件）
   function look(x, y, level) {
-    const t = world.terrainAt(x, y);
+    const { glyph, ink } = lookAt(world, data, x, y);
     const out = {
-      glyph: glyphAt(world, data, x, y),
-      fg: shades.fg[t][level][FLAT],
-      bg: shades.bg[t][level][FLAT],
+      glyph,
+      fg: shades.fg[ink][level][FLAT],
+      bg: shades.bg[world.groundAt(x, y)][level][FLAT],
     };
     const o = world.objectAt(x, y);
     if (o >= 0) {
@@ -66,13 +62,13 @@ export function createVariants(world, data) {
     if (kind === 'rim#') {
       if (e === EDGE_RIM) {
         l.glyph = '#';
-        l.fg = shades.fg[world.terrainAt(x, y)][Math.min(7, level + 1)][FLAT];
+        l.fg = shades.fg[world.groundAt(x, y)][Math.min(7, level + 1)][FLAT];
       } else if (e === EDGE_SHADOW) {
         l.fg = dimColor(l.fg, 0.45);
         l.bg = dimColor(l.bg, 0.45);
       }
     } else if (kind === 'thin') {
-      if (e === EDGE_RIM) l.fg = shades.fg[world.terrainAt(x, y)][Math.min(7, level + 1)][FLAT];
+      if (e === EDGE_RIM) l.fg = shades.fg[world.groundAt(x, y)][Math.min(7, level + 1)][FLAT];
       else if (e === EDGE_SHADOW) l.bg = dimColor(l.bg, 0.6);
     } else if (kind === 'shadow') {
       if (e === EDGE_SHADOW) {
@@ -108,7 +104,7 @@ export function createVariants(world, data) {
         const top = base - liftOf(world.tierAt(x, y));
         if (top >= filled) continue;
         const level = absLevel(x, y);
-        const wall = shades.fg[world.terrainAt(x, y)][level][FLAT];
+        const wall = shades.fg[world.groundAt(x, y)][level][FLAT];
         for (let r = Math.min(base, filled - 1); r > top; r--) {
           if (r >= 0 && r < rows) mv.draw(vx, r, '▓', dimColor(wall, r === top + 1 ? 0.5 : 0.36), dimColor(wall, 0.25));
         }

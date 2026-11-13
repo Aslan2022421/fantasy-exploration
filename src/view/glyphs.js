@@ -1,16 +1,21 @@
-// 地形的字形（使用者定的原則）：字形代表「地表長什麼樣」，顏色代表「是什麼材質」，亮度輔助（高低、深淺）。
-// - 起伏：空白 → . → · → ∙，由平地到有起伏，所有陸地共用，依坡度選
-// - 植被（草地）：, 碎葉、細草；' 稀疏草叢；" 較高的草叢；: 苔蘚；; 混合植被
-// - 波紋：空白、-、~、≈。深藍色是水，沙黃色是沙地
-// - 高起：^ 沙黃色是沙丘；山地坡陡用實心三角 ▲（山坡），其餘用線三角 ^（山地）
-// 每種地形用哪一套寫在資料的 style；同一種樣子裡挑哪個字，用座標的雜湊決定，畫面不會閃。
-// 這裡只算字形，不碰畫布，可以在 Node 裡測
+// 地面的字形與顏色。字元原則（使用者定）：語意優先、形狀輔助、顏色補充；一個字元只代表一件事，
+// 意思相同、材質不同時靠顏色分（^ 是隆起的高處：沙黃色是沙丘、灰色是山地）。
+// 一格四層都有東西時只畫最上面那層的字元，顏色跟著那一層（提議，使用者同意）：
+//   水文 > 物件 > 生態覆蓋 > 地貌（山地的 ^ ▲）> 地表材質 > 起伏點
+// 物件由 worldview.js 疊上去；這裡管其餘幾層。背景永遠是地面（水或材質）的顏色。
+// - 起伏：空白 → . → · → ∙，由平地到有起伏，依坡度選（泥土、雪，以及岩石、碎石沒露出的地方）
+// - 水文：深水大多空白、偶爾 ≈；淺水與沼澤是 - 與 ~（沼澤墨綠色）；結冰的淺水是冰面 ═
+// - 材質：沙地平坦處空白、-、~，坡陡是沙丘 ^；岩石 ■、碎石 °
+// - 地貌：山峰（山地裡附近最高的一格）是 ▲；其餘山地只有一部分格子畫 ^，
+//   剩下的露出材質（雪是起伏點、陡坡岩石 ■、緩坡碎石 °），陡不陡交給材質
+// - 覆蓋：資料裡每種一個字元（, ' " : ; * τ Γ |）
+// 同一種樣子裡挑哪個字，用座標的雜湊決定，畫面不會閃。這裡只算字形，不碰畫布，可以在 Node 裡測
 
 import { hash01 } from '../world/noise.js';
 
 export const RELIEF = [' ', '.', '·', '∙'];
 export const RELIEF_STEPS = [39, 55, 69]; // 坡度門檻（量過：陸地約一半在 39 以下）
-export const MOUNTAIN_STEEP = 45; // 山地坡度到這裡以上是山坡 ▲
+export const MOUNTAIN_MARK = 0.3; // 非山峰的山地格畫 ^ 的比例
 export const DUNE_STEEP = 55; // 沙地坡度到這裡以上是沙丘 ^
 
 export function reliefGlyph(slope) {
@@ -19,65 +24,58 @@ export function reliefGlyph(slope) {
   return RELIEF[i];
 }
 
-// 草地的植被：看生態的溫度與濕度。a 是這格的雜湊（0～1）
-function vegetation(temperature, moisture, a) {
-  if (temperature === 'cold' && moisture === 'wet') return a < 0.5 ? ':' : ',';
-  if (moisture === 'wet') return a < 0.6 ? '"' : "'";
-  if (moisture === 'dry') return a < 0.6 ? ',' : "'";
-  return a < 0.45 ? "'" : a < 0.8 ? ',' : '"';
+// 水文的字形：style 是水文資料的 style，a 是這格的雜湊（0～1）
+export function waterGlyph(style, a) {
+  if (style === 'deep') return a < 0.12 ? '≈' : ' ';
+  return a < 0.5 ? '-' : '~';
 }
 
-// c：{ style, slope, temperature, moisture, edge（是不是生態交界）, a、b（這格的兩個雜湊值） }
-export function terrainGlyph(c) {
-  switch (c.style) {
-    case 'grass':
-      if (c.slope >= RELIEF_STEPS[2]) return reliefGlyph(c.slope); // 很陡的草坡看得出起伏
-      if (c.edge && c.b < 0.5) return ';'; // 生態交界是混合植被
-      return vegetation(c.temperature, c.moisture, c.a);
-    case 'mud':
-      if (c.temperature === 'cold' && c.a < 0.3) return ':'; // 寒冷的泥地長苔蘚
-      if (c.a < 0.15) return ','; // 零星碎葉
-      return reliefGlyph(c.slope);
-    case 'snow':
-      return reliefGlyph(c.slope); // 雪面平滑，只有起伏
+// 地表材質的字形
+export function surfaceGlyph(style, slope, a) {
+  switch (style) {
     case 'sand':
-      if (c.slope >= DUNE_STEEP) return '^';
-      return c.a < 0.6 ? ' ' : c.a < 0.85 ? '-' : '~';
-    case 'mountain':
-      return c.slope >= MOUNTAIN_STEEP ? '▲' : '^';
-    case 'deep-water':
-      return c.a < 0.12 ? '≈' : ' ';
-    case 'shallow-water':
-      return c.a < 0.5 ? '-' : '~';
+      if (slope >= DUNE_STEEP) return '^';
+      return a < 0.6 ? ' ' : a < 0.85 ? '-' : '~';
+    case 'rock':
+      return a < 0.6 ? '■' : reliefGlyph(slope);
+    case 'gravel':
+      return a < 0.5 ? '°' : reliefGlyph(slope);
+    case 'ice':
+      return a < 0.4 ? '═' : ' ';
     default:
-      return '?';
+      return reliefGlyph(slope);
   }
 }
 
-export const STYLES = ['grass', 'mud', 'snow', 'sand', 'mountain', 'deep-water', 'shallow-water'];
+// 一格（不含物件）的字形與字元顏色。c：{ water（水文 style 或 null）, surface（材質 style）,
+// mountain（是不是山地）, peak（是不是山峰）, cover（覆蓋的字元或 null）, slope,
+// a（挑材質字元的雜湊）, b（決定山地這格畫不畫 ^ 的雜湊，跟 a 分開，免得 ^ 吃掉 ■ 與 °）}。
+// 回傳 'water' | 'cover' | 'surface' 告訴呼叫的人字元顏色取哪一層
+export function cellGlyph(c) {
+  if (c.water && c.surface !== 'ice') return { glyph: waterGlyph(c.water, c.a), ink: 'water' };
+  if (c.surface === 'ice') return { glyph: surfaceGlyph('ice', 0, c.a), ink: 'surface' };
+  if (c.cover) return { glyph: c.cover, ink: 'cover' };
+  if (c.peak) return { glyph: '▲', ink: 'surface' };
+  if (c.mountain && c.b < MOUNTAIN_MARK) return { glyph: '^', ink: 'surface' };
+  return { glyph: surfaceGlyph(c.surface, c.slope, c.a), ink: 'surface' };
+}
 
-// 世界上 (x, y) 那格地面的字形（遊戲畫面與比較頁共用）
-export function glyphAt(world, data, x, y) {
-  const t = data.terrains[world.terrainAt(x, y)];
-  const bi = world.biomeAt(x, y);
-  const biome = data.biomes[bi];
-  let edge = false;
-  for (const [dx, dy] of [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ]) {
-    const n = world.biomeAt(x + dx, y + dy);
-    if (n >= 0 && n !== bi) edge = true;
-  }
-  return terrainGlyph({
-    style: t.style,
+// 世界上 (x, y) 那格地面的樣子（遊戲畫面與比較頁共用）：{ glyph, ink（字元色，data.palette 的索引） }
+export function lookAt(world, data, x, y) {
+  const w = world.waterAt(x, y);
+  const s = world.surfaceAt(x, y);
+  const k = world.coverAt(x, y);
+  const r = cellGlyph({
+    water: w >= 0 ? data.waters[w].style : null,
+    surface: data.surfaces[s].style,
+    mountain: data.landforms[world.landformAt(x, y)].style === 'mountain',
+    peak: world.peakAt(x, y),
+    cover: k >= 0 ? data.covers[k].glyph : null,
     slope: world.slopeAt(x, y),
-    temperature: biome.temperature,
-    moisture: biome.moisture,
-    edge,
-    a: hash01(world.seed, x, y, 101),
-    b: hash01(world.seed, x, y, 102),
+    a: hash01(world.seed, x, y, 103),
+    b: hash01(world.seed, x, y, 104),
   });
+  const base = data.paletteBase;
+  const ink = r.ink === 'water' ? base.water + w : r.ink === 'cover' ? base.cover + k : base.surface + s;
+  return { glyph: r.glyph, ink };
 }

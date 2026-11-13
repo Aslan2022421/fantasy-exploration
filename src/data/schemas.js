@@ -1,6 +1,8 @@
 // 資料規格（Zod）：data/ 底下每種類型的條目長什麼樣
 // 引用一律只認 id；id 寫在條目裡，拆檔、搬檔都不影響引用。
-// 地圖分兩層：地形層是地面本身（水、草地、山地⋯⋯）；物件層是站在地面上、會變成資源的東西（樹、草叢，之後的礦脈）
+// 地圖每格分四層（使用者定）：地貌（地勢、高度、坡度）、地表材質（外觀與通行）、水文（水體）、
+// 生態覆蓋（地面長什麼）；另有物件層，是站在地面上、會變成資源的東西（樹、矮叢，之後的礦脈）。
+// 地貌、材質、水文、覆蓋都放在 data/terrain，用 layer 分；生態群落在 data/biome
 
 import { z } from 'zod';
 
@@ -8,19 +10,39 @@ const Id = z.string().regex(/^[a-z][a-z0-9-]*$/, 'id 只能用小寫英文、數
 const Color = z.string().regex(/^#[0-9a-f]{6}$/, '顏色寫成 #rrggbb');
 const Glyph = z.string().length(1); // 地圖上的字元，必須在 CP437 表裡（另由資料檢查確認）
 
-export const TerrainSchema = z.object({
-  id: Id,
-  name: z.string().min(1),
-  glyph: Glyph, // 說明與圖例裡的代表字
-  color: Color,
-  passable: z.boolean(),
-  shade: z.boolean(), // 顏色要不要依高低、深淺調亮暗（亮度是輔助）
-  // 字形規則（src/view/glyphs.js）：字形代表地表長什麼樣，顏色代表材質。
-  // grass 植被、mud／snow 起伏、sand 波紋與沙丘、mountain 山地與山坡、deep-water／shallow-water 水面
-  style: z.enum(['grass', 'mud', 'snow', 'sand', 'mountain', 'deep-water', 'shallow-water']),
-  glyphs: z.array(Glyph).min(1), // 這種地形會用到的字元（檢查與圖例用；空白只畫背景）
-  tile: z.string().nullable(), // 預留給圖塊模式
-});
+// 四層共用：glyph 是說明與圖例裡的代表字，glyphs 是這一種會用到的字元（檢查與圖例用；空白只畫背景）
+const layerBase = { id: Id, name: z.string().min(1), glyph: Glyph, tile: z.string().nullable() };
+
+// 字元原則（使用者定）：語意優先、形狀輔助、顏色補充。字形規則在 src/view/glyphs.js
+export const TerrainSchema = z.discriminatedUnion('layer', [
+  // 地貌：沒有自己的顏色（顏色來自材質）。relief 用起伏點；mountain 用 ^ 與 ▲
+  z.object({
+    ...layerBase,
+    layer: z.literal('landform'),
+    style: z.enum(['relief', 'mountain']),
+    glyphs: z.array(Glyph).min(1),
+  }),
+  // 地表材質：relief 起伏點、sand 波紋與沙丘、rock 裸岩 ■、gravel 碎石 °、ice 冰面 ═
+  z.object({
+    ...layerBase,
+    layer: z.literal('surface'),
+    color: Color,
+    passable: z.boolean(),
+    style: z.enum(['relief', 'sand', 'rock', 'gravel', 'ice']),
+    glyphs: z.array(Glyph).min(1),
+  }),
+  // 水文：deep 深水、shallow 淺水、swamp 沼澤（墨綠色的水文字元）
+  z.object({
+    ...layerBase,
+    layer: z.literal('water'),
+    color: Color,
+    passable: z.boolean(),
+    style: z.enum(['deep', 'shallow', 'swamp']),
+    glyphs: z.array(Glyph).min(1),
+  }),
+  // 生態覆蓋：地面長的草、苔、花、樹苗等，一種一個字元、一個顏色
+  z.object({ ...layerBase, layer: z.literal('cover'), color: Color }),
+]);
 
 export const ObjectSchema = z.object({
   id: Id,
@@ -38,11 +60,13 @@ export const ObjectSchema = z.object({
 export const BAND = z.enum(['cold', 'mild', 'hot']);
 export const WETNESS = z.enum(['dry', 'normal', 'wet']);
 
+const Share = z.number().min(0).max(1);
+
 export const BiomeSchema = z.object({
   id: Id,
   name: z.string().min(1),
   temperature: BAND,
   moisture: WETNESS,
-  ground: Id, // 平地鋪什麼地形
-  flora: z.array(z.object({ object: Id, density: z.number().min(0).max(1) })), // 依序撒在平地上的物件與密度
+  flora: z.array(z.object({ object: Id, density: Share })), // 依序撒的物件與密度
+  cover: z.array(z.object({ cover: Id, density: Share })), // 泥土與沙地上長的生態覆蓋，各佔幾成
 });

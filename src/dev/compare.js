@@ -48,8 +48,8 @@ function interestingSpots(count) {
         for (let i = 0; i < COLS; i += 2) {
           const c = world.cell(x + i, y + j);
           tiers.add(world.tierAt(x + i, y + j));
-          if (c.terrain.id.endsWith('water')) water++;
-          if (c.terrain.id === 'mountain') mountain++;
+          if (c.water) water++;
+          if (c.landform.style === 'mountain') mountain++;
           if (c.object) trees++;
         }
       }

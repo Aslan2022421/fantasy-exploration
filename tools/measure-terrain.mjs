@@ -17,9 +17,15 @@ function readKind(kind) {
 const data = buildData({ terrain: readKind('terrain'), object: readKind('object'), biome: readKind('biome') });
 
 const SEEDS = Number(process.argv[2] ?? 20);
-const T = data.terrains;
 const O = data.objects;
-const counts = new Array(T.length).fill(0);
+// 四層各自的比例：[資料裡的條目, 生成結果的欄位]
+const LAYERS = [
+  ['地貌', data.landforms, 'landform'],
+  ['材質', data.surfaces, 'surface'],
+  ['水文', data.waters, 'water'],
+  ['生態覆蓋', data.covers, 'cover'],
+];
+const counts = LAYERS.map(([, list]) => new Array(list.length).fill(0));
 const objectCounts = new Array(O.length).fill(0);
 const shade = new Array(8).fill(0);
 const reach = [];
@@ -66,12 +72,14 @@ for (let s = 1; s <= SEEDS; s++) {
       const ms = performance.now() - t0;
       if (s === 1 && zx === 0 && zy === 0) firstMs = ms;
       else zoneMs.push(ms);
-      for (let i = 0; i < z.terrain.length; i++) {
-        counts[z.terrain[i]]++;
+      for (let i = 0; i < z.surface.length; i++) {
+        LAYERS.forEach(([, list, key], k) => {
+          if (z[key][i] < list.length) counts[k][z[key][i]]++;
+        });
         if (z.object[i]) objectCounts[z.object[i] - 1]++;
-        if (T[z.terrain[i]].shade) shade[z.shade[i]]++;
+        shade[z.shade[i]]++;
       }
-      cells += z.terrain.length;
+      cells += z.surface.length;
     }
   }
   reach.push(reachable(world, startPosition(world)));
@@ -83,10 +91,11 @@ for (let s = 1; s <= SEEDS; s++) {
 const pct = (n, d) => `${((100 * n) / d).toFixed(1)}%`;
 const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 console.log(`種子 ${SEEDS} 個，每個 ${3}×${3} 區、共 ${cells} 格\n`);
-console.log('地形比例：');
-for (let i = 0; i < T.length; i++) console.log(`  ${T[i].name}（${T[i].id}）${pct(counts[i], cells)}`);
-const blocked = T.reduce((n, t, i) => n + (t.passable ? 0 : counts[i]), 0);
-console.log(`  不能走 ${pct(blocked, cells)}`);
+LAYERS.forEach(([name, list], k) => {
+  console.log(`${name}比例：${list.map((t, i) => `${t.name} ${pct(counts[k][i], cells)}`).join('、')}`);
+});
+const blocked = data.waters.reduce((n, t, i) => n + (t.passable ? 0 : counts[2][i]), 0);
+console.log(`不能走的水 ${pct(blocked, cells)}`);
 console.log('物件比例（佔全部格子）：');
 for (let i = 0; i < O.length; i++) console.log(`  ${O[i].name}（${O[i].id}）${pct(objectCounts[i], cells)}`);
 reach.sort((a, b) => a - b);

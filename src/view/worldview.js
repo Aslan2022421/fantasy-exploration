@@ -11,34 +11,33 @@ import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js
 import { FLAT } from '../world/relief.js';
 import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
-import { glyphAt } from './glyphs.js';
+import { lookAt } from './glyphs.js';
 import { buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 
 const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮度
 const SHADOW_DIM = 0.6; // 影子裡的亮度
 const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_TRUNK]: 0.8 }; // 樹冠各側的亮度
 export const TRUNK_GLYPH = 'Φ'; // 樹幹：走不過去的那一格，跟樹冠分得出來
-const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往山地靠幾成
+const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
 
 export function createWorldView(mapView, world, data, { extrude = true } = {}) {
-  const { terrains, objects } = data;
-  const shades = buildShadeTable(terrains); // { fg, bg }：[地形][明暗級數][立面]
+  const { objects, surfaces } = data;
+  const shades = buildShadeTable(data.palette); // { fg, bg }：[顏色來源][明暗級數][立面]
   const objectFg = buildObjectShades(objects); // [物件][明暗級數][立面]
-  // 山上的樹：顏色往山地靠（使用者定），用另一張表
-  const mountain = terrains.findIndex((t) => t.id === 'mountain');
-  const mountainColor = mountain >= 0 ? terrains[mountain].color : null;
-  const objectFgMountain = mountainColor
-    ? buildObjectShades(objects.map((o) => ({ ...o, color: mixColor(o.color, mountainColor, MOUNTAIN_TINT) })))
-    : objectFg;
+  // 山上的樹：顏色往腳下的材質（岩石、碎石、雪）靠（使用者定），每種材質一張表
+  const objectFgOn = surfaces.map((s) =>
+    buildObjectShades(objects.map((o) => ({ ...o, color: mixColor(o.color, s.color, MOUNTAIN_TINT) }))),
+  );
+  const isMountain = data.landforms.map((l) => l.style === 'mountain');
 
-  // 一格地面的樣子：字形看地表長什麼樣（glyphs.js），顏色看材質，亮暗輔助高低與深淺
+  // 一格地面的樣子：字形與字元色看四層（glyphs.js），背景是地面的顏色，亮暗輔助高低與深淺
   function groundLook(x, y) {
-    const t = world.terrainAt(x, y);
     const level = world.shadeAt(x, y);
+    const { glyph, ink } = lookAt(world, data, x, y);
     return {
-      glyph: glyphAt(world, data, x, y),
-      fg: shades.fg[t][level][FLAT],
-      bg: shades.bg[t][level][FLAT],
+      glyph,
+      fg: shades.fg[ink][level][FLAT],
+      bg: shades.bg[world.groundAt(x, y)][level][FLAT],
       level,
     };
   }
@@ -58,7 +57,7 @@ export function createWorldView(mapView, world, data, { extrude = true } = {}) {
     if (o >= 0) {
       const part = world.objectPartAt(x, y);
       look.glyph = part === PART_TRUNK ? TRUNK_GLYPH : objects[o].glyph;
-      const table = world.terrainAt(x, y) === mountain ? objectFgMountain : objectFg;
+      const table = isMountain[world.landformAt(x, y)] ? objectFgOn[world.surfaceAt(x, y)] : objectFg;
       look.fg = dimColor(table[o][look.level][FLAT], PART_FACTOR[part]);
     } else if (extrude && inShadow(world, objects, x, y)) {
       look.fg = dimColor(look.fg, SHADOW_DIM);

@@ -3,10 +3,10 @@
 // 地圖不進存檔：讀檔時用種子重生，再把紀錄套回去
 
 import { PART_TRUNK } from './footprint.js';
-import { bandOf, createTerrainGen, TEMP_BANDS, WET_BANDS } from './terrain.js';
+import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 5; // 5：每格存坡度（字形看地表起伏）
+export const WORLD_VERSION = 7; // 7：山地標出山峰
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;
@@ -76,13 +76,18 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     return (y - zy * zoneSize) * zoneSize + (x - zx * zoneSize);
   }
 
+  const orNull = (list, v) => (v === LAYER_NONE ? null : list[v]);
+
   function cell(x, y) {
     const i = locate(x, y);
     if (i < 0) return null;
-    const t = data.terrains[last.terrain[i]];
     const o = last.object[i];
     return {
-      terrain: t,
+      landform: data.landforms[last.landform[i]],
+      peak: last.peak[i] === 1,
+      surface: data.surfaces[last.surface[i]],
+      water: orNull(data.waters, last.water[i]),
+      cover: orNull(data.covers, last.cover[i]),
       object: o ? data.objects[o - 1] : null,
       trunk: o ? last.objectPart[i] === PART_TRUNK : false,
       biome: data.biomes[last.biome[i]],
@@ -105,10 +110,35 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     generatedZones: () => zones.size,
     inside,
     cell,
-    // 地形編號（data.terrains 的索引）；世界外是 -1
-    terrainAt(x, y) {
+    // 四層各自的編號（data.landforms／surfaces／waters／covers 的索引）；世界外或沒有東西是 -1
+    landformAt(x, y) {
       const i = locate(x, y);
-      return i < 0 ? -1 : last.terrain[i];
+      return i < 0 ? -1 : last.landform[i];
+    },
+    // 是不是山峰（山地裡附近最高的一格）
+    peakAt(x, y) {
+      const i = locate(x, y);
+      return i >= 0 && last.peak[i] === 1;
+    },
+    surfaceAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 ? -1 : last.surface[i];
+    },
+    waterAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 || last.water[i] === LAYER_NONE ? -1 : last.water[i];
+    },
+    coverAt(x, y) {
+      const i = locate(x, y);
+      return i < 0 || last.cover[i] === LAYER_NONE ? -1 : last.cover[i];
+    },
+    // 這格地面的顏色來源（data.palette 的索引）：有水是水，不然是材質；結冰的淺水是冰。世界外是 -1
+    groundAt(x, y) {
+      const i = locate(x, y);
+      if (i < 0) return -1;
+      const w = last.water[i];
+      if (w === LAYER_NONE || data.surfaces[last.surface[i]].style === 'ice') return last.surface[i];
+      return data.paletteBase.water + w;
     },
     shadeAt(x, y) {
       const i = locate(x, y);
@@ -144,10 +174,13 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const i = locate(x, y);
       return i < 0 ? -1 : last.object[i] - 1;
     },
-    // 地形與物件都走得過去才算；樹幹那一格走不過去（樹冠其他格照物件的 passable）
+    // 水文、材質與物件都走得過去才算；樹幹那一格走不過去（樹冠其他格照物件的 passable）
     isPassable(x, y) {
       const i = locate(x, y);
-      if (i < 0 || !data.terrains[last.terrain[i]].passable) return false;
+      if (i < 0) return false;
+      const w = last.water[i];
+      if (w !== LAYER_NONE && !data.waters[w].passable) return false;
+      if (!data.surfaces[last.surface[i]].passable) return false;
       const o = last.object[i];
       if (!o) return true;
       return data.objects[o - 1].passable && last.objectPart[i] !== PART_TRUNK;

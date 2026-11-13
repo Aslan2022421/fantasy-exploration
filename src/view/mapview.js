@@ -52,7 +52,9 @@ export function createMapView(image, ctx) {
       const px = (e.clientX - rect.left) * s.dpr - s.map.x;
       const py = (e.clientY - rect.top) * s.dpr - s.map.y;
       if (px < 0 || py < 0 || px >= s.map.w || py >= s.map.h) return null;
-      return { x: Math.floor(px / s.tile), y: Math.floor(py / s.tile) };
+      // fx、fy：滑鼠在地圖區的位置，以字元像素計（一格 8 個），錯開的疊層要用它找點到哪格
+      const k = s.tile / 8;
+      return { x: Math.floor(px / s.tile), y: Math.floor(py / s.tile), fx: px / k, fy: py / k };
     },
   };
 }

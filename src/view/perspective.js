@@ -1,20 +1,17 @@
-// 全俯視透視（使用者選定）：相機懸在畫面中心正上方往下看，高的東西用「疊層」做出體積。
-// - 高度用「層」算：每個高度層（tier）是 tierLayers 層，水面是第 0 層
-// - 原點固定在水面那一層（使用者定）：比原點高幾層，就往外（離開畫面中心）錯開幾層的量，
-//   每層 layerStep 個字元像素（一格 8 個），離中心越遠越大，總錯開量有上限。
-//   原點跟著角色的高度層走的話，角色一上下坡整個畫面就會跳一下，像突然縮放，所以改成固定。
-//   角色那格在畫面中心、永遠在原位，附近也錯得很少
-// - 地形：比往中心那一格高的邊緣，從低處那一層疊到自己底下一層，看起來是一面牆。
-//   低窪的水整片往內縮，遠側的岸露出岸壁、近側的岸蓋住水邊（使用者同意的提議）
+// 疊層（使用者選定 C）：高的東西同一個字疊好幾層做出體積，全部往畫面上方疊，每高一層往上錯開一樣的量，
+// 跟在畫面哪裡無關。走路時每一格的錯開量都不變，畫面只是平移，不會游動、沒有凹凸鏡感
+// （試過以角色為中心往外錯開的透視，離中心越遠錯越開，看起來像凹凸鏡、會頭暈，已取代）。
+// - 高度用「層」算：每個高度層（tier）是 tierLayers 層；原點是水面（第 0 層），比原點高幾層就往上錯開幾層
+// - 地形：比南邊那一格高的格子，從低處那一層疊到自己底下一層，看起來是一面朝南的牆。
+//   低窪的水在原點，北岸露出岸壁
 // - 樹（使用者定）：第 1 層是地貌、第 2 層留空，樹葉在第 3、4 層（離地 +2、+3），
 //   樹幹 Φ 從離地 +1 疊到 +4，頂端露出樹冠；矮叢實心疊 2 層
-// 畫的時候照高度由低到高，高的蓋住低的。這裡只算層與錯開量，不碰畫布，可以在 Node 裡測
+// 畫的時候照高度由低到高，同高時北邊先畫、南邊後畫。這裡只算層與錯開量，不碰畫布，可以在 Node 裡測
 
 export const STACK = {
   tierLayers: 2, // 每個高度層算幾層
-  stepPerCell: 0.12, // 離中心每一格，每差一層多錯開幾個字元像素
-  maxStep: 2, // 每差一層最多錯開幾個字元像素
-  maxShift: 12, // 總錯開量上限（字元像素，一格半）
+  step: 2, // 每高一層往上錯開幾個字元像素（一格 8 個）
+  maxShift: 32, // 錯開量上限（字元像素，四格）
   maxWall: 8, // 牆最多疊幾層
   dims: [1, 0.85, 0.7, 0.55, 0.45], // 由頂往下各層的亮度
 };
@@ -23,31 +20,18 @@ export const TREE = { trunk: [1, 2, 3, 4], leaves: [2, 3] }; // 離地幾層
 
 export const dimAt = (j) => STACK.dims[Math.min(j, STACK.dims.length - 1)];
 export const groundHeight = (tier) => tier * STACK.tierLayers;
+export const MAX_SHIFT_CELLS = Math.ceil(STACK.maxShift / 8); // 錯開最多幾格
 
-// 離中心 dist 格時，每差一層錯開幾個字元像素
-export function layerStep(dist) {
-  return Math.min(STACK.maxStep, dist * STACK.stepPerCell);
+// 高度 h（層）的東西往上錯開幾個字元像素
+export function shiftOf(h) {
+  return { ox: 0, oy: -Math.min(STACK.maxShift, Math.max(0, h) * STACK.step) || 0 }; // || 0 把 -0 變 0
 }
 
-// 比原點高 dh 層的東西錯開多少：正的往外、負的往內（原點固定在水面時不會有負的）。(dx, dy) 是這格減畫面中心
-export function shiftOf(dx, dy, dh) {
-  const dist = Math.hypot(dx, dy);
-  if (dist === 0 || dh === 0) return { ox: 0, oy: 0 };
-  const s = Math.max(-STACK.maxShift, Math.min(STACK.maxShift, dh * layerStep(dist)));
-  return { ox: Math.round((dx / dist) * s) || 0, oy: Math.round((dy / dist) * s) || 0 }; // || 0 把 -0 變 0
-}
-
-// 這格的牆：比往中心那一格高時，回傳要疊的高度範圍 { from, to }（含頭尾），不然 null
-export function wallRange(world, cx, cy, x, y) {
-  const dx = x - cx;
-  const dy = y - cy;
-  const m = Math.max(Math.abs(dx), Math.abs(dy));
-  if (m === 0) return null;
-  const nx = x - Math.round(dx / m);
-  const ny = y - Math.round(dy / m);
-  if (!world.inside(nx, ny)) return null;
+// 這格的牆：比南邊那一格高時，回傳要疊的高度範圍 { from, to }（含頭尾），不然 null
+export function wallRange(world, x, y) {
+  if (!world.inside(x, y + 1)) return null;
   const top = groundHeight(world.tierAt(x, y));
-  const low = groundHeight(world.tierAt(nx, ny));
+  const low = groundHeight(world.tierAt(x, y + 1));
   if (top <= low) return null;
   return { from: Math.max(low, top - STACK.maxWall), to: top - 1 };
 }

@@ -172,10 +172,10 @@ function closeExamine() {
   return true;
 }
 
-// 畫面上的格子 → 地圖上的格子（斜投影時抬高的格子由 worldView 換算）
+// 畫面上的格子 → 地圖上的格子（疊層時錯開的格子由 worldView 用滑鼠的實際位置換算）
 function mapCellAt(e) {
   const v = mapView.cellAt(e);
-  return v ? worldView.cellAt(camera(), v.x, v.y) : null;
+  return v ? worldView.cellAt(camera(), v.x, v.y, v.fx, v.fy) : null;
 }
 
 function describeCell(cell) {

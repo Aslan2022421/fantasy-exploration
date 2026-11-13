@@ -1,5 +1,5 @@
-// 畫地圖區。預設是全俯視透視（使用者選定，perspective.js 算層、stackview.js 畫）：相機在畫面中心正上方，
-// 原點固定在水面，越高的往外錯開越多，地形邊緣與物件疊層。網址加 ?leftdown 是前一版
+// 畫地圖區。預設是疊層（使用者選定，perspective.js 算層、stackview.js 畫）：高的東西同一個字疊好幾層，
+// 全部往畫面上方錯開，每高一層錯開一樣的量；地形邊緣疊成朝南的牆。網址加 ?leftdown 是前一版
 // （光從右上照，往左下拉側面與物件影子，extrude.js），加 ?flat 不畫側面，這兩種頂面都在原位。
 // - 亮度：生成時算好的亮度級數（陸地看高度層＋坡向明暗，水看深度）
 // - 樹冠：多格的樹右上亮、左下暗
@@ -138,13 +138,14 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
   return {
     draw,
     // 視窗格 → 世界格；世界外回傳 null。全俯視透視時找畫面上那一點最上面的地面
-    cellAt(cam, vx, vy) {
-      if (mode === 'perspective') return stack.cellAt(cam, vx, vy);
+    cellAt(cam, vx, vy, fx, fy) {
+      if (mode === 'perspective') return stack.cellAt(cam, vx, vy, fx, fy);
       const c = { x: cam.x + vx, y: cam.y + vy };
       return world.inside(c.x, c.y) ? c : null;
     },
     // 世界格 → 視窗格（路線標籤用）
     screenOf(cam, x, y) {
+      if (mode === 'perspective') return stack.screenOf(cam, x, y);
       return { vx: x - cam.x, vy: y - cam.y };
     },
   };

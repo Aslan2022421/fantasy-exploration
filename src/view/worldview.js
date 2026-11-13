@@ -21,7 +21,6 @@ const SIDE_DIM = [0, 0.6, 0.5, 0.42]; // 側面離高處 1、2、3 格時的亮�
 const SHADOW_DIM = 0.6; // 影子裡的亮度
 const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65, [PART_TRUNK]: 0.8 }; // 樹冠各側的亮度
 export const TRUNK_GLYPH = 'Φ'; // 樹幹：走不過去的那一格，跟樹冠分得出來
-const STACK_TRUNK_GLYPH = '│'; // 疊層畫法的樹幹
 const WOOD = '#6b5638'; // 疊層畫法的樹幹顏色往這個木頭色靠
 const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
 const SOFTEN = 0.6; // 交界的底色往周圍平均靠幾成
@@ -88,8 +87,8 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
     return {
       glyph: objects[o].glyph,
       fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part]),
-      // 疊層時樹幹是細的 │、帶木頭色，跟頂上的樹葉分得開；其他畫法照舊用 Φ
-      trunkGlyph: stacked ? STACK_TRUNK_GLYPH : TRUNK_GLYPH,
+      // 樹幹一律是 Φ（試過細的 │，使用者說很難看）；疊層時帶木頭色，跟頂上的樹葉分得開
+      trunkGlyph: TRUNK_GLYPH,
       trunkFg: stacked ? mixColor(dimColor(base, 0.8), WOOD, 0.6) : dimColor(base, PART_FACTOR[PART_TRUNK]),
       isTrunk,
     };

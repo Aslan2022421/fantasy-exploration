@@ -114,10 +114,8 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
 
   // overlay：{ route: {steps, reachable} | null, target, examined, player }
   function draw(screen, cam, overlay) {
-    if (mode === 'perspective') {
-      stack.draw(screen, cam, overlay);
-      return;
-    }
+    if (mode === 'perspective') return stack.draw(screen, cam, overlay); // true：相機還在半路上
+
     for (let vy = 0; vy < screen.rows; vy++) {
       for (let vx = 0; vx < screen.cols; vx++) {
         const x = cam.x + vx;
@@ -132,6 +130,7 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
     drawMarks(screen, cam, overlay);
     const { player } = overlay;
     mapView.draw(player.x - cam.x, player.y - cam.y, '@', COLORS.player, COLORS.bg);
+    return false;
   }
 
   return {

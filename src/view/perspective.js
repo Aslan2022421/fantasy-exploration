@@ -1,22 +1,27 @@
-// 疊層（使用者選定 C）：高的東西同一個字疊好幾層做出體積，全部往畫面上方疊，每高一層往上錯開一樣的量，
-// 跟在畫面哪裡無關。走路時每一格的錯開量都不變，畫面只是平移，不會游動、沒有凹凸鏡感
-// （試過以角色為中心往外錯開的透視，離中心越遠錯越開，看起來像凹凸鏡、會頭暈，已取代）。
-// - 高度用「層」算（groundHeight）：原點是水面（第 0 層），比原點高幾層就往上錯開幾層
-// - 地形：比南邊那一格高的格子，從低處那一層疊到自己底下一層，看起來是一面朝南的牆。
-//   低窪的水在原點，北岸露出岸壁
-// - 樹（使用者定）：第 1 層是地貌、第 2 層留空，樹葉只在第 3 層（離地 +2），
-//   樹幹 Φ 從離地 +1 疊到 +4，頂端露出樹冠；矮叢實心疊 2 層
-// 畫的時候照高度由低到高，同高時北邊先畫、南邊後畫。這裡只算層與錯開量，不碰畫布，可以在 Node 裡測
+// 多層次視差堆疊（使用者定）：高的東西同一個字疊好幾層做出體積，從畫面中心（相機）往外錯開，
+// 角色一走，周圍的高處跟著轉，有視差。為了不頭暈、不像凹凸鏡（前幾版的教訓）：
+// - 原點是角色腳下的高度，同高的地面不錯開，走路時地面不動；換高度層時原點平滑過渡（stackview.js）
+// - 相機平滑緩衝：相機與原點都往目標慢慢靠過去，不一步跳到位
+// - 限制最大偏移：錯開量隨離中心的距離長大，但有上限，角色附近看得到視差，遠處角落不會被拉長變形
+// - 每層之間錯開的距離是前一版的一半（使用者定）
+// - 下面幾層的顏色往地面底色壓淡，不往黑色壓，牆與樹幹不會變成一條條突兀的色塊
+// 高度用「層」算（groundHeight）；樹（使用者定）：第 1 層是地貌、第 2 層留空，樹葉在離地 +2，
+// 樹幹 Φ 從離地 +1 疊到 +4，連地貌共 5 層；矮叢實心疊 2 層；玩家疊 2 層。
+// 這裡只算層、錯開量與壓淡的比例，不碰畫布，可以在 Node 裡測
 
 import { LAND } from '../world/landform.js';
 
 export const STACK = {
-  tierLayers: 2, // 每個高度層算幾層
-  step: 2, // 每高一層往上錯開幾個字元像素（一格 8 個）
-  maxShift: 48, // 錯開量上限（字元像素，六格；最高的山頂約 44）
+  tierLayers: 2, // 陸地每個高度層算幾層
+  stepPerCell: 0.06, // 離中心每一格，每差一層多錯開幾個字元像素（一格 8 個）
+  maxStep: 1, // 每差一層最多錯開幾個字元像素
+  maxShift: 6, // 錯開量上限（字元像素）：遠處角落不會拉長變形
   maxWall: 8, // 牆最多疊幾層
-  dims: [1, 0.85, 0.7, 0.55, 0.45], // 由頂往下各層的亮度
+  fade: [0, 0.35, 0.6, 0.75, 0.85], // 由頂往下各層往地面底色壓淡多少（頂層不壓；5 層）
 };
+
+// 相機平滑緩衝：每過 tau 毫秒，離目標的距離剩約 37%；離太遠（瞬移、讀檔）直接跳過去
+export const LERP = { tau: 90, snap: 8, settle: 0.01 };
 
 // 山地逐圈的底色亮度（使用者要的「逐圈顏色變深」）：山腳那圈 foot、往上每圈變亮，第 full 圈以上全亮
 export const RING = { foot: 0.75, full: 10 };
@@ -33,33 +38,54 @@ export const TREE = { trunk: [1, 2, 3, 4], leaves: [2] }; // 離地幾層（樹�
 // 玩家、NPC、怪物依體型疊 2～3 層、佔 1、2、4 格（使用者定）；現在只有玩家，疊 2 層
 export const PLAYER_LAYERS = 2;
 
-export const dimAt = (j) => STACK.dims[Math.min(j, STACK.dims.length - 1)];
-// 地面高度（層）：陸地第 1～4 層每層算 tierLayers 層；再往上是山地一圈一圈加的，每圈算 1 層，
-// 山才疊得起來又不會高到蓋掉北邊一大片
+export const fadeAt = (j) => STACK.fade[Math.min(j, STACK.fade.length - 1)];
+// 地面高度（層）：陸地第 1～4 層每層算 tierLayers 層；再往上是山地一圈一圈加的，每圈算 1 層
 export const groundHeight = (tier) =>
   tier <= LAND.landTiers ? tier * STACK.tierLayers : LAND.landTiers * STACK.tierLayers + (tier - LAND.landTiers);
 export const MAX_SHIFT_CELLS = Math.ceil(STACK.maxShift / 8); // 錯開最多幾格
 
-// 高度 h（層）的東西往上錯開幾個字元像素
-export function shiftOf(h) {
-  return { ox: 0, oy: -Math.min(STACK.maxShift, Math.max(0, h) * STACK.step) || 0 }; // || 0 把 -0 變 0
+// 離中心 dist 格時，每差一層錯開幾個字元像素
+export function layerStep(dist) {
+  return Math.min(STACK.maxStep, dist * STACK.stepPerCell);
 }
 
-// 這格的牆：比南邊那一格高時，回傳要疊的高度範圍 { from, to }（含頭尾），不然 null
-export function wallRange(world, x, y) {
-  if (!world.inside(x, y + 1)) return null;
+// 比原點高 dh 層的東西錯開多少（可以是小數）：正的往外、負的往內，總量不超過 maxShift。
+// (dx, dy) 是這格減畫面中心（可以是小數，相機在半路上時）
+export function shiftOf(dx, dy, dh) {
+  const dist = Math.hypot(dx, dy);
+  if (dist === 0 || dh === 0) return { ox: 0, oy: 0 };
+  const s = Math.max(-STACK.maxShift, Math.min(STACK.maxShift, dh * layerStep(dist)));
+  return { ox: (dx / dist) * s, oy: (dy / dist) * s };
+}
+
+// 往目標靠近一步：dt 毫秒過去後的新值；離目標夠近或太遠就直接到位
+export function approach(cur, target, dt) {
+  const d = target - cur;
+  if (Math.abs(d) <= LERP.settle || Math.abs(d) >= LERP.snap) return target;
+  return cur + d * (1 - Math.exp(-dt / LERP.tau));
+}
+
+// 這格的牆：比往中心那一格高時，回傳 { from, to, low }（要疊的高度範圍含頭尾、低處那格的座標），不然 null
+export function wallRange(world, cx, cy, x, y) {
+  const dx = x - cx;
+  const dy = y - cy;
+  const m = Math.max(Math.abs(dx), Math.abs(dy));
+  if (m < 0.5) return null;
+  const nx = x - Math.round(dx / m);
+  const ny = y - Math.round(dy / m);
+  if (!world.inside(nx, ny)) return null;
   const top = groundHeight(world.tierAt(x, y));
-  const low = groundHeight(world.tierAt(x, y + 1));
+  const low = groundHeight(world.tierAt(nx, ny));
   if (top <= low) return null;
-  return { from: Math.max(low, top - STACK.maxWall), to: top - 1 };
+  return { from: Math.max(low, top - STACK.maxWall), to: top - 1, low: { x: nx, y: ny } };
 }
 
-// 物件這格要疊的層：[{ dh（離地幾層）, part: 'trunk' | 'leaf' | 'solid', j（離那部分頂端幾層，決定亮度）}]。
+// 物件這格要疊的層：[{ dh（離地幾層）, part: 'trunk' | 'leaf' | 'solid', j（離那部分頂端幾層，決定壓淡）}]。
 // 同高時先樹幹後樹葉，樹葉蓋住樹幹；樹幹最頂那層高過樹葉，露出來
 export function objectLayers(object, isTrunk) {
   if (!object?.height) return [];
   if (!object.trunk) {
-    const n = Math.min(object.height, STACK.dims.length);
+    const n = Math.min(object.height, STACK.fade.length);
     return Array.from({ length: n }, (_, i) => ({ dh: i + 1, part: 'solid', j: n - 1 - i }));
   }
   const top = (list) => list[list.length - 1];

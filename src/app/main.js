@@ -115,6 +115,8 @@ function shownPath() {
   return { steps, reachable: steps.length > 0 };
 }
 
+let frameRequested = false; // 相機平滑緩衝：還沒到位就在下一個畫面再畫一次
+
 function render() {
   const { tile, map } = screen;
   const cam = camera();
@@ -123,7 +125,14 @@ function render() {
   const p = player();
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  worldView.draw(screen, cam, { route, target, examined, player: p });
+  const moving = worldView.draw(screen, cam, { route, target, examined, player: p });
+  if (moving && !frameRequested) {
+    frameRequested = true;
+    requestAnimationFrame(() => {
+      frameRequested = false;
+      render();
+    });
+  }
 
   const where = regionLabel(world, DATA, p.x, p.y);
   panels.status(

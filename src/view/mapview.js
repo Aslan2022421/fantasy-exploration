@@ -21,8 +21,8 @@ export function createMapView(image, ctx) {
     // 背景四邊各多塗 1 個字元像素：相鄰兩格錯開量四捨五入不同時，中間才不會露出細縫
     drawShifted(vx, vy, ox, oy, ch, fg, bg) {
       const k = s.tile / 8;
-      const px = s.map.x + vx * s.tile + ox * k;
-      const py = s.map.y + vy * s.tile + oy * k;
+      const px = Math.round(s.map.x + vx * s.tile + ox * k); // 錯開量可以是小數，落到整數像素才不會糊
+      const py = Math.round(s.map.y + vy * s.tile + oy * k);
       if (bg) {
         ctx.fillStyle = bg;
         ctx.fillRect(px - k, py - k, s.tile + 2 * k, s.tile + 2 * k);

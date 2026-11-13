@@ -62,10 +62,18 @@ export function shiftOf(dx, dy, dh) {
 // 畫面是 100% 靜止的平行投影，走路時整張圖只平移。高的東西同時露出南面與西面兩面牆（光從右上照，露出的是背光面）。
 // 每高一層往右、往上各錯開 px 個「螢幕像素」，不跟著地圖縮放變（使用者定：原本用字元像素，
 // 預設大小每層只錯 2 像素，要放到最大才看得出立體）；總量最多 maxPx 螢幕像素，最高的山頂會被壓平一點
-export const UP = { px: 4, maxPx: 64 };
+// 物件（樹、矮叢）與冒險者從腳下地面往上的每一層錯開 objPx 螢幕像素，比地形大一倍：
+// 預設大小（一格 16 像素）樹幹頂端（離地 4 層）約錯開兩格（使用者定）
+export const UP = { px: 4, maxPx: 64, objPx: 8, maxLift: 4 };
 
-// 格子放大 k 倍（一個字元像素是 k 個螢幕像素）時，錯開最多幾格
-export const upShiftCells = (k) => Math.ceil(UP.maxPx / k / 8);
+// 格子放大 k 倍（一個字元像素是 k 個螢幕像素）時，錯開最多幾格（地面加上物件）
+export const upShiftCells = (k) => Math.ceil((UP.maxPx + UP.maxLift * UP.objPx) / k / 8);
+
+// 物件從腳下地面往上 dh 層，再多錯開多少字元像素
+export function liftUp(dh, k = 1) {
+  const s = (Math.min(UP.maxLift, Math.max(0, dh)) * UP.objPx) / k;
+  return { ox: s || 0, oy: -s || 0 };
+}
 
 // 高度 h（層，原點是水面）錯開多少字元像素（可以是小數）：{ ox 往右（正）, oy 往上（負）}；k 是格子放大倍數
 export function shiftUp(h, k = 1) {

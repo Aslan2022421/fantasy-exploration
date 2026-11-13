@@ -59,16 +59,23 @@ export function createMapView(image, ctx) {
       ctx.drawImage(layer.canvas, Math.round(s.map.x + gx * k), Math.round(s.map.y + gy * k));
     },
     tile: () => s.tile,
-    // 畫一條線段：兩端是地圖區的字元像素，寬 width 個字元像素
-    line(x1, y1, x2, y2, color, width) {
+    // 畫一條線段：兩端是地圖區的字元像素，寬 width 個字元像素。
+    // dash 是虛線的 [畫, 空]（字元像素），offset 是這段從虛線花紋的哪裡開始（接續上一段，花紋才連得起來）
+    line(x1, y1, x2, y2, color, width, dash = null, offset = 0) {
       const k = s.tile / 8;
+      ctx.save();
       ctx.strokeStyle = color;
       ctx.lineWidth = Math.max(1, Math.round(width * k));
-      ctx.lineCap = 'round';
+      ctx.lineCap = 'butt';
+      if (dash) {
+        ctx.setLineDash(dash.map((d) => d * k));
+        ctx.lineDashOffset = offset * k;
+      }
       ctx.beginPath();
       ctx.moveTo(s.map.x + x1 * k, s.map.y + y1 * k);
       ctx.lineTo(s.map.x + x2 * k, s.map.y + y2 * k);
       ctx.stroke();
+      ctx.restore();
     },
     // 視野外壓暗：以 (cx, cy)（字元像素）為中心，r0 以內不變，到 r1 漸漸蓋上 rgb 顏色、不透明度 alpha
     vignette(cx, cy, r0, r1, rgb, alpha) {

@@ -12,6 +12,7 @@ import {
   approach,
   fadeAt,
   groundHeight,
+  liftUp,
   objectLayers,
   PLAYER_LAYERS,
   shiftUp,
@@ -23,7 +24,8 @@ import { dimColor, mixColor } from './shades.js';
 const CHUNK = 16; // 分塊邊長（格）
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
 const SIGHT = { near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 }; // 視野外壓暗：COLORS.dark 的 RGB
-const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5 }; // 路線的亮度隨高度、線寬（字元像素）
+// 路線的亮度隨高度、線寬與虛線的 [畫, 空]（字元像素）
+const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3] };
 
 const fadeCache = new Map();
 // a 往 b 壓淡 f（0 不變、1 變成 b）
@@ -68,7 +70,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     for (const l of layers) {
       const trunk = l.part === 'trunk';
       const fg = fade(trunk ? ol.trunkFg : ol.fg, g.bg, fadeAt(l.j));
-      put(h0 + l.dh, { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null });
+      put(h0 + l.dh, { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh });
     }
   }
 
@@ -85,7 +87,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     for (const list of buckets) {
       if (!list) continue;
       for (const it of list) {
-        const { ox, oy } = shiftUp(it.h, k);
+        const { ox, oy } = shiftOf(it.ground ?? it.h, it.lift ?? 0, k);
         layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg);
       }
     }
@@ -104,9 +106,16 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     return layer;
   }
 
-  // 世界格 (x, y) 的地面畫在地圖區哪裡（字元像素，左上角）
-  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y))) {
-    const { ox, oy } = shiftUp(h, mapView.tile() / 8);
+  // 地面高度 h 的東西、再往上 lift 層（物件、冒險者）錯開多少字元像素
+  function shiftOf(h, lift, k) {
+    const a = shiftUp(h, k);
+    const b = liftUp(lift, k);
+    return { ox: a.ox + b.ox, oy: a.oy + b.oy };
+  }
+
+  // 世界格 (x, y) 的地面（或往上 lift 層）畫在地圖區哪裡（字元像素，左上角）
+  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y)), lift = 0) {
+    const { ox, oy } = shiftOf(h, lift, mapView.tile() / 8);
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
@@ -124,8 +133,8 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 路線（使用者要線狀，不要點狀）：從冒險者連到每一步的中心，跟著每格地面的高度錯開，
-  // 越高的那段越亮（PATH_LIGHT），上下坡看得出來
+  // 路線（使用者要虛線）：從冒險者連到每一步的中心，跟著每格地面的高度錯開，
+  // 越高的那段越亮（PATH_LIGHT），上下坡看得出來；虛線花紋一段接一段連下去
   function drawRoute(f, route, player) {
     if (!route?.steps.length) return;
     const pts = [player, ...route.steps].map((c) => {
@@ -133,11 +142,13 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       const { px, py } = placeOf(f, c.x, c.y, h);
       return { x: px + 4, y: py + 4, h };
     });
+    let walked = 0;
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1];
       const b = pts[i];
       const k = Math.min(PATH_LIGHT.max, PATH_LIGHT.base + PATH_LIGHT.perLayer * Math.max(a.h, b.h));
-      mapView.line(a.x, a.y, b.x, b.y, dimColor(COLORS.path, k), PATH_LIGHT.width);
+      mapView.line(a.x, a.y, b.x, b.y, dimColor(COLORS.path, k), PATH_LIGHT.width, PATH_LIGHT.dash, walked);
+      walked += Math.hypot(b.x - a.x, b.y - a.y);
     }
   }
 
@@ -170,7 +181,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       const pg = look.ground(player.x, player.y).bg;
       for (let dh = 1; dh <= PLAYER_LAYERS; dh++) {
         const fg = fade(COLORS.player, pg, fadeAt(PLAYER_LAYERS - dh));
-        const { px, py } = placeOf(f, player.x, player.y, p0 + dh);
+        const { px, py } = placeOf(f, player.x, player.y, p0, dh);
         mapView.drawShifted(0, 0, px, py, '@', fg, null);
       }
     });

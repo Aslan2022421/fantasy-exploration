@@ -4,10 +4,11 @@
 
 import { PART_TRUNK } from './footprint.js';
 import { buildGeography } from './geography.js';
+import { anchorOffset } from './objects.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 14;
+export const WORLD_VERSION = 15;
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -185,6 +186,13 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     objectAt(x, y) {
       const i = locate(x, y);
       return i < 0 ? -1 : last.object[i] - 1;
+    },
+    // 這格的物件從哪一格長出來（錨點，多格的樹是左上角那格）；沒有物件回傳 null
+    anchorAt(x, y) {
+      const i = locate(x, y);
+      if (i < 0 || !last.object[i]) return null;
+      const { k, j } = anchorOffset(last.objectAnchor[i]);
+      return { x: x - k, y: y - j };
     },
     // 水文、材質與物件都走得過去才算；樹幹那一格走不過去（樹冠其他格照物件的 passable）
     isPassable(x, y) {

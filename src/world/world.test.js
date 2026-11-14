@@ -15,6 +15,7 @@ const LAYERS = ['landform', 'surface', 'water', 'cover'];
 const MOUNTAIN = DATA.landformIndex.get('mountain');
 const S = (id) => DATA.surfaceIndex.get(id);
 const W = (id) => DATA.waterIndex.get(id);
+const ROCKY = new Set(['rock-wall', 'vein'].map((id) => DATA.objectIndex.get(id))); // 長在岩石上的物件
 
 describe('只看種子＋座標', () => {
   test('生成順序不同，同一區的內容完全一樣', () => {
@@ -32,6 +33,8 @@ describe('只看種子＋座標', () => {
       for (const k of LAYERS) expect(za[i][k]).toEqual(zb[i][k]);
       expect(za[i].height).toEqual(zb[i].height);
       expect(za[i].shade).toEqual(zb[i].shade);
+      expect(za[i].object).toEqual(zb[i].object);
+      expect(za[i].objectAnchor).toEqual(zb[i].objectAnchor);
     }
   });
 
@@ -218,6 +221,10 @@ describe('世界的形狀', () => {
           if (!z.object[i]) continue;
           objects++;
           expect(z.water[i]).toBe(LAYER_NONE);
+          if (ROCKY.has(z.object[i] - 1)) {
+            expect(z.surface[i]).toBe(S('rock')); // 岩壁與礦脈只長在岩石上
+            continue;
+          }
           expect([S('rock'), S('ice')]).not.toContain(z.surface[i]);
           if (onMountain) expect(z.height[i]).toBeLessThanOrEqual(treeline + 1);
         }
@@ -235,7 +242,7 @@ describe('世界的形狀', () => {
     let trunks = 0;
     let canopy = 0;
     for (let i = 0; i < z.object.length; i++) {
-      if (!z.object[i]) continue;
+      if (!z.object[i] || ROCKY.has(z.object[i] - 1)) continue;
       const x = Z + (i % Z);
       const y = Z + Math.floor(i / Z);
       if (z.objectPart[i] === PART_TRUNK) {

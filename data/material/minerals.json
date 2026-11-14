@@ -1,0 +1,50 @@
+[
+  {
+    "id": "stone",
+    "name": "石塊",
+    "category": "mineral",
+    "cap": 300,
+    "hardness": 5.5,
+    "source": "提議：一般岩石不是單一礦物，沒有莫氏硬度，先取 5.5"
+  },
+  {
+    "id": "copper-ore",
+    "name": "銅礦",
+    "category": "mineral",
+    "cap": 60,
+    "hardness": 3.75,
+    "source": "Handbook of Mineralogy, Chalcopyrite：Hardness 3.5–4，取中間"
+  },
+  {
+    "id": "iron-ore",
+    "name": "鐵礦",
+    "category": "mineral",
+    "cap": 40,
+    "hardness": 5.5,
+    "source": "Handbook of Mineralogy, Hematite：Hardness 5–6，取中間"
+  },
+  {
+    "id": "quartz",
+    "name": "石英",
+    "category": "mineral",
+    "cap": 30,
+    "hardness": 7,
+    "source": "Handbook of Mineralogy, Quartz：Hardness 7"
+  },
+  {
+    "id": "gold-ore",
+    "name": "金礦",
+    "category": "mineral",
+    "cap": 8,
+    "hardness": 2.75,
+    "source": "Handbook of Mineralogy, Gold：Hardness 2.5–3，取中間"
+  },
+  {
+    "id": "ice-crystal",
+    "name": "冰晶礦",
+    "category": "mineral",
+    "cap": 20,
+    "hardness": 4,
+    "source": "提議：虛構礦物"
+  }
+]

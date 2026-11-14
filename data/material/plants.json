@@ -1,0 +1,9 @@
+[
+  { "id": "cold-berry", "name": "寒地漿果", "category": "plant", "cap": 30 },
+  { "id": "labrador-tea", "name": "杜香", "category": "plant", "cap": 30 },
+  { "id": "yarrow", "name": "蓍草", "category": "plant", "cap": 30 },
+  { "id": "mint", "name": "薄荷", "category": "plant", "cap": 30 },
+  { "id": "aloe", "name": "蘆薈", "category": "plant", "cap": 30 },
+  { "id": "lemongrass", "name": "香茅", "category": "plant", "cap": 30 },
+  { "id": "flax", "name": "亞麻", "category": "plant", "cap": 40 }
+]

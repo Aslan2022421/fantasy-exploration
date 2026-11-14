@@ -9,7 +9,16 @@
     "trunk": true,
     "sizes": [3],
     "canopy": "round",
-    "tile": null
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [{ "weights": { "broadleaf-wood": 1 } }]
+    }
   },
   {
     "id": "conifer",
@@ -21,7 +30,16 @@
     "trunk": true,
     "sizes": [3],
     "canopy": "cross",
-    "tile": null
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [{ "weights": { "conifer-wood": 1 } }]
+    }
   },
   {
     "id": "palm",
@@ -33,13 +51,135 @@
     "trunk": true,
     "sizes": [3],
     "canopy": "pair",
-    "tile": null
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [{ "weights": { "palm-wood": 1 } }]
+    }
   },
   {
     "id": "shrub",
     "name": "矮叢",
     "glyph": "τ",
     "color": "#8a9a5a",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "pick",
+      "time": 2,
+      "uses": [1, 1],
+      "amount": [1, 2],
+      "kinds": [1, 1],
+      "after": "picked",
+      "yields": [
+        { "biomes": ["taiga", "moss-forest"], "weights": { "cold-berry": 1 } },
+        { "biomes": ["tundra"], "weights": { "labrador-tea": 1 } },
+        { "biomes": ["grassland", "temperate-forest"], "weights": { "yarrow": 1 } },
+        { "biomes": ["temperate-rainforest"], "weights": { "mint": 1 } },
+        { "biomes": ["desert"], "weights": { "aloe": 1 } },
+        { "biomes": ["savanna", "rainforest"], "weights": { "lemongrass": 1 } }
+      ]
+    }
+  },
+  {
+    "id": "herb",
+    "name": "草本",
+    "glyph": "ƒ",
+    "color": "#9cb46a",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "pick",
+      "time": 2,
+      "uses": [1, 1],
+      "amount": [1, 2],
+      "kinds": [1, 1],
+      "after": "picked",
+      "yields": [{ "weights": { "flax": 1 } }]
+    }
+  },
+  {
+    "id": "rock-wall",
+    "name": "岩壁",
+    "glyph": "◘",
+    "color": "#8c8c84",
+    "passable": false,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "mine",
+      "uses": [2, 2],
+      "amount": [1, 2],
+      "kinds": [1, 2],
+      "after": "pit",
+      "yields": [{ "weights": { "stone": 90, "iron-ore": 6, "copper-ore": 4 } }]
+    }
+  },
+  {
+    "id": "vein",
+    "name": "礦脈",
+    "glyph": "◘",
+    "color": "#c9a45a",
+    "baseColor": "#8c8c84",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "mine",
+      "uses": [3, 6],
+      "amount": [1, 2],
+      "kinds": [2, 3],
+      "after": "pit",
+      "yields": [
+        { "weights": { "stone": 20 } },
+        { "biomes": ["taiga", "moss-forest"], "weights": { "ice-crystal": 30, "iron-ore": 25 } },
+        { "biomes": ["tundra"], "weights": { "iron-ore": 30, "stone": 20 } },
+        {
+          "biomes": ["grassland", "temperate-forest", "temperate-rainforest"],
+          "weights": { "iron-ore": 30, "copper-ore": 25 }
+        },
+        { "biomes": ["desert"], "weights": { "copper-ore": 30, "quartz": 30 } },
+        { "biomes": ["savanna", "rainforest"], "weights": { "copper-ore": 30, "iron-ore": 20 } },
+        { "minTier": 8, "weights": { "quartz": 20, "gold-ore": 8 } }
+      ]
+    }
+  },
+  {
+    "id": "stump",
+    "name": "樹樁",
+    "glyph": "φ",
+    "color": "#5a4630",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null
+  },
+  {
+    "id": "pit",
+    "name": "碎石坑",
+    "glyph": "°",
+    "color": "#5c5c58",
     "passable": true,
     "height": 1,
     "trunk": false,

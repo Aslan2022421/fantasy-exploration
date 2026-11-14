@@ -2,19 +2,10 @@
 // 明暗級數的分布、生成時間。調 src/world/terrain.js 的 GEN 參數時用。
 // 用法：node tools/measure-terrain.mjs [種子數，預設 20]
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { buildData } from '../src/data/build.js';
 import { createWorld, startPosition } from '../src/world/world.js';
+import { loadData } from './data.mjs';
 
-const root = new URL('../', import.meta.url);
-function readKind(kind) {
-  const dir = new URL(`data/${kind}/`, root);
-  const files = {};
-  for (const f of readdirSync(dir))
-    if (f.endsWith('.json')) files[f] = JSON.parse(readFileSync(new URL(f, dir), 'utf8'));
-  return files;
-}
-const data = buildData({ terrain: readKind('terrain'), object: readKind('object'), biome: readKind('biome') });
+const data = loadData();
 
 const SEEDS = Number(process.argv[2] ?? 20);
 const O = data.objects;

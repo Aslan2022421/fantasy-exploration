@@ -3,7 +3,7 @@
 // 這裡不讀檔：遊戲由 load.js 用 Vite 載入，Node 的工具腳本自己讀 JSON 再交進來
 
 import { z } from 'zod';
-import { BiomeSchema, ObjectSchema, TerrainSchema } from './schemas.js';
+import { BiomeSchema, MaterialSchema, ObjectSchema, TerrainSchema } from './schemas.js';
 
 // files：{ 檔名: 條目陣列 }。回傳 [條目⋯⋯]，順序照檔名再照檔內順序（編號就是這個順序）
 function merge(files, schema, kind, errors) {
@@ -31,11 +31,14 @@ const indexOf = (list) => new Map(list.map((t, i) => [t.id, i]));
 // - terrains：四層全部的條目（文字檢查等用）；landforms、surfaces、waters、covers 各層分開，編號是各層自己的
 // - palette：畫面上有顏色的條目（材質、水文、覆蓋）排成一列，shades.js 依這個建顏色表；
 //   paletteBase 是各層在 palette 裡的起點
-export function buildData({ terrain, object = {}, biome }) {
+export function buildData({ terrain, object = {}, biome, material = {} }) {
   const errors = [];
   const terrains = merge(terrain, TerrainSchema, '地形', errors);
   const objects = merge(object, ObjectSchema, '物件', errors);
   const biomes = merge(biome, BiomeSchema, '生態', errors);
+  const materials = merge(material, MaterialSchema, '材料', errors);
+  const materialIndex = indexOf(materials);
+  checkGather(objects, indexOf(objects), materialIndex, indexOf(biomes), materials, errors);
   const layer = (name) => terrains.filter((t) => t.layer === name);
   const landforms = layer('landform');
   const surfaces = layer('surface');
@@ -66,5 +69,27 @@ export function buildData({ terrain, object = {}, biome }) {
     objects,
     objectIndex,
     biomes,
+    materials,
+    materialIndex,
   };
+}
+
+// 物件的採集規則：產出的材料、條件裡的生態、採光後留下的物件都要找得到；挖礦的時間看硬度，所以挖得到的材料要有硬度
+function checkGather(objects, objectIndex, materialIndex, biomeIndex, materials, errors) {
+  for (const o of objects) {
+    const g = o.gather;
+    if (!g) continue;
+    if (g.after !== 'picked' && !objectIndex.has(g.after)) errors.push(`物件 ${o.id} 的 after 找不到物件：${g.after}`);
+    if (g.action !== 'mine' && !g.time) errors.push(`物件 ${o.id} 不是挖礦，要寫 time`);
+    for (const [name, [lo, hi]] of Object.entries({ uses: g.uses, amount: g.amount, kinds: g.kinds }))
+      if (lo > hi || hi < 1) errors.push(`物件 ${o.id} 的 ${name} 範圍不對：${lo}～${hi}`);
+    for (const row of g.yields) {
+      for (const b of row.biomes ?? []) if (!biomeIndex.has(b)) errors.push(`物件 ${o.id} 的產出找不到生態：${b}`);
+      for (const m of Object.keys(row.weights)) {
+        if (!materialIndex.has(m)) errors.push(`物件 ${o.id} 的產出找不到材料：${m}`);
+        else if (g.action === 'mine' && materials[materialIndex.get(m)].hardness == null)
+          errors.push(`物件 ${o.id} 挖得到的材料 ${m} 要有硬度`);
+      }
+    }
+  }
 }

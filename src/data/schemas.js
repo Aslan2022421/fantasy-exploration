@@ -1,8 +1,9 @@
 // 資料規格（Zod）：data/ 底下每種類型的條目長什麼樣
 // 引用一律只認 id；id 寫在條目裡，拆檔、搬檔都不影響引用。
 // 地圖每格分四層：地貌（地勢、高度、坡度）、地表材質（外觀與通行）、水文（水體）、
-// 生態覆蓋（地面長什麼）；另有物件層，是站在地面上、會變成資源的東西（樹、矮叢，之後的礦脈）。
-// 地貌、材質、水文、覆蓋都放在 data/terrain，用 layer 分；生態群落在 data/biome
+// 生態覆蓋（地面長什麼）；另有物件層，是站在地面上、會變成資源的東西（樹、矮叢、草本、岩壁、礦脈），
+// 以及採光之後留下的樹樁、碎石坑。
+// 地貌、材質、水文、覆蓋都放在 data/terrain，用 layer 分；生態群落在 data/biome；採得到的材料在 data/material
 
 import { z } from 'zod';
 
@@ -44,11 +45,52 @@ export const TerrainSchema = z.discriminatedUnion('layer', [
   z.object({ ...layerBase, layer: z.literal('cover'), color: Color }),
 ]);
 
+// 材料：採集得到的東西（礦物、木頭、植物，之後的動物部位）。cap 是全世界的上限，玩家看不到；
+// 物理屬性都是選填，用到的階段才填：hardness 莫氏硬度（挖礦花的時間看它）、density 密度 g/cm³、
+// ignition 燃點 °C、edible 能不能吃、value 基本價值；source 寫數值的出處
+export const MaterialSchema = z.object({
+  id: Id,
+  name: z.string().min(1),
+  category: z.enum(['mineral', 'wood', 'plant', 'animal']),
+  cap: z.number().int().positive(),
+  hardness: z.number().positive().optional(),
+  density: z.number().positive().optional(),
+  ignition: z.number().optional(),
+  edible: z.boolean().optional(),
+  value: z.number().nonnegative().optional(),
+  source: z.string().optional(),
+});
+
+const Range = z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]);
+
+// 採集：action 決定動作（mine 挖礦、chop 伐木、pick 採集）；mine 的時間看產出材料的硬度，其餘用 time。
+// uses 一處能採幾次、amount 每次幾個、kinds 組成有幾種（第一次採時讀出來，之後固定）。
+// yields 是產出的權重表：條件（生態、最低高度層）符合的列加總；after 是採光之後留下的物件 id，
+// 或 picked（物件留著、壓暗，不能再採）
+const GatherSchema = z.object({
+  action: z.enum(['mine', 'chop', 'pick']),
+  time: z.number().int().positive().optional(),
+  uses: Range,
+  amount: Range,
+  kinds: Range,
+  after: z.union([z.literal('picked'), Id]),
+  yields: z
+    .array(
+      z.object({
+        biomes: z.array(Id).optional(),
+        minTier: z.number().int().optional(),
+        weights: z.record(Id, z.number().positive()),
+      }),
+    )
+    .min(1),
+});
+
 export const ObjectSchema = z.object({
   id: Id,
   name: z.string().min(1),
   glyph: Glyph,
   color: Color,
+  baseColor: Color.optional(), // 疊層時頂層以下的顏色（礦脈頂層是礦脈色、下面是岩石色）；沒有就跟 color 一樣
   passable: z.boolean(),
   // 疊幾層：樹的樹幹往上疊、最頂層是樹冠；1 層是平的，不疊
   height: z.number().int().min(0).max(5),
@@ -59,6 +101,7 @@ export const ObjectSchema = z.object({
   // pair 是對邊兩片（左右或上下，每棵用雜湊挑）
   canopy: z.enum(['round', 'cross', 'pair']).default('round'),
   tile: z.string().nullable(),
+  gather: GatherSchema.optional(), // 能採的才有
 });
 
 export const BAND = z.enum(['cold', 'mild', 'hot']);

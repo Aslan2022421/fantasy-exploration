@@ -5,16 +5,16 @@
 // 生成順序是地貌 → 水文 → 材質 → 生態。只看「種子＋座標」與世界的地理，任何順序生出來都一樣
 
 import { CLIMATE, createClimate } from './climate.js';
-import { inFootprint, MAX_SIZE, meanArea, PART_TRUNK, partOf, trunkCell } from './footprint.js';
+import { MAX_SIZE } from './footprint.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
-import { fbm, hash01, makeNoise } from './noise.js';
+import { hash01 } from './noise.js';
+import { createObjectPlacer } from './objects.js';
 import { isPeak } from './peak.js';
 import { applyGeography } from './riverbed.js';
 
 // 生成的參數（調比例時改這裡；大地形與水的參數在 landform.js 的 LAND）
 export const GEN = {
-  floraBase: 24, // 樹叢成片的大小
   treelineRange: 0.2, // 山地高出山地門檻這麼多就沒有樹（中間線性變少），也是雪線
   band: 0.1, // 溫度、濕度超過 ±這個值才算寒冷／炎熱、乾燥／潮濕
   waterShadeStep: 0.05, // 水每深這麼多暗一級
@@ -51,7 +51,6 @@ export function createTerrainGen(seed, data) {
   const land = createLandform(seed);
   const { climateAt, setMoisture } = createClimate(seed);
   let geo = null; // 世界的地理（geography.js：河流、淺灘、濕度），世界建好後由 setGeography 接上
-  const nFlora = makeNoise(seed, 'terrain:flora');
   const need = (index, kind) => (name) => {
     if (!index.has(name)) throw new Error(`地形生成需要的${kind}不在資料裡：${name}`);
     return index.get(name);
@@ -85,11 +84,7 @@ export function createTerrainGen(seed, data) {
       biomeGrid[t * 3 + w] = b;
     }
   }
-  const objectId = (name) => {
-    if (!data.objectIndex.has(name)) throw new Error(`物件生成需要的物件不在資料裡：${name}`);
-    return data.objectIndex.get(name);
-  };
-  const flora = data.biomes.map((b) => b.flora.map((f) => [objectId(f.object), f.density]));
+  const placer = createObjectPlacer(seed, data, { ROCK, DIRT, ICE, SHALLOW, DEEP, NONE }, GEN.treelineRange);
   const covers = data.biomes.map((b) => b.cover.map((c) => [cv(c.cover), c.density]));
 
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
@@ -126,29 +121,6 @@ export function createTerrainGen(seed, data) {
     return DIRT;
   }
 
-  // 植物長得出來的地方：沒有水、不是岩石或冰
-  const canGrow = (water, surface) => water === NONE && surface !== ROCK && surface !== ICE;
-
-  // 物件層的錨點：這格是不是一棵物件的左上角，回傳 { object, size, turn } 或 null。撒的機率除以平均佔地，
-  // 樹冠大的林子不會跟著變密；山地越高樹越少，高出 treelineRange 就沒有樹
-  const objectArea = data.objects.map((o) => meanArea(o.sizes, o.canopy));
-  function anchorAt(x, y, biome, water, surface, h) {
-    if (!canGrow(water, surface)) return null;
-    const line = h > LAND.mountain ? Math.max(0, 1 - (h - LAND.mountain) / GEN.treelineRange) : 1;
-    if (line <= 0) return null;
-    const list = flora[biome];
-    const m = Math.min(1, Math.max(0, 0.5 + 1.5 * fbm(nFlora, x, y, GEN.floraBase, 2)));
-    for (let i = 0; i < list.length; i++) {
-      const [object, density] = list[i];
-      if (hash01(seed, x, y, i) < (Math.min(1, density * 2 * m) * line) / objectArea[object]) {
-        const sizes = data.objects[object].sizes;
-        const size = sizes[Math.floor(hash01(seed, x, y, 50 + i) * sizes.length)];
-        return { object, size, turn: hash01(seed, x, y, 60 + i) < 0.5 }; // turn：對邊兩片的樹冠是上下還是左右
-      }
-    }
-    return null;
-  }
-
   // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算 PAD 圈（明暗、坡度要看鄰格，樹的錨點可能在區外左上方），再多一圈 E
   function genZone(zx, zy, size) {
     const n = size * size;
@@ -160,6 +132,7 @@ export function createTerrainGen(seed, data) {
     const cover = new Uint8Array(n).fill(NONE); // 生態覆蓋編號，NONE 是沒有
     const object = new Uint8Array(n); // 物件層：物件編號＋1，0 是沒有
     const objectPart = new Uint8Array(n); // 這格在樹冠的哪一側（footprint.js 的 PART_*）
+    const objectAnchor = new Uint8Array(n); // 這格的物件錨點在左上幾格（objects.js 的 anchorOffset）
     const shade = new Uint8Array(n);
     const slope = new Uint8Array(n); // 坡度（每格高度差×SLOPE_SCALE，0～255）
     const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 MAX_TIER
@@ -194,9 +167,21 @@ export function createTerrainGen(seed, data) {
         slAll[c] = Math.min(255, Math.round(Math.hypot(grad.dx, grad.dy) * SLOPE_SCALE));
         wAll[c] = waterOf(g.water[c], g.tier[c], slAll[c], w);
         sAll[c] = surfaceOf(wAll[c], g.h[c], slAll[c], tBand[c], wBand[c], t);
-        anchors[c] = anchorAt(X, Y, bAll[c], wAll[c], sAll[c], g.h[c]);
+        anchors[c] = placer.anchorAt(X, Y, bAll[c], wAll[c], sAll[c], g.h[c]);
       }
     }
+    const z = placer.zoneContext({
+      G,
+      gx0: x0 - E,
+      gy0: y0 - E,
+      h: g.h,
+      tier: g.tier,
+      sAll,
+      wAll,
+      tBand,
+      wBand,
+      anchors,
+    });
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const c = (y + E) * G + (x + E);
@@ -213,27 +198,11 @@ export function createTerrainGen(seed, data) {
         water[i] = wAll[c];
         surface[i] = sAll[c];
         cover[i] = coverAt(c, X, Y);
-        // 物件：往左上找會蓋到這格的錨點。樹冠只長在跟樹幹同一個高度層、長得出植物的格子上（樹冠底下是平地），
-        // 樹幹那格本身也要長得出來。樹幹永遠露出來；其餘重疊時取雜湊最小的那棵
-        if (canGrow(wAll[c], sAll[c])) {
-          let best = null;
-          for (let j = 0; j < MAX_SIZE; j++) {
-            for (let k = 0; k < MAX_SIZE; k++) {
-              const ac = c - j * G - k;
-              const a = anchors[ac];
-              if (!a || !inFootprint(k, j, a.size, data.objects[a.object].canopy, a.turn)) continue;
-              const tc = trunkCell(a.size);
-              const tci = ac + tc.j * G + tc.i;
-              if (!canGrow(wAll[tci], sAll[tci]) || g.tier[tci] !== g.tier[c]) continue;
-              const isTrunk = data.objects[a.object].trunk && k === tc.i && j === tc.j;
-              const rank = isTrunk ? -1 : hash01(seed, X - k, Y - j, 77);
-              if (!best || rank < best.rank) best = { a, rank, i: k, j, isTrunk };
-            }
-          }
-          if (best) {
-            object[i] = best.a.object + 1;
-            objectPart[i] = best.isTrunk ? PART_TRUNK : partOf(best.i, best.j, best.a.size);
-          }
+        const placed = placer.objectAt(z, c, X, Y); // 物件層（objects.js）
+        if (placed) {
+          object[i] = placed.object + 1;
+          objectPart[i] = placed.part;
+          objectAnchor[i] = placed.anchor;
         }
         if (g.water[c] === WATER_NONE) {
           const grad = gradient(hAt(c));
@@ -277,6 +246,7 @@ export function createTerrainGen(seed, data) {
       cover,
       object,
       objectPart,
+      objectAnchor,
       shade,
       slope,
       tier,

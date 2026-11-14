@@ -1,0 +1,5 @@
+[
+  { "id": "broadleaf-wood", "name": "闊葉木", "category": "wood", "cap": 80 },
+  { "id": "conifer-wood", "name": "針葉木", "category": "wood", "cap": 80 },
+  { "id": "palm-wood", "name": "棕櫚木", "category": "wood", "cap": 40 }
+]

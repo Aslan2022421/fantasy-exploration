@@ -18,6 +18,7 @@ import { loadGame, newGame } from '../world/game.js';
 import { findPath, stepDirection } from '../world/path.js';
 import { describePlace, regionLabel } from '../world/place.js';
 import { createKeyboard } from './input.js';
+import { showLoading } from './loading.js';
 import { bindMapMouse, drawMapLabels } from './mouse.js';
 import { createZoom } from './zoom.js';
 
@@ -41,6 +42,7 @@ const mapView = createMapView(image, ctx);
 const panels = createPanels(font);
 
 store.remove('stage0'); // 階段 0 的舊存檔格式不同，不再讀
+await showLoading(canvas, ctx, panels, '生成世界中');
 const game = loadGame(store.load(SAVE_KEY, null)) ?? newGame(SEED);
 const turns = createTurnLoop();
 turns.start();

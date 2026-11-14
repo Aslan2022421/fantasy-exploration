@@ -14,31 +14,34 @@ export function heap() {
       vals.push(v);
       while (i > 0) {
         const p = (i - 1) >> 1;
-        if (keys[p] <= keys[i]) break;
-        [keys[p], keys[i]] = [keys[i], keys[p]];
-        [vals[p], vals[i]] = [vals[i], vals[p]];
+        if (keys[p] <= k) break;
+        keys[i] = keys[p];
+        vals[i] = vals[p];
         i = p;
       }
+      keys[i] = k;
+      vals[i] = v;
     },
     pop() {
       const top = vals[0];
       const lastK = keys.pop();
       const lastV = vals.pop();
-      if (keys.length) {
-        keys[0] = lastK;
-        vals[0] = lastV;
+      const len = keys.length;
+      if (len) {
         let i = 0;
         for (;;) {
           const l = i * 2 + 1;
           const r = l + 1;
-          let m = i;
-          if (l < keys.length && keys[l] < keys[m]) m = l;
-          if (r < keys.length && keys[r] < keys[m]) m = r;
-          if (m === i) break;
-          [keys[m], keys[i]] = [keys[i], keys[m]];
-          [vals[m], vals[i]] = [vals[i], vals[m]];
+          let m = l;
+          if (l >= len) break;
+          if (r < len && keys[r] < keys[l]) m = r;
+          if (keys[m] >= lastK) break;
+          keys[i] = keys[m];
+          vals[i] = vals[m];
           i = m;
         }
+        keys[i] = lastK;
+        vals[i] = lastV;
       }
       return top;
     },
@@ -55,6 +58,76 @@ export const AROUND = [
   [-1, 1],
   [-1, -1],
 ];
+
+// 連通（W×H 的格子，blocked(i) 是過不去的格子）：從 start 出發，每塊到不了的陸地找「要跨過最少格障礙」的路接回來。
+// 只掃一遍（0-1 BFS：走陸地不花成本、跨一格障礙花 1），所以世界再大也只跟格數成正比。
+// 要跨超過 maxCross 格、或小於 minSize 格的陸地不接（海中的小島不架橋）。
+// 回傳要開淺灘的路段，每段是相鄰兩格 [a, b]
+export function linkRegions(W, H, blocked, start, { maxCross, minSize }) {
+  const n = W * H;
+  const dist = new Int32Array(n).fill(-1);
+  const prev = new Int32Array(n).fill(-1);
+  const dq = new Int32Array(2 * n + 2);
+  let head = n;
+  let tail = n;
+  dist[start] = 0;
+  dq[tail++] = start;
+  const done = new Uint8Array(n);
+  while (head < tail) {
+    const i = dq[head++];
+    if (done[i]) continue;
+    done[i] = 1;
+    const x = i % W;
+    const y = (i - x) / W;
+    for (const [dx, dy] of AROUND) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const j = ny * W + nx;
+      const cost = blocked(j) ? 1 : 0;
+      const d = dist[i] + cost;
+      if (dist[j] >= 0 && dist[j] <= d) continue;
+      dist[j] = d;
+      prev[j] = i;
+      if (cost) dq[tail++] = j;
+      else dq[--head] = j;
+    }
+  }
+  // 陸地分塊；每塊取 dist 最小的一格當接口
+  const comp = new Int32Array(n).fill(-1);
+  const links = [];
+  const linked = new Uint8Array(n);
+  const stack = [];
+  for (let s = 0; s < n; s++) {
+    if (comp[s] >= 0 || blocked(s)) continue;
+    comp[s] = s;
+    stack.push(s);
+    let size = 0;
+    let best = s;
+    while (stack.length) {
+      const i = stack.pop();
+      size++;
+      if (dist[i] >= 0 && (dist[best] < 0 || dist[i] < dist[best])) best = i;
+      const x = i % W;
+      const y = (i - x) / W;
+      for (const [dx, dy] of AROUND) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const j = ny * W + nx;
+        if (comp[j] >= 0 || blocked(j)) continue;
+        comp[j] = s;
+        stack.push(j);
+      }
+    }
+    if (dist[best] <= 0 || dist[best] > maxCross || size < minSize) continue;
+    for (let k = best; dist[k] > 0 && prev[k] >= 0 && !linked[k]; k = prev[k]) {
+      linked[k] = 1; // 跟別塊共用的路段只開一次
+      links.push([k, prev[k]]);
+    }
+  }
+  return links;
+}
 
 // 點 (px, py) 到線段 (a → b) 的距離
 export function segDist(px, py, ax, ay, bx, by) {

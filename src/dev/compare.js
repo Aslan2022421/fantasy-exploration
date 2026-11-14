@@ -7,19 +7,21 @@ import { createWorldView } from '../view/worldview.js';
 import { createWorld } from '../world/world.js';
 import { createVariants } from './variants.js';
 
+const SMALL = { zonesX: 3, zonesY: 3 }; // 3×3 區的小世界（96×96 建一次要 2 秒）
+
 const SEED = 20261112; // 跟遊戲同一個世界
 const COLS = 44;
 const ROWS = 28;
 const TILE = 16;
 
-const world = createWorld(SEED, DATA);
+const world = createWorld(SEED, DATA, SMALL);
 
 // 使用者喜歡的那一版：畫法跟現在的遊戲一樣，只是樹一格一棵、沒有樹幹
 const likedData = {
   ...DATA,
   objects: DATA.objects.map((o) => ({ ...o, sizes: [1], trunk: false })),
 };
-const likedWorld = createWorld(SEED, likedData);
+const likedWorld = createWorld(SEED, likedData, SMALL);
 
 // 用遊戲本身的畫法（worldview.js）畫一張；冒險者放到畫面外
 function gameDraw(w, data) {

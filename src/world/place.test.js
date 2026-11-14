@@ -3,7 +3,9 @@ import { DATA } from '../data/load.js';
 import { describePlace, groundName, regionLabel } from './place.js';
 import { createWorld, startPosition } from './world.js';
 
-const world = createWorld(20261112, DATA);
+const SMALL = { zonesX: 3, zonesY: 3 }; // 3×3 區的小世界（96×96 建一次要 2 秒）
+
+const world = createWorld(20261112, DATA, SMALL);
 
 test('查看一格寫出地面、地貌、生態、氣候與高度', () => {
   const p = startPosition(world);

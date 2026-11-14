@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 import { CHECKPOINT_EVERY, loadGame, newGame } from './game.js';
 
 const SEED = 20261112;
@@ -11,6 +11,8 @@ function walkAround(game, n) {
 }
 
 describe('世界紀錄', () => {
+  beforeAll(() => newGame(SEED), 30000); // 先建好 96×96 區的世界（約 2 秒），之後同一個種子重用
+
   test('開始遊戲就有第一筆紀錄', () => {
     const g = newGame(SEED);
     expect(g.log.get(0)).toMatchObject({ id: 0, verb: 'start', time: 0, cause: null });

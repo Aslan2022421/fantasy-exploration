@@ -5,11 +5,11 @@
 //    窪地被填平，水一定找得到出口，永遠往低處流
 // 3. 河流：高處（GEO.source 以上）挑幾格當水源，沿流向一路流到湖海或世界邊緣；匯流越多河越寬，夠寬中間是深水
 // 4. 濕度：離河、湖越近越濕；山的背風面（盛行風由西往東，山的東側）比較乾
-// 5. 連通：從世界中央（出生點附近）洪水填充，被深水隔開的陸地，從最近的地方開一條淺灘接過來
+// 5. 連通：從世界中央（出生點附近）出發，被深水隔開的陸地，從要跨最少深水的地方開一條淺灘接過來（海中的島不接）
 // 畫進區域時（applyGeography）：河道是水（第 0 層），兩岸自然變成高度層的牆，看起來是挖下去的河谷
 // ROT.js 沒有淹水、洪水填充與有成本的尋路，這幾個自己寫（都只在粗格上算，世界 96×96 區也只有約一百萬格）
 
-import { AROUND, heap, segDist } from './gridtools.js';
+import { AROUND, heap, linkRegions, segDist } from './gridtools.js';
 import { LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { hash01 } from './noise.js';
 
@@ -27,6 +27,8 @@ export const GEO = {
   shadowPerHeight: 0.8, // 西邊的山每高出 1，濕度少多少
   shadowMax: 0.35, // 背風面最多少多少濕度
   fordRadius: 1.2, // 淺灘寬（半徑，格）
+  fordMax: 4, // 淺灘最多跨幾個粗格的深水；再寬的（海中的島）不接
+  fordMinLand: 4, // 陸地至少幾個粗格才接
 };
 
 const MASK_RIVER = 1;
@@ -47,16 +49,18 @@ export function buildGeography(heightAt, seed, width, height) {
   }
   const isWater = (i) => elev[i] < LAND.water;
   const isDeep = (i) => elev[i] < LAND.water - LAND.deepDepth;
+  // 鄰格寫進共用的 nb，回傳個數（熱迴圈裡不新建陣列）
+  const nb = new Int32Array(8);
   const neighbors = (i) => {
     const x = i % W;
-    const y = Math.floor(i / W);
-    const out = [];
+    const y = (i - x) / W;
+    let m = 0;
     for (const [dx, dy] of AROUND) {
       const nx = x + dx;
       const ny = y + dy;
-      if (nx >= 0 && ny >= 0 && nx < W && ny < H) out.push(ny * W + nx);
+      if (nx >= 0 && ny >= 0 && nx < W && ny < H) nb[m++] = ny * W + nx;
     }
-    return out;
+    return m;
   };
 
   // 2. 填窪與流向：從邊緣與水面往內淹，每格的「下游」是淹到它的那一格
@@ -75,7 +79,8 @@ export function buildGeography(heightAt, seed, width, height) {
   }
   while (q.size) {
     const i = q.pop();
-    for (const j of neighbors(i)) {
+    for (let t = 0, m = neighbors(i); t < m; t++) {
+      const j = nb[t];
       if (seen[j]) continue;
       seen[j] = 1;
       filled[j] = Math.max(elev[j], filled[i]);
@@ -115,7 +120,8 @@ export function buildGeography(heightAt, seed, width, height) {
   }
   for (let h = 0; h < bfs.length; h++) {
     const i = bfs[h];
-    for (const j of neighbors(i)) {
+    for (let t = 0, m = neighbors(i); t < m; t++) {
+      const j = nb[t];
       if (dist[j] !== 0xffff) continue;
       dist[j] = dist[i] + 1;
       bfs.push(j);
@@ -132,54 +138,13 @@ export function buildGeography(heightAt, seed, width, height) {
 
   // 5. 連通：被深水（深湖、深河）隔開的陸地，從最近的地方開一條淺灘接過來
   const blocked = (i) => isDeep(i) || flow[i] >= GEO.deepFlow;
-  const reached = new Uint8Array(n);
-  const fords = [];
-  const spread = (from) => {
-    const stack = [from];
-    reached[from] = 1;
-    while (stack.length) {
-      const i = stack.pop();
-      for (const j of neighbors(i)) {
-        if (reached[j] || blocked(j)) continue;
-        reached[j] = 1;
-        stack.push(j);
-      }
-    }
-  };
   let start = Math.floor(H / 2) * W + Math.floor(W / 2);
   if (blocked(start)) start = bfsNearest(start, (i) => !blocked(i)) ?? start;
-  spread(start);
-  for (let guard = 0; guard < 200; guard++) {
-    // 從已經到得了的地方往外量距離，找最近一塊到不了的陸地
-    const prev = new Int32Array(n).fill(-2);
-    const order = [];
-    for (let i = 0; i < n; i++) {
-      if (reached[i]) {
-        prev[i] = -1;
-        order.push(i);
-      }
-    }
-    let target = -1;
-    for (let h = 0; h < order.length && target < 0; h++) {
-      const i = order[h];
-      for (const j of neighbors(i)) {
-        if (prev[j] !== -2) continue;
-        prev[j] = i;
-        if (!blocked(j) && !reached[j]) {
-          target = j;
-          break;
-        }
-        order.push(j);
-      }
-    }
-    if (target < 0) break;
-    for (let k = target; prev[k] >= 0; k = prev[k]) {
-      const a = center(k);
-      const b = center(prev[k]);
-      fords.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, r: GEO.fordRadius, deep: false, kind: MASK_FORD });
-    }
-    spread(target);
-  }
+  const fords = linkRegions(W, H, blocked, start, { maxCross: GEO.fordMax, minSize: GEO.fordMinLand }).map(([k, j]) => {
+    const a = center(k);
+    const b = center(j);
+    return { ax: a.x, ay: a.y, bx: b.x, by: b.y, r: GEO.fordRadius, deep: false, kind: MASK_FORD };
+  });
   segments.push(...fords);
 
   function bfsNearest(from, ok) {
@@ -188,7 +153,8 @@ export function buildGeography(heightAt, seed, width, height) {
     seenB[from] = 1;
     for (let h = 0; h < list.length; h++) {
       if (ok(list[h])) return list[h];
-      for (const j of neighbors(list[h])) {
+      for (let t = 0, m = neighbors(list[h]); t < m; t++) {
+        const j = nb[t];
         if (seenB[j]) continue;
         seenB[j] = 1;
         list.push(j);

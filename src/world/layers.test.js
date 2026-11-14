@@ -5,7 +5,9 @@ import { LAND } from './landform.js';
 import { GEN, LAYER_NONE } from './terrain.js';
 import { createWorld } from './world.js';
 
-const world = createWorld(20261112, DATA);
+const SMALL = { zonesX: 3, zonesY: 3 }; // 3×3 區的小世界（96×96 建一次要 2 秒）
+
+const world = createWorld(20261112, DATA, SMALL);
 const MOUNTAIN = DATA.landformIndex.get('mountain');
 const S = (id) => DATA.surfaceIndex.get(id);
 const W = (id) => DATA.waterIndex.get(id);

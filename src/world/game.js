@@ -39,8 +39,11 @@ export function apply(state, rec) {
   }
 }
 
+// 世界只由種子決定、建好後不會被改（區的快取除外），同一個種子重用上一次建好的（96×96 區建一次要 2 秒）
+let lastWorld = null;
 function build(seed) {
-  return { rng: createStreams(seed), world: createWorld(seed, DATA) };
+  if (lastWorld?.seed !== seed) lastWorld = createWorld(seed, DATA);
+  return { rng: createStreams(seed), world: lastWorld };
 }
 
 function makeGame(seed, rng, world, log, initialState, checkpoint) {

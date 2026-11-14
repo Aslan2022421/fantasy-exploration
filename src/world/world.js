@@ -1,5 +1,5 @@
 // 世界分兩層：世界層一格＝一個局部區域（每格又分地形層與物件層，見 terrain.js）。世界層一開始整個算好（每區的氣候與生態標籤），
-// 局部區域用到才生、生過就留著。全世界共用一套格子座標，跨區時無縫走過去。
+// 局部區域用到才生，最近用過的 64 區留著。全世界共用一套格子座標，跨區時無縫走過去。
 // 地圖不進存檔：讀檔時用種子重生，再把紀錄套回去
 
 import { PART_TRUNK } from './footprint.js';
@@ -7,12 +7,14 @@ import { buildGeography } from './geography.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 12; // 12：多層次地理模擬（河流、淺灘、濕度看離水與背風面、溫度以高度為主）
+export const WORLD_VERSION = 13; // 13：世界放大到 96×96 區；淺灘不接海中的小島
 
-export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
-export const ZONES_Y = 3;
+// 世界層寬幾區（使用者定 96×96）：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
+export const ZONES_X = 96;
+export const ZONES_Y = 96;
 export const ZONE_SIZE = 96; // 一區的邊長（格）
 const SAMPLES = 8; // 世界層每區取 8×8 個點平均
+const MAX_ZONES = 64; // 生過的區最多留幾區（一區十幾萬位元組，走遍 96×96 區會吃掉上 GB）
 
 export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zoneSize = ZONE_SIZE } = {}) {
   const gen = createTerrainGen(seed, data);
@@ -66,10 +68,13 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
   function zone(zx, zy) {
     const key = `${zx},${zy}`;
     let z = zones.get(key);
-    if (!z) {
+    if (z) {
+      zones.delete(key); // 重新放到最後＝最近用過
+    } else {
       z = gen.genZone(zx, zy, zoneSize);
-      zones.set(key, z);
+      if (zones.size >= MAX_ZONES) zones.delete(zones.keys().next().value); // 丟最久沒用的，要用時再生（結果一樣）
     }
+    zones.set(key, z);
     return z;
   }
 

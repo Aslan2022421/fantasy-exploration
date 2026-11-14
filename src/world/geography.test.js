@@ -4,6 +4,8 @@ import { buildGeography, GEO } from './geography.js';
 import { LAND } from './landform.js';
 import { createWorld } from './world.js';
 
+const SMALL = { zonesX: 3, zonesY: 3 }; // 3×3 區的小世界（96×96 建一次要 2 秒）
+
 // 一座圓錐形的山在正中央，往外越來越低，邊緣是水
 const cone = (x, y) => 0.9 - Math.hypot(x - 128, y - 128) / 100;
 
@@ -61,7 +63,7 @@ test('連通：被一圈深水圍住的出生點，會開一條淺灘接到外�
 });
 
 test('畫進世界：河道是水、第 0 層', () => {
-  const world = createWorld(20261112, DATA);
+  const world = createWorld(20261112, DATA, SMALL);
   const g = world.geography;
   const mask = g.paint(0, 0, world.width, world.height);
   let checked = 0;

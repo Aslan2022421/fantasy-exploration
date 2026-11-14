@@ -34,7 +34,8 @@
     </p>
     <script>
       setTimeout(() => {
-        if (!window.__fe) document.getElementById('hint').style.display = 'block';
+        // __feStarting：程式已經跑起來、正在建世界（96×96 區要一兩秒）
+        if (!window.__fe && !window.__feStarting) document.getElementById('hint').style.display = 'block';
       }, 2000);
     </script>
     <script type="module" src="/src/app/main.js"></script>

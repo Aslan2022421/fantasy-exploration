@@ -8,6 +8,8 @@ import { reliefOf } from './relief.js';
 import { createTerrainGen, GEN, LAYER_NONE, waterLevel } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
+const SMALL = { zonesX: 3, zonesY: 3 }; // 3×3 區的小世界（96×96 建一次要 2 秒）
+
 const SEED = 20261112;
 const Z = ZONE_SIZE;
 const LAYERS = ['landform', 'surface', 'water', 'cover'];
@@ -17,8 +19,8 @@ const W = (id) => DATA.waterIndex.get(id);
 
 describe('只看種子＋座標', () => {
   test('生成順序不同，同一區的內容完全一樣', () => {
-    const a = createWorld(SEED, DATA);
-    const b = createWorld(SEED, DATA);
+    const a = createWorld(SEED, DATA, SMALL);
+    const b = createWorld(SEED, DATA, SMALL);
     const order = [
       [0, 0],
       [2, 1],
@@ -35,15 +37,15 @@ describe('只看種子＋座標', () => {
   });
 
   test('不同種子生出不同的地形', () => {
-    const a = createWorld(SEED, DATA).zone(1, 1).surface;
-    const b = createWorld(SEED + 1, DATA).zone(1, 1).surface;
+    const a = createWorld(SEED, DATA, SMALL).zone(1, 1).surface;
+    const b = createWorld(SEED + 1, DATA, SMALL).zone(1, 1).surface;
     expect(a).not.toEqual(b);
   });
 
   test('生世界不會動到全域亂數', () => {
     RNG.setSeed(42);
     const before = RNG.getState().join();
-    createWorld(SEED, DATA).zone(0, 0);
+    createWorld(SEED, DATA, SMALL).zone(0, 0);
     expect(RNG.getState().join()).toBe(before);
   });
 });
@@ -110,7 +112,7 @@ describe('區與區的交界', () => {
 });
 
 describe('世界的形狀', () => {
-  const world = createWorld(SEED, DATA);
+  const world = createWorld(SEED, DATA, SMALL);
 
   test('世界層 3×3、每區都有氣候與生態標籤', () => {
     expect(world.regions).toHaveLength(9);
@@ -132,15 +134,23 @@ describe('世界的形狀', () => {
   });
 
   test('區用到才生', () => {
-    const w = createWorld(SEED, DATA);
+    const w = createWorld(SEED, DATA, SMALL);
     expect(w.generatedZones()).toBe(0);
     w.isPassable(Z + 3, Z + 3);
     expect(w.generatedZones()).toBe(1);
   });
 
+  test('生過的區最多留 64 區，丟掉的再生一次結果一樣', () => {
+    const w = createWorld(SEED, DATA, { zonesX: 10, zonesY: 10 });
+    const first = w.zone(0, 0).surface.slice();
+    for (let zy = 0; zy < 10; zy++) for (let zx = 0; zx < 10; zx++) w.zone(zx, zy);
+    expect(w.generatedZones()).toBe(64);
+    expect(w.zone(0, 0).surface).toEqual(first);
+  });
+
   test('多個種子的起點都能走、都在中間那區', () => {
     for (let s = 1; s <= 10; s++) {
-      const w = createWorld(s * 7919, DATA);
+      const w = createWorld(s * 7919, DATA, SMALL);
       const p = startPosition(w);
       expect(w.isPassable(p.x, p.y)).toBe(true);
       expect(w.regionAt(p.x, p.y)).toBe(w.region(1, 1));

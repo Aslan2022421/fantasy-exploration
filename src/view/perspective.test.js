@@ -77,14 +77,14 @@ test('牆：比南、西、西南最低那格高才有，從那格的高度疊�
   expect(wallSouth(w, 5, 3)).toBeNull(); // 高台東北那格：南、西一樣高，西南比它高
 });
 
-test('樹：依種類疊層，樹幹那格從 1 疊到 height-1、頂層是樹冠；旁邊的樹冠只有頂層一片；矮叢平的不疊', () => {
+test('樹：依種類疊層，樹幹那格從地面（0）疊到 height-1、頂層是樹冠；旁邊的樹冠只有頂層一片；矮叢平的不疊', () => {
   for (const id of ['broadleaf', 'conifer', 'palm']) {
     const o = obj(id);
     expect(o.height).toBeGreaterThanOrEqual(3);
     expect(o.height).toBeLessThanOrEqual(5);
     const trunk = objectLayers(o, true);
     expect(trunk.filter((l) => l.part === 'trunk').map((l) => l.dh)).toEqual(
-      Array.from({ length: o.height - 1 }, (_, i) => i + 1),
+      Array.from({ length: o.height }, (_, i) => i),
     );
     expect(trunk.at(-1)).toMatchObject({ dh: o.height, part: 'leaf' });
     expect(objectLayers(o, false)).toEqual([{ dh: o.height, part: 'leaf', j: 0 }]);

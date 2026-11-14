@@ -87,7 +87,7 @@ export function approach(cur, target, dt) {
 }
 
 // 物件這格要疊的層：[{ dh 離地幾層, part: 'trunk' | 'leaf' | 'solid', j 離那部分頂端幾層（決定壓淡）}]。
-// 樹疊 height 層：樹幹那格從離地 1 層疊到 height-1，最頂層是樹冠；旁邊的樹冠只有頂層一片。
+// 樹疊 height 層：樹幹那格從地面那層（離地 0 層）疊到 height-1，根部貼地不會懸空，最頂層是樹冠；旁邊的樹冠只有頂層一片。
 // 沒有樹幹的（矮叢）：height 1 平畫在地面上，更高才往上疊
 export function objectLayers(object, isTrunk) {
   if (!object?.height) return [];
@@ -98,7 +98,7 @@ export function objectLayers(object, isTrunk) {
     return Array.from({ length: n }, (_, i) => ({ dh: i + 1, part: 'solid', j: n - 1 - i }));
   }
   const out = [];
-  if (isTrunk) for (let dh = 1; dh < top; dh++) out.push({ dh, part: 'trunk', j: top - 1 - dh });
+  if (isTrunk) for (let dh = 0; dh < top; dh++) out.push({ dh, part: 'trunk', j: top - 1 - dh });
   out.push({ dh: top, part: 'leaf', j: 0 });
   return out;
 }

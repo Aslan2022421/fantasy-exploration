@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { CANVAS, cameraOrigin, canvasScale, cssSize, layout, MAP_GRID } from './screen.js';
+import { CANVAS, cameraOrigin, canvasScale, cssSize, gridLabel, layout, MAP_GRID } from './screen.js';
 
 describe('畫面配置：固定 960×540，整數倍放大', () => {
   test.each([
@@ -42,6 +42,12 @@ describe('畫面配置：固定 960×540，整數倍放大', () => {
     expect(cssSize(layout(1920, 1080, 1), 1920, 1080)).toEqual({ w: 1920, h: 1080 });
     expect(cssSize(layout(1920, 1080, 2), 1920, 1080)).toEqual({ w: 1920, h: 1080 });
     expect(cssSize(layout(480, 540, 1), 480, 540)).toEqual({ w: 480, h: 270 });
+  });
+
+  test('G 鍵顯示的可視格數：整格數與每格畫布像素，放大倍數不影響', () => {
+    expect(gridLabel(layout(960, 540, 1))).toBe('可視 49×33 格、每格 16 像素');
+    expect(gridLabel(layout(1920, 1080, 1))).toBe('可視 49×33 格、每格 16 像素');
+    expect(gridLabel(layout(1920, 1080, 1, 1))).toBe('可視 32×22 格、每格 24 像素');
   });
 
   test('畫面跟著冒險者，但不捲出地圖', () => {

@@ -37,7 +37,13 @@ export function layout(cssWidth, cssHeight, dpr, zoom = 0) {
   const rows = Math.ceil(mapH / tile);
   const map = { x: 0, y: top.h, w: mapW, h: mapH };
   const side = { x: mapW, y: top.h, w: width - mapW, h: height - top.h };
-  return { dpr, width, height, tile, textScale, lineHeight, pad, cols, rows, top, map, side };
+  return { dpr, scale: k, width, height, tile, textScale, lineHeight, pad, cols, rows, top, map, side };
+}
+
+// 給 G 鍵顯示：地圖區看得到幾×幾整格、一格是畫布的幾像素
+export function gridLabel(s) {
+  const full = (len) => Math.floor(len / s.tile);
+  return `可視 ${full(s.map.w)}×${full(s.map.h)} 格、每格 ${s.tile / s.scale} 像素`;
 }
 
 // 畫布在網頁上的大小（CSS 像素）：通常就是實體像素除以縮放比例；

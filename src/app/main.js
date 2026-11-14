@@ -10,7 +10,7 @@ import { COLORS } from '../view/colors.js';
 import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
-import { cameraOrigin, cssSize, layout } from '../view/screen.js';
+import { cameraOrigin, cssSize, gridLabel, layout } from '../view/screen.js';
 import { loadImage } from '../view/tiles.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
@@ -27,7 +27,7 @@ const STEP_MS = 70; // 滑鼠點擊後自動走，每一步間隔
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '左鍵點地圖走過去，空白鍵停下；右鍵查看，再點一下收起。',
-  'H 看完整紀錄。＋／－ 放大縮小地圖。',
+  'H 看完整紀錄。＋／－ 放大縮小地圖，G 顯示可視格數。',
 ];
 
 const params = new URLSearchParams(location.search);
@@ -136,7 +136,7 @@ function render() {
   panels.status(
     ctx,
     screen,
-    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}`,
+    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}${zoom.showGrid ? `｜${gridLabel(screen)}` : ''}`,
   );
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
   if (route && target && !historyOpen) {
@@ -211,6 +211,7 @@ window.addEventListener('keydown', (e) => {
     render();
     return;
   }
+  if (zoom.toggleGrid(e)) return render();
   if (e.code === 'KeyH') {
     stopWalking();
     historyOpen = true;

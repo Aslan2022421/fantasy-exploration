@@ -147,7 +147,7 @@ describe('世界的形狀', () => {
     for (let zy = 0; zy < 10; zy++) for (let zx = 0; zx < 10; zx++) w.zone(zx, zy);
     expect(w.generatedZones()).toBe(64);
     expect(w.zone(0, 0).surface).toEqual(first);
-  });
+  }, 15000); // 要生 100 多區，單獨跑約 3 秒，全部測試平行跑時會慢好幾倍
 
   test('多個種子的起點都能走、都在中間那區', () => {
     for (let s = 1; s <= 10; s++) {

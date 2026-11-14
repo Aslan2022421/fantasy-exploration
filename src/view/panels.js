@@ -1,4 +1,4 @@
-// 文字面板：頂部狀態列、右側訊息欄、H 鍵的完整紀錄視窗、路線終點旁的步數。
+// 文字面板：頂部狀態列、右側訊息欄、大視窗（H 紀錄、B 背包）、路線終點旁的步數。
 // 都畫在疊在地圖上面的那張 canvas，用烘焙點陣字
 
 import { COLORS } from './colors.js';
@@ -60,19 +60,12 @@ export function createPanels(font) {
       return maxScroll;
     },
 
-    // 完整紀錄：蓋在地圖上的大視窗，從最舊的往下排；scroll 是往下捲了幾行。回傳最多能捲幾行
-    history(ctx, s, entries, scroll) {
+    // 大視窗（H 紀錄、B 背包）：蓋在地圖上，標題一行，內容從上往下排；scroll 是往下捲了幾行。回傳最多能捲幾行
+    window(ctx, s, title, entries, scroll) {
       const { map, pad, textScale, lineHeight } = s;
       const box = { x: map.x + pad * 2, y: map.y + pad * 2, w: map.w - pad * 4, h: map.h - pad * 4 };
       frame(ctx, box, COLORS.bg, COLORS.line2);
-      font.drawText(
-        ctx,
-        '紀錄（H 或 Esc 關閉，滾輪或方向鍵捲動）',
-        box.x + pad * 2,
-        box.y + pad,
-        textScale,
-        COLORS.head,
-      );
+      font.drawText(ctx, title, box.x + pad * 2, box.y + pad, textScale, COLORS.head);
       const bodyTop = box.y + pad * 2 + lineHeight;
       const lines = visualLines(font, entries, box.w - pad * 4, textScale);
       const visible = Math.max(1, Math.floor((box.y + box.h - pad - bodyTop) / lineHeight));

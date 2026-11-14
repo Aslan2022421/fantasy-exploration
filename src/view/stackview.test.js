@@ -57,6 +57,29 @@ test('路線是線：從冒險者連到每一步，跟著地面高度錯開，�
   expect(lines[1].offset).toBeGreaterThan(lines[0].offset); // 花紋接續上一段
 });
 
+test('斜坡上貼地的物件（矮叢、碎石坑）畫在斜坡多疊的那層之後，不會被它的底色蓋掉', () => {
+  const calls = [];
+  const flatWorld = { ...world, tierAt: () => 1, objectAt: (x, y) => (x === 5 && y === 5 ? 0 : -1) };
+  let chunk = 0; // 第幾個分塊（第一個是左上那塊，(5, 5) 在裡面）
+  const mv = {
+    ...mapView,
+    layer: () => {
+      const id = chunk++;
+      return { tile: 16, drawShifted: (gx, gy, _ox, _oy, ch, _fg, bg) => id === 0 && calls.push({ gx, gy, ch, bg }) };
+    },
+  };
+  const lk = {
+    ground: () => ({ glyph: '.', fg: '#ffffff', bg: '#000000' }),
+    object: () => ({ glyph: '°', fg: '#888888', isTrunk: false }),
+    slope: (x, y) => (x === 5 && y === 5 ? { gx: 1 } : null),
+  };
+  const v = createStackView(mv, flatWorld, [{ height: 1, trunk: false }], lk, { now: () => 0 });
+  v.draw(screen, { x: 0, y: 0 }, { player: { x: 1, y: 1 } });
+  const here = calls.filter((c) => c.gx === 5 && c.gy === 5);
+  expect(here.at(-1).ch).toBe('°');
+  expect(here.filter((c) => c.bg).length).toBe(2); // 斜坡兩層地面都在物件之前
+});
+
 test('樹往上每層錯得比地形多：預設大小（一格 16 像素）離地 4 層約兩格', () => {
   const s = liftUp(4, K);
   expect(-s.oy * K).toBeCloseTo(32); // 往上 32 螢幕像素＝兩格

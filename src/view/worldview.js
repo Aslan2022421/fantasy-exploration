@@ -13,6 +13,10 @@ const WOOD = '#6b5638'; // 樹幹往這個木頭色靠
 const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
 const SOFTEN = 0.6; // 交界的底色往周圍平均靠幾成
 const ROCK_INK = 0.65; // 山上岩石、碎石字元的亮度
+// 疊層回饋：貼地資源（矮叢、草本）還能採時微微發亮、採過壓暗；被岩壁整圈圍住的岩壁壓暗，外圈是亮的
+const GLOW = 1.3;
+const PICKED = 0.5;
+const INNER_WALL = 0.55;
 
 export function createWorldView(mapView, world, data) {
   const { objects, surfaces } = data;
@@ -21,6 +25,21 @@ export function createWorldView(mapView, world, data) {
   const objectFgOn = surfaces.map((s) =>
     buildObjectShades(objects.map((o) => ({ ...o, color: mixColor(o.color, s.color, MOUNTAIN_TINT) }))),
   );
+  const lowFg = buildObjectShades(objects.map((o) => ({ ...o, color: o.baseColor ?? o.color }))); // 頂層以下的顏色
+  const isRocky = objects.map((o) => o.gather?.action === 'mine');
+  const isGround = objects.map((o) => o.gather?.action === 'pick');
+  // 八格都是岩壁或礦脈：在一整片岩壁的裡面
+  const inner = (x, y) => {
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !isRocky[world.objectAt(x + dx, y + dy)]) return false;
+    return true;
+  };
+  // 物件本身的亮暗回饋
+  function feedback(x, y, o) {
+    if (isRocky[o]) return inner(x, y) ? INNER_WALL : 1;
+    if (isGround[o]) return world.changeAt?.(x, y)?.picked ? PICKED : GLOW;
+    return 1;
+  }
   const isMountain = data.landforms.map((l) => l.style === 'mountain');
   const isStone = surfaces.map((s) => s.style === 'rock' || s.style === 'gravel');
 
@@ -54,15 +73,18 @@ export function createWorldView(mapView, world, data) {
     return { glyph, fg, bg: softBg(x, y), level };
   }
 
-  // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色；山上的樹顏色往腳下材質靠
+  // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色、頂層以下的顏色（礦脈）；山上的樹顏色往腳下材質靠
   function objectLook(x, y, o) {
     const part = world.objectPartAt(x, y);
     const table = isMountain[world.landformAt(x, y)] ? objectFgOn[world.surfaceAt(x, y)] : objectFg;
-    const base = table[o][world.shadeAt(x, y)];
+    const level = world.shadeAt(x, y);
+    const base = table[o][level];
     const isTrunk = part === PART_TRUNK;
+    const k = feedback(x, y, o);
     return {
       glyph: objects[o].glyph,
-      fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part]),
+      fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part] * k),
+      lowFg: objects[o].baseColor ? dimColor(lowFg[o][level], k) : null,
       trunkGlyph: TRUNK_GLYPH,
       trunkFg: mixColor(dimColor(base, 0.8), WOOD, 0.6),
       isTrunk,

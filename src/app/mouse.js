@@ -1,6 +1,6 @@
 // 地圖上的滑鼠：
 // - 懸停：在那格旁邊顯示一個小提示框，寫那裡是什麼
-// - 右鍵：查看那一格，訊息欄寫出查看結果，地圖上畫出走過去的路線；再按同一格收起
+// - 右鍵：查看那一格兼選定成目標，訊息欄寫出查看結果，地圖上畫出走過去的路線；再按同一格收起
 // - 左鍵：走過去。不管有沒有畫出路線、查看有沒有開著，都直接走
 // 這裡只接事件、換算成地圖格，要做什麼由 main.js 給的 handlers 決定
 
@@ -35,7 +35,7 @@ export function drawMapLabels({ ctx, screen, panels, worldView, cam, route, targ
   const same = tip && target && tip.cell.x === target.x && tip.cell.y === target.y;
   if (route && target) {
     const { px, py } = place(target);
-    let label = route.reachable ? `${route.steps.length} 步` : '走不到';
+    let label = !route.reachable ? '走不到' : route.steps.length ? `${route.steps.length} 步` : '就在旁邊';
     if (same) label += `｜${tooltipText(tip.text)}`; // 懸停的正是終點：合成一個框，不疊在一起
     panels.routeLabel(ctx, screen, px, py, label, route.reachable ? COLORS.path : COLORS.text);
   }

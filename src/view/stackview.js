@@ -4,7 +4,7 @@
 //   所以畫一塊時連它下面幾列、左邊幾欄也一起畫
 // - 牆的下層往低處那格的底色壓淡，物件的下層往腳下的底色壓淡
 // - 冒險者、路線、目標每個畫面另外畫；冒險者附近比他頭頂高的樹冠再補畫一次，站在樹冠下會被蓋住
-// 地圖內容改變時要呼叫 invalidate() 丟掉快取
+// 地圖內容改變時要呼叫 invalidate() 丟掉快取；只改了幾格（採集）用 invalidateCells
 
 import { COLORS } from './colors.js';
 import {
@@ -71,12 +71,16 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     if (o < 0) return;
     const ol = look.object(x, y, o);
     const layers = objectLayers(objects[o], ol.isTrunk);
-    if (!layers.length) put(h0, { glyph: ol.glyph, fg: ol.fg, bg: null });
+    // 貼地的物件（矮叢、碎石坑）畫在地面最上面那層：斜坡多疊的那層有底色，畫在它下面會被蓋掉
+    const flat = slope ? { h: h0 + 1, tilt: slope.gx } : { h: h0 };
+    if (!layers.length) put(flat.h, { glyph: ol.glyph, fg: ol.fg, bg: null, ground: h0, tilt: flat.tilt });
     for (const l of layers) {
       const trunk = l.part === 'trunk';
-      const fg = fade(trunk ? ol.trunkFg : ol.fg, g.bg, fadeAt(l.j));
+      const color = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg; // 礦脈頂層以下是岩石色
+      const fg = fade(color, g.bg, fadeAt(l.j));
       const item = { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh };
-      put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });
+      if (l.dh === 0) put(flat.h, { ...item, tilt: flat.tilt });
+      else put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });
     }
   }
 
@@ -257,5 +261,14 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     };
   }
 
-  return { draw, cellAt, screenOf, focus, invalidate: () => chunks.clear() };
+  // 這幾格變了（採集）：丟掉它們所在與周圍的分塊。東西會錯開進隔壁分塊，旁邊的岩壁也會跟著換亮暗，所以連周圍一起丟
+  function invalidateCells(cells) {
+    for (const { x, y } of cells) {
+      const cx = Math.floor(x / CHUNK);
+      const cy = Math.floor(y / CHUNK);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) chunks.delete(`${cx + dx},${cy + dy}`);
+    }
+  }
+
+  return { draw, cellAt, screenOf, focus, invalidate: () => chunks.clear(), invalidateCells };
 }

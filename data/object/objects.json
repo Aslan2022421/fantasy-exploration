@@ -179,7 +179,7 @@
     "id": "pit",
     "name": "碎石坑",
     "glyph": "°",
-    "color": "#5c5c58",
+    "color": "#9a9a92",
     "passable": true,
     "height": 1,
     "trunk": false,

@@ -14,6 +14,7 @@ import { inShadow, sideSource } from './extrude.js';
 import { lookAt } from './glyphs.js';
 import { createParallaxView } from './parallaxview.js';
 import { mountainRingFactor } from './perspective.js';
+import { cameraOrigin } from './screen.js';
 import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 import { createStackView } from './stackview.js';
 
@@ -168,6 +169,11 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
 
   return {
     draw,
+    // 相機該到哪：往上疊的畫法讓冒險者剛好在地圖區正中間（可以是小數、可以捲出世界）；其他畫法照舊整格、不捲出世界
+    camera(screen, player) {
+      if (mode === 'perspective') return stack.focus(screen, player);
+      return cameraOrigin(player.x, player.y, world.width, world.height, screen.cols, screen.rows);
+    },
     // 視窗格 → 世界格；世界外回傳 null。全俯視透視時找畫面上那一點最上面的地面
     cellAt(cam, vx, vy, fx, fy) {
       if (stacked) return stack.cellAt(cam, vx, vy, fx, fy);

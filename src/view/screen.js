@@ -1,17 +1,19 @@
-// 畫面配置：固定 960×540 的畫布（使用者定），整張照整數倍放大到視窗裝得下的最大，置中、四周補黑邊。
-// 1080p 剛好 2 倍、4K 剛好 4 倍，點陣不糊。格子 16 像素＝8×8 字元表放大 2 倍，介面字 12 像素（Fusion Pixel 原尺寸）。
-// 版面：頂部 12 像素狀態列；下面左邊是地圖（49×33 格，兩邊都奇數，冒險者在正中間；俯視要看得廣，
-// 使用者要可視格數大一點），右邊是訊息欄（176 像素，一行約 14 個字）
+// 畫面配置：固定 1920×1080 的畫布（使用者定；先試過 960×540），整張照整數倍放大到視窗裝得下的最大，置中、四周補黑邊；
+// 視窗比畫布小時整張縮小塞進去。1080p 剛好 1 倍、4K 剛好 2 倍。
+// 格子預設 24 像素＝8×8 字元表放大 3 倍（使用者定），介面字 24 像素（Fusion Pixel 12 像素放大 2 倍）。
+// 版面：頂部 24 像素狀態列；下面左邊是地圖區 1568×1056（每格 24 時約 65×44 格），右邊是 352 像素的訊息欄
+// （階段 1 使用者定的版面：頂部狀態列、左邊地圖、右邊訊息欄）
 
-export const CANVAS = { w: 960, h: 540 };
-const CELL = 16; // 預設一格（畫布像素）
+export const CANVAS = { w: 1920, h: 1080 };
+const CELL = 24; // 預設一格（畫布像素）
 const TILE_BASE = 8; // 字元表一格 8 像素
 const TEXT_BASE = 12; // Fusion Pixel 的設計格 12 像素
-const TOP = 12; // 頂部狀態列高
-export const MAP_GRID = { cols: 49, rows: 33 }; // 預設格子大小時地圖區幾格
-export const SIDE_CHARS = 14; // 右側訊息欄大約幾個全形字寬（給測試與說明用）
+const TEXT = 2; // 介面字放大幾倍
+const TOP = 24; // 頂部狀態列高
+const SIDE = 352; // 右邊訊息欄寬
+export const MAP_AREA = { w: CANVAS.w - SIDE, h: CANVAS.h - TOP };
 
-// 地圖縮放（使用者要的縮放鍵）：一格是字元表的幾倍，預設 2 倍（16 像素），加減幾倍、最小 1 倍。
+// 地圖縮放（使用者要的縮放鍵）：一格是字元表的幾倍，預設 3 倍（24 像素），一次加減 8 像素（16、24、32、40）。
 // 地圖區的大小固定，放大時看到的格數變少；文字欄不跟著變
 export const MAP_ZOOM = { min: -1, max: 2 };
 
@@ -26,13 +28,13 @@ export function layout(cssWidth, cssHeight, dpr, zoom = 0) {
   const k = canvasScale(cssWidth, cssHeight, dpr);
   const width = CANVAS.w * k;
   const height = CANVAS.h * k;
-  const tile = TILE_BASE * k * Math.max(1, CELL / TILE_BASE + zoom);
-  const textScale = k;
-  const pad = 2 * k;
-  const lineHeight = (TEXT_BASE + 2) * k;
+  const tile = TILE_BASE * k * Math.max(2, CELL / TILE_BASE + zoom);
+  const textScale = TEXT * k;
+  const pad = 4 * k;
+  const lineHeight = (TEXT_BASE + 2) * textScale;
   const top = { x: 0, y: 0, w: width, h: TOP * k };
-  const mapW = MAP_GRID.cols * CELL * k;
-  const mapH = MAP_GRID.rows * CELL * k;
+  const mapW = MAP_AREA.w * k;
+  const mapH = MAP_AREA.h * k;
   const cols = Math.ceil(mapW / tile);
   const rows = Math.ceil(mapH / tile);
   const map = { x: 0, y: top.h, w: mapW, h: mapH };

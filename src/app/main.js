@@ -10,7 +10,7 @@ import { COLORS } from '../view/colors.js';
 import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
-import { cameraOrigin, cssSize, gridLabel, layout } from '../view/screen.js';
+import { cssSize, gridLabel, layout } from '../view/screen.js';
 import { loadImage } from '../view/tiles.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
@@ -63,7 +63,7 @@ const world = game.world;
 const MODES = ['flat', 'leftdown', 'parallax'];
 const viewMode = MODES.find((m) => params.has(m)) ?? 'perspective';
 const worldView = createWorldView(mapView, world, DATA, { mode: viewMode });
-const camera = () => cameraOrigin(player().x, player().y, world.width, world.height, screen.cols, screen.rows);
+const camera = () => worldView.camera(screen, player()); // 往上疊的畫法讓冒險者剛好置中
 
 // 花時間的動作：輪到冒險者才做，做完把回合交回排程
 function act(fn) {

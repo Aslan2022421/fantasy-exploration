@@ -66,6 +66,20 @@ test('視野外壓暗先關閉（使用者定）：不畫', () => {
   expect(drawn.some((d) => d.vignette)).toBe(false);
 });
 
+test('相機置中：冒險者那格地面錯開後的中心剛好落在地圖區正中間，世界邊緣也一樣', () => {
+  const scr = { tile: 16, map: { w: 320, h: 320 } };
+  for (const p of [
+    { x: 10, y: 22 },
+    { x: 0, y: 0 },
+  ]) {
+    const f = view.focus(scr, p);
+    const s = shiftUp(groundHeight(tiers[p.y][p.x]), K);
+    expect((p.x - f.x) * 8 + s.ox + 4).toBeCloseTo((320 / 16 / 2) * 8);
+    expect((p.y - f.y) * 8 + s.oy + 4).toBeCloseTo((320 / 16 / 2) * 8);
+  }
+  expect(view.focus(scr, { x: 0, y: 0 }).x).toBeLessThan(0); // 可以捲出世界
+});
+
 test('分塊只畫一次：相機沒動時再畫，不再重畫分塊，只貼圖', () => {
   draw({ x: 0, y: 0 }, { x: 10, y: 10 });
   const first = layers;

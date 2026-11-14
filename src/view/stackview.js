@@ -217,5 +217,16 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     return { vx: px / 8, vy: py / 8 };
   }
 
-  return { draw, cellAt, screenOf, invalidate: () => chunks.clear() };
+  // 相機該到哪（左上角，可以是小數）：冒險者那格的中心，加上腳下地面往上錯開的量，剛好落在地圖區正中間。
+  // 不限制在世界裡，走到世界邊緣時外面是黑的，冒險者照樣在正中間（使用者要角色置中）
+  function focus(screen, player) {
+    const k = screen.tile / 8;
+    const { ox, oy } = shiftUp(groundHeight(world.tierAt(player.x, player.y)), k);
+    return {
+      x: player.x + 0.5 + ox / 8 - screen.map.w / screen.tile / 2,
+      y: player.y + 0.5 + oy / 8 - screen.map.h / screen.tile / 2,
+    };
+  }
+
+  return { draw, cellAt, screenOf, focus, invalidate: () => chunks.clear() };
 }

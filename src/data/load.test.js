@@ -45,7 +45,8 @@ describe('實際的資料', () => {
 
   test('每種地形與物件的字元都在 CP437 字元表裡', () => {
     for (const t of [...DATA.terrains, ...DATA.objects])
-      expect(cp437Index(t.glyph), `${t.id} 的字元 ${t.glyph}`).toBeGreaterThan(0);
+      for (const ch of [t.glyph, t.baseGlyph, t.edgeGlyph].filter(Boolean))
+        expect(cp437Index(ch), `${t.id} 的字元 ${ch}`).toBeGreaterThan(0);
   });
 
   test('物件都有，樹與矮叢在物件層', () => {

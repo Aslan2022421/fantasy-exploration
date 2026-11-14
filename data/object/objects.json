@@ -395,7 +395,8 @@
   {
     "id": "rock-wall",
     "name": "岩壁",
-    "glyph": "◘",
+    "glyph": "▓",
+    "edgeGlyph": "▒",
     "color": "#8c8c84",
     "passable": false,
     "height": 2,
@@ -424,8 +425,10 @@
   {
     "id": "vein",
     "name": "礦脈",
-    "glyph": "◘",
+    "glyph": "♦",
     "color": "#c9a45a",
+    "baseGlyph": "▓",
+    "edgeGlyph": "▒",
     "baseColor": "#8c8c84",
     "passable": false,
     "height": 3,

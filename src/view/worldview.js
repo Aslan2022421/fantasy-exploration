@@ -26,7 +26,9 @@ export const PEAK = { minRing: 2, radius: 6, minRows: 3, ringsPerRow: 3, maxRows
 // 疊層回饋：貼地資源（矮叢、草本）還能採時微微發亮、採過壓暗；被岩壁整圈圍住的岩壁壓暗，外圈是亮的
 const GLOW = 1.3;
 const PICKED = 0.5;
-const INNER_WALL = 0.55;
+const INNER_WALL = 0.8; // 內部（▓）比邊緣（▒）暗一點；字已經分開了，不用壓太多
+const STRATA = 0.85; // 岩體內部每隔一列再壓暗，做出一層一層的岩層
+const DUST = 0.3; // 岩壁旁一格的地面，底色往岩石色靠幾成（塵土、碎石散出來）
 // 岩壁、礦脈跟著山一圈一圈變亮：山腳（和山以外的露頭）low，第 RING.full 圈以上 high，跟山地本身的明暗一起往上走
 const WALL_RING = { low: 0.5, high: 0.85 }; // 最亮也比坡線暗，岩壁不搶過山坡
 
@@ -55,7 +57,7 @@ export function createWorldView(mapView, world, data) {
   // 頂層的礦脈色不壓暗，山腳的礦脈才認得出來
   function feedback(x, y, o) {
     if (isRocky[o]) {
-      const k = inner(x, y) ? INNER_WALL : 1;
+      const k = inner(x, y) ? INNER_WALL * (y % 2 ? STRATA : 1) : 1;
       const ring = wallRing(x, y);
       return { top: objects[o].baseColor ? k : ring * k, low: ring * k };
     }
@@ -88,6 +90,16 @@ export function createWorldView(mapView, world, data) {
     return differs ? mixColor(own, averageColor(all), SOFTEN) : own;
   }
 
+  // 岩壁旁一格（八方向）的地面：底色往岩石色靠，岩壁跟地面之間有一圈過渡，不是硬生生切開
+  const ROCK = objects.find((o) => o.gather?.action === 'mine')?.color;
+  function dusty(x, y, bg) {
+    if (!ROCK || isRocky[world.objectAt(x, y)]) return bg;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++)
+        if ((dx || dy) && isRocky[world.objectAt(x + dx, y + dy)]) return mixColor(bg, dimColor(ROCK, 0.45), DUST);
+    return bg;
+  }
+
   function groundLook(x, y) {
     const level = world.shadeAt(x, y);
     const { glyph, ink } = lookAt(world, data, x, y);
@@ -96,7 +108,15 @@ export function createWorldView(mapView, world, data) {
       const face = FACE[glyph] ?? (isStone[world.surfaceAt(x, y)] ? ROCK_INK : 1);
       fg = dimColor(fg, ringInk(x, y) * face);
     }
-    return { glyph, fg, bg: softBg(x, y), level, rise: FACE[glyph] ? FACE_RISE : 0 };
+    return { glyph, fg, bg: dusty(x, y, softBg(x, y)), level, rise: FACE[glyph] ? FACE_RISE : 0 };
+  }
+
+  // 岩體的字：在一片的邊緣（八格裡有不是岩壁、礦脈的）用 edgeGlyph（▒），裡面照原本的字（▓）；
+  // 礦脈頂層的 ♦ 不換
+  function rockGlyph(x, y, o, glyph) {
+    const edge = objects[o].edgeGlyph;
+    if (!edge || (glyph === objects[o].glyph && objects[o].baseGlyph)) return glyph;
+    return inner(x, y) ? glyph : edge;
   }
 
   // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色、頂層以下的顏色（礦脈）；山上的樹顏色往腳下材質靠
@@ -110,7 +130,8 @@ export function createWorldView(mapView, world, data) {
     const isTrunk = part === PART_TRUNK;
     const k = feedback(x, y, o);
     return {
-      glyph: objects[o].glyph,
+      glyph: rockGlyph(x, y, o, objects[o].glyph),
+      lowGlyph: objects[o].baseGlyph ? rockGlyph(x, y, o, objects[o].baseGlyph) : null,
       fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part] * k.top),
       lowFg: objects[o].baseColor ? dimColor(lowFg[o][level], k.low) : null,
       trunkGlyph: objects[o].glyph, // 整根用樹種那一類的字（針葉樹 ↑、闊葉樹 ♣、硬木闊葉樹 ♠、棕櫚類 Y）

@@ -96,6 +96,8 @@ export const ObjectSchema = z.object({
   glyph: Glyph,
   color: Color,
   baseColor: Color.optional(), // 疊層時頂層以下的顏色（礦脈頂層是礦脈色、下面是岩石色）；沒有就跟 color 一樣
+  baseGlyph: Glyph.optional(), // 疊層時頂層以下的字（礦脈頂層 ♦、下面是岩體 ▓）；沒有就跟 glyph 一樣
+  edgeGlyph: Glyph.optional(), // 在一片的邊緣（八格裡有不是同類的）時，岩體改用這個字（▒，比內部的 ▓ 疏）
   passable: z.boolean(),
   // 疊幾層：樹的樹幹往上疊、最頂層是樹冠；1 層是平的，不疊
   height: z.number().int().min(0).max(5),

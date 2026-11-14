@@ -88,7 +88,14 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       const cap = ol.cap?.[l.j]; // 雪地或山上的樹：頂端幾層往地形顏色靠、越上面越亮
       if (cap) color = dimColor(mixColor(color, cap.color, cap.mix), cap.light);
       const fg = fade(color, g.bg, fadeAt(trunk ? Math.min(l.j, 1) : l.j)); // 樹幹最多壓淡一級，根部貼地看得到
-      const item = { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh, px: liftPx };
+      const item = {
+        glyph: trunk ? ol.trunkGlyph : l.j > 0 && ol.lowGlyph ? ol.lowGlyph : ol.glyph,
+        fg,
+        bg: null,
+        ground: h0,
+        lift: l.dh,
+        px: liftPx,
+      };
       if (l.dh === 0) put(flat.h, { ...item, tilt: flat.tilt });
       else put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });
     }
@@ -187,7 +194,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       for (const l of layers) {
         const trunk = l.part === 'trunk';
         const fg = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg;
-        mark(l.dh, trunk ? ol.trunkGlyph : ol.glyph, fg);
+        mark(l.dh, trunk ? ol.trunkGlyph : l.j > 0 && ol.lowGlyph ? ol.lowGlyph : ol.glyph, fg);
       }
     }
   }

@@ -7,9 +7,23 @@ import { findPathNextTo, stepDirection } from './path.js';
 
 const SEED = 20261112;
 const O = (id) => DATA.objectIndex.get(id);
-const def = (id) => DATA.objects[O(id)].gather;
 const rng = (s) => RNG.clone().setSeed(s);
 const TREES = DATA.objects.filter((o) => o.trunk).map((o) => o.id); // 各樹種
+// 測試用的挖礦產出表（資料裡現在沒有可挖的物件）
+const ORE = {
+  action: 'mine',
+  uses: [3, 6],
+  amount: [1, 2],
+  kinds: [2, 3],
+  after: 'pit',
+  yields: [
+    { weights: { stone: 20 } },
+    { biomes: ['taiga', 'moss-forest'], weights: { 'ice-crystal': 30, 'iron-ore': 25 } },
+    { biomes: ['desert'], weights: { 'copper-ore': 30, quartz: 30 } },
+    { minTier: 8, weights: { quartz: 20, 'gold-ore': 8 } },
+    { nearWater: 3, weights: { 'gold-ore': 6 } },
+  ],
+};
 
 // 從冒險者往外一圈一圈找最近一處能採的 id（id 可以是一串，任一種都算；給 test 判斷的條件）
 function nearest(game, id, test = () => true) {
@@ -43,9 +57,8 @@ describe('上限與組成', () => {
   });
 
   test('產出權重照環境加總：生態不符的列不算，高度層不夠的列不算', () => {
-    const vein = def('vein');
-    expect(weightsFor(vein, { biome: 'taiga', tier: 3 })).toEqual({ stone: 20, 'ice-crystal': 30, 'iron-ore': 25 });
-    expect(weightsFor(vein, { biome: 'desert', tier: 9 })).toEqual({
+    expect(weightsFor(ORE, { biome: 'taiga', tier: 3 })).toEqual({ stone: 20, 'ice-crystal': 30, 'iron-ore': 25 });
+    expect(weightsFor(ORE, { biome: 'desert', tier: 9 })).toEqual({
       stone: 20,
       'copper-ore': 30,
       quartz: 50,
@@ -54,10 +67,9 @@ describe('上限與組成', () => {
   });
 
   test('地理條件：幾格內有河或湖、高度層範圍、在不在山地；沒寫的條件不限', () => {
-    const vein = def('vein');
     const base = { biome: 'taiga', tier: 3, mountain: true };
-    expect(weightsFor(vein, { ...base, waterDist: 2 })['gold-ore']).toBe(6); // 河邊的礦脈有砂金
-    expect(weightsFor(vein, { ...base, waterDist: 4 })['gold-ore']).toBeUndefined();
+    expect(weightsFor(ORE, { ...base, waterDist: 2 })['gold-ore']).toBe(6); // 河邊有砂金
+    expect(weightsFor(ORE, { ...base, waterDist: 4 })['gold-ore']).toBeUndefined();
     const toy = {
       yields: [
         { maxTier: 2, weights: { stone: 1 } },
@@ -69,13 +81,12 @@ describe('上限與組成', () => {
   });
 
   test('讀組成：抽幾種照 kinds、不重複；到上限的材料讀不出來', () => {
-    const vein = def('vein');
     for (let s = 0; s < 50; s++) {
-      const comp = readComposition(vein, { biome: 'taiga', tier: 3 }, DATA, {}, rng(s));
+      const comp = readComposition(ORE, { biome: 'taiga', tier: 3 }, DATA, {}, rng(s));
       const n = Object.keys(comp).length;
       expect(n).toBeGreaterThanOrEqual(2);
       expect(n).toBeLessThanOrEqual(3);
-      const capped = readComposition(vein, { biome: 'taiga', tier: 3 }, DATA, { 'ice-crystal': 20 }, rng(s));
+      const capped = readComposition(ORE, { biome: 'taiga', tier: 3 }, DATA, { 'ice-crystal': 20 }, rng(s));
       expect(capped['ice-crystal']).toBeUndefined();
     }
   });
@@ -108,26 +119,10 @@ describe('在世界裡採', () => {
     expect(g.state.time).toBe(rec.time + 6);
   });
 
-  test('挖岩壁：挖兩次才穿，穿了變成能走的碎石坑；組成第一次讀出來後固定', () => {
-    const g = newGame(SEED);
-    const src = nearest(g, 'rock-wall');
-    walkNextTo(g, src);
-    const first = g.gather(src);
-    expect(first.data.read).not.toBeNull();
-    expect(first.data.done).toBeNull();
-    expect(g.world.isPassable(src.x, src.y)).toBe(false);
-    const second = g.gather(src);
-    expect(second.data.read).toBeNull();
-    expect(second.data.done).toBe('pit');
-    expect(g.world.objectAt(src.x, src.y)).toBe(O('pit'));
-    expect(g.world.isPassable(src.x, src.y)).toBe(true);
-    expect(g.gather(src)).toBeNull(); // 碎石坑不能再挖
-  });
-
   test('來源的環境：離河或湖的距離照八方向一圈一圈量，超過產出表用到的最遠距離算 Infinity', () => {
     const g = newGame(SEED);
-    const src = nearest(g, 'vein');
-    const env = envAt(g.world, DATA, src.def, src.x, src.y);
+    const src = nearest(g, 'herb'); // 草本長在河或湖邊，量得到距離
+    const env = envAt(g.world, DATA, ORE, src.x, src.y);
     expect(env.biome).toBe(DATA.biomes[g.world.biomeAt(src.x, src.y)].id);
     let d = Number.POSITIVE_INFINITY;
     for (let dy = -3; dy <= 3; dy++)
@@ -155,7 +150,7 @@ describe('在世界裡採', () => {
   test('採集寫進紀錄：存讀檔、從檢查點重放、從頭重放，狀態都一樣；同樣的操作兩次結果一樣', () => {
     const play = () => {
       const g = newGame(SEED);
-      for (const id of ['rock-wall', 'shrub', TREES]) {
+      for (const id of ['herb', 'shrub', TREES]) {
         const src = nearest(g, id);
         if (!src) continue;
         walkNextTo(g, src);

@@ -22,7 +22,7 @@ export function describePlace(world, x, y) {
   const landform = lake ? '' : `，${c.landform.name}`;
   let what;
   const state = c.picked ? '（採過了）' : c.worked ? '（挖過了）' : '';
-  // 植物（含樹樁）「長在」地上，岩壁、礦脈、碎石坑「在」地上
+  // 植物（含樹樁）「長在」地上，碎石坑「在」地上
   const grows = ['chop', 'pick'].includes(c.object?.gather?.action) || c.object?.id === 'stump';
   // 樹寫樹種與類名：「雲杉（針葉樹）」，同一個字的不同樹靠這裡分得出來
   const family = c.object?.family ? `（${c.object.family}）` : '';

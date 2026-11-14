@@ -1,9 +1,6 @@
 // 物件層的生成：
 // - 樹、矮叢照生態撒錨點，多格的樹冠互相讓位（樹幹永遠露出來，其餘取雜湊最小的那棵）；現在的樹都只佔一格
 // - 山上平坦的台階（平台）樹線放寬，高山的台階上也有幾棵樹
-// - 岩壁長在山與山之間的谷地（低處、三面以上有山圍住），用雜訊撒成一片一片，山坡上不放；
-//   單獨一格、四邊都沒有岩壁的不放
-// - 谷地裡的岩壁有一部分是礦脈
 // - 草本長在低處（高度層 1～2）、溫和或炎熱、不乾燥、靠近河或湖的泥土上
 // 只看種子＋座標與周圍幾格，不看生成順序，跨區接得起來
 
@@ -13,13 +10,6 @@ import { fbm, hash01, makeNoise } from './noise.js';
 
 export const PLACE = {
   floraBase: 24, // 樹叢成片的大小
-  wallBase: 10, // 岩壁成片的大小
-  wallCut: 0, // 谷地裡雜訊高過這個的格子長岩壁（約一半）
-  valleyTop: 0.1, // 谷地的地面最高只到山地門檻再高這麼多（山腳的低處）
-  valleyRise: 0.1, // 周圍要有比山地門檻高這麼多的山
-  valleyReach: 3, // 往東南西北各看幾個地理粗格（一格 8 格）找山
-  valleySides: 3, // 三面有山（山凹）；兩側相對有山（山谷）也算
-  veinShare: 0.25, // 岩壁有幾成是礦脈
   herbDensity: 0.08, // 符合條件的格子長草本的機率
   herbRange: 2, // 這麼多格內有河或湖
   herbMaxTier: 2, // 高度層到這裡為止才長草本
@@ -32,7 +22,6 @@ export const PLACE = {
 export function createObjectPlacer(seed, data, ids, treelineRange) {
   const { ROCK, DIRT, ICE, SHALLOW, DEEP, NONE } = ids;
   const nFlora = makeNoise(seed, 'terrain:flora');
-  const nWall = makeNoise(seed, 'terrain:wall');
   const objectId = (name) => {
     if (!data.objectIndex.has(name)) throw new Error(`物件生成需要的物件不在資料裡：${name}`);
     return data.objectIndex.get(name);
@@ -41,8 +30,6 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
   const objectArea = data.objects.map((o) => meanArea(o.sizes, o.canopy));
   // 資料裡沒有的就不放（測試用的小資料只有幾種物件）
   const PINE = data.objectIndex.get('pine') ?? -1;
-  const WALL = data.objectIndex.get('rock-wall') ?? -1;
-  const VEIN = data.objectIndex.get('vein') ?? WALL;
   const HERB = data.objectIndex.get('herb') ?? -1;
 
   // 植物長得出來的地方：沒有水、不是岩石或冰
@@ -70,41 +57,6 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
       }
     }
     return null;
-  }
-
-  // 一區生成時共用的格子（G×G，左上角是世界座標 gx0, gy0）：高度 h、高度層 tier、材質、水文、溫度帶、濕度帶、錨點
-  function zoneContext(z) {
-    return { ...z, wall: new Int8Array(z.G * z.G).fill(-1) };
-  }
-
-  // 岩壁長得出來的地方：山與山之間的谷地。地面低（最高到山腳），往東南西北看，至少三個方向不遠處有山把它圍住。
-  // 周圍的山用世界地理的粗格高度看（geography.js，一格 8 格），一區自己的格子看不了那麼遠
-  function wallGround(z, X, Y, c) {
-    if (!z.coarse || z.wAll[c] !== NONE || z.sAll[c] === ICE) return false;
-    if (z.h[c] > LAND.mountain + PLACE.valleyTop) return false;
-    const high = LAND.mountain + PLACE.valleyRise;
-    // 東、西、南、北各看 valleyReach 個粗格內有沒有山
-    const hit = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ].map(([dx, dy]) => {
-      for (let k = 1; k <= PLACE.valleyReach; k++) if (z.coarse(X + dx * k * 8, Y + dy * k * 8) > high) return true;
-      return false;
-    });
-    const sides = hit.filter(Boolean).length;
-    // 三面有山（山凹），或兩側相對有山（東西或南北夾住的山谷）
-    return sides >= PLACE.valleySides || (hit[0] && hit[1]) || (hit[2] && hit[3]);
-  }
-
-  function isWall(z, c) {
-    if (z.wall[c] < 0) {
-      const X = z.gx0 + (c % z.G);
-      const Y = z.gy0 + Math.floor(c / z.G);
-      z.wall[c] = fbm(nWall, X, Y, PLACE.wallBase, 2) > PLACE.wallCut && wallGround(z, X, Y, c) ? 1 : 0;
-    }
-    return z.wall[c] === 1;
   }
 
   // r 格內有沒有一格符合 test
@@ -136,13 +88,6 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
     return { object: best.a.object, part, anchor: best.k * MAX_SIZE + best.j };
   }
 
-  function wallAt(z, c, X, Y) {
-    if (WALL < 0 || !isWall(z, c)) return null;
-    if (![1, -1, z.G, -z.G].some((d) => isWall(z, c + d))) return null;
-    const vein = hash01(seed, X, Y, 201) < PLACE.veinShare; // 谷地裡的岩壁有一部分是礦脈
-    return { object: vein ? VEIN : WALL, part: PART_MID, anchor: 0 };
-  }
-
   function herbAt(z, c, X, Y) {
     if (HERB < 0 || z.sAll[c] !== DIRT || z.wAll[c] !== NONE) return null;
     if (z.tier[c] < 1 || z.tier[c] > PLACE.herbMaxTier || z.tBand[c] < 1 || z.wBand[c] < 1) return null;
@@ -152,13 +97,13 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
     return { object: HERB, part: PART_MID, anchor: 0 };
   }
 
-  // 這格的物件：{ object（data.objects 的編號）, part（footprint.js 的 PART_*）, anchor（錨點在左上幾格：k×MAX_SIZE＋j）} 或 null
+  // 這格的物件：{ object（data.objects 的編號）, part（footprint.js 的 PART_*）, anchor（錨點在左上幾格：k×MAX_SIZE＋j）} 或 null。
+  // z 是一區生成時共用的格子（G×G，左上角是世界座標 gx0, gy0）：高度 h、高度層 tier、材質、水文、溫度帶、濕度帶、錨點
   function objectAt(z, c, X, Y) {
-    // 岩壁先放：平台上也長樹，樹先放的話會佔掉成片岩壁裡的一格，留下孤零零的岩壁
-    return wallAt(z, c, X, Y) ?? floraAt(z, c, X, Y) ?? herbAt(z, c, X, Y);
+    return floraAt(z, c, X, Y) ?? herbAt(z, c, X, Y);
   }
 
-  return { anchorAt, zoneContext, objectAt };
+  return { anchorAt, objectAt };
 }
 
 // 錨點編碼 → 往左上幾格

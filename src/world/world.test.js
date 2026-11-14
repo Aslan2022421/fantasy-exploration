@@ -16,7 +16,6 @@ const LAYERS = ['landform', 'surface', 'water', 'cover'];
 const MOUNTAIN = DATA.landformIndex.get('mountain');
 const S = (id) => DATA.surfaceIndex.get(id);
 const W = (id) => DATA.waterIndex.get(id);
-const ROCKY = new Set(['rock-wall', 'vein'].map((id) => DATA.objectIndex.get(id))); // 長在岩石上的物件
 
 describe('只看種子＋座標', () => {
   test('生成順序不同，同一區的內容完全一樣', () => {
@@ -224,7 +223,6 @@ describe('世界的形狀', () => {
           if (!z.object[i]) continue;
           objects++;
           expect(z.water[i]).toBe(LAYER_NONE);
-          if (ROCKY.has(z.object[i] - 1)) continue; // 岩壁與礦脈長在谷地，規則見 objects.test.js
           expect([S('rock'), S('ice')]).not.toContain(z.surface[i]);
           if (onMountain) expect(z.height[i]).toBeLessThanOrEqual(Math.max(treeline, ledgeTop) + 1); // 平坦的台階樹線放寬
         }
@@ -242,7 +240,7 @@ describe('世界的形狀', () => {
     let trunks = 0;
     let canopy = 0;
     for (let i = 0; i < z.object.length; i++) {
-      if (!z.object[i] || ROCKY.has(z.object[i] - 1)) continue;
+      if (!z.object[i]) continue;
       const x = Z + (i % Z);
       const y = Z + Math.floor(i / Z);
       if (z.objectPart[i] === PART_TRUNK) {

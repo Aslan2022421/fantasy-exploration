@@ -16,7 +16,7 @@ export const LERP = { tau: 90, snap: 8, settle: 0.01 };
 export const RING = { foot: 0.75, full: 10 };
 
 // 錯開量（螢幕像素，不跟地圖縮放變）：地形每層往上 px、往右 leanPx，總量最多 maxPx；
-// 物件從腳下地面垂直往上每層 objPx（objLeanPx 0：樹、礦脈等物件不往右偏），最多 maxLift 層
+// 物件從腳下地面垂直往上每層 objPx（objLeanPx 0：樹等物件不往右偏），最多 maxLift 層
 export const UP = { px: 4, leanPx: 1, maxPx: 64, objPx: 8, objLeanPx: 0, maxLift: 5 };
 
 // 斜坡（坡度 min 以上、不是山也不是水）多疊一層，往上坡那側左右偏 leanPx 螢幕像素
@@ -50,7 +50,7 @@ export function shiftUp(h, k = 1) {
   return { ox: (n * UP.leanPx) / k || 0, oy: (-n * UP.px) / k || 0 }; // || 0 把 -0 變 0
 }
 
-// 物件從腳下地面往上 dh 層，再多錯開多少字元像素；px 是每層往上幾螢幕像素（資料的 layerPx，沒寫用 UP.objPx）
+// 物件從腳下地面往上 dh 層，再多錯開多少字元像素；px 是每層往上幾螢幕像素
 export function liftUp(dh, k = 1, px = UP.objPx) {
   const n = Math.min(UP.maxLift, Math.max(0, dh));
   return { ox: (n * UP.objLeanPx) / k || 0, oy: (-n * px) / k || 0 };

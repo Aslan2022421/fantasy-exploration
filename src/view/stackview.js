@@ -78,23 +78,21 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     if (o < 0) return;
     const ol = look.object(x, y, o);
     const layers = objectLayers(objects[o], ol.isTrunk);
-    const liftPx = objects[o].layerPx; // 每層往上幾像素（岩壁、礦脈跟地形一樣）
     // 貼地的物件（矮叢、碎石坑）畫在地面最上面那層：斜坡多疊的那層有底色，畫在它下面會被蓋掉
     const flat = slope ? { h: h0 + 1, tilt: slope.gx } : { h: h0 };
     if (!layers.length) put(flat.h, { glyph: ol.glyph, fg: ol.fg, bg: null, ground: h0, tilt: flat.tilt });
     for (const l of layers) {
       const trunk = l.part === 'trunk';
-      let color = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg; // 礦脈頂層以下是岩石色
+      let color = trunk ? ol.trunkFg : ol.fg;
       const cap = ol.cap?.[l.j]; // 雪地或山上的樹：頂端幾層往地形顏色靠、越上面越亮
       if (cap) color = dimColor(mixColor(color, cap.color, cap.mix), cap.light);
       const fg = fade(color, g.bg, fadeAt(trunk ? Math.min(l.j, 1) : l.j)); // 樹幹最多壓淡一級，根部貼地看得到
       const item = {
-        glyph: trunk ? ol.trunkGlyph : l.j > 0 && ol.lowGlyph ? ol.lowGlyph : ol.glyph,
+        glyph: trunk ? ol.trunkGlyph : ol.glyph,
         fg,
         bg: null,
         ground: h0,
         lift: l.dh,
-        px: liftPx,
       };
       if (l.dh === 0) put(flat.h, { ...item, tilt: flat.tilt });
       else put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });
@@ -117,7 +115,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
 
   // 這一項畫在哪：地面高度、往上幾層（物件），斜坡那層再往上坡偏；山峰剪影再往上整列
   function offsetOf(it, k) {
-    const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k, it.px);
+    const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k);
     if (it.rowsUp) s.oy -= it.rowsUp * 8;
     if (it.tilt === undefined) return s;
     const t = slopeTilt(it.tilt, k);
@@ -158,15 +156,15 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   }
 
   // 地面高度 h 的東西、再往上 lift 層（物件、冒險者）錯開多少字元像素
-  function shiftOf(h, lift, k, px) {
+  function shiftOf(h, lift, k) {
     const a = shiftUp(h, k);
-    const b = liftUp(lift, k, px);
+    const b = liftUp(lift, k);
     return { ox: a.ox + b.ox, oy: a.oy + b.oy };
   }
 
   // 世界格 (x, y) 的地面（或往上 lift 層）畫在地圖區哪裡（字元像素，左上角）
-  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y)), lift = 0, px = undefined) {
-    const { ox, oy } = shiftOf(h, lift, mapView.tile() / 8, px);
+  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y)), lift = 0) {
+    const { ox, oy } = shiftOf(h, lift, mapView.tile() / 8);
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
@@ -178,9 +176,8 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       const bg = isTarget ? (route?.reachable ? COLORS.target : COLORS.blocked) : COLORS.examined;
       const o = world.objectAt(c.x, c.y);
       const h0 = groundHeight(world.tierAt(c.x, c.y));
-      const liftPx = o >= 0 ? objects[o].layerPx : undefined;
       const mark = (lift, glyph, fg) => {
-        const { px, py } = placeOf(f, c.x, c.y, h0, lift, liftPx);
+        const { px, py } = placeOf(f, c.x, c.y, h0, lift);
         mapView.drawShifted(0, 0, px, py, glyph, fg, bg);
       };
       if (o < 0) {
@@ -193,8 +190,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       if (!layers.some((l) => l.dh === 0)) mark(0, ' ', ol.fg); // 物件底下那格地面也標，跟上面幾層連成一塊
       for (const l of layers) {
         const trunk = l.part === 'trunk';
-        const fg = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg;
-        mark(l.dh, trunk ? ol.trunkGlyph : l.j > 0 && ol.lowGlyph ? ol.lowGlyph : ol.glyph, fg);
+        mark(l.dh, trunk ? ol.trunkGlyph : ol.glyph, trunk ? ol.trunkFg : ol.fg);
       }
     }
   }
@@ -209,7 +205,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       if (!list) continue;
       for (const it of list) {
         if (!it.leaf || it.h <= top) continue;
-        const { px, py } = placeOf(f, it.x, it.y, it.ground, it.lift, it.px);
+        const { px, py } = placeOf(f, it.x, it.y, it.ground, it.lift);
         mapView.drawShifted(0, 0, px, py, it.glyph, it.fg, null);
       }
     }
@@ -286,7 +282,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     };
   }
 
-  // 這幾格變了（採集）：丟掉它們所在與周圍的分塊。東西會錯開進隔壁分塊，旁邊的岩壁也會跟著換亮暗，所以連周圍一起丟
+  // 這幾格變了（採集）：丟掉它們所在與周圍的分塊。東西會錯開進隔壁分塊，所以連周圍一起丟
   function invalidateCells(cells) {
     for (const { x, y } of cells) {
       const cx = Math.floor(x / CHUNK);

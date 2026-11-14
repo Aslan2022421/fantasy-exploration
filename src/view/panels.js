@@ -4,8 +4,6 @@
 import { COLORS } from './colors.js';
 import { ellipsis, wrap } from './wrap.js';
 
-const LABEL_BASE = 12; // 介面字的設計格（Fusion Pixel 12 像素）
-
 // entries：[{ time, text, color }]；time 是 null 的是說明文字（不是紀錄）
 function visualLines(font, entries, width, scale) {
   const out = [];
@@ -92,11 +90,9 @@ export function createPanels(font) {
     },
 
     // 地圖上的小標籤（路線終點的步數、懸停提示框）；(px, py) 是那格的左上角（實體像素）。
-    // 字用介面字的一半（12 像素的整數倍），框比較矮，旁邊往上疊的樹冠才不會穿過字；描一圈框線跟地圖分開
+    // 字跟介面字一樣大；描一圈框線跟地圖分開
     routeLabel(ctx, s, px, py, label, color) {
-      const { pad, tile, map } = s;
-      const scale = Math.max(1, s.textScale / 2);
-      const lineHeight = (LABEL_BASE + 2) * scale;
+      const { pad, tile, map, lineHeight, textScale: scale } = s;
       const w = font.measure(label, scale);
       let lx = px + tile + pad;
       if (lx + w + pad * 2 > map.x + map.w) lx = px - w - pad * 3;

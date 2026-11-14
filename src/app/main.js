@@ -10,7 +10,7 @@ import { COLORS } from '../view/colors.js';
 import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
-import { cameraOrigin, layout } from '../view/screen.js';
+import { cameraOrigin, cssSize, layout } from '../view/screen.js';
 import { loadImage } from '../view/tiles.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
@@ -98,8 +98,9 @@ function resize() {
   screen = layoutAt(zoom.value);
   canvas.width = screen.width;
   canvas.height = screen.height;
-  canvas.style.width = `${screen.width / screen.dpr}px`;
-  canvas.style.height = `${screen.height / screen.dpr}px`;
+  const css = cssSize(screen, window.innerWidth, window.innerHeight);
+  canvas.style.width = `${css.w}px`;
+  canvas.style.height = `${css.h}px`;
   mapView.resize(screen);
   render();
 }
@@ -239,7 +240,8 @@ window.addEventListener(
   (e) => {
     const lines = Math.sign(e.deltaY) * 3;
     if (historyOpen) return scrollHistory(lines);
-    if (e.clientX * screen.dpr >= screen.side.x) {
+    const rect = canvas.getBoundingClientRect(); // 畫布置中、可能被縮小，用實際位置與大小換算
+    if ((e.clientX - rect.left) * (canvas.width / rect.width) >= screen.side.x) {
       logScroll = Math.max(0, Math.min(maxLogScroll, logScroll - lines));
       render();
     }

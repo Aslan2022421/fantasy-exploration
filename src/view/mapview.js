@@ -108,8 +108,9 @@ export function createMapView(image, ctx) {
     // 滑鼠 → 地圖區第幾格；不在地圖區回傳 null
     cellAt(e) {
       const rect = ctx.canvas.getBoundingClientRect();
-      const px = (e.clientX - rect.left) * s.dpr - s.map.x;
-      const py = (e.clientY - rect.top) * s.dpr - s.map.y;
+      const ratio = ctx.canvas.width / rect.width; // 畫面上一個 CSS 像素是畫布的幾個像素（置中、縮小都算進去）
+      const px = (e.clientX - rect.left) * ratio - s.map.x;
+      const py = (e.clientY - rect.top) * ratio - s.map.y;
       if (px < 0 || py < 0 || px >= s.map.w || py >= s.map.h) return null;
       // fx、fy：滑鼠在地圖區的位置，以字元像素計（一格 8 個），錯開的疊層要用它找點到哪格
       const k = s.tile / 8;

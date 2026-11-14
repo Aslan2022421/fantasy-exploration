@@ -26,7 +26,7 @@ const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
 // 視野外壓暗：COLORS.dark 的 RGB。使用者說先關閉（on: false），程式留著
 const SIGHT = { on: false, near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 };
 // 路線的亮度隨高度、線寬與虛線的 [畫, 空]（字元像素）
-const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3] };
+const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3], smooth: 2 };
 
 const fadeCache = new Map();
 // a 往 b 壓淡 f（0 不變、1 變成 b）
@@ -138,8 +138,13 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   // 越高的那段越亮（PATH_LIGHT），上下坡看得出來；虛線花紋一段接一段連下去
   function drawRoute(f, route, player) {
     if (!route?.steps.length) return;
-    const pts = [player, ...route.steps].map((c) => {
-      const h = groundHeight(world.tierAt(c.x, c.y));
+    // 每一點的高度取前後 PATH_LIGHT.smooth 格的平均，爬坡時線慢慢升上去，不會在一格內突然折上去
+    const cells = [player, ...route.steps];
+    const raw = cells.map((c) => groundHeight(world.tierAt(c.x, c.y)));
+    const r = PATH_LIGHT.smooth;
+    const pts = cells.map((c, i) => {
+      const near = raw.slice(Math.max(0, i - r), i + r + 1);
+      const h = near.reduce((a, v) => a + v, 0) / near.length;
       const { px, py } = placeOf(f, c.x, c.y, h);
       return { x: px + 4, y: py + 4, h };
     });

@@ -42,7 +42,7 @@ export function layout(cssWidth, cssHeight, dpr, zoom = 0) {
   return { dpr, scale: k, width, height, tile, textScale, lineHeight, pad, cols, rows, top, map, side };
 }
 
-// 給 G 鍵顯示：地圖區看得到幾×幾整格、一格是畫布的幾像素
+// 狀態列上直接顯示：地圖區看得到幾×幾整格、一格是畫布的幾像素
 export function gridLabel(s) {
   const full = (len) => Math.floor(len / s.tile);
   return `可視 ${full(s.map.w)}×${full(s.map.h)} 格、每格 ${s.tile / s.scale} 像素`;

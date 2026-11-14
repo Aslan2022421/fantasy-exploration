@@ -26,3 +26,20 @@ test('地圖標籤：有路線時標步數，有懸停時在那格旁邊出提�
     { px: 120, py: 144, text: '細草，泥土，平原' },
   ]);
 });
+
+test('懸停的正是路線終點：合成一個框', () => {
+  const calls = [];
+  const panels = { routeLabel: (_ctx, _s, px, py, text) => calls.push({ px, py, text }) };
+  const worldView = { screenOf: (_cam, x, y) => ({ vx: x, vy: y }) };
+  drawMapLabels({
+    ctx: null,
+    screen: { map: { x: 0, y: 0 }, tile: 24 },
+    panels,
+    worldView,
+    cam: null,
+    route: { steps: new Array(18), reachable: true },
+    target: { x: 2, y: 1 },
+    tip: { cell: { x: 2, y: 1 }, text: '雪，山地。凍原' },
+  });
+  expect(calls.map((c) => c.text)).toEqual(['18 步｜雪，山地']);
+});

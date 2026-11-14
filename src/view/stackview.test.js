@@ -48,8 +48,11 @@ test('路線是線：從冒險者連到每一步，跟著地面高度錯開，�
   const lines = drawn.filter((d) => d.line);
   expect(lines).toHaveLength(3);
   expect(drawn.some((d) => d.ch === '•')).toBe(false);
-  const s4 = shiftUp(groundHeight(4), K);
-  expect(lines[2].y2).toBe(20 * 8 + s4.oy + 4); // 終點在台地頂面錯開後的中心
+  // 高度取前後兩格的平均：終點在平地與台地頂面之間，線一段一段慢慢往上錯開，不會突然折上去
+  const flat = 20 * 8 + shiftUp(groundHeight(1), K).oy + 4;
+  const top = 20 * 8 + shiftUp(groundHeight(4), K).oy + 4;
+  expect(lines[2].y2).toBeLessThan(flat);
+  expect(lines[2].y2).toBeGreaterThanOrEqual(top);
   expect(lines[2].color).not.toBe(lines[0].color);
   expect(lines.every((l) => l.dash?.length === 2)).toBe(true); // 虛線
   expect(lines[1].offset).toBeGreaterThan(lines[0].offset); // 花紋接續上一段

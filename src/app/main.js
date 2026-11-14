@@ -28,7 +28,7 @@ const STEP_MS = 70; // 滑鼠點擊後自動走，每一步間隔
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '滑鼠指著地圖看是什麼；左鍵走過去，空白鍵停下；右鍵查看並畫出路線，再點一下收起。',
-  'H 看完整紀錄。＋／－ 放大縮小地圖，G 顯示可視格數。',
+  'H 看完整紀錄。＋／－ 放大縮小地圖。',
 ];
 
 const params = new URLSearchParams(location.search);
@@ -136,7 +136,7 @@ function render() {
   panels.status(
     ctx,
     screen,
-    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}${zoom.showGrid ? `｜${gridLabel(screen)}` : ''}`,
+    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}｜${gridLabel(screen)}`, // 可視格數直接顯示（使用者定）
   );
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
   if (!historyOpen) {
@@ -208,7 +208,6 @@ window.addEventListener('keydown', (e) => {
     render();
     return;
   }
-  if (zoom.toggleGrid(e)) return render();
   if (e.code === 'KeyH') {
     stopWalking();
     historyOpen = true;

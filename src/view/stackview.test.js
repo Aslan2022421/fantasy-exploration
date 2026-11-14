@@ -38,21 +38,19 @@ const draw = (cam, player, route = null) => {
 };
 
 test('路線是線：從冒險者連到每一步，跟著地面高度錯開，爬上台地那段比較亮', () => {
-  const steps = [
-    { x: 10, y: 18 },
-    { x: 10, y: 19 },
-    { x: 10, y: 20 },
-  ];
-  draw({ x: 0, y: 0 }, { x: 10, y: 17 }, { steps, reachable: true });
+  // 從平地往南走上台地（y 20～24），走 12 步
+  const steps = Array.from({ length: 12 }, (_, i) => ({ x: 10, y: 11 + i }));
+  draw({ x: 0, y: 0 }, { x: 10, y: 10 }, { steps, reachable: true });
   const lines = drawn.filter((d) => d.line);
-  expect(lines).toHaveLength(3);
+  expect(lines).toHaveLength(12);
   expect(drawn.some((d) => d.ch === '•')).toBe(false);
-  // 高度取前後兩格的平均：終點在平地與台地頂面之間，線一段一段慢慢往上錯開，不會突然折上去
+  // 高度取前後幾格的平均：踏上台地那格（y 20）畫在平地與台地頂面之間，線一段一段慢慢往上錯開，不會突然折上去
+  const at20 = lines[9]; // 第 10 段的終點是 y 20
   const flat = 20 * 8 + shiftUp(groundHeight(1), K).oy + 4;
   const top = 20 * 8 + shiftUp(groundHeight(4), K).oy + 4;
-  expect(lines[2].y2).toBeLessThan(flat);
-  expect(lines[2].y2).toBeGreaterThanOrEqual(top);
-  expect(lines[2].color).not.toBe(lines[0].color);
+  expect(at20.y2).toBeLessThan(flat);
+  expect(at20.y2).toBeGreaterThan(top);
+  expect(lines[11].color).not.toBe(lines[0].color);
   expect(lines.every((l) => l.dash?.length === 2)).toBe(true); // 虛線
   expect(lines[1].offset).toBeGreaterThan(lines[0].offset); // 花紋接續上一段
 });

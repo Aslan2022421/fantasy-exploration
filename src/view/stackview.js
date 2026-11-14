@@ -25,7 +25,8 @@ const CHUNK = 16; // 分塊邊長（格）
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
 const COVER = { below: 3, left: 1 }; // 會蓋到冒險者的樹冠：往南幾格、往西幾格裡的
 // 路線：亮度隨高度、線寬、虛線的 [畫, 空]（字元像素）、高度取前後幾格平均
-const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3], smooth: 2 };
+// smooth 取前後 5 格：從高山下來時落差攤成一段長斜坡，不會在岩壁那裡突然折下去（代價是線跟格子差幾個像素）
+const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3], smooth: 5 };
 
 const fadeCache = new Map();
 // a 往 b 壓淡 f（0 不變、1 變成 b）

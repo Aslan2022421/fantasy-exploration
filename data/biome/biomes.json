@@ -222,8 +222,12 @@
     "moisture": "wet",
     "flora": [
       {
+        "object": "broadleaf",
+        "density": 0.3
+      },
+      {
         "object": "palm",
-        "density": 0.33
+        "density": 0.08
       },
       {
         "object": "shrub",

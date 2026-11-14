@@ -1,13 +1,12 @@
 // 地形生成：每格分四層（使用者定）＋物件層。
-// - 地貌：平原、丘陵、高原、山地，看高度、高度層與坡度，山地另標山峰（山谷、盆地、峽谷等河流做了再加）
-// - 水文：深水、淺水（landform.js），沼澤（低窪、平坦、潮濕的地方積水）
-// - 地表材質：泥土、沙地、岩石、碎石、雪、冰，看氣候（climate.js：越高越冷、低地較濕）、坡度與是否在山上
-// - 生態覆蓋：泥土與沙地上長的草、苔、花，照生態的 cover；水邊長蘆葦，生態交界是混合植被
-// 生成順序是地貌 → 水文 → 材質 → 生態（材質要看水與坡度）。
-// 只看「種子＋座標」，一區可以單獨生，任何順序生出來都一樣
+// - 地貌：平原、丘陵、高原、山地，看高度、高度層與坡度，山地另標山峰；水文：深水、淺水（landform.js）、
+//   河流與淺灘（geography.js 在整個世界上先算好）、沼澤（低窪、平坦、潮濕的地方積水）
+// - 地表材質看氣候（climate.js）、坡度與是否在山上；生態覆蓋照生態的 cover，水邊長蘆葦，交界是混合植被
+// 生成順序是地貌 → 水文 → 材質 → 生態。只看「種子＋座標」與世界的地理，任何順序生出來都一樣
 
 import { CLIMATE, createClimate } from './climate.js';
 import { inFootprint, MAX_SIZE, meanArea, PART_TRUNK, partOf, trunkCell } from './footprint.js';
+import { applyGeography } from './geography.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { fbm, hash01, makeNoise } from './noise.js';
@@ -51,7 +50,8 @@ const NONE = 255; // 水文、覆蓋沒有東西時存這個
 
 export function createTerrainGen(seed, data) {
   const land = createLandform(seed);
-  const { climateAt } = createClimate(seed);
+  const { climateAt, setMoisture } = createClimate(seed);
+  let geo = null; // 世界的地理（geography.js：河流、淺灘、濕度），世界建好後由 setGeography 接上
   const nFlora = makeNoise(seed, 'terrain:flora');
   const need = (index, kind) => (name) => {
     if (!index.has(name)) throw new Error(`地形生成需要的${kind}不在資料裡：${name}`);
@@ -130,9 +130,8 @@ export function createTerrainGen(seed, data) {
   // 植物長得出來的地方：沒有水、不是岩石或冰
   const canGrow = (water, surface) => water === NONE && surface !== ROCK && surface !== ICE;
 
-  // 物件層的錨點：這格是不是一棵物件的左上角。回傳 { object, size } 或 null。
-  // 物件依物種有大小（資料的 sizes），撒的機率除以平均佔地，樹變大後林子的密度不會跟著暴增。
-  // 山地上越高樹越少，高出山地門檻 treelineRange 就沒有樹（使用者定：山地的高度決定樹多不多）
+  // 物件層的錨點：這格是不是一棵物件的左上角，回傳 { object, size, turn } 或 null。撒的機率除以平均佔地，
+  // 樹變大後林子不會跟著變密；山地越高樹越少，高出 treelineRange 就沒有樹（使用者定）
   const objectArea = data.objects.map((o) => meanArea(o.sizes, o.canopy));
   function anchorAt(x, y, biome, water, surface, h) {
     if (!canGrow(water, surface)) return null;
@@ -151,8 +150,7 @@ export function createTerrainGen(seed, data) {
     return null;
   }
 
-  // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算 PAD 圈：明暗、坡度與立面要看鄰格，
-  // 多格物件的錨點可能在區外左上方（最遠 MAX_SIZE-1 格）；再多一圈 E 讓外圍那幾圈的坡度也算得準
+  // 生一區：(zx, zy) 是區座標，size 是邊長。外圍多算 PAD 圈（明暗、坡度要看鄰格，樹的錨點可能在區外左上方），再多一圈 E
   function genZone(zx, zy, size) {
     const n = size * size;
     const height = new Uint8Array(n);
@@ -174,6 +172,7 @@ export function createTerrainGen(seed, data) {
     const x0 = zx * size;
     const y0 = zy * size;
     const g = land.grid(x0 - E, y0 - E, G, G);
+    if (geo) applyGeography(g, x0 - E, y0 - E, G, geo); // 河道、淺灘畫進高度格
     const N = G * G;
     const bAll = new Uint8Array(N);
     const tBand = new Uint8Array(N);
@@ -290,7 +289,12 @@ export function createTerrainGen(seed, data) {
     };
   }
 
-  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt };
+  function setGeography(x) {
+    geo = x;
+    setMoisture(x.moistureAt);
+  }
+
+  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt, setGeography };
 }
 
 export { NONE as LAYER_NONE };

@@ -1,33 +1,44 @@
-// 氣候：溫度、濕度。底子是兩張雜訊圖，再照地形調整（使用者要隨機有真實地貌的邏輯）：
-// - 溫度隨高度下降：越高越冷，雪與凍原會長在山上和高地，低地平原比較暖
-// - 濕度看離水多近：貼著水線的低地比較濕（用高度近似，不真的量到水的距離）
+// 氣候：溫度、濕度（使用者要隨機有真實地貌的邏輯，生態用「高度×濕度」查表，Whittaker 那種做法）：
+// - 溫度以高度為主：越高越冷，低地熱、中間溫和、高地與山上冷；再加一張變化很慢、幅度小的溫度雜訊，
+//   低地也有一點冷熱差別（Claude 的選擇：只看高度的話，凍原、冰原只會在高山上）
+// - 濕度：底子是雜訊，再加上地理模擬算的修正（geography.js：離河湖越近越濕，山的背風面乾）
 // - 積雪只在很冷的地方：寒帶但沒那麼冷的是凍土（泥土加苔蘚、稀疏草叢），冰原和草原之間才有過渡
-// 只看「種子＋座標＋那格的高度」，任何一格都能單獨算
+// 只看「種子＋座標＋那格的高度」與世界的地理，任何一格都能單獨算
 
-import { LAND } from './landform.js';
 import { fbm, makeNoise } from './noise.js';
 
 export const CLIMATE = {
-  base: 144, // 溫度、濕度最粗那層的波長，約 1.5 區
+  base: 144, // 濕度雜訊最粗那層的波長，約 1.5 區
+  tempBase: 400, // 溫度雜訊的波長（很慢）
   tempOctaves: 2,
   wetOctaves: 3,
-  lapse: 0.5, // 高度每高 1，溫度降多少（高度 -1～1：水線 -0.34、平地約 0、山地 0.42 以上）
-  lowWet: 0.2, // 貼著水線的低地最多加多少濕度
-  lowWetRange: 0.25, // 高出水線這麼多以上就不加
+  tempAmp: 0.3, // 溫度雜訊乘多少（幅度小，高度才是主軸）
+  lapse: 0.75, // 高度每高 1，溫度降多少（高度 -1～1：水線 -0.34、平地約 0、山地 0.42 以上）
+  midHeight: 0.05, // 這個高度的溫度大約是溫和的中間
+  wetAmp: 1, // 濕度雜訊乘多少
   snowTemp: -0.3, // 溫度低於這個才積雪
 };
 
 export function createClimate(seed) {
   const nTemp = makeNoise(seed, 'terrain:temperature');
   const nWet = makeNoise(seed, 'terrain:moisture');
-  const tempNoise = (x, y) => fbm(nTemp, x, y, CLIMATE.base, CLIMATE.tempOctaves);
+  const tempNoise = (x, y) => fbm(nTemp, x, y, CLIMATE.tempBase, CLIMATE.tempOctaves);
   const wetNoise = (x, y) => fbm(nWet, x, y, CLIMATE.base, CLIMATE.wetOctaves);
+  let moisture = () => 0; // 地理模擬的濕度修正，世界建好後由 setMoisture 接上
 
   // (x, y) 這格的 { t 溫度, w 濕度 }，h 是這格的高度（landform.js 的 heightAt）
   function climateAt(x, y, h) {
-    const low = Math.min(1, Math.max(0, 1 - (h - LAND.water) / CLIMATE.lowWetRange));
-    return { t: tempNoise(x, y) - CLIMATE.lapse * h, w: wetNoise(x, y) + CLIMATE.lowWet * low };
+    const t = CLIMATE.tempAmp * tempNoise(x, y) - CLIMATE.lapse * (h - CLIMATE.midHeight);
+    const w = CLIMATE.wetAmp * wetNoise(x, y) + moisture(x, y);
+    return { t, w };
   }
 
-  return { climateAt, tempNoise, wetNoise };
+  return {
+    climateAt,
+    tempNoise,
+    wetNoise,
+    setMoisture: (fn) => {
+      moisture = fn;
+    },
+  };
 }

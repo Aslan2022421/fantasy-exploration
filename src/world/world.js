@@ -3,10 +3,11 @@
 // 地圖不進存檔：讀檔時用種子重生，再把紀錄套回去
 
 import { PART_TRUNK } from './footprint.js';
+import { buildGeography } from './geography.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 11; // 11：叢林改名棕櫚樹，樹冠改對邊兩片
+export const WORLD_VERSION = 12; // 12：多層次地理模擬（河流、淺灘、濕度看離水與背風面、溫度以高度為主）
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;
@@ -17,6 +18,9 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
   const gen = createTerrainGen(seed, data);
   const width = zonesX * zoneSize;
   const height = zonesY * zoneSize;
+  // 先在整個世界的粗格上算地理（河流、淺灘、濕度），之後每一區都照著畫
+  const geography = buildGeography(gen.heightAt, seed, width, height);
+  gen.setGeography(geography);
 
   // 世界層：每區的平均溫度、濕度、高度，以及由此得出的氣候與生態標籤。
   // numbers 是「每區幾個數字」的位置，各數字等用到的階段再加
@@ -106,6 +110,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     zonesX,
     zonesY,
     regions,
+    geography, // 世界的地理（河流、淺灘、濕度），除錯與量測用
     region: (zx, zy) => regions[zy * zonesX + zx] ?? null,
     regionAt: (x, y) => (inside(x, y) ? regions[Math.floor(y / zoneSize) * zonesX + Math.floor(x / zoneSize)] : null),
     zone,

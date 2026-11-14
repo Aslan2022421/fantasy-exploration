@@ -149,12 +149,13 @@ describe('世界的形狀', () => {
     expect(w.zone(0, 0).surface).toEqual(first);
   }, 15000); // 要生 100 多區，單獨跑約 3 秒，全部測試平行跑時會慢好幾倍
 
-  test('多個種子的起點都能走、都在中間那區', () => {
+  test('多個種子的起點都能走、在最大那塊陸地上（離地理算好的起點粗格不遠）', () => {
     for (let s = 1; s <= 10; s++) {
       const w = createWorld(s * 7919, DATA, SMALL);
       const p = startPosition(w);
       expect(w.isPassable(p.x, p.y)).toBe(true);
-      expect(w.regionAt(p.x, p.y)).toBe(w.region(1, 1));
+      const g = w.geography.start;
+      expect(Math.max(Math.abs(p.x - g.x), Math.abs(p.y - g.y))).toBeLessThan(24);
     }
   });
 

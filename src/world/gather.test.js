@@ -159,6 +159,8 @@ describe('在世界裡採', () => {
         walkNextTo(g, src);
         while (g.gather(src));
       }
+      // 來回走到跨過檢查點
+      for (let i = 0; g.log.size <= CHECKPOINT_EVERY + 5 && i < 1000; i++) g.move(['e', 'w', 'n', 's'][i % 4]);
       return g;
     };
     const g = play();

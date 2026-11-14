@@ -1,5 +1,5 @@
 // 氣候：溫度、濕度，生態用「溫度×濕度」查表（Whittaker 那種做法）：
-// - 溫度以高度為主：越高越冷；再加一張變化很慢、幅度小的雜訊，低地也有一點冷熱差別
+// - 溫度以高度為主：越高越冷；緯度北冷南熱；再加一張變化很慢、幅度小的雜訊，低地也有一點冷熱差別
 // - 濕度：底子是雜訊，再加上地理模擬算的修正（geography.js：離河湖越近越濕，山的背風面乾）
 // - 積雪只在很冷的地方：寒帶但沒那麼冷的是凍土
 // 只看「種子＋座標＋那格的高度」與世界的地理，任何一格都能單獨算
@@ -16,9 +16,11 @@ export const CLIMATE = {
   midHeight: 0.05, // 這個高度的溫度大約是溫和的中間
   wetAmp: 1, // 濕度雜訊乘多少
   snowTemp: -0.3, // 溫度低於這個才積雪
+  latitude: 0.6, // 緯度：北邊界比中間冷這麼多、南邊界熱這麼多（世界中間不加減）
 };
 
-export function createClimate(seed) {
+// worldHeight：世界有多高（格），有給才算緯度（北冷南熱）
+export function createClimate(seed, worldHeight = 0) {
   const nTemp = makeNoise(seed, 'terrain:temperature');
   const nWet = makeNoise(seed, 'terrain:moisture');
   const tempNoise = (x, y) => fbm(nTemp, x, y, CLIMATE.tempBase, CLIMATE.tempOctaves);
@@ -27,7 +29,8 @@ export function createClimate(seed) {
 
   // (x, y) 這格的 { t 溫度, w 濕度 }，h 是這格的高度（landform.js 的 heightAt）
   function climateAt(x, y, h) {
-    const t = CLIMATE.tempAmp * tempNoise(x, y) - CLIMATE.lapse * (h - CLIMATE.midHeight);
+    const lat = worldHeight ? CLIMATE.latitude * 2 * (y / worldHeight - 0.5) : 0;
+    const t = CLIMATE.tempAmp * tempNoise(x, y) - CLIMATE.lapse * (h - CLIMATE.midHeight) + lat;
     const w = CLIMATE.wetAmp * wetNoise(x, y) + moisture(x, y);
     return { t, w };
   }

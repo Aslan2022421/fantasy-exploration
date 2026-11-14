@@ -5,6 +5,7 @@
 // 生成順序是地貌 → 水文 → 材質 → 生態。只看「種子＋座標」與世界的地理，任何順序生出來都一樣
 
 import { CLIMATE, createClimate } from './climate.js';
+import { createContinent } from './continent.js';
 import { MAX_SIZE } from './footprint.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
@@ -47,9 +48,11 @@ export function waterLevel(h) {
 
 const NONE = 255; // 水文、覆蓋沒有東西時存這個
 
-export function createTerrainGen(seed, data) {
-  const land = createLandform(seed);
-  const { climateAt, setMoisture } = createClimate(seed);
+// size：{ width, height } 世界的大小（格）。有給才墊世界形狀（continent.js）、算緯度；測試只看局部時不給
+export function createTerrainGen(seed, data, size = null) {
+  const shape = size ? createContinent(seed, data.worldShapes, size.width, size.height) : null;
+  const land = createLandform(seed, shape?.id ? shape.at : null);
+  const { climateAt, setMoisture } = createClimate(seed, size?.height);
   let geo = null; // 世界的地理（geography.js：河流、淺灘、濕度），世界建好後由 setGeography 接上
   const need = (index, kind) => (name) => {
     if (!index.has(name)) throw new Error(`地形生成需要的${kind}不在資料裡：${name}`);
@@ -259,7 +262,7 @@ export function createTerrainGen(seed, data) {
     setMoisture(x.moistureAt);
   }
 
-  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt, setGeography };
+  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt, setGeography, shape };
 }
 
 export { NONE as LAYER_NONE };

@@ -8,7 +8,7 @@ import { anchorOffset } from './objects.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 15;
+export const WORLD_VERSION = 16;
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -18,9 +18,9 @@ const SAMPLES = 8; // 世界層每區取 8×8 個點平均
 const MAX_ZONES = 64; // 生過的區最多留幾區（一區十幾萬位元組，走遍 96×96 區會吃掉上 GB）
 
 export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zoneSize = ZONE_SIZE } = {}) {
-  const gen = createTerrainGen(seed, data);
   const width = zonesX * zoneSize;
   const height = zonesY * zoneSize;
+  const gen = createTerrainGen(seed, data, { width, height });
   // 先在整個世界的粗格上算地理（河流、淺灘、濕度），之後每一區都照著畫
   const geography = buildGeography(gen.heightAt, seed, width, height);
   gen.setGeography(geography);
@@ -117,6 +117,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     zonesY,
     regions,
     geography, // 世界的地理（河流、淺灘、濕度），世界地圖、除錯與量測用
+    shape: gen.shape?.id ?? null, // 這個世界擲到的形狀模板（data/worldshape）
     climateAt: gen.climateAt, // (x, y, 高度) → { t 溫度, w 濕度 }
     biomeIndexOf: gen.biomeAt, // (溫度, 濕度) → 生態編號（data.biomes 的索引）
     region: (zx, zy) => regions[zy * zonesX + zx] ?? null,
@@ -210,10 +211,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
   };
 }
 
-// 起點：世界正中央，往外一圈一圈找第一個能走的格子
+// 起點：最大那塊陸地上離世界中央最近的地方（geography.js 算好的粗格），往外一圈一圈找第一個能走的格子
 export function startPosition(world) {
-  const cx = Math.floor(world.width / 2);
-  const cy = Math.floor(world.height / 2);
+  const s = world.geography?.start;
+  const cx = Math.floor(s?.x ?? world.width / 2);
+  const cy = Math.floor(s?.y ?? world.height / 2);
   for (let r = 0; r < Math.max(world.width, world.height); r++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {

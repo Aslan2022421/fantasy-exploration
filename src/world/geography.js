@@ -30,6 +30,7 @@ export const GEO = {
   fordRadius: 1.2, // 淺灘寬（半徑，格）
   fordMax: 4, // 淺灘最多跨幾個粗格的深水；再寬的（海中的島）不接
   fordMinLand: 4, // 陸地至少幾個粗格才接
+  startBelowMountain: 0.15, // 起點要比山地門檻低這麼多（離山腳有點距離）
 };
 
 // heightAt(x, y)：格子座標的高度；width、height：世界大小（格）
@@ -144,10 +145,45 @@ export function buildGeography(heightAt, seed, width, height) {
     moist[i] = wet - Math.min(GEO.shadowMax, GEO.shadowPerHeight * up);
   }
 
-  // 5. 連通：被深水（深湖、深河）隔開的陸地，從最近的地方開一條淺灘接過來
+  // 5. 連通：被深水（深湖、深河）隔開的陸地，從最近的地方開一條淺灘接過來。
+  // 起點在最大那塊陸地上、離世界中央最近的粗格（世界中央可能是海或小島）
   const blocked = (i) => isDeep(i) || flow[i] >= GEO.deepFlow;
-  let start = Math.floor(H / 2) * W + Math.floor(W / 2);
+  const mid = Math.floor(H / 2) * W + Math.floor(W / 2);
+  const mainland = largestLand();
+  // 不放在山地上（山脈常常橫過世界中央，開局就在雪地裡）；整塊陸地都是山才退而求其次
+  const lowland = (i) => mainland[i] === 1 && elev[i] <= LAND.mountain - GEO.startBelowMountain;
+  let start = mainland ? (bfsNearest(mid, lowland) ?? bfsNearest(mid, (i) => mainland[i] === 1)) : mid;
   if (blocked(start)) start = bfsNearest(start, (i) => !blocked(i)) ?? start;
+
+  // 最大那塊陸地（八方向相連、高過水線的粗格）：回傳標記陣列，沒有陸地回傳 null
+  function largestLand() {
+    const comp = new Int32Array(n).fill(-1);
+    let best = -1;
+    let bestSize = 0;
+    let id = 0;
+    for (let i = 0; i < n; i++) {
+      if (comp[i] >= 0 || isWater(i)) continue;
+      const list = [i];
+      comp[i] = id;
+      for (let h = 0; h < list.length; h++) {
+        for (let t = 0, m = neighbors(list[h]); t < m; t++) {
+          const j = nb[t];
+          if (comp[j] >= 0 || isWater(j)) continue;
+          comp[j] = id;
+          list.push(j);
+        }
+      }
+      if (list.length > bestSize) {
+        bestSize = list.length;
+        best = id;
+      }
+      id++;
+    }
+    if (best < 0) return null;
+    const out = new Uint8Array(n);
+    for (let i = 0; i < n; i++) if (comp[i] === best) out[i] = 1;
+    return out;
+  }
   const fords = linkRegions(W, H, blocked, start, { maxCross: GEO.fordMax, minSize: GEO.fordMinLand }).map(([k, j]) => {
     const a = center(k);
     const b = center(j);
@@ -197,6 +233,7 @@ export function buildGeography(heightAt, seed, width, height) {
     segments,
     rivers: segments.length - fords.length,
     fords: fords.length,
+    start: center(start), // 起點那個粗格的中心（格子座標）
     paint,
     moistureAt,
   };

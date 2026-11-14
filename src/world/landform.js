@@ -1,4 +1,4 @@
-// 大地形：高度分成「大地形」與「細節」兩部分。
+// 大地形：高度分成「大地形」與「細節」兩部分；大地形底下再墊世界形狀（continent.js：海、大陸、山脈）。
 // - 大地形：波長幾百格，決定盆地、台地這種一眼看得出的高低；高度層（tier）只看它，
 //   一區裡通常只有兩三層，台階與側面只出現在大地形的邊緣
 // - 細節：小起伏，只影響亮度、字元與山地，不切台階
@@ -12,6 +12,7 @@ import { fbm, makeNoise } from './noise.js';
 export const LAND = {
   macroBase: 320, // 大地形最粗那層的波長（格）
   macroOctaves: 2,
+  localAmp: 0.55, // 有世界形狀（continent.js）時，大地形縮成這麼大，山主要由板塊山脈來
   detailBase: 48, // 細節的波長
   detailOctaves: 3,
   detailAmp: 0.12, // 細節最多加減多少高度
@@ -39,10 +40,12 @@ export const WATER_NONE = 0;
 export const WATER_SHALLOW = 1;
 export const WATER_DEEP = 2;
 
-export function createLandform(seed) {
+// shapeAt(x, y)：世界形狀那一層的高度（continent.js）；沒給就只有局部起伏（測試用）
+export function createLandform(seed, shapeAt = null) {
   const nMacro = makeNoise(seed, 'terrain:height');
   const nDetail = makeNoise(seed, 'terrain:detail');
-  const macroAt = (x, y) => fbm(nMacro, x, y, LAND.macroBase, LAND.macroOctaves);
+  const local = (x, y) => fbm(nMacro, x, y, LAND.macroBase, LAND.macroOctaves);
+  const macroAt = shapeAt ? (x, y) => shapeAt(x, y) + LAND.localAmp * local(x, y) : local;
   const heightAt = (x, y) => macroAt(x, y) + LAND.detailAmp * fbm(nDetail, x, y, LAND.detailBase, LAND.detailOctaves);
   const isDeep = (h) => h < LAND.water - LAND.deepDepth;
 

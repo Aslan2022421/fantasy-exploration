@@ -110,6 +110,26 @@ export const ObjectSchema = z.object({
   gather: GatherSchema.optional(), // 能採的才有
 });
 
+// 世界形狀的模板（src/world/continent.js）：建世界時照 weight 擲一種，用幾團平滑的隆起疊出陸地。
+// 位置、半徑都是世界寬高的比例（0～1）；h 是隆起的高度，負的是往下挖（內海、海峽）；
+// jitter 是每團位置隨機偏移最多多少；random 是另外隨機撒幾團（群島）
+const Unit = z.number().min(0).max(1);
+export const WorldShapeSchema = z.object({
+  id: Id,
+  name: z.string().min(1),
+  weight: z.number().positive(),
+  jitter: Unit.default(0),
+  blobs: z.array(z.object({ x: Unit, y: Unit, r: z.number().positive(), h: z.number() })),
+  random: z
+    .object({
+      count: Range,
+      r: z.tuple([z.number().positive(), z.number().positive()]),
+      area: z.tuple([Unit, Unit]),
+      h: z.number(),
+    })
+    .optional(),
+});
+
 export const BAND = z.enum(['cold', 'mild', 'hot']);
 export const WETNESS = z.enum(['dry', 'normal', 'wet']);
 

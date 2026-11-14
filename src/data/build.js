@@ -3,7 +3,7 @@
 // 這裡不讀檔：遊戲由 load.js 用 Vite 載入，Node 的工具腳本自己讀 JSON 再交進來
 
 import { z } from 'zod';
-import { BiomeSchema, MaterialSchema, ObjectSchema, TerrainSchema } from './schemas.js';
+import { BiomeSchema, MaterialSchema, ObjectSchema, TerrainSchema, WorldShapeSchema } from './schemas.js';
 
 // files：{ 檔名: 條目陣列 }。回傳 [條目⋯⋯]，順序照檔名再照檔內順序（編號就是這個順序）
 function merge(files, schema, kind, errors) {
@@ -31,8 +31,9 @@ const indexOf = (list) => new Map(list.map((t, i) => [t.id, i]));
 // - terrains：四層全部的條目（文字檢查等用）；landforms、surfaces、waters、covers 各層分開，編號是各層自己的
 // - palette：畫面上有顏色的條目（材質、水文、覆蓋）排成一列，shades.js 依這個建顏色表；
 //   paletteBase 是各層在 palette 裡的起點
-export function buildData({ terrain, object = {}, biome, material = {} }) {
+export function buildData({ terrain, object = {}, biome, material = {}, worldshape = {} }) {
   const errors = [];
+  const worldShapes = merge(worldshape, WorldShapeSchema, '世界形狀', errors);
   const terrains = merge(terrain, TerrainSchema, '地形', errors);
   const objects = merge(object, ObjectSchema, '物件', errors);
   const biomes = merge(biome, BiomeSchema, '生態', errors);
@@ -71,6 +72,7 @@ export function buildData({ terrain, object = {}, biome, material = {} }) {
     biomes,
     materials,
     materialIndex,
+    worldShapes,
   };
 }
 

@@ -41,7 +41,6 @@ const [image, font] = await Promise.all([loadImage(tilesUrl), loadPixelFont(font
 const mapView = createMapView(image, ctx);
 const panels = createPanels(font);
 
-store.remove('stage0'); // 階段 0 的舊存檔格式不同，不再讀
 await showLoading(canvas, ctx, panels, '生成世界中');
 const game = loadGame(store.load(SAVE_KEY, null)) ?? newGame(SEED);
 const turns = createTurnLoop();
@@ -62,11 +61,8 @@ let maxHistoryScroll = 0;
 const player = () => game.state.player;
 const save = () => store.save(SAVE_KEY, game.serialize());
 const world = game.world;
-// ?parallax 看多層次視差堆疊，?leftdown 看往左下拉側面與影子，?flat 不畫側面
-const MODES = ['flat', 'leftdown', 'parallax'];
-const viewMode = MODES.find((m) => params.has(m)) ?? 'perspective';
-const worldView = createWorldView(mapView, world, DATA, { mode: viewMode });
-const camera = () => worldView.camera(screen, player()); // 往上疊的畫法讓冒險者剛好置中
+const worldView = createWorldView(mapView, world, DATA);
+const camera = () => worldView.focus(screen, player());
 
 // 花時間的動作：輪到冒險者才做，做完把回合交回排程
 function act(fn) {
@@ -116,7 +112,7 @@ function shownPath() {
   return { steps, reachable: steps.length > 0 };
 }
 
-let frameRequested = false; // 相機平滑緩衝：還沒到位就在下一個畫面再畫一次
+let frameRequested = false; // 相機還沒到位就在下一個畫面再畫一次
 
 function render() {
   const cam = camera();
@@ -138,7 +134,7 @@ function render() {
   panels.status(
     ctx,
     screen,
-    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}｜${gridLabel(screen)}`, // 可視格數直接顯示（使用者定）
+    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}｜${gridLabel(screen)}`,
   );
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
   if (!historyOpen) {
@@ -178,7 +174,7 @@ function closeExamine() {
   return true;
 }
 
-// 畫面上的格子 → 地圖上的格子（疊層時錯開的格子由 worldView 用滑鼠的實際位置換算）
+// 滑鼠 → 世界格：疊層錯開了，要用滑鼠的實際位置換算
 function mapCellAt(e) {
   const v = mapView.cellAt(e);
   return v ? worldView.cellAt(camera(), v.x, v.y, v.fx, v.fy) : null;

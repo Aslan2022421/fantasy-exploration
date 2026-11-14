@@ -1,4 +1,4 @@
-// 地形生成：每格分四層（使用者定）＋物件層。
+// 地形生成：每格分四層＋物件層。
 // - 地貌：平原、丘陵、高原、山地，看高度、高度層與坡度，山地另標山峰；水文：深水、淺水（landform.js）、
 //   河流與淺灘（geography.js 在整個世界上先算好）、沼澤（低窪、平坦、潮濕的地方積水）
 // - 地表材質看氣候（climate.js）、坡度與是否在山上；生態覆蓋照生態的 cover，水邊長蘆葦，交界是混合植被
@@ -10,7 +10,6 @@ import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { fbm, hash01, makeNoise } from './noise.js';
 import { isPeak } from './peak.js';
-import { reliefOf } from './relief.js';
 import { applyGeography } from './riverbed.js';
 
 // 生成的參數（調比例時改這裡；大地形與水的參數在 landform.js 的 LAND）
@@ -27,7 +26,7 @@ export const GEN = {
   peakRadius: 3, // 山地格比周圍這麼多格內都高，才算山峰（不能超過 genZone 的外圍 E）
   swampSlope: 39, // 沼澤要比這個平
   swampWet: 0.18, // 濕度高於這個、又在最低的陸地層才積水成沼澤
-  reeds: 0.12, // 緊鄰淺水或沼澤的泥土長蘆葦的機率（覆蓋全部乘 0.3，地面才空得出來，使用者同意）
+  reeds: 0.12, // 緊鄰淺水或沼澤的泥土長蘆葦的機率
   mixed: 0.15, // 生態交界長混合植被的機率
 };
 
@@ -131,7 +130,7 @@ export function createTerrainGen(seed, data) {
   const canGrow = (water, surface) => water === NONE && surface !== ROCK && surface !== ICE;
 
   // 物件層的錨點：這格是不是一棵物件的左上角，回傳 { object, size, turn } 或 null。撒的機率除以平均佔地，
-  // 樹變大後林子不會跟著變密；山地越高樹越少，高出 treelineRange 就沒有樹（使用者定）
+  // 樹冠大的林子不會跟著變密；山地越高樹越少，高出 treelineRange 就沒有樹
   const objectArea = data.objects.map((o) => meanArea(o.sizes, o.canopy));
   function anchorAt(x, y, biome, water, surface, h) {
     if (!canGrow(water, surface)) return null;
@@ -163,7 +162,6 @@ export function createTerrainGen(seed, data) {
     const objectPart = new Uint8Array(n); // 這格在樹冠的哪一側（footprint.js 的 PART_*）
     const shade = new Uint8Array(n);
     const slope = new Uint8Array(n); // 坡度（每格高度差×SLOPE_SCALE，0～255）
-    const relief = new Uint8Array(n);
     const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 MAX_TIER
     const biome = new Uint8Array(n);
     const PAD = Math.max(2, MAX_SIZE - 1);
@@ -209,16 +207,14 @@ export function createTerrainGen(seed, data) {
         height[i] = Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5);
         biome[i] = bAll[c];
         tier[i] = g.tier[c];
-        relief[i] = reliefOf(g.tier[c - 2 * G], g.tier[c - G], g.tier[c], g.tier[c + G]);
         slope[i] = g.water[c] === WATER_NONE ? slAll[c] : 0;
         landform[i] = landformOf(h, tier[i], slope[i]);
         peak[i] = landform[i] === MOUNTAIN && isPeak(g.h, c, G, GEN.peakRadius) ? 1 : 0;
         water[i] = wAll[c];
         surface[i] = sAll[c];
         cover[i] = coverAt(c, X, Y);
-        // 物件：往左上找會蓋到這格的錨點。使用者定：樹冠底下要是平地（樹幹被破壞後樹冠消失，露出的是平地），
-        // 所以樹冠只長在跟樹幹同一個高度層、而且長得出植物的格子上；樹幹那格本身也要長得出來。
-        // 樹幹永遠露出來（它是樹冠的根）；其餘重疊時取雜湊最小的那棵
+        // 物件：往左上找會蓋到這格的錨點。樹冠只長在跟樹幹同一個高度層、長得出植物的格子上（樹冠底下是平地），
+        // 樹幹那格本身也要長得出來。樹幹永遠露出來；其餘重疊時取雜湊最小的那棵
         if (canGrow(wAll[c], sAll[c])) {
           let best = null;
           for (let j = 0; j < MAX_SIZE; j++) {
@@ -283,7 +279,6 @@ export function createTerrainGen(seed, data) {
       objectPart,
       shade,
       slope,
-      relief,
       tier,
       biome,
     };

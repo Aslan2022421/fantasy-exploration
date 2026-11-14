@@ -1,12 +1,10 @@
-// 往斜上方疊的畫法（預設；使用者選 B 再要斜上方）。錯開量只看高度（perspective.js 的 shiftUp），跟相機在哪無關，
-// 所以地圖可以先畫好存起來：世界切成 CHUNK×CHUNK 的分塊，每塊畫一次存成離屏圖層，之後只貼圖。
-// 相機平滑緩衝：相機位置是小數，每個畫面往目標靠近一點，整張圖只平移（不會頓、畫面裡沒有東西互相錯動）。
-// - 分塊裡照高度由低到高畫（地面、牆、物件各層），同高時北邊先畫、南邊後畫；
-//   東西會往右上錯開進隔壁的分塊，所以畫一塊時連它下面幾列、左邊幾欄也一起畫，超出的部分自然被裁掉
+// 往上疊的畫法。錯開量只看高度（perspective.js），跟相機無關，所以地圖可以先畫好存起來：
+// 世界切成 CHUNK×CHUNK 的分塊，每塊畫一次存成離屏圖層，之後只貼圖；相機位置是小數，每個畫面往目標靠近一點。
+// - 分塊裡照高度由低到高畫（地面、牆、物件各層），同高時北邊先畫；東西會往右上錯開進隔壁的分塊，
+//   所以畫一塊時連它下面幾列、左邊幾欄也一起畫
 // - 牆的下層往低處那格的底色壓淡，物件的下層往腳下的底色壓淡
-// - 冒險者、路線、目標每個畫面另外畫（不進快取）；冒險者附近比他高的樹冠再補畫一次，站在樹冠下會被蓋住
-// - 斜坡多疊一層、往上坡那側偏；樹依種類疊層、樹冠在頂（perspective.js 的 objectLayers）
-// 地圖內容改變（之後砍樹之類）時要呼叫 invalidate() 丟掉快取
+// - 冒險者、路線、目標每個畫面另外畫；冒險者附近比他頭頂高的樹冠再補畫一次，站在樹冠下會被蓋住
+// 地圖內容改變時要呼叫 invalidate() 丟掉快取
 
 import { COLORS } from './colors.js';
 import {
@@ -25,10 +23,8 @@ import { dimColor, mixColor } from './shades.js';
 
 const CHUNK = 16; // 分塊邊長（格）
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
-// 視野外壓暗：COLORS.dark 的 RGB。使用者說先關閉（on: false），程式留著
-const SIGHT = { on: false, near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 };
-// 路線的亮度隨高度、線寬與虛線的 [畫, 空]（字元像素）
 const COVER = { below: 3, left: 1 }; // 會蓋到冒險者的樹冠：往南幾格、往西幾格裡的
+// 路線：亮度隨高度、線寬、虛線的 [畫, 空]（字元像素）、高度取前後幾格平均
 const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3], smooth: 2 };
 
 const fadeCache = new Map();
@@ -151,11 +147,10 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 路線（使用者要虛線）：從冒險者連到每一步的中心，跟著每格地面的高度錯開，
-  // 越高的那段越亮（PATH_LIGHT），上下坡看得出來；虛線花紋一段接一段連下去
+  // 路線：從冒險者連到每一步中心的虛線，跟著地面高度錯開，越高越亮。
+  // 每一點的高度取前後幾格的平均，爬坡時線慢慢升上去
   function drawRoute(f, route, player) {
     if (!route?.steps.length) return;
-    // 每一點的高度取前後 PATH_LIGHT.smooth 格的平均，爬坡時線慢慢升上去，不會在一格內突然折上去
     const cells = [player, ...route.steps];
     const raw = cells.map((c) => groundHeight(world.tierAt(c.x, c.y)));
     const r = PATH_LIGHT.smooth;
@@ -175,8 +170,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 冒險者在樹冠底下時被樹冠蓋住（使用者要的點綴）：冒險者附近、比冒險者頭頂高的樹冠，在冒險者之後再畫一次。
-  // 樹冠往右上錯開，會蓋到冒險者的是冒險者那格與它南邊、西邊幾格的樹冠
+  // 冒險者附近比他頭頂高的樹冠，在冒險者之後再畫一次。樹冠往右上錯開，會蓋到冒險者的是他那格與南邊、西邊幾格的
   function coverPlayer(f, player, top) {
     const near = [];
     for (let y = player.y; y <= player.y + COVER.below; y++) {
@@ -210,15 +204,10 @@ export function createStackView(mapView, world, objects, look, { now = () => per
         for (let cx = cx0; cx <= cx1; cx++)
           mapView.blit(chunkAt(cx, cy), (cx * CHUNK - f.x) * 8, (cy * CHUNK - f.y) * 8);
       }
-      // 視野外壓暗（使用者定）：以冒險者為中心，SIGHT.near 格內不變，到 SIGHT.far 格漸漸蓋上接近純黑的顏色；
-      // 不完全蓋死，亮的山脊與牆還留一點輪廓。還沒有真的視野計算，先用距離
-      const p0 = groundHeight(world.tierAt(player.x, player.y));
-      const pc = placeOf(f, player.x, player.y, p0);
-      if (SIGHT.on) mapView.vignette(pc.px + 4, pc.py + 4, SIGHT.near * 8, SIGHT.far * 8, SIGHT.rgb, SIGHT.alpha);
-      drawMarks(f, overlay); // 目標、查看與路線畫在壓暗之上，遠處也看得到
+      drawMarks(f, overlay);
       drawRoute(f, overlay.route, player);
-      // 冒險者：疊 PLAYER_LAYERS 層，最底層就在腳下那格的地面上，往上每層照地形的間距（4 像素）錯開，
-      // 看得出站在哪一格；不用樹的 8 像素（那樣頂層會跑到隔壁格）。只畫字，下層往腳下底色壓淡
+      // 冒險者疊 PLAYER_LAYERS 層，最底層在腳下那格的地面上，往上照地形的間距錯開；只畫字，下層往腳下底色壓淡
+      const p0 = groundHeight(world.tierAt(player.x, player.y));
       const pg = look.ground(player.x, player.y).bg;
       for (let i = 0; i < PLAYER_LAYERS; i++) {
         const fg = fade(COLORS.player, pg, fadeAt(PLAYER_LAYERS - 1 - i));
@@ -257,8 +246,8 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     return { vx: px / 8, vy: py / 8 };
   }
 
-  // 相機該到哪（左上角，可以是小數）：冒險者那格的中心，加上腳下地面往上錯開的量，剛好落在地圖區正中間。
-  // 不限制在世界裡，走到世界邊緣時外面是黑的，冒險者照樣在正中間（使用者要角色置中）
+  // 相機該到哪（左上角，可以是小數）：冒險者那格（含腳下地面往上錯開的量）落在地圖區正中間。
+  // 不限制在世界裡，走到世界邊緣時外面是黑的
   function focus(screen, player) {
     const k = screen.tile / 8;
     const { ox, oy } = shiftUp(groundHeight(world.tierAt(player.x, player.y)), k);

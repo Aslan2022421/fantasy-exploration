@@ -22,7 +22,7 @@ export const LAND = {
   landTiers: 4, // 陸地第 1～4 層
   mountain: 0.42, // 高度（含細節）高於這個是山地
   mountainStep: 0.04, // 山地從自己那層往上，用完整高度每這麼多再加一層
-  mountainTiers: 14, // 山地最多再加幾層（原本 3 層，山頂七成擠在同一層像平台，使用者說不像山）
+  mountainTiers: 14, // 山地最多再加幾層
 };
 
 export const MAX_TIER = LAND.landTiers + LAND.mountainTiers; // 18

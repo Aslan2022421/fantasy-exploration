@@ -25,7 +25,6 @@ const mapView = {
   },
   blit: (_layer, gx, gy) => drawn.push({ blit: true, gx, gy }),
   line: (x1, y1, x2, y2, color, _w, dash, offset) => drawn.push({ line: true, x1, y1, x2, y2, color, dash, offset }),
-  vignette: (cx, cy, r0, r1) => drawn.push({ vignette: true, cx, cy, r0, r1 }),
   drawShifted: (_vx, _vy, px, py, ch, _fg, bg) => drawn.push({ px, py, ch, bg }),
 };
 const look = { ground: () => ({ glyph: '.', fg: '#ffffff', bg: '#000000' }), object: () => null, slope: () => null };
@@ -62,11 +61,6 @@ test('樹往上每層錯得比地形多：預設大小（一格 16 像素）離�
   const s = liftUp(4, K);
   expect(-s.oy * K).toBeCloseTo(32); // 往上 32 螢幕像素＝兩格
   expect(-liftUp(4, K).oy).toBeGreaterThan(-shiftUp(4, K).oy);
-});
-
-test('視野外壓暗先關閉（使用者定）：不畫', () => {
-  draw({ x: 0, y: 0 }, { x: 10, y: 10 });
-  expect(drawn.some((d) => d.vignette)).toBe(false);
 });
 
 test('相機置中：冒險者那格地面錯開後的中心剛好落在地圖區正中間，世界邊緣也一樣', () => {

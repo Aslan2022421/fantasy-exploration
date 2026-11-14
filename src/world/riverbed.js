@@ -1,8 +1,8 @@
 // 河道怎麼畫進格子（geography.js 算好河段之後）：
 // - paint：一塊矩形裡哪些格子是河、深河、淺灘，以及河面的高度。河段是粗格中心連到下游中心的直線，
 //   畫的時候把每格的位置用低頻雜訊推開一點（RIVER.warp），河道才會彎，不是一段一段的直線
-// - applyGeography：河跟著地勢走（使用者選 A）：河面比兩岸低一層，高山上的河就在高處流，到低地才接進湖海。
-//   世界的地理算出來的河面高度比兩岸低很多時，最多往下挖 RIVER.carve 層，就是河谷；不會一路挖到海平面
+// - applyGeography：河跟著地勢走：河面比兩岸低一層，高山上的河就在高處流，到低地才接進湖海。
+//   世界的地理算出來的河面高度比兩岸低很多時，最多往下挖 RIVER.carve 層，就是河谷
 
 import { AROUND, segDist, segT } from './gridtools.js';
 import { LAND, landTierOf, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';

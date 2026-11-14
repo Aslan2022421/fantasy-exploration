@@ -1,8 +1,8 @@
-// 地面的字形與顏色。字元原則（使用者定）：語意優先、形狀輔助、顏色補充；一個字元只代表一件事，
+// 地面的字形與顏色。字元原則：語意優先、形狀輔助、顏色補充；一個字元只代表一件事，
 // 意思相同、材質不同時靠顏色分（^ 是隆起的高處：沙黃色是沙丘、灰色是山地）。
-// 一格四層都有東西時只畫最上面那層的字元，顏色跟著那一層（提議，使用者同意）：
+// 一格四層都有東西時只畫最上面那層的字元，顏色跟著那一層：
 //   水文 > 物件 > 生態覆蓋 > 地貌（山地的 ^ ▲）> 地表材質 > 起伏點
-// 物件由 worldview.js 疊上去；這裡管其餘幾層。背景永遠是地面（水或材質）的顏色。
+// 物件由 stackview.js 疊上去；這裡管其餘幾層。背景永遠是地面（水或材質）的顏色。
 // - 起伏：空白 → . → · → ∙，由平地到有起伏，依坡度選（泥土、雪，以及岩石、碎石沒露出的地方）
 // - 水文：深水大多空白、偶爾 ≈；淺水與沼澤是 - 與 ~（沼澤墨綠色）；結冰的淺水是冰面 ═
 // - 材質：沙地平坦處空白、-、~，坡陡是沙丘 ^；岩石 ■、碎石 °
@@ -14,7 +14,7 @@
 import { hash01 } from '../world/noise.js';
 
 export const RELIEF = [' ', '.', '·', '∙'];
-// 坡度門檻：只有比較陡的地方才畫起伏點，平地空著，疊起來的樹和牆才看得出來（使用者同意；原本 39、55、69）
+// 坡度門檻：只有比較陡的地方才畫起伏點，平地空著
 export const RELIEF_STEPS = [69, 85, 100];
 export const MOUNTAIN_MARK = 0.3; // 非山峰的山地格畫 ^ 的比例
 export const ROCK_MARK = 0.25; // 岩石格畫 ■ 的比例
@@ -39,7 +39,6 @@ export function surfaceGlyph(style, slope, a) {
       if (slope >= DUNE_STEEP) return '^';
       return a < 0.6 ? ' ' : a < 0.85 ? '-' : '~';
     case 'rock':
-      // 原本六成畫 ■，山腳一圈變成整排白色方塊（使用者要柔化），降到兩成半
       return a < ROCK_MARK ? '■' : reliefGlyph(slope);
     case 'gravel':
       return a < 0.5 ? '°' : reliefGlyph(slope);
@@ -63,7 +62,7 @@ export function cellGlyph(c) {
   return { glyph: surfaceGlyph(c.surface, c.slope, c.a), ink: 'surface' };
 }
 
-// 世界上 (x, y) 那格地面的樣子（遊戲畫面與比較頁共用）：{ glyph, ink（字元色，data.palette 的索引） }
+// 世界上 (x, y) 那格地面的樣子：{ glyph, ink（字元色，data.palette 的索引） }
 export function lookAt(world, data, x, y) {
   const w = world.waterAt(x, y);
   const s = world.surfaceAt(x, y);

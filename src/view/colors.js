@@ -1,7 +1,6 @@
-// 配色：沿用舊專案（old-v37.1 的 css/style.css :root）
+// 配色
 
 export const COLORS = {
-  void: '#06181a', // 最深：地圖外的空白、條的底
   bg: '#0d2a2c', // 地圖與面板的底
   panel2: '#143a3d', // 按鈕、游標那一行
   line: '#2b5558', // 細框線
@@ -12,7 +11,7 @@ export const COLORS = {
   good: '#7fa874',
   bad: '#b8675c',
   // 地圖（地形的顏色在 data/terrain）
-  dark: '#080a0c', // 視野外壓暗的顏色、地圖外的空白（接近純黑，使用者定）
+  dark: '#080a0c', // 地圖外的空白
   player: '#ffffff',
   path: '#c9bb7a',
   target: '#3d3a1f',

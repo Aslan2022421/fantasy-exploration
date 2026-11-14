@@ -1,27 +1,22 @@
-// 每種地形與物件在畫面上的顏色：字元色、背景色都依「明暗級數×台地立面」先算好，畫的時候直接查表。
-// 顏色代表材質；亮暗輔助表現高低、深淺（使用者定）。字形另外由 glyphs.js 決定。
-// 背景也帶光，整格看得出亮暗。
-// 顏色有上限（地形數×明暗級數×4），字元表的染色快取（tiles.js 一種顏色一張，用到才染）不會無限長大
+// 每種地形與物件在畫面上的顏色：字元色、背景色都依明暗級數先算好，畫的時候直接查表。
+// 顏色代表材質，亮暗表現高低、深淺；字形另外由 glyphs.js 決定。
+// 顏色種類有上限（地形數×明暗級數），字元表的染色快取（tiles.js 一種顏色一張，用到才染）不會無限長大
 
 import { Color } from 'rot-js';
 import { LEVELS, levelFactor } from '../world/hillshade.js';
-import { FACE, FACE_FAR, FLAT, RIM } from '../world/relief.js';
 
-const BG_DIM = 0.2; // 水的背景是地形色的幾成亮（原本 0.32；壓暗讓疊起來的樹和牆突出，使用者同意）
-// 陸地的背景只留少數幾種深色（參考 Caves of Qud 背景幾乎都是同一個深色，使用者同意）：
-// 地形色的 LAND_BG 成，明暗只分三段（低、中、高），地形差異主要靠字的顏色
+const BG_DIM = 0.2; // 水的背景是地形色的幾成亮
+// 陸地的背景只有少數幾種深色：地形色的 LAND_BG 成，明暗只分低、中、高三段，地形差異主要靠字的顏色
 const LAND_BG = 0.13;
 const landBand = (level) => (level <= 2 ? 0.85 : level <= 5 ? 1 : 1.15);
-const RELIEF_FACTOR = { [FLAT]: 1, [RIM]: 1.25, [FACE]: 0.42, [FACE_FAR]: 0.3 };
-const RELIEFS = [FLAT, RIM, FACE, FACE_FAR];
-// 彩度只留幾成：地形種類仍靠色相分辨，但畫面上最強的差異是亮暗（高低）
+// 彩度只留幾成：地形種類靠色相分辨，畫面上最強的差異是亮暗
 export const SATURATION = 0.55;
 
 function scale(rgb, f) {
   return Color.toHex(rgb.map((c) => Math.max(0, Math.min(255, Math.round(c * f)))));
 }
 
-// 把畫面上的顏色再調暗（側面、影子用）。結果快取起來，種類有上限，字元表的染色快取不會無限長大
+// 把顏色調暗 f 倍；結果快取起來
 const dimCache = new Map();
 export function dimColor(hex, f) {
   const key = `${hex}:${f}`;
@@ -38,7 +33,7 @@ export function mixColor(a, b, f) {
   return Color.toHex(Color.interpolate(Color.fromString(a), Color.fromString(b), f));
 }
 
-// 幾個顏色的平均（柔化交界用）
+// 幾個顏色的平均
 export function averageColor(hexes) {
   const sum = [0, 0, 0];
   for (const h of hexes) {
@@ -54,7 +49,7 @@ export function desaturate(rgb) {
   return rgb.map((c) => gray + (c - gray) * SATURATION);
 }
 
-// 回傳 { fg, bg }，各是 [地形編號][明暗級數][立面]。不套明暗的地形每一級都一樣
+// 回傳 { fg, bg }，各是 [地形編號][明暗級數]。不套明暗的地形每一級都一樣
 export function buildShadeTable(terrains) {
   const fg = [];
   const bg = [];
@@ -63,15 +58,9 @@ export function buildShadeTable(terrains) {
     const f = [];
     const b = [];
     for (let level = 0; level < LEVELS; level++) {
-      const fr = [];
-      const br = [];
-      for (const r of RELIEFS) {
-        const k = t.shade ? levelFactor(level) * RELIEF_FACTOR[r] : 1;
-        fr[r] = scale(base, k);
-        br[r] = t.layer === 'water' ? scale(base, BG_DIM * k) : scale(base, LAND_BG * landBand(level));
-      }
-      f.push(fr);
-      b.push(br);
+      const k = t.shade ? levelFactor(level) : 1;
+      f.push(scale(base, k));
+      b.push(t.layer === 'water' ? scale(base, BG_DIM * k) : scale(base, LAND_BG * landBand(level)));
     }
     fg.push(f);
     bg.push(b);
@@ -79,15 +68,10 @@ export function buildShadeTable(terrains) {
   return { fg, bg };
 }
 
-// 物件層的字元色：[物件編號][明暗級數][立面]。物件跟它腳下的地面受同一道光，
-// 背景用地面的，所以樹底下仍看得到地面的光照
+// 物件的字元色：[物件編號][明暗級數]。物件跟腳下的地面受同一道光
 export function buildObjectShades(objects) {
   return objects.map((o) => {
     const base = desaturate(Color.fromString(o.color));
-    return Array.from({ length: LEVELS }, (_, level) => {
-      const row = [];
-      for (const r of RELIEFS) row[r] = scale(base, levelFactor(level) * RELIEF_FACTOR[r]);
-      return row;
-    });
+    return Array.from({ length: LEVELS }, (_, level) => scale(base, levelFactor(level)));
   });
 }

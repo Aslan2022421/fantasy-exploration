@@ -1,6 +1,6 @@
 // 資料規格（Zod）：data/ 底下每種類型的條目長什麼樣
 // 引用一律只認 id；id 寫在條目裡，拆檔、搬檔都不影響引用。
-// 地圖每格分四層（使用者定）：地貌（地勢、高度、坡度）、地表材質（外觀與通行）、水文（水體）、
+// 地圖每格分四層：地貌（地勢、高度、坡度）、地表材質（外觀與通行）、水文（水體）、
 // 生態覆蓋（地面長什麼）；另有物件層，是站在地面上、會變成資源的東西（樹、矮叢，之後的礦脈）。
 // 地貌、材質、水文、覆蓋都放在 data/terrain，用 layer 分；生態群落在 data/biome
 
@@ -13,7 +13,7 @@ const Glyph = z.string().length(1); // 地圖上的字元，必須在 CP437 表�
 // 四層共用：glyph 是說明與圖例裡的代表字，glyphs 是這一種會用到的字元（檢查與圖例用；空白只畫背景）
 const layerBase = { id: Id, name: z.string().min(1), glyph: Glyph, tile: z.string().nullable() };
 
-// 字元原則（使用者定）：語意優先、形狀輔助、顏色補充。字形規則在 src/view/glyphs.js
+// 字形規則在 src/view/glyphs.js
 export const TerrainSchema = z.discriminatedUnion('layer', [
   // 地貌：沒有自己的顏色（顏色來自材質）。relief 用起伏點；mountain 用 ^ 與 ▲
   z.object({
@@ -50,9 +50,9 @@ export const ObjectSchema = z.object({
   glyph: Glyph,
   color: Color,
   passable: z.boolean(),
-  // 疊幾層（使用者定：樹依種類 3～5 層，樹幹往上疊、最頂層是樹冠；1 層是平的，不疊）
+  // 疊幾層：樹的樹幹往上疊、最頂層是樹冠；1 層是平的，不疊
   height: z.number().int().min(0).max(5),
-  trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去（使用者定）；樹冠其他格照 passable
+  trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去；樹冠其他格照 passable
   // 佔地多大（直徑幾格），每棵從這裡用雜湊挑一個；重複寫的數字比較常出現（例如 4 格的老樹只寫一次）
   sizes: z.array(z.number().int().min(1).max(4)).min(1),
   // 樹冠的形狀：round 是一團（直徑 3 時是九宮格，旁邊貼 8 邊），cross 是十字（旁邊貼 4 邊），

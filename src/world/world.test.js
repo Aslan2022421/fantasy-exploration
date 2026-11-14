@@ -4,7 +4,6 @@ import { DATA } from '../data/load.js';
 import { PART_TRUNK } from './footprint.js';
 import { gradient, lightLevel, shadeLevel } from './hillshade.js';
 import { LAND, landTierOf, MAX_TIER, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
-import { reliefOf } from './relief.js';
 import { createTerrainGen, GEN, LAYER_NONE, waterLevel } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
@@ -80,7 +79,7 @@ describe('區與區的交界', () => {
     expect(objects).toBeGreaterThan(0);
   });
 
-  test('邊上的高度層、水與台地立面，等於單獨算那幾格的結果', () => {
+  test('邊上的高度層，等於單獨算那幾格的結果', () => {
     const z = gen.genZone(1, 1, Z);
     const tierAt = (x, y) => gen.landform.cellAt(x, y).tier;
     for (let x = 0; x < Z; x += 5) {
@@ -89,7 +88,6 @@ describe('區與區的交界', () => {
         const Y = Z + y;
         const i = y * Z + x;
         expect(z.tier[i]).toBe(tierAt(X, Y));
-        expect(z.relief[i]).toBe(reliefOf(tierAt(X, Y - 2), tierAt(X, Y - 1), tierAt(X, Y), tierAt(X, Y + 1)));
       }
     }
   });

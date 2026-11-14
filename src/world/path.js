@@ -24,8 +24,7 @@ export function lineSteps(a, b) {
   return out;
 }
 
-// 路線拉直（使用者覺得「先斜走到底再直走」的折角很怪）：A* 找到的路線步數不變，
-// 斜走與直走穿插開來、貼近起點到終點的直線。整段拉直走得通就換掉，走不通就從中間切開兩半各自拉直
+// 路線拉直：A* 找到的路線步數不變，斜走與直走穿插開來、貼近起點到終點的直線，不會先斜走到底再直走。整段拉直走得通就換掉，走不通就從中間切開兩半各自拉直
 export function straighten(world, from, steps) {
   if (steps.length <= 1) return steps;
   const to = steps[steps.length - 1];

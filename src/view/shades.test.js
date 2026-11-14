@@ -1,6 +1,5 @@
 import { expect, test } from 'vitest';
 import { LEVELS, lightLevel } from '../world/hillshade.js';
-import { FACE, FACE_FAR, FLAT, RIM } from '../world/relief.js';
 import { buildShadeTable, mixColor } from './shades.js';
 
 const terrains = [
@@ -13,23 +12,19 @@ test('越亮的級數顏色越亮，字元與背景都是', () => {
   const { fg, bg } = buildShadeTable(terrains);
   expect(fg[0]).toHaveLength(LEVELS);
   for (let i = 1; i < LEVELS; i++) {
-    expect(lum(fg[0][i][FLAT])).toBeGreaterThanOrEqual(lum(fg[0][i - 1][FLAT]));
-    expect(lum(bg[0][i][FLAT])).toBeGreaterThanOrEqual(lum(bg[0][i - 1][FLAT]));
+    expect(lum(fg[0][i])).toBeGreaterThanOrEqual(lum(fg[0][i - 1]));
+    expect(lum(bg[0][i])).toBeGreaterThanOrEqual(lum(bg[0][i - 1]));
   }
 });
 
-test('背景比字元暗；立面比平地暗、台地邊緣比平地亮', () => {
+test('背景比字元暗', () => {
   const { fg, bg } = buildShadeTable(terrains);
-  const l = 5;
-  expect(lum(bg[0][l][FLAT])).toBeLessThan(lum(fg[0][l][FLAT]));
-  expect(lum(fg[0][l][FACE])).toBeLessThan(lum(fg[0][l][FLAT]));
-  expect(lum(fg[0][l][FACE_FAR])).toBeLessThan(lum(fg[0][l][FACE]));
-  expect(lum(fg[0][l][RIM])).toBeGreaterThan(lum(fg[0][l][FLAT]));
+  expect(lum(bg[0][5])).toBeLessThan(lum(fg[0][5]));
 });
 
-test('不套明暗的地形每一級、每種立面都是同一個顏色（降過彩度的原色）', () => {
+test('不套明暗的地形每一級都是同一個顏色（降過彩度的原色）', () => {
   const { fg } = buildShadeTable(terrains);
-  const colors = new Set(fg[1].flat());
+  const colors = new Set(fg[1]);
   expect(colors.size).toBe(1);
   const [hex] = colors;
   const rgb = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));

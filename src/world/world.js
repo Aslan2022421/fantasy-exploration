@@ -7,9 +7,9 @@ import { buildGeography } from './geography.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 14; // 14：河跟著地勢走（河面比兩岸低一層、最多挖 2 層）、河道用雜訊推彎
+export const WORLD_VERSION = 14;
 
-// 世界層寬幾區（使用者定 96×96）：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
+// 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
 export const ZONES_Y = 96;
 export const ZONE_SIZE = 96; // 一區的邊長（格）
@@ -171,15 +171,10 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const i = locate(x, y);
       return i < 0 ? 0 : last.slope[i];
     },
-    // 高度層：水 0、陸地 1～4（landform.js）；世界外是 0
+    // 高度層：湖海 0、陸地 1～4、山地往上到 MAX_TIER（landform.js），河比兩岸低一層；世界外是 0
     tierAt(x, y) {
       const i = locate(x, y);
       return i < 0 ? 0 : last.tier[i];
-    },
-    // 台地立面（relief.js 的 FLAT、RIM、FACE、FACE_FAR）
-    reliefAt(x, y) {
-      const i = locate(x, y);
-      return i < 0 ? 0 : last.relief[i];
     },
     // 這格在樹冠的哪一側（footprint.js 的 PART_MID、PART_LIT、PART_DARK）
     objectPartAt(x, y) {

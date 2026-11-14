@@ -1,4 +1,4 @@
-// 地形量測：多個種子各生整個世界，量各地形的比例、起點那區走得到的比例、每個世界有幾種生態、
+// 地形量測：多個種子各生一個 3×3 區的小世界並全部展開，量各地形的比例、起點那區走得到的比例、每個世界有幾種生態、
 // 明暗級數的分布、生成時間。調 src/world/terrain.js 的 GEN 參數時用。
 // 用法：node tools/measure-terrain.mjs [種子數，預設 20]
 
@@ -64,7 +64,7 @@ function reachable(world, start) {
 
 for (let s = 1; s <= SEEDS; s++) {
   const seed = s * 104729;
-  const world = createWorld(seed, data);
+  const world = createWorld(seed, data, { zonesX: 3, zonesY: 3 });
   for (let zy = 0; zy < world.zonesY; zy++) {
     for (let zx = 0; zx < world.zonesX; zx++) {
       const t0 = performance.now();

@@ -5,16 +5,13 @@ import {
   fadeAt,
   groundHeight,
   LERP,
-  layerStep,
   liftUp,
   mountainRingFactor,
   objectLayers,
   STACK,
-  shiftOf,
   shiftUp,
   slopeTilt,
   UP,
-  wallRange,
   wallSouth,
 } from './perspective.js';
 
@@ -27,16 +24,6 @@ function fakeWorld(tiers) {
 }
 const grid = (n, v) => Array.from({ length: n }, () => new Array(n).fill(v));
 const obj = (id) => DATA.objects[DATA.objectIndex.get(id)];
-
-test('錯開量：比原點高往外、低往內，離中心越遠越大但有上限；原點與畫面中心不動', () => {
-  expect(layerStep(10)).toBeCloseTo(0.6);
-  expect(layerStep(100)).toBe(STACK.maxStep);
-  expect(shiftOf(20, 0, 0)).toEqual({ ox: 0, oy: 0 });
-  expect(shiftOf(0, 0, 3)).toEqual({ ox: 0, oy: 0 });
-  expect(shiftOf(20, 0, 2).ox).toBeCloseTo(2); // 往外
-  expect(shiftOf(20, 0, -2).ox).toBeCloseTo(-2); // 往內
-  expect(shiftOf(0, -30, 99).oy).toBeCloseTo(-STACK.maxShift); // 遠處角落不會拉長
-});
 
 test('相機平滑緩衝：往目標靠近但不一步到位；夠近或太遠直接到位', () => {
   const next = approach(0, 1, LERP.tau);
@@ -61,17 +48,6 @@ test('地面高度：陸地每層 2 層，山地每圈 1 層；山地底色往�
   expect(mountainRingFactor(255)).toBe(1);
 });
 
-test('牆：比往中心那一格高才有，記下低處那格；水邊遠側的岸有岸壁', () => {
-  const t = grid(21, 1);
-  t[10][3] = 0; // 中心左邊的水，再往左是岸
-  t[10][16] = 3; // 中心右邊的台地
-  const w = fakeWorld(t);
-  expect(wallRange(w, 10, 10, 2, 10)).toEqual({ from: 0, to: groundHeight(1) - 1, low: { x: 3, y: 10 } });
-  expect(wallRange(w, 10, 10, 4, 10)).toBeNull(); // 近側的岸
-  expect(wallRange(w, 10, 10, 16, 10)).toMatchObject({ from: groundHeight(1), to: groundHeight(3) - 1 });
-  expect(wallRange(w, 10, 10, 10, 10)).toBeNull();
-});
-
 test('往上錯開的量是固定螢幕像素、接近垂直：每層往上 px、往右只偏 1 像素，總量有上限', () => {
   for (const k of [1, 2, 3, 4]) {
     const s = shiftUp(2, k);
@@ -91,7 +67,7 @@ test('斜坡那層：往上一層，往上坡那側（東高往右、西高往�
   expect(slopeTilt(5, 1).oy).toBe(-UP.px);
 });
 
-test('往斜上方疊的牆：比南、西、西南最低那格高才有，從那格的高度疊上來', () => {
+test('牆：比南、西、西南最低那格高才有，從那格的高度疊上來', () => {
   const t = grid(9, 1);
   t[4][4] = 3; // 一格高台
   const w = fakeWorld(t);

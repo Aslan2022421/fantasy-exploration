@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { CANVAS, cameraOrigin, canvasScale, cssSize, gridLabel, layout, MAP_AREA } from './screen.js';
+import { CANVAS, canvasScale, cssSize, gridLabel, layout, MAP_AREA } from './screen.js';
 
 describe('畫面配置：固定 1920×1080，整數倍放大', () => {
   test.each([
@@ -43,12 +43,5 @@ describe('畫面配置：固定 1920×1080，整數倍放大', () => {
     expect(cssSize(layout(1920, 1080, 1), 1920, 1080)).toEqual({ w: 1920, h: 1080 });
     expect(cssSize(layout(1536, 864, 1.25), 1536, 864)).toEqual({ w: 1536, h: 864 });
     expect(cssSize(layout(960, 540, 1), 960, 540)).toEqual({ w: 960, h: 540 });
-  });
-
-  test('畫面跟著冒險者，但不捲出地圖（往上疊以外的畫法）', () => {
-    expect(cameraOrigin(40, 25, 80, 50, 20, 10)).toEqual({ x: 30, y: 20 });
-    expect(cameraOrigin(1, 1, 80, 50, 20, 10)).toEqual({ x: 0, y: 0 });
-    expect(cameraOrigin(79, 49, 80, 50, 20, 10)).toEqual({ x: 60, y: 40 });
-    expect(cameraOrigin(5, 5, 80, 50, 100, 60)).toEqual({ x: 0, y: 0 });
   });
 });

@@ -1,6 +1,4 @@
-// 地圖區：用字元表蓋印章（tiles.js：每種顏色先染一份再整格複製），畫在主畫布的地圖矩形裡。
-// 試過改用 ROT.js 的 Display，每走一步整張重畫要 0.27～0.96 秒（它每畫一格就重新染色），
-// 這個做法只要 0.02～0.03 秒，所以換回來；介面照舊（draw、cellAt、resize）
+// 地圖區：用字元表蓋印章（tiles.js：每種顏色先染一份再整格複製），畫在主畫布的地圖矩形裡
 
 import { createTileset } from './tiles.js';
 
@@ -13,11 +11,7 @@ export function createMapView(image, ctx) {
     resize(screen) {
       s = screen;
     },
-    // 在地圖區第 (vx, vy) 格畫一個字
-    draw(vx, vy, ch, fg, bg) {
-      tiles.draw(ctx, ch, s.map.x + vx * s.tile, s.map.y + vy * s.tile, s.tile, fg, bg);
-    },
-    // 同上，但再錯開 (ox, oy) 個字元像素（一格 8 個；放大時跟著放大，點陣不糊）。bg 可省略，只畫字
+    // 在地圖區第 (vx, vy) 格、再錯開 (ox, oy) 個字元像素（一格 8 個）畫一個字。bg 可省略，只畫字
     // 背景四邊各多塗 1 個字元像素：相鄰兩格錯開量四捨五入不同時，中間才不會露出細縫
     drawShifted(vx, vy, ox, oy, ch, fg, bg) {
       const k = s.tile / 8;
@@ -30,7 +24,7 @@ export function createMapView(image, ctx) {
       tiles.draw(ctx, ch, px, py, s.tile, fg, null);
     },
     // 離屏圖層：寬 w、高 h 格的小畫布，畫法跟 drawShifted 一樣（座標從圖層左上角算），
-    // 畫好之後用 blit 整張貼上來。格子大小（tile）一變，舊圖層就不能用了，呼叫的人看 layer.tile 自己丟掉
+    // 畫好之後用 blit 整張貼上來。格子大小（tile）變了圖層就不能用，呼叫的人看 layer.tile 自己丟掉
     layer(w, h) {
       const tile = s.tile;
       const k = tile / 8;
@@ -76,17 +70,6 @@ export function createMapView(image, ctx) {
       ctx.lineTo(s.map.x + x2 * k, s.map.y + y2 * k);
       ctx.stroke();
       ctx.restore();
-    },
-    // 視野外壓暗：以 (cx, cy)（字元像素）為中心，r0 以內不變，到 r1 漸漸蓋上 rgb 顏色、不透明度 alpha
-    vignette(cx, cy, r0, r1, rgb, alpha) {
-      const k = s.tile / 8;
-      const x = s.map.x + cx * k;
-      const y = s.map.y + cy * k;
-      const g = ctx.createRadialGradient(x, y, r0 * k, x, y, r1 * k);
-      g.addColorStop(0, `rgba(${rgb}, 0)`);
-      g.addColorStop(1, `rgba(${rgb}, ${alpha})`);
-      ctx.fillStyle = g;
-      ctx.fillRect(s.map.x, s.map.y, s.map.w, s.map.h);
     },
     // 整個地圖區塗成一個顏色
     fill(color) {

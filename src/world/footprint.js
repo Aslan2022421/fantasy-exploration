@@ -17,7 +17,7 @@ export function trunkCell(d) {
 
 // (i, j) 是相對錨點的位置（0～d-1）；在不在直徑 d 的那一團裡。
 // shape：round 接近圓形（直徑 3 是九宮格，樹幹旁邊貼 8 邊）；cross 是十字（旁邊貼 4 邊）；
-// pair 是對邊兩片（使用者定）：turn 為 false 時左右兩片、true 時上下兩片。cross、pair 只用在奇數直徑
+// pair 是對邊兩片：turn 為 false 時左右兩片、true 時上下兩片。cross、pair 只用在奇數直徑
 export function inFootprint(i, j, d, shape = 'round', turn = false) {
   if (i < 0 || j < 0 || i >= d || j >= d) return false;
   const c = (d - 1) / 2;
@@ -34,7 +34,7 @@ export function areaOf(d, shape = 'round') {
   return n;
 }
 
-// 一組大小平均佔幾格（用來換算撒錨點的機率，讓樹變大後林子的密度不會跟著暴增）
+// 一組大小平均佔幾格（用來換算撒錨點的機率，樹冠大的林子密度不會跟著暴增）
 export function meanArea(sizes, shape = 'round') {
   return sizes.reduce((s, d) => s + areaOf(d, shape), 0) / sizes.length;
 }

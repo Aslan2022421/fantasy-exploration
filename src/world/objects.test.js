@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
+import { mountainRing } from '../view/perspective.js';
 import { PART_TRUNK, trunkCell } from './footprint.js';
 import { LAND } from './landform.js';
 import { PLACE } from './objects.js';
@@ -25,13 +26,17 @@ describe('物件層的資源來源', () => {
   const worlds = SEEDS.map((s) => createWorld(s, DATA, SMALL));
   const count = { [WALL]: 0, [VEIN]: 0, [HERB]: 0 };
 
-  test('岩壁與礦脈只在岩石上、成片（四邊至少有一格也是），礦脈在山腳或山以外', () => {
+  test('岩壁與礦脈：山上長在平台與山谷（東西兩邊同一圈，不壓在畫 / \\ 的山坡上），山以外長在岩石上；成片，礦脈在山腳或山以外', () => {
     for (const w of worlds) {
       for (const [x, y] of cells(w)) {
         const o = w.objectAt(x, y);
         if (!ROCKY.has(o)) continue;
         count[o]++;
-        expect(w.surfaceAt(x, y)).toBe(S('rock'));
+        const h = w.heightAt(x, y);
+        if (h > toH(LAND.mountain) + 1) {
+          expect(mountainRing(w.heightAt(x - 1, y))).toBe(mountainRing(h));
+          expect(mountainRing(w.heightAt(x + 1, y))).toBe(mountainRing(h));
+        } else if (h < toH(LAND.mountain) - 1) expect(w.surfaceAt(x, y)).toBe(S('rock'));
         expect(w.isPassable(x, y)).toBe(false);
         const linked = [
           [1, 0],

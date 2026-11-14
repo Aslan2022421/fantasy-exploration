@@ -28,7 +28,7 @@ const GLOW = 1.3;
 const PICKED = 0.5;
 const INNER_WALL = 0.55;
 // 岩壁、礦脈跟著山一圈一圈變亮：山腳（和山以外的露頭）low，第 RING.full 圈以上 high，跟山地本身的明暗一起往上走
-const WALL_RING = { low: 0.6, high: 1.15 };
+const WALL_RING = { low: 0.5, high: 0.85 }; // 最亮也比坡線暗，岩壁不搶過山坡
 
 export function createWorldView(mapView, world, data) {
   const { objects, surfaces } = data;
@@ -102,7 +102,9 @@ export function createWorldView(mapView, world, data) {
   // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色、頂層以下的顏色（礦脈）；山上的樹顏色往腳下材質靠
   function objectLook(x, y, o) {
     const part = world.objectPartAt(x, y);
-    const table = isMountain[world.landformAt(x, y)] ? objectFgOn[world.surfaceAt(x, y)] : objectFg;
+    // 山上的樹顏色往腳下材質靠；岩壁、礦脈不靠（長在雪地的平台上會變成一片亮白），維持岩石色
+    const tinted = isMountain[world.landformAt(x, y)] && !isRocky[o];
+    const table = tinted ? objectFgOn[world.surfaceAt(x, y)] : objectFg;
     const level = world.shadeAt(x, y);
     const base = table[o][level];
     const isTrunk = part === PART_TRUNK;

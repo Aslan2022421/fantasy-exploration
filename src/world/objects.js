@@ -1,7 +1,8 @@
 // 物件層的生成：
 // - 樹、矮叢照生態撒錨點，多格的樹冠互相讓位（樹幹永遠露出來，其餘取雜湊最小的那棵）；現在的樹都只佔一格
 // - 山上平坦的台階（平台）樹線放寬，高山的台階上也有幾棵樹
-// - 岩壁長在岩石上，用雜訊撒成一片一片；單獨一格、四邊都沒有岩壁的不放
+// - 岩壁長在山上的平台與山谷（不壓在畫 / \ 的山坡上），山以外長在露出的岩石上，用雜訊撒成一片一片；
+//   單獨一格、四邊都沒有岩壁的不放
 // - 礦脈是貼著山腳的岩壁（附近有非山地的陸地），以及山以外的岩石露頭，各有一部分
 // - 草本長在低處（高度層 1～2）、溫和或炎熱、不乾燥、靠近河或湖的泥土上
 // 只看種子＋座標與周圍幾格，不看生成順序，跨區接得起來
@@ -13,7 +14,8 @@ import { fbm, hash01, makeNoise } from './noise.js';
 export const PLACE = {
   floraBase: 24, // 樹叢成片的大小
   wallBase: 10, // 岩壁成片的大小
-  wallCut: 0.08, // 雜訊高過這個的岩石格子長岩壁（約四成）
+  wallCut: 0.08, // 山以外：雜訊高過這個的岩石格子長岩壁（約四成）
+  ledgeWallCut: 0.3, // 山上的平台、山谷：雜訊高過這個才長岩壁（平地比陡坡多很多，門檻高一點）
   veinShare: 0.2, // 符合條件的岩壁有幾成是礦脈
   footRange: 2, // 這麼多格內有非山地的陸地，就算山腳
   herbDensity: 0.08, // 符合條件的格子長草本的機率
@@ -73,12 +75,29 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
     return { ...z, wall: new Int8Array(z.G * z.G).fill(-1) };
   }
 
+  // 山地的第幾圈：跟畫面（perspective.js 的 mountainRing）用同一套算法，連高度存成 0～255 的取整也一樣，
+  // 台階邊才會剛好對上畫 / \ 的格子
+  const ringOf = (h) =>
+    Math.floor(
+      (Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5) / 127.5 - 1 - LAND.mountain) / LAND.mountainStep,
+    );
+
+  // 岩壁長得出來的地方：
+  // - 山上：坡與坡之間的平台、山谷（東西兩邊跟自己在同一圈，不是畫 / \ 的台階邊），岩壁不壓在山坡上
+  // - 山以外：陡到露出岩石的地方（丘陵的露頭）
+  function wallGround(z, c) {
+    if (z.wAll[c] !== NONE || z.sAll[c] === ICE) return false;
+    if (z.h[c] <= LAND.mountain) return z.sAll[c] === ROCK;
+    const ring = ringOf(z.h[c]);
+    return ringOf(z.h[c - 1]) === ring && ringOf(z.h[c + 1]) === ring;
+  }
+
   function isWall(z, c) {
     if (z.wall[c] < 0) {
       const X = z.gx0 + (c % z.G);
       const Y = z.gy0 + Math.floor(c / z.G);
-      z.wall[c] =
-        z.sAll[c] === ROCK && z.wAll[c] === NONE && fbm(nWall, X, Y, PLACE.wallBase, 2) > PLACE.wallCut ? 1 : 0;
+      const cut = z.h[c] > LAND.mountain ? PLACE.ledgeWallCut : PLACE.wallCut;
+      z.wall[c] = wallGround(z, c) && fbm(nWall, X, Y, PLACE.wallBase, 2) > cut ? 1 : 0;
     }
     return z.wall[c] === 1;
   }
@@ -132,7 +151,8 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
 
   // 這格的物件：{ object（data.objects 的編號）, part（footprint.js 的 PART_*）, anchor（錨點在左上幾格：k×MAX_SIZE＋j）} 或 null
   function objectAt(z, c, X, Y) {
-    return floraAt(z, c, X, Y) ?? wallAt(z, c, X, Y) ?? herbAt(z, c, X, Y);
+    // 岩壁先放：平台上也長樹，樹先放的話會佔掉成片岩壁裡的一格，留下孤零零的岩壁
+    return wallAt(z, c, X, Y) ?? floraAt(z, c, X, Y) ?? herbAt(z, c, X, Y);
   }
 
   return { anchorAt, zoneContext, objectAt };

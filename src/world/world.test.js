@@ -225,7 +225,7 @@ describe('世界的形狀', () => {
           objects++;
           expect(z.water[i]).toBe(LAYER_NONE);
           if (ROCKY.has(z.object[i] - 1)) {
-            expect(z.surface[i]).toBe(S('rock')); // 岩壁與礦脈只長在岩石上
+            if (!onMountain) expect(z.surface[i]).toBe(S('rock')); // 山以外的岩壁與礦脈長在岩石上（山上的見 objects.test.js）
             continue;
           }
           expect([S('rock'), S('ice')]).not.toContain(z.surface[i]);

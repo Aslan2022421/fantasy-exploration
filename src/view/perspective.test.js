@@ -102,7 +102,7 @@ test('往斜上方疊的牆：比南、西、西南最低那格高才有，從�
 });
 
 test('樹：依種類疊層，樹幹那格從 1 疊到 height-1、頂層是樹冠；旁邊的樹冠只有頂層一片；矮叢平的不疊', () => {
-  for (const id of ['broadleaf', 'conifer', 'jungle']) {
+  for (const id of ['broadleaf', 'conifer', 'palm']) {
     const o = obj(id);
     expect(o.height).toBeGreaterThanOrEqual(3);
     expect(o.height).toBeLessThanOrEqual(5);

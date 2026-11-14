@@ -6,7 +6,7 @@ import { PART_TRUNK } from './footprint.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 10; // 10：樹依種類疊 4～5 層，樹冠十字或九宮格
+export const WORLD_VERSION = 11; // 11：叢林改名棕櫚樹，樹冠改對邊兩片
 
 export const ZONES_X = 3; // 世界層寬幾區（之後要 96×96 只改這兩個數字）
 export const ZONES_Y = 3;

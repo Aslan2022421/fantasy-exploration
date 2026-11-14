@@ -24,15 +24,15 @@
     "tile": null
   },
   {
-    "id": "jungle",
-    "name": "叢林",
+    "id": "palm",
+    "name": "棕櫚樹",
     "glyph": "♠",
     "color": "#4f9a4a",
     "passable": true,
     "height": 4,
     "trunk": true,
     "sizes": [3],
-    "canopy": "round",
+    "canopy": "pair",
     "tile": null
   },
   {

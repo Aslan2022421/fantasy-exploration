@@ -222,7 +222,7 @@
     "moisture": "wet",
     "flora": [
       {
-        "object": "jungle",
+        "object": "palm",
         "density": 0.33
       },
       {

@@ -13,6 +13,8 @@ const WOOD = '#6b5638'; // 樹幹往這個木頭色靠
 const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
 const SOFTEN = 0.6; // 交界的底色往周圍平均靠幾成
 const ROCK_INK = 0.65; // 山上岩石、碎石字元的亮度
+// 山坡兩面：光從右上照，東坡（\）是受光面、西坡（/）是背光面，一座山看得出亮暗兩面
+const FACE = { '/': 0.6, '\\': 1.05 };
 // 疊層回饋：貼地資源（矮叢、草本）還能採時微微發亮、採過壓暗；被岩壁整圈圍住的岩壁壓暗，外圈是亮的
 const GLOW = 1.3;
 const PICKED = 0.5;
@@ -83,7 +85,8 @@ export function createWorldView(mapView, world, data) {
     const { glyph, ink } = lookAt(world, data, x, y);
     let fg = shades.fg[ink][level];
     if (isMountain[world.landformAt(x, y)]) {
-      fg = dimColor(fg, ringInk(x, y) * (isStone[world.surfaceAt(x, y)] ? ROCK_INK : 1));
+      const face = FACE[glyph] ?? (isStone[world.surfaceAt(x, y)] ? ROCK_INK : 1);
+      fg = dimColor(fg, ringInk(x, y) * face);
     }
     return { glyph, fg, bg: softBg(x, y), level };
   }

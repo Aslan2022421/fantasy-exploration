@@ -6,8 +6,8 @@
 // - 起伏：空白 → . → · → ∙，由平地到有起伏，依坡度選（泥土、雪，以及岩石、碎石沒露出的地方）
 // - 水文：深水大多空白、偶爾 ≈；淺水與沼澤是 - 與 ~（沼澤墨綠色）；結冰的淺水是冰面 ═
 // - 材質：沙地平坦處空白、-、~，坡陡是沙丘 ^；岩石 ■、碎石 °
-// - 地貌：山峰（山地裡附近最高的一格）是 ▲；其餘山地只有一部分格子畫 ^，
-//   剩下的露出材質（雪是起伏點、陡坡岩石 ■、緩坡碎石 °），陡不陡交給材質
+// - 地貌：山峰（山地裡附近最高的一格）是 ▲；山坡依朝向畫 /（西坡）、\（東坡），一座山看起來像畫出來的兩條稜線；
+//   朝南北的坡與山頂附近只有一部分格子畫 ^，剩下的露出材質（雪是起伏點、陡坡岩石 ■、緩坡碎石 °）
 // - 覆蓋：資料裡每種一個字元（, ' " : ; * τ Γ |）
 // 同一種樣子裡挑哪個字，用座標的雜湊決定，畫面不會閃。這裡只算字形，不碰畫布，可以在 Node 裡測
 
@@ -58,8 +58,26 @@ export function cellGlyph(c) {
   if (c.surface === 'ice') return { glyph: surfaceGlyph('ice', 0, c.a), ink: 'surface' };
   if (c.cover) return { glyph: c.cover, ink: 'cover' };
   if (c.peak) return { glyph: '▲', ink: 'surface' };
+  if (c.mountain && c.aspect) return { glyph: c.aspect, ink: 'surface' };
   if (c.mountain && c.b < MOUNTAIN_MARK) return { glyph: '^', ink: 'surface' };
   return { glyph: surfaceGlyph(c.surface, c.slope, c.a), ink: 'surface' };
+}
+
+// 山坡的字：東邊比西邊高（山的西坡）是 /，西邊比東邊高（東坡）是 \，像畫山的兩條稜線；
+// 東西向的高低差不夠明顯（朝南北的坡、山頂附近的平處）回傳 null，照原本的 ^ 與材質。
+// 高度是 0～255 的整數，隔 span 格量才不會被取整吃掉
+export const ASPECT = { span: 2, min: 2, ratio: 0.6 };
+
+export function slopeGlyph(gx, gy) {
+  if (Math.abs(gx) < ASPECT.min || Math.abs(gx) < Math.abs(gy) * ASPECT.ratio) return null;
+  return gx > 0 ? '/' : '\\';
+}
+
+function aspectAt(world, x, y) {
+  const d = ASPECT.span;
+  const gx = world.heightAt(x + d, y) - world.heightAt(x - d, y);
+  const gy = world.heightAt(x, y + d) - world.heightAt(x, y - d);
+  return slopeGlyph(gx, gy);
 }
 
 // 世界上 (x, y) 那格地面的樣子：{ glyph, ink（字元色，data.palette 的索引） }
@@ -67,10 +85,12 @@ export function lookAt(world, data, x, y) {
   const w = world.waterAt(x, y);
   const s = world.surfaceAt(x, y);
   const k = world.coverAt(x, y);
+  const mountain = data.landforms[world.landformAt(x, y)].style === 'mountain';
   const r = cellGlyph({
     water: w >= 0 ? data.waters[w].style : null,
     surface: data.surfaces[s].style,
-    mountain: data.landforms[world.landformAt(x, y)].style === 'mountain',
+    mountain,
+    aspect: mountain ? aspectAt(world, x, y) : null,
     peak: world.peakAt(x, y),
     cover: k >= 0 ? data.covers[k].glyph : null,
     slope: world.slopeAt(x, y),

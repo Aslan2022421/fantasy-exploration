@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { cp437Index } from './cp437.js';
-import { cellGlyph, DUNE_STEEP, MOUNTAIN_MARK, RELIEF, RELIEF_STEPS, reliefGlyph } from './glyphs.js';
+import { cellGlyph, DUNE_STEEP, MOUNTAIN_MARK, RELIEF, RELIEF_STEPS, reliefGlyph, slopeGlyph } from './glyphs.js';
 
 const base = { water: null, surface: 'relief', mountain: false, peak: false, cover: null, slope: 0, a: 0.5, b: 0.5 };
 const glyphs = (over = {}) => {
@@ -25,6 +25,19 @@ test('山地：山峰是 ▲；其餘一部分畫 ^、剩下露出材質，顏�
   expect(glyphs({ ...m, surface: 'rock' })).toContain('■');
   expect(glyphs({ ...m, surface: 'gravel' })).toContain('°');
   expect(glyphs({ ...m, slope: 255 })).toEqual(new Set(['∙'])); // 雪露出起伏點
+});
+
+test('山坡：東高西低（西坡）是 /、西高東低（東坡）是 \\；朝南北或太平的不換，山峰照樣 ▲', () => {
+  expect(slopeGlyph(5, 1)).toBe('/');
+  expect(slopeGlyph(-5, 1)).toBe('\\');
+  expect(slopeGlyph(1, 1)).toBeNull(); // 太平
+  expect(slopeGlyph(2, 8)).toBeNull(); // 朝南北
+  const base = { surface: 'rock', mountain: true, slope: 80, a: 0.9, b: 0.9 };
+  expect(cellGlyph({ ...base, aspect: '/' }).glyph).toBe('/');
+  expect(cellGlyph({ ...base, aspect: '/', peak: true }).glyph).toBe('▲');
+  expect(cellGlyph({ ...base, aspect: null }).glyph).not.toMatch(/[/\\]/);
+  expect(cp437Index('/')).toBeGreaterThanOrEqual(0);
+  expect(cp437Index('\\')).toBeGreaterThanOrEqual(0);
 });
 
 test('材質：沙地平坦處空白與波紋、坡陡是沙丘；岩石 ■、碎石 °', () => {

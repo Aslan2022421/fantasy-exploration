@@ -137,17 +137,31 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
-  // 目標、查看中的格子：整格標底色，畫在那格地面錯開後的位置
+  // 目標、查看中的格子：標底色。有物件時物件疊的每一層都標，標記跟著物件疊上去，不會留在地面跟物件分開
   function drawMarks(f, { route, target, examined }) {
     for (const c of [examined, target]) {
       if (!c || !world.inside(c.x, c.y)) continue;
-      const { px, py } = placeOf(f, c.x, c.y);
       const isTarget = target?.x === c.x && target?.y === c.y;
       const bg = isTarget ? (route?.reachable ? COLORS.target : COLORS.blocked) : COLORS.examined;
       const o = world.objectAt(c.x, c.y);
-      const g = o >= 0 ? look.object(c.x, c.y, o) : look.ground(c.x, c.y);
-      const trunk = o >= 0 && g.isTrunk;
-      mapView.drawShifted(0, 0, px, py, trunk ? g.trunkGlyph : g.glyph, trunk ? g.trunkFg : g.fg, bg);
+      const h0 = groundHeight(world.tierAt(c.x, c.y));
+      const mark = (lift, glyph, fg) => {
+        const { px, py } = placeOf(f, c.x, c.y, h0, lift);
+        mapView.drawShifted(0, 0, px, py, glyph, fg, bg);
+      };
+      if (o < 0) {
+        const g = look.ground(c.x, c.y);
+        mark(0, g.glyph, g.fg);
+        continue;
+      }
+      const ol = look.object(c.x, c.y, o);
+      const layers = objectLayers(objects[o], ol.isTrunk);
+      if (!layers.some((l) => l.dh === 0)) mark(0, ' ', ol.fg); // 物件底下那格地面也標，跟上面幾層連成一塊
+      for (const l of layers) {
+        const trunk = l.part === 'trunk';
+        const fg = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg;
+        mark(l.dh, trunk ? ol.trunkGlyph : ol.glyph, fg);
+      }
     }
   }
 

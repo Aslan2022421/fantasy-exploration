@@ -18,6 +18,7 @@ import { loadGame, newGame } from '../world/game.js';
 import { findPath, stepDirection } from '../world/path.js';
 import { describePlace, regionLabel } from '../world/place.js';
 import { createKeyboard } from './input.js';
+import { bindMapMouse, drawMapLabels } from './mouse.js';
 import { createZoom } from './zoom.js';
 
 const VERSION = '0.1.0';
@@ -26,7 +27,7 @@ const SEED = 20261112;
 const STEP_MS = 70; // 滑鼠點擊後自動走，每一步間隔
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
-  '左鍵點地圖走過去，空白鍵停下；右鍵查看，再點一下收起。',
+  '滑鼠指著地圖看是什麼；左鍵走過去，空白鍵停下；右鍵查看並畫出路線，再點一下收起。',
   'H 看完整紀錄。＋／－ 放大縮小地圖，G 顯示可視格數。',
 ];
 
@@ -105,21 +106,20 @@ function resize() {
   render();
 }
 
-// 要畫的路線：走路中顯示剩下的路，否則顯示滑鼠指著的地方怎麼走
+// 要畫的路線：走路中顯示剩下的路，否則顯示右鍵查看中那一格怎麼走（滑鼠懸停只出提示框）
 function shownPath() {
   if (walking.length) return { steps: walking, reachable: true };
-  if (!hover || historyOpen) return null;
-  const steps = findPath(world, player(), hover);
+  if (!examined || historyOpen) return null;
+  const steps = findPath(world, player(), examined);
   return { steps, reachable: steps.length > 0 };
 }
 
 let frameRequested = false; // 相機平滑緩衝：還沒到位就在下一個畫面再畫一次
 
 function render() {
-  const { tile, map } = screen;
   const cam = camera();
   const route = shownPath();
-  const target = walking.at(-1) ?? (route ? hover : null);
+  const target = walking.at(-1) ?? (route ? examined : null);
   const p = player();
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -139,12 +139,9 @@ function render() {
     `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}${zoom.showGrid ? `｜${gridLabel(screen)}` : ''}`,
   );
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
-  if (route && target && !historyOpen) {
-    const label = route.reachable ? `${route.steps.length} 步` : '走不到';
-    const at = worldView.screenOf(cam, target.x, target.y);
-    const px = map.x + at.vx * tile;
-    const py = map.y + at.vy * tile;
-    panels.routeLabel(ctx, screen, px, py, label, route.reachable ? COLORS.path : COLORS.text);
+  if (!historyOpen) {
+    const tip = hover && world.inside(hover.x, hover.y) ? { cell: hover, text: describeCell(hover) } : null;
+    drawMapLabels({ ctx, screen, panels, worldView, cam, route, target, tip });
   }
   if (historyOpen) maxHistoryScroll = panels.history(ctx, screen, entries(), historyScroll);
 }
@@ -250,32 +247,34 @@ window.addEventListener(
   { passive: true },
 );
 
-mapView.canvas.addEventListener('contextmenu', (e) => {
-  e.preventDefault();
-  const cell = mapCellAt(e);
-  if (!cell || historyOpen) return;
-  stopWalking();
-  if (examined?.x === cell.x && examined?.y === cell.y) return closeExamine();
-  examined = cell;
-  note(() => game.examine(cell, describeCell(cell)));
-  render();
-});
-mapView.canvas.addEventListener('mousemove', (e) => {
-  const cell = mapCellAt(e);
-  if (cell?.x === hover?.x && cell?.y === hover?.y) return;
-  hover = cell;
-  if (!walking.length) render();
-});
-mapView.canvas.addEventListener('mouseleave', () => {
-  hover = null;
-  if (!walking.length) render();
-});
-mapView.canvas.addEventListener('click', (e) => {
-  if (historyOpen || closeExamine()) return; // 查看還開著時，這一下只是收起來
-  const cell = mapCellAt(e);
-  if (!cell) return;
-  const steps = findPath(world, player(), cell);
-  if (steps.length) startWalking(steps, cell);
+bindMapMouse(mapView.canvas, {
+  cellAt: mapCellAt,
+  hover(cell) {
+    if (cell?.x === hover?.x && cell?.y === hover?.y) return;
+    hover = cell;
+    render();
+  },
+  leave() {
+    hover = null;
+    render();
+  },
+  // 右鍵：查看那一格（訊息欄寫結果、地圖畫路線），再按同一格收起
+  look(cell) {
+    if (historyOpen) return;
+    stopWalking();
+    if (examined?.x === cell.x && examined?.y === cell.y) return closeExamine();
+    examined = cell;
+    note(() => game.examine(cell, describeCell(cell)));
+    render();
+  },
+  // 左鍵：直接走過去，查看開著也順便收起
+  go(cell) {
+    if (historyOpen) return;
+    examined = null;
+    const steps = findPath(world, player(), cell);
+    if (steps.length) startWalking(steps, cell);
+    else render();
+  },
 });
 window.addEventListener('resize', resize);
 resize();

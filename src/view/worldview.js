@@ -41,10 +41,13 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
 
   // 一格地面的樣子：字形與字元色看四層（glyphs.js），背景是地面的顏色，亮暗輔助高低與深淺
   // 山地的底色逐圈變亮、往山腳變深（perspective.js 的 RING）；只調背景，字元顏色不多出新的染色表
+  // 背景只留少數幾種深色（shades.js）；山的逐圈明暗改放在字的顏色上（ringInk）
   function rawBg(x, y) {
-    const bg = shades.bg[world.groundAt(x, y)][world.shadeAt(x, y)][FLAT];
-    return isMountain[world.landformAt(x, y)] ? dimColor(bg, mountainRingFactor(world.heightAt(x, y))) : bg;
+    return shades.bg[world.groundAt(x, y)][world.shadeAt(x, y)][FLAT];
   }
+
+  // 山地逐圈的字色亮度，取到 0.05 一級，染色表才不會多出太多種顏色
+  const ringInk = (x, y) => Math.round(mountainRingFactor(world.heightAt(x, y)) * 20) / 20;
 
   // 交界柔化（使用者要柔化山脈邊緣的白色方塊）：周圍八格的底色跟自己不一樣時，往九格的平均靠 SOFTEN，
   // 雪線、山的一圈一圈、湖岸就不會是一格一格的方塊。只在疊層畫法用（結果存進分塊，只算一次）
@@ -70,7 +73,10 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
     const { glyph, ink } = lookAt(world, data, x, y);
     const bg = stacked ? softBg(x, y) : rawBg(x, y);
     let fg = shades.fg[ink][level][FLAT];
-    if (stacked && isMountain[world.landformAt(x, y)] && isStone[world.surfaceAt(x, y)]) fg = dimColor(fg, ROCK_INK);
+    if (isMountain[world.landformAt(x, y)]) {
+      const stone = stacked && isStone[world.surfaceAt(x, y)];
+      fg = dimColor(fg, ringInk(x, y) * (stone ? ROCK_INK : 1));
+    }
     return { glyph, fg, bg, level };
   }
 

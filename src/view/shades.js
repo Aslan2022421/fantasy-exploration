@@ -7,7 +7,11 @@ import { Color } from 'rot-js';
 import { LEVELS, levelFactor } from '../world/hillshade.js';
 import { FACE, FACE_FAR, FLAT, RIM } from '../world/relief.js';
 
-const BG_DIM = 0.2; // 背景是地形色的幾成亮（原本 0.32；壓暗讓疊起來的樹和牆突出，使用者同意）
+const BG_DIM = 0.2; // 水的背景是地形色的幾成亮（原本 0.32；壓暗讓疊起來的樹和牆突出，使用者同意）
+// 陸地的背景只留少數幾種深色（參考 Caves of Qud 背景幾乎都是同一個深色，使用者同意）：
+// 地形色的 LAND_BG 成，明暗只分三段（低、中、高），地形差異主要靠字的顏色
+const LAND_BG = 0.13;
+const landBand = (level) => (level <= 2 ? 0.85 : level <= 5 ? 1 : 1.15);
 const RELIEF_FACTOR = { [FLAT]: 1, [RIM]: 1.25, [FACE]: 0.42, [FACE_FAR]: 0.3 };
 const RELIEFS = [FLAT, RIM, FACE, FACE_FAR];
 // 彩度只留幾成：地形種類仍靠色相分辨，但畫面上最強的差異是亮暗（高低）
@@ -64,7 +68,7 @@ export function buildShadeTable(terrains) {
       for (const r of RELIEFS) {
         const k = t.shade ? levelFactor(level) * RELIEF_FACTOR[r] : 1;
         fr[r] = scale(base, k);
-        br[r] = scale(base, BG_DIM * k);
+        br[r] = t.layer === 'water' ? scale(base, BG_DIM * k) : scale(base, LAND_BG * landBand(level));
       }
       f.push(fr);
       b.push(br);

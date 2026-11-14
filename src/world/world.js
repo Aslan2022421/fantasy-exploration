@@ -7,7 +7,7 @@ import { buildGeography } from './geography.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 13; // 13：世界放大到 96×96 區；淺灘不接海中的小島
+export const WORLD_VERSION = 14; // 14：河跟著地勢走（河面比兩岸低一層、最多挖 2 層）、河道用雜訊推彎
 
 // 世界層寬幾區（使用者定 96×96）：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;

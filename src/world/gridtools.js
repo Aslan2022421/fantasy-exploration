@@ -131,9 +131,14 @@ export function linkRegions(W, H, blocked, start, { maxCross, minSize }) {
 
 // 點 (px, py) 到線段 (a → b) 的距離
 export function segDist(px, py, ax, ay, bx, by) {
+  const t = segT(px, py, ax, ay, bx, by);
+  return Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay)));
+}
+
+// 點 (px, py) 投影到線段 (a → b) 上的位置：0 在 a、1 在 b
+export function segT(px, py, ax, ay, bx, by) {
   const dx = bx - ax;
   const dy = by - ay;
   const len = dx * dx + dy * dy;
-  const t = len ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len)) : 0;
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  return len ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len)) : 0;
 }

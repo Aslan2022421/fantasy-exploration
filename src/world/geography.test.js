@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { buildGeography, GEO } from './geography.js';
 import { LAND } from './landform.js';
+import { RIVER } from './riverbed.js';
 import { createWorld } from './world.js';
 
 const SMALL = { zonesX: 3, zonesY: 3 }; // 3×3 區的小世界（96×96 建一次要 2 秒）
@@ -50,7 +51,7 @@ test('連通：被一圈深水圍住的出生點，會開一條淺灘接到外�
   };
   const g = buildGeography(island, 1, 256, 256);
   expect(g.fords).toBeGreaterThan(0);
-  const mask = g.paint(0, 0, 256, 256);
+  const { mask } = g.paint(0, 0, 256, 256);
   let fordInRing = 0;
   for (let y = 0; y < 256; y++) {
     for (let x = 0; x < 256; x++) {
@@ -62,18 +63,32 @@ test('連通：被一圈深水圍住的出生點，會開一條淺灘接到外�
   expect(GEO.fordRadius).toBeGreaterThan(0);
 });
 
-test('畫進世界：河道是水、第 0 層', () => {
+test('畫進世界：河道是水，跟著地勢走（比旁邊的陸地低、最多低 2 層），高處也有河', () => {
   const world = createWorld(20261112, DATA, SMALL);
   const g = world.geography;
-  const mask = g.paint(0, 0, world.width, world.height);
+  const { mask } = g.paint(0, 0, world.width, world.height);
   let checked = 0;
-  for (let i = 0; i < mask.length && checked < 50; i++) {
+  let high = 0;
+  for (let i = 0; i < mask.length; i++) {
     if (mask[i] !== 1 && mask[i] !== 2) continue;
     const x = i % world.width;
     const y = Math.floor(i / world.width);
+    if (x < 1 || y < 1 || x >= world.width - 1 || y >= world.height - 1) continue;
     expect(world.waterAt(x, y)).toBeGreaterThanOrEqual(0);
-    expect(world.tierAt(x, y)).toBe(0);
+    const t = world.tierAt(x, y);
+    if (t > 0) high++;
+    let lowestLand = Number.POSITIVE_INFINITY;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (world.waterAt(x + dx, y + dy) < 0) lowestLand = Math.min(lowestLand, world.tierAt(x + dx, y + dy));
+      }
+    }
+    if (lowestLand < Number.POSITIVE_INFINITY) {
+      expect(t).toBeLessThan(lowestLand);
+      expect(lowestLand - t).toBeLessThanOrEqual(RIVER.carve);
+    }
     checked++;
   }
-  expect(checked).toBeGreaterThan(0);
+  expect(checked).toBeGreaterThan(100);
+  expect(high).toBeGreaterThan(0);
 });

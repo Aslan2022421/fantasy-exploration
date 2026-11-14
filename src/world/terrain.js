@@ -6,12 +6,12 @@
 
 import { CLIMATE, createClimate } from './climate.js';
 import { inFootprint, MAX_SIZE, meanArea, PART_TRUNK, partOf, trunkCell } from './footprint.js';
-import { applyGeography } from './geography.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { fbm, hash01, makeNoise } from './noise.js';
 import { isPeak } from './peak.js';
 import { reliefOf } from './relief.js';
+import { applyGeography } from './riverbed.js';
 
 // 生成的參數（調比例時改這裡；大地形與水的參數在 landform.js 的 LAND）
 export const GEN = {
@@ -172,7 +172,7 @@ export function createTerrainGen(seed, data) {
     const x0 = zx * size;
     const y0 = zy * size;
     const g = land.grid(x0 - E, y0 - E, G, G);
-    if (geo) applyGeography(g, x0 - E, y0 - E, G, geo); // 河道、淺灘畫進高度格
+    if (geo) applyGeography(g, x0 - E, y0 - E, G, geo, land.macroAt); // 河道、淺灘畫進高度格
     const N = G * G;
     const bAll = new Uint8Array(N);
     const tBand = new Uint8Array(N);

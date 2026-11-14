@@ -157,7 +157,8 @@ describe('世界的形狀', () => {
     }
   });
 
-  test('水面在第 0 層、陸地在第 1 層以上；淺水一定在深水旁邊', () => {
+  // 只看湖海：這裡的 gen 沒接世界的地理，生出來的區沒有河（河跟著地勢走，見 geography.test.js）
+  test('湖海的水面在第 0 層、陸地在第 1 層以上；淺水一定在深水旁邊', () => {
     const gen = createTerrainGen(SEED, DATA);
     const R = LAND.shallowRange;
     const deepId = W('deep-water');
@@ -165,7 +166,7 @@ describe('世界的形狀', () => {
     let shallow = 0;
     for (let zy = 0; zy < 3; zy++) {
       for (let zx = 0; zx < 3; zx++) {
-        const z = world.zone(zx, zy);
+        const z = gen.genZone(zx, zy, Z);
         for (let i = 0; i < z.water.length; i++) {
           const isWater = z.water[i] === deepId || z.water[i] === shallowId;
           if (isWater) expect(z.tier[i]).toBe(0);

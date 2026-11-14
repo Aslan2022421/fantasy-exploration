@@ -30,7 +30,9 @@ test('沼澤在最低的陸地層、平坦；生態覆蓋只長在泥土與沙�
           expect([S('dirt'), S('sand')]).toContain(z.surface[i]);
         }
         if (z.surface[i] === S('ice')) expect(z.water[i]).toBe(W('shallow-water'));
-        if (z.landform[i] === MOUNTAIN && z.height[i] > snowline) expect(z.surface[i]).toBe(S('snow'));
+        // 高山上的河是水（冷的地方結冰），只看陸地
+        if (z.landform[i] === MOUNTAIN && z.height[i] > snowline && z.water[i] === LAYER_NONE)
+          expect(z.surface[i]).toBe(S('snow'));
       }
     }
   }

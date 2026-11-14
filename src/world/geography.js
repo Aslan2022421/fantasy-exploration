@@ -6,12 +6,13 @@
 // 3. 河流：高處（GEO.source 以上）挑幾格當水源，沿流向一路流到湖海或世界邊緣；匯流越多河越寬，夠寬中間是深水
 // 4. 濕度：離河、湖越近越濕；山的背風面（盛行風由西往東，山的東側）比較乾
 // 5. 連通：從世界中央（出生點附近）出發，被深水隔開的陸地，從要跨最少深水的地方開一條淺灘接過來（海中的島不接）
-// 畫進區域時（applyGeography）：河道是水（第 0 層），兩岸自然變成高度層的牆，看起來是挖下去的河谷
+// 畫進區域（riverbed.js）：河跟著地勢走，河面比兩岸低一層，最多挖下去 2 層成河谷；河道用雜訊推彎
 // ROT.js 沒有淹水、洪水填充與有成本的尋路，這幾個自己寫（都只在粗格上算，世界 96×96 區也只有約一百萬格）
 
-import { AROUND, heap, linkRegions, segDist } from './gridtools.js';
-import { LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
+import { AROUND, heap, linkRegions } from './gridtools.js';
+import { LAND } from './landform.js';
 import { hash01 } from './noise.js';
+import { MASK_FORD, MASK_RIVER, makePainter } from './riverbed.js';
 
 export const GEO = {
   cell: 8, // 粗格邊長（格）
@@ -30,10 +31,6 @@ export const GEO = {
   fordMax: 4, // 淺灘最多跨幾個粗格的深水；再寬的（海中的島）不接
   fordMinLand: 4, // 陸地至少幾個粗格才接
 };
-
-const MASK_RIVER = 1;
-const MASK_DEEP = 2;
-const MASK_FORD = 3;
 
 // heightAt(x, y)：格子座標的高度；width、height：世界大小（格）
 export function buildGeography(heightAt, seed, width, height) {
@@ -106,7 +103,18 @@ export function buildGeography(heightAt, seed, width, height) {
     const a = center(i);
     const b = center(down[i]);
     const r = GEO.riverWidth + GEO.riverGrow * Math.log2(flow[i]);
-    segments.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, r, deep: flow[i] >= GEO.deepFlow, kind: MASK_RIVER });
+    const deep = flow[i] >= GEO.deepFlow;
+    segments.push({
+      ax: a.x,
+      ay: a.y,
+      bx: b.x,
+      by: b.y,
+      r,
+      deep,
+      kind: MASK_RIVER,
+      la: filled[i],
+      lb: filled[down[i]],
+    });
   }
 
   // 4. 濕度：離水（湖海與河）的粗格距離，加上背風面
@@ -163,52 +171,7 @@ export function buildGeography(heightAt, seed, width, height) {
     return null;
   }
 
-  // 河段照所在的粗格分桶，畫一區時只看附近的
-  const buckets = new Map();
-  segments.forEach((s, id) => {
-    const pad = s.r + 1;
-    const cx0 = Math.floor((Math.min(s.ax, s.bx) - pad) / C);
-    const cx1 = Math.floor((Math.max(s.ax, s.bx) + pad) / C);
-    const cy0 = Math.floor((Math.min(s.ay, s.by) - pad) / C);
-    const cy1 = Math.floor((Math.max(s.ay, s.by) + pad) / C);
-    for (let cy = cy0; cy <= cy1; cy++) {
-      for (let cx = cx0; cx <= cx1; cx++) {
-        const key = cy * (W + 2) + cx;
-        if (!buckets.has(key)) buckets.set(key, new Set());
-        buckets.get(key).add(id);
-      }
-    }
-  });
-
-  // 一塊矩形（左上 x0, y0，寬 w、高 h）裡每格是不是河、深河或淺灘
-  function paint(x0, y0, w, h) {
-    const mask = new Uint8Array(w * h);
-    const ids = new Set();
-    for (let cy = Math.floor(y0 / C) - 1; cy <= Math.floor((y0 + h) / C) + 1; cy++) {
-      for (let cx = Math.floor(x0 / C) - 1; cx <= Math.floor((x0 + w) / C) + 1; cx++) {
-        for (const id of buckets.get(cy * (W + 2) + cx) ?? []) ids.add(id);
-      }
-    }
-    const order = [...ids].sort((a, b) => segments[a].kind - segments[b].kind); // 淺灘最後畫，蓋過深河
-    for (const id of order) {
-      const s = segments[id];
-      const pad = s.r + 1;
-      const xa = Math.max(x0, Math.floor(Math.min(s.ax, s.bx) - pad));
-      const xb = Math.min(x0 + w - 1, Math.ceil(Math.max(s.ax, s.bx) + pad));
-      const ya = Math.max(y0, Math.floor(Math.min(s.ay, s.by) - pad));
-      const yb = Math.min(y0 + h - 1, Math.ceil(Math.max(s.ay, s.by) + pad));
-      for (let y = ya; y <= yb; y++) {
-        for (let x = xa; x <= xb; x++) {
-          const d = segDist(x + 0.5, y + 0.5, s.ax, s.ay, s.bx, s.by);
-          if (d > s.r) continue;
-          const k = (y - y0) * w + (x - x0);
-          if (s.kind === MASK_FORD) mask[k] = MASK_FORD;
-          else if (mask[k] !== MASK_FORD) mask[k] = Math.max(mask[k], s.deep && d <= s.r - 1 ? MASK_DEEP : MASK_RIVER);
-        }
-      }
-    }
-    return mask;
-  }
+  const paint = makePainter(segments, W, C, seed); // 畫河段（riverbed.js）
 
   // 濕度修正：粗格中心之間雙線性內插
   function moistureAt(x, y) {
@@ -237,22 +200,4 @@ export function buildGeography(heightAt, seed, width, height) {
     paint,
     moistureAt,
   };
-}
-
-// 把河道與淺灘畫進一塊高度格（landform.js 的 grid 結果，左上 gx0, gy0、邊長 G）：
-// 河道是水、第 0 層、高度壓到水線以下；淺灘把深水改成淺水
-export function applyGeography(g, gx0, gy0, G, geo) {
-  const mask = geo.paint(gx0, gy0, G, G);
-  for (let c = 0; c < mask.length; c++) {
-    const m = mask[c];
-    if (!m) continue;
-    if (m === MASK_FORD) {
-      if (g.water[c] === WATER_DEEP) g.water[c] = WATER_SHALLOW;
-      continue;
-    }
-    const deep = m === MASK_DEEP;
-    if (g.water[c] === WATER_NONE || deep) g.water[c] = deep ? WATER_DEEP : WATER_SHALLOW;
-    g.tier[c] = 0;
-    g.h[c] = Math.min(g.h[c], LAND.water - (deep ? LAND.deepDepth + 0.02 : 0.02));
-  }
 }

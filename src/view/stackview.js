@@ -20,7 +20,7 @@ import {
   wallSouth,
 } from './perspective.js';
 import { drawRoute } from './route.js';
-import { mixColor } from './shades.js';
+import { dimColor, mixColor } from './shades.js';
 
 const CHUNK = 16; // 分塊邊長（格）
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
@@ -84,7 +84,9 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     if (!layers.length) put(flat.h, { glyph: ol.glyph, fg: ol.fg, bg: null, ground: h0, tilt: flat.tilt });
     for (const l of layers) {
       const trunk = l.part === 'trunk';
-      const color = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg; // 礦脈頂層以下是岩石色
+      let color = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg; // 礦脈頂層以下是岩石色
+      const cap = ol.cap?.[l.j]; // 雪地或山上的樹：頂端幾層往地形顏色靠、越上面越亮
+      if (cap) color = dimColor(mixColor(color, cap.color, cap.mix), cap.light);
       const fg = fade(color, g.bg, fadeAt(trunk ? Math.min(l.j, 1) : l.j)); // 樹幹最多壓淡一級，根部貼地看得到
       const item = { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh, px: liftPx };
       if (l.dh === 0) put(flat.h, { ...item, tilt: flat.tilt });

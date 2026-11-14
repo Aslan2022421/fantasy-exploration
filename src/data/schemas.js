@@ -50,10 +50,13 @@ export const ObjectSchema = z.object({
   glyph: Glyph,
   color: Color,
   passable: z.boolean(),
-  height: z.number().int().min(0).max(3), // 有多高（樹 3、矮叢 2）
+  // 疊幾層（使用者定：樹依種類 3～5 層，樹幹往上疊、最頂層是樹冠；1 層是平的，不疊）
+  height: z.number().int().min(0).max(5),
   trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去（使用者定）；樹冠其他格照 passable
   // 佔地多大（直徑幾格），每棵從這裡用雜湊挑一個；重複寫的數字比較常出現（例如 4 格的老樹只寫一次）
   sizes: z.array(z.number().int().min(1).max(4)).min(1),
+  // 樹冠的形狀：round 是一團（直徑 3 時是九宮格，旁邊貼 8 邊），cross 是十字（旁邊貼 4 邊）
+  canopy: z.enum(['round', 'cross']).default('round'),
   tile: z.string().nullable(),
 });
 

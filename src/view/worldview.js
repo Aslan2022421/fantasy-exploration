@@ -13,7 +13,7 @@ import { COLORS } from './colors.js';
 import { inShadow, sideSource } from './extrude.js';
 import { lookAt } from './glyphs.js';
 import { createParallaxView } from './parallaxview.js';
-import { mountainRingFactor } from './perspective.js';
+import { mountainRingFactor, SLOPE_STACK } from './perspective.js';
 import { cameraOrigin } from './screen.js';
 import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 import { createStackView } from './stackview.js';
@@ -101,7 +101,14 @@ export function createWorldView(mapView, world, data, { mode = 'perspective' } =
     };
   }
   const createStack = mode === 'parallax' ? createParallaxView : createStackView;
-  const stack = createStack(mapView, world, objects, { ground: groundLook, object: objectLook });
+  // 斜坡：坡度到 SLOPE_STACK.min、不是水也不是山，回傳 { gx 東邊減西邊的高度 }（往上坡那側偏），不然 null
+  function slopeLook(x, y) {
+    if (world.waterAt(x, y) >= 0 || isMountain[world.landformAt(x, y)]) return null;
+    if (world.slopeAt(x, y) < SLOPE_STACK.min) return null;
+    return { gx: world.heightAt(x + 1, y) - world.heightAt(x - 1, y) };
+  }
+  const look = { ground: groundLook, object: objectLook, slope: slopeLook };
+  const stack = createStack(mapView, world, objects, look);
 
   function withObject(look, x, y, o) {
     if (o < 0) return look;

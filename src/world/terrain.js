@@ -133,7 +133,7 @@ export function createTerrainGen(seed, data) {
   // 物件層的錨點：這格是不是一棵物件的左上角。回傳 { object, size } 或 null。
   // 物件依物種有大小（資料的 sizes），撒的機率除以平均佔地，樹變大後林子的密度不會跟著暴增。
   // 山地上越高樹越少，高出山地門檻 treelineRange 就沒有樹（使用者定：山地的高度決定樹多不多）
-  const objectArea = data.objects.map((o) => meanArea(o.sizes));
+  const objectArea = data.objects.map((o) => meanArea(o.sizes, o.canopy));
   function anchorAt(x, y, biome, water, surface, h) {
     if (!canGrow(water, surface)) return null;
     const line = h > LAND.mountain ? Math.max(0, 1 - (h - LAND.mountain) / GEN.treelineRange) : 1;
@@ -225,7 +225,7 @@ export function createTerrainGen(seed, data) {
             for (let k = 0; k < MAX_SIZE; k++) {
               const ac = c - j * G - k;
               const a = anchors[ac];
-              if (!a || !inFootprint(k, j, a.size)) continue;
+              if (!a || !inFootprint(k, j, a.size, data.objects[a.object].canopy)) continue;
               const tc = trunkCell(a.size);
               const tci = ac + tc.j * G + tc.i;
               if (!canGrow(wAll[tci], sAll[tci]) || g.tier[tci] !== g.tier[c]) continue;

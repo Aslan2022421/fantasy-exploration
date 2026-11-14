@@ -4,7 +4,8 @@
 // - 分塊裡照高度由低到高畫（地面、牆、物件各層），同高時北邊先畫、南邊後畫；
 //   東西會往右上錯開進隔壁的分塊，所以畫一塊時連它下面幾列、左邊幾欄也一起畫，超出的部分自然被裁掉
 // - 牆的下層往低處那格的底色壓淡，物件的下層往腳下的底色壓淡
-// - 冒險者、路線、目標每個畫面另外畫在最上面（不進快取），所以冒險者不會被樹擋住
+// - 冒險者、路線、目標每個畫面另外畫（不進快取）；冒險者附近比他高的樹冠再補畫一次，站在樹冠下會被蓋住
+// - 斜坡多疊一層、往上坡那側偏；樹依種類疊層、樹冠在頂（perspective.js 的 objectLayers）
 // 地圖內容改變（之後砍樹之類）時要呼叫 invalidate() 丟掉快取
 
 import { COLORS } from './colors.js';
@@ -16,6 +17,7 @@ import {
   objectLayers,
   PLAYER_LAYERS,
   shiftUp,
+  slopeTilt,
   upShiftCells,
   wallSouth,
 } from './perspective.js';
@@ -26,6 +28,7 @@ const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
 // 視野外壓暗：COLORS.dark 的 RGB。使用者說先關閉（on: false），程式留著
 const SIGHT = { on: false, near: 9, far: 18, rgb: '8, 10, 12', alpha: 0.88 };
 // 路線的亮度隨高度、線寬與虛線的 [畫, 空]（字元像素）
+const COVER = { below: 3, left: 1 }; // 會蓋到冒險者的樹冠：往南幾格、往西幾格裡的
 const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3], smooth: 2 };
 
 const fadeCache = new Map();
@@ -63,7 +66,12 @@ export function createStackView(mapView, world, objects, look, { now = () => per
         put(h, { glyph, fg: fade(g.fg, lowBg, k), bg: fade(g.bg, lowBg, k) });
       }
     }
-    put(h0, { glyph, fg: g.fg, bg: g.bg });
+    // 斜坡（不是牆、不是山、不是水）：底下一層壓淡，上面一層往上坡那側偏，看得出往哪邊斜
+    const slope = wall ? null : look.slope(x, y);
+    if (slope) {
+      put(h0, { glyph, fg: fade(g.fg, g.bg, fadeAt(1)), bg: g.bg });
+      put(h0 + 1, { glyph, fg: g.fg, bg: g.bg, ground: h0, tilt: slope.gx });
+    } else put(h0, { glyph, fg: g.fg, bg: g.bg });
     if (o < 0) return;
     const ol = look.object(x, y, o);
     const layers = objectLayers(objects[o], ol.isTrunk);
@@ -71,8 +79,17 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     for (const l of layers) {
       const trunk = l.part === 'trunk';
       const fg = fade(trunk ? ol.trunkFg : ol.fg, g.bg, fadeAt(l.j));
-      put(h0 + l.dh, { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh });
+      const item = { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh };
+      put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });
     }
+  }
+
+  // 這一項畫在哪：地面高度、往上幾層（物件），斜坡那層再往上坡偏
+  function offsetOf(it, k) {
+    const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k);
+    if (it.tilt === undefined) return s;
+    const t = slopeTilt(it.tilt, k);
+    return { ox: s.ox + t.ox, oy: s.oy + t.oy };
   }
 
   function renderChunk(cx, cy) {
@@ -88,7 +105,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     for (const list of buckets) {
       if (!list) continue;
       for (const it of list) {
-        const { ox, oy } = shiftOf(it.ground ?? it.h, it.lift ?? 0, k);
+        const { ox, oy } = offsetOf(it, k);
         layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg);
       }
     }
@@ -158,6 +175,23 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
+  // 冒險者在樹冠底下時被樹冠蓋住（使用者要的點綴）：冒險者附近、比冒險者頭頂高的樹冠，在冒險者之後再畫一次。
+  // 樹冠往右上錯開，會蓋到冒險者的是冒險者那格與它南邊、西邊幾格的樹冠
+  function coverPlayer(f, player, top) {
+    const near = [];
+    for (let y = player.y; y <= player.y + COVER.below; y++) {
+      for (let x = player.x - COVER.left; x <= player.x; x++) if (world.inside(x, y)) collect(x, y, near);
+    }
+    for (const list of near) {
+      if (!list) continue;
+      for (const it of list) {
+        if (!it.leaf || it.h <= top) continue;
+        const { px, py } = placeOf(f, it.x, it.y, it.ground, it.lift);
+        mapView.drawShifted(0, 0, px, py, it.glyph, it.fg, null);
+      }
+    }
+  }
+
   // 畫一次。cam 是相機該到的位置（整數）；相機還在半路上回傳 true，呼叫的人下一個畫面再畫
   function draw(screen, cam, overlay) {
     const { player } = overlay;
@@ -191,6 +225,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
         const { px, py } = placeOf(f, player.x, player.y, p0 + i);
         mapView.drawShifted(0, 0, px, py, '@', fg, null);
       }
+      coverPlayer(f, player, p0 + PLAYER_LAYERS - 1);
     });
     return view.x !== cam.x || view.y !== cam.y;
   }

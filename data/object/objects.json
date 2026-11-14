@@ -5,9 +5,10 @@
     "glyph": "♣",
     "color": "#5f8a4a",
     "passable": true,
-    "height": 3,
+    "height": 4,
     "trunk": true,
-    "sizes": [1, 2, 2],
+    "sizes": [3],
+    "canopy": "round",
     "tile": null
   },
   {
@@ -16,9 +17,10 @@
     "glyph": "↑",
     "color": "#5a8a6a",
     "passable": true,
-    "height": 3,
+    "height": 5,
     "trunk": true,
-    "sizes": [1, 1, 2],
+    "sizes": [3],
+    "canopy": "cross",
     "tile": null
   },
   {
@@ -27,9 +29,10 @@
     "glyph": "♠",
     "color": "#4f9a4a",
     "passable": true,
-    "height": 3,
+    "height": 4,
     "trunk": true,
-    "sizes": [1, 2, 2],
+    "sizes": [3],
+    "canopy": "round",
     "tile": null
   },
   {
@@ -38,9 +41,10 @@
     "glyph": "τ",
     "color": "#8a9a5a",
     "passable": true,
-    "height": 2,
+    "height": 1,
     "trunk": false,
     "sizes": [1],
+    "canopy": "round",
     "tile": null
   }
 ]

@@ -6,12 +6,13 @@ import {
   groundHeight,
   LERP,
   layerStep,
+  liftUp,
   mountainRingFactor,
   objectLayers,
   STACK,
   shiftOf,
   shiftUp,
-  TREE,
+  slopeTilt,
   UP,
   wallRange,
   wallSouth,
@@ -71,15 +72,23 @@ test('牆：比往中心那一格高才有，記下低處那格；水邊遠側�
   expect(wallRange(w, 10, 10, 10, 10)).toBeNull();
 });
 
-test('往上錯開的量是固定螢幕像素、接近垂直：格子放大幾倍，字元像素就除以幾，總量有上限', () => {
+test('往上錯開的量是固定螢幕像素、接近垂直：每層往上 px、往右只偏 1 像素，總量有上限', () => {
   for (const k of [1, 2, 3, 4]) {
     const s = shiftUp(2, k);
     expect(s.oy * k).toBeCloseTo(-2 * UP.px);
-    expect(s.ox * k).toBeCloseTo(2 * UP.px * UP.lean); // 只往右微微偏
+    expect(s.ox * k).toBeCloseTo(2 * UP.leanPx);
     expect(shiftUp(999, k).oy * k).toBeCloseTo(-UP.maxPx);
+    expect(liftUp(4, k).oy * k).toBeCloseTo(-4 * UP.objPx); // 樹每層錯得比地形多
+    expect(liftUp(4, k).ox * k).toBeCloseTo(4 * UP.objLeanPx);
   }
-  expect(UP.lean).toBeLessThan(0.5);
   expect(shiftUp(0, 2)).toEqual({ ox: 0, oy: 0 });
+});
+
+test('斜坡那層：往上一層，往上坡那側（東高往右、西高往左）偏', () => {
+  expect(slopeTilt(5, 1).ox).toBeGreaterThan(0);
+  expect(slopeTilt(-5, 1).ox).toBeLessThan(0);
+  expect(slopeTilt(0, 1).ox).toBe(0);
+  expect(slopeTilt(5, 1).oy).toBe(-UP.px);
 });
 
 test('往斜上方疊的牆：比南、西、西南最低那格高才有，從那格的高度疊上來', () => {
@@ -92,16 +101,20 @@ test('往斜上方疊的牆：比南、西、西南最低那格高才有，從�
   expect(wallSouth(w, 5, 3)).toBeNull(); // 高台東北那格：南、西一樣高，西南比它高
 });
 
-test('樹：樹幹在下、樹葉在最頂層，樹冠其他格只有頂上的樹葉；矮叢實心 2 層', () => {
-  const canopy = objectLayers(obj('broadleaf'), false);
-  expect(canopy.map((l) => [l.dh, l.part])).toEqual(TREE.leaves.map((dh) => [dh, 'leaf']));
-  const trunk = objectLayers(obj('broadleaf'), true);
-  const top = trunk.at(-1);
-  expect(top.part).toBe('leaf'); // 最上面是樹葉
-  expect(Math.max(...trunk.filter((l) => l.part === 'trunk').map((l) => l.dh))).toBeLessThan(top.dh);
-  expect(objectLayers(obj('shrub'), false).map((l) => [l.dh, l.part])).toEqual([
-    [1, 'solid'],
-    [2, 'solid'],
-  ]);
+test('樹：依種類疊層，樹幹那格從 1 疊到 height-1、頂層是樹冠；旁邊的樹冠只有頂層一片；矮叢平的不疊', () => {
+  for (const id of ['broadleaf', 'conifer', 'jungle']) {
+    const o = obj(id);
+    expect(o.height).toBeGreaterThanOrEqual(3);
+    expect(o.height).toBeLessThanOrEqual(5);
+    const trunk = objectLayers(o, true);
+    expect(trunk.filter((l) => l.part === 'trunk').map((l) => l.dh)).toEqual(
+      Array.from({ length: o.height - 1 }, (_, i) => i + 1),
+    );
+    expect(trunk.at(-1)).toMatchObject({ dh: o.height, part: 'leaf' });
+    expect(objectLayers(o, false)).toEqual([{ dh: o.height, part: 'leaf', j: 0 }]);
+  }
+  expect(obj('conifer').canopy).toBe('cross');
+  expect(obj('broadleaf').canopy).toBe('round');
+  expect(objectLayers(obj('shrub'), false)).toEqual([{ dh: 0, part: 'solid', j: 0 }]);
   expect(objectLayers(null, false)).toEqual([]);
 });

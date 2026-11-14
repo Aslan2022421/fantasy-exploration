@@ -15,24 +15,26 @@ export function trunkCell(d) {
   return { i: m, j: m };
 }
 
-// (i, j) 是相對錨點的位置（0～d-1）；在不在直徑 d 的那一團裡
-export function inFootprint(i, j, d) {
+// (i, j) 是相對錨點的位置（0～d-1）；在不在直徑 d 的那一團裡。
+// shape：round 接近圓形（直徑 3 是九宮格，樹幹旁邊貼 8 邊）；cross 是十字（旁邊貼 4 邊，只用在奇數直徑）
+export function inFootprint(i, j, d, shape = 'round') {
   if (i < 0 || j < 0 || i >= d || j >= d) return false;
   const c = (d - 1) / 2;
+  if (shape === 'cross' && d % 2 === 1) return i === c || j === c;
   const r = d / 2 + 0.1;
   return (i - c) ** 2 + (j - c) ** 2 <= r * r;
 }
 
 // 直徑 d 那一團有幾格
-export function areaOf(d) {
+export function areaOf(d, shape = 'round') {
   let n = 0;
-  for (let j = 0; j < d; j++) for (let i = 0; i < d; i++) if (inFootprint(i, j, d)) n++;
+  for (let j = 0; j < d; j++) for (let i = 0; i < d; i++) if (inFootprint(i, j, d, shape)) n++;
   return n;
 }
 
 // 一組大小平均佔幾格（用來換算撒錨點的機率，讓樹變大後林子的密度不會跟著暴增）
-export function meanArea(sizes) {
-  return sizes.reduce((s, d) => s + areaOf(d), 0) / sizes.length;
+export function meanArea(sizes, shape = 'round') {
+  return sizes.reduce((s, d) => s + areaOf(d, shape), 0) / sizes.length;
 }
 
 // (i, j) 在直徑 d 的樹冠裡屬於哪一側

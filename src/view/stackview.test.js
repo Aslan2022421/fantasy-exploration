@@ -28,7 +28,7 @@ const mapView = {
   vignette: (cx, cy, r0, r1) => drawn.push({ vignette: true, cx, cy, r0, r1 }),
   drawShifted: (_vx, _vy, px, py, ch, _fg, bg) => drawn.push({ px, py, ch, bg }),
 };
-const look = { ground: () => ({ glyph: '.', fg: '#ffffff', bg: '#000000' }), object: () => null };
+const look = { ground: () => ({ glyph: '.', fg: '#ffffff', bg: '#000000' }), object: () => null, slope: () => null };
 let clock = 0;
 const view = createStackView(mapView, world, [], look, { now: () => clock });
 const screen = { cols: 20, rows: 20 };

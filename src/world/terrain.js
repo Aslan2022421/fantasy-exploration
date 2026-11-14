@@ -170,7 +170,7 @@ export function createTerrainGen(seed, data, size = null) {
         slAll[c] = Math.min(255, Math.round(Math.hypot(grad.dx, grad.dy) * SLOPE_SCALE));
         wAll[c] = waterOf(g.water[c], g.tier[c], slAll[c], w);
         sAll[c] = surfaceOf(wAll[c], g.h[c], slAll[c], tBand[c], wBand[c], t);
-        anchors[c] = placer.anchorAt(X, Y, bAll[c], wAll[c], sAll[c], g.h[c]);
+        anchors[c] = placer.anchorAt(X, Y, bAll[c], wAll[c], sAll[c], g.h[c], slAll[c]);
       }
     }
     const z = placer.zoneContext({

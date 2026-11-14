@@ -12,6 +12,7 @@
 // 同一種樣子裡挑哪個字，用座標的雜湊決定，畫面不會閃。這裡只算字形，不碰畫布，可以在 Node 裡測
 
 import { hash01 } from '../world/noise.js';
+import { mountainRing } from './perspective.js';
 
 export const RELIEF = [' ', '.', '·', '∙'];
 // 坡度門檻：只有比較陡的地方才畫起伏點，平地空著
@@ -73,7 +74,11 @@ export function slopeGlyph(gx, gy) {
   return gx > 0 ? '/' : '\\';
 }
 
+// 只有台階邊（東或西鄰格跟自己不在同一圈）才畫坡；同一圈裡的平處是平台，照原本的 ^ 與材質。
+// 一大片同方向的坡因此切成一條條台階線，中間夾著平台
 function aspectAt(world, x, y) {
+  const ring = mountainRing(world.heightAt(x, y));
+  if (mountainRing(world.heightAt(x + 1, y)) === ring && mountainRing(world.heightAt(x - 1, y)) === ring) return null;
   const d = ASPECT.span;
   const gx = world.heightAt(x + d, y) - world.heightAt(x - d, y);
   const gy = world.heightAt(x, y + d) - world.heightAt(x, y - d);

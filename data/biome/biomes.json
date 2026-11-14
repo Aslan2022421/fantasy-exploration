@@ -31,7 +31,7 @@
     "flora": [
       {
         "object": "conifer",
-        "density": 0.275
+        "density": 0.055
       },
       {
         "object": "shrub",
@@ -58,7 +58,7 @@
     "flora": [
       {
         "object": "conifer",
-        "density": 0.11
+        "density": 0.022
       },
       {
         "object": "shrub",
@@ -93,7 +93,7 @@
       },
       {
         "object": "broadleaf",
-        "density": 0.022
+        "density": 0.0024
       }
     ],
     "cover": [
@@ -124,7 +124,7 @@
     "flora": [
       {
         "object": "broadleaf",
-        "density": 0.275
+        "density": 0.0306
       },
       {
         "object": "shrub",
@@ -151,7 +151,7 @@
     "flora": [
       {
         "object": "broadleaf",
-        "density": 0.33
+        "density": 0.0367
       },
       {
         "object": "shrub",
@@ -201,7 +201,7 @@
     "flora": [
       {
         "object": "broadleaf",
-        "density": 0.055
+        "density": 0.0061
       },
       {
         "object": "shrub",
@@ -232,11 +232,11 @@
     "flora": [
       {
         "object": "broadleaf",
-        "density": 0.3
+        "density": 0.0333
       },
       {
         "object": "palm",
-        "density": 0.08
+        "density": 0.0267
       },
       {
         "object": "shrub",

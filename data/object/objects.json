@@ -7,7 +7,7 @@
     "passable": true,
     "height": 4,
     "trunk": true,
-    "sizes": [3],
+    "sizes": [1],
     "canopy": "round",
     "tile": null,
     "gather": {
@@ -28,7 +28,7 @@
     "passable": true,
     "height": 5,
     "trunk": true,
-    "sizes": [3],
+    "sizes": [1],
     "canopy": "cross",
     "tile": null,
     "gather": {
@@ -49,7 +49,7 @@
     "passable": true,
     "height": 4,
     "trunk": true,
-    "sizes": [3],
+    "sizes": [1],
     "canopy": "pair",
     "tile": null,
     "gather": {

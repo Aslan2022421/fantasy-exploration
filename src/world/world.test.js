@@ -259,26 +259,16 @@ describe('世界的形狀', () => {
     expect(canopy).toBeGreaterThan(trunks);
   });
 
-  test('每格樹冠附近 3 格內都有同種、同高度層的樹幹（樹冠不跨層，也不會沒有根）', () => {
+  test('樹只佔一格：有樹幹的物件每一格都是樹幹，旁邊沒有樹冠', () => {
     const z = world.zone(1, 1);
-    let checked = 0;
-    for (let i = 0; i < z.object.length && checked < 400; i++) {
+    let trees = 0;
+    for (let i = 0; i < z.object.length; i++) {
       const o = z.object[i];
-      if (!o || !DATA.objects[o - 1].trunk || z.objectPart[i] === PART_TRUNK) continue;
-      const x = i % Z;
-      const y = Math.floor(i / Z);
-      if (x < 3 || y < 3 || x > Z - 4 || y > Z - 4) continue; // 邊上的樹幹可能在隔壁區
-      let found = false;
-      for (let dy = -3; dy <= 3 && !found; dy++) {
-        for (let dx = -3; dx <= 3; dx++) {
-          const j = (y + dy) * Z + (x + dx);
-          if (z.object[j] === o && z.objectPart[j] === PART_TRUNK && z.tier[j] === z.tier[i]) found = true;
-        }
-      }
-      expect(found, `(${x}, ${y})`).toBe(true);
-      checked++;
+      if (!o || !DATA.objects[o - 1].trunk) continue;
+      expect(z.objectPart[i]).toBe(PART_TRUNK);
+      trees++;
     }
-    expect(checked).toBeGreaterThan(50);
+    expect(trees).toBeGreaterThan(10);
   });
 
   test('格子的資訊', () => {

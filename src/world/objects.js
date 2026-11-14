@@ -1,5 +1,6 @@
 // 物件層的生成：
-// - 樹、矮叢照生態撒錨點，多格的樹冠互相讓位（樹幹永遠露出來，其餘取雜湊最小的那棵）
+// - 樹、矮叢照生態撒錨點，多格的樹冠互相讓位（樹幹永遠露出來，其餘取雜湊最小的那棵）；現在的樹都只佔一格
+// - 山上平坦的台階（平台）樹線放寬，高山的台階上也有幾棵樹
 // - 岩壁長在岩石上，用雜訊撒成一片一片；單獨一格、四邊都沒有岩壁的不放
 // - 礦脈是貼著山腳的岩壁（附近有非山地的陸地），以及山以外的岩石露頭，各有一部分
 // - 草本長在低處（高度層 1～2）、溫和或炎熱、不乾燥、靠近河或湖的泥土上
@@ -18,6 +19,9 @@ export const PLACE = {
   herbDensity: 0.08, // 符合條件的格子長草本的機率
   herbRange: 2, // 這麼多格內有河或湖
   herbMaxTier: 2, // 高度層到這裡為止才長草本
+  ledgeSlope: 25, // 山上坡度（SLOPE_SCALE 倍）比這個平的算平台
+  ledgeAbove: 0.35, // 高出山地門檻這麼多以內的平台，樹線放寬
+  ledgeTrees: 0.4, // 平台上長樹的機率至少是平地的幾成
 };
 
 // ids：地形編號（ROCK、DIRT、ICE、SHALLOW、DEEP、NONE）；treelineRange：山地高出門檻多少就沒有樹
@@ -41,9 +45,12 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
 
   // 這格是不是一棵物件的左上角，回傳 { object, size, turn } 或 null。撒的機率除以平均佔地，
   // 樹冠大的林子不會跟著變密；山地越高樹越少，高出 treelineRange 就沒有樹
-  function anchorAt(x, y, biome, water, surface, h) {
+  function anchorAt(x, y, biome, water, surface, h, slope) {
     if (!canGrow(water, surface)) return null;
-    const line = h > LAND.mountain ? Math.max(0, 1 - (h - LAND.mountain) / treelineRange) : 1;
+    let line = h > LAND.mountain ? Math.max(0, 1 - (h - LAND.mountain) / treelineRange) : 1;
+    // 山上平坦的台階（平台）樹線放寬：高出山地門檻 ledgeAbove 以內，平台至少照 ledgeTrees 的比例長樹
+    if (h > LAND.mountain && slope < PLACE.ledgeSlope && h < LAND.mountain + PLACE.ledgeAbove)
+      line = Math.max(line, PLACE.ledgeTrees);
     if (line <= 0) return null;
     const list = flora[biome];
     const m = Math.min(1, Math.max(0, 0.5 + 1.5 * fbm(nFlora, x, y, PLACE.floraBase, 2)));

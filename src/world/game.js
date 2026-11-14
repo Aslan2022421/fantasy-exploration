@@ -5,18 +5,29 @@
 // 地形生成一改，舊紀錄就對不上新地圖：存檔記下世界版本（WORLD_VERSION），不同就不讀；
 // 讀出來冒險者站在走不過去的格子上，也當成不相容
 
+import { RNG } from 'rot-js';
 import { z } from 'zod';
 import { createLog, RecordSchema } from '../core/records.js';
-import { createStreams } from '../core/rng.js';
+import { createStreams, streamSeed } from '../core/rng.js';
 import { DATA } from '../data/load.js';
+import { withChanges } from './changes.js';
+import { applyGather, planGather, sourceAt } from './gather.js';
 import { tryMove } from './move.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
-export const SAVE_FORMAT = 3; // 3：加上世界版本
+export const SAVE_FORMAT = 4; // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子
 export const CHECKPOINT_EVERY = 100;
 const PLAYER = 'player';
 
-const StateSchema = z.object({ player: z.object({ x: z.number(), y: z.number() }), time: z.number() });
+const Counts = z.record(z.string(), z.number());
+const StateSchema = z.object({
+  player: z.object({ x: z.number(), y: z.number() }),
+  time: z.number(),
+  bag: Counts, // 背包：材料 → 幾個
+  stock: Counts, // 現存數量（算上限用）：採到的都算，之後消耗了才扣
+  cells: z.record(z.string(), z.object({}).passthrough()), // 採過的格子（changes.js）
+});
+const emptyState = () => ({ player: { x: 0, y: 0 }, time: 0, bag: {}, stock: {}, cells: {} });
 export const SaveSchema = z.object({
   format: z.literal(SAVE_FORMAT),
   world: z.literal(WORLD_VERSION),
@@ -34,6 +45,8 @@ export function apply(state, rec) {
       return { ...state, player: { ...rec.data.at }, time: rec.time };
     case 'move':
       return { ...state, player: { ...rec.data.to }, time: rec.time + rec.data.duration };
+    case 'gather':
+      return { ...applyGather(state, rec.data), time: rec.time + rec.data.duration };
     default:
       return state;
   }
@@ -46,9 +59,10 @@ function build(seed) {
   return { rng: createStreams(seed), world: lastWorld };
 }
 
-function makeGame(seed, rng, world, log, initialState, checkpoint) {
+function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   let state = initialState;
   let lastCheckpoint = checkpoint;
+  const world = withChanges(baseWorld, DATA, () => state.cells);
 
   function record(entry) {
     const rec = log.append({ time: state.time, actor: PLAYER, ...entry });
@@ -83,6 +97,22 @@ function makeGame(seed, rng, world, log, initialState, checkpoint) {
     blocked(cause) {
       return record({ verb: 'blocked', data: {}, cause });
     },
+    // 這格能不能採：回傳那處來源（樹冠會換成樹幹那格）或 null
+    sourceAt: (at) => sourceAt(world, DATA, at.x, at.y),
+    // 採 at 那處來源一次：要站在旁邊（或上面）。不能採回傳 null，不記錄。
+    // 每次採集的骰子用「主種子＋這筆紀錄的編號」開，讀檔從檢查點接著做也一樣
+    gather(at, cause = null) {
+      const src = sourceAt(world, DATA, at.x, at.y);
+      const p = state.player;
+      if (!src || Math.max(Math.abs(src.x - p.x), Math.abs(src.y - p.y)) > 1) return null;
+      const dice = RNG.clone().setSeed(streamSeed(seed, `gather:${log.size}`));
+      return record({
+        verb: 'gather',
+        target: { x: src.x, y: src.y },
+        data: planGather(world, DATA, state, src, dice),
+        cause,
+      });
+    },
     serialize() {
       return { format: SAVE_FORMAT, world: WORLD_VERSION, seed, records: log.all(), checkpoint: lastCheckpoint };
     },
@@ -93,7 +123,7 @@ export function newGame(seed) {
   const { rng, world } = build(seed);
   const log = createLog();
   const rec = log.append({ time: 0, actor: PLAYER, verb: 'start', data: { at: startPosition(world) } });
-  return makeGame(seed, rng, world, log, apply({ player: { x: 0, y: 0 }, time: 0 }, rec), null);
+  return makeGame(seed, rng, world, log, apply(emptyState(), rec), null);
 }
 
 // 讀檔：格式不對回傳 null（呼叫端開新遊戲）。fromCheckpoint 為 false 時一律從頭重放（測試用）
@@ -102,7 +132,7 @@ export function loadGame(saved, { fromCheckpoint = true } = {}) {
   if (!parsed.success) return null;
   const { seed, records, checkpoint } = parsed.data;
   const { rng, world } = build(seed);
-  let state = { player: { x: 0, y: 0 }, time: 0 };
+  let state = emptyState();
   let from = 0;
   const useCheckpoint = fromCheckpoint && checkpoint && checkpoint.at < records.length;
   if (useCheckpoint) {
@@ -111,7 +141,8 @@ export function loadGame(saved, { fromCheckpoint = true } = {}) {
     from = checkpoint.at + 1;
   }
   for (let i = from; i < records.length; i++) state = apply(state, records[i]);
+  const game = makeGame(seed, rng, world, createLog(records), state, useCheckpoint ? checkpoint : null);
   // 保險：套完紀錄後冒險者站在走不過去的格子上，表示紀錄跟這張地圖對不上，當成不相容
-  if (!world.isPassable(state.player.x, state.player.y)) return null;
-  return makeGame(seed, rng, world, createLog(records), state, useCheckpoint ? checkpoint : null);
+  if (!game.world.isPassable(state.player.x, state.player.y)) return null;
+  return game;
 }

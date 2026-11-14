@@ -21,7 +21,11 @@ export function describePlace(world, x, y) {
   const lake = c.water && c.water.style !== 'swamp';
   const landform = lake ? '' : `，${c.landform.name}`;
   let what;
-  if (c.object) what = `${c.object.name}${c.trunk ? '的樹幹' : ''}，長在${ground}上${landform}`;
+  const state = c.picked ? '（採過了）' : c.worked ? '（挖過了）' : '';
+  // 植物（含樹樁）「長在」地上，岩壁、礦脈、碎石坑「在」地上
+  const grows = ['chop', 'pick'].includes(c.object?.gather?.action) || c.object?.id === 'stump';
+  if (c.object)
+    what = `${c.object.name}${c.trunk ? '的樹幹' : ''}${state}，${grows ? '長在' : '在'}${ground}上${landform}`;
   else what = `${c.cover ? `${c.cover.name}，` : ''}${ground}${landform}`;
   return `${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
 }

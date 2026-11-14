@@ -14,6 +14,17 @@ export function findPath(world, from, to) {
   return straighten(world, from, steps.slice(1));
 }
 
+// 走到 to 旁邊（八方向相鄰）：to 本身可以走不過去（岩壁、樹幹）。ROT.js 的 A* 從終點往回找，終點那格不檢查能不能走，
+// 所以直接拿 to 當終點，再去掉最後一步。已經在旁邊回傳 []，走不到回傳 null
+export function findPathNextTo(world, from, to) {
+  if (Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y)) <= 1) return [];
+  const astar = new Path.AStar(to.x, to.y, (x, y) => world.isPassable(x, y), { topology: 8 });
+  const steps = [];
+  astar.compute(from.x, from.y, (x, y) => steps.push({ x, y }));
+  if (steps.length < 2) return null;
+  return straighten(world, from, steps.slice(1, -1));
+}
+
 // 從 a 到 b 的八方向直線（每步主軸走一格、副軸平均分配），步數＝兩點的切比雪夫距離
 export function lineSteps(a, b) {
   const dx = b.x - a.x;

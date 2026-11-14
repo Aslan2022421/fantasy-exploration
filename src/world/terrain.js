@@ -144,7 +144,8 @@ export function createTerrainGen(seed, data) {
       const [object, density] = list[i];
       if (hash01(seed, x, y, i) < (Math.min(1, density * 2 * m) * line) / objectArea[object]) {
         const sizes = data.objects[object].sizes;
-        return { object, size: sizes[Math.floor(hash01(seed, x, y, 50 + i) * sizes.length)] };
+        const size = sizes[Math.floor(hash01(seed, x, y, 50 + i) * sizes.length)];
+        return { object, size, turn: hash01(seed, x, y, 60 + i) < 0.5 }; // turn：對邊兩片的樹冠是上下還是左右
       }
     }
     return null;
@@ -225,7 +226,7 @@ export function createTerrainGen(seed, data) {
             for (let k = 0; k < MAX_SIZE; k++) {
               const ac = c - j * G - k;
               const a = anchors[ac];
-              if (!a || !inFootprint(k, j, a.size, data.objects[a.object].canopy)) continue;
+              if (!a || !inFootprint(k, j, a.size, data.objects[a.object].canopy, a.turn)) continue;
               const tc = trunkCell(a.size);
               const tci = ac + tc.j * G + tc.i;
               if (!canGrow(wAll[tci], sAll[tci]) || g.tier[tci] !== g.tier[c]) continue;

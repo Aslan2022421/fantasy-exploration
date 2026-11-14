@@ -55,8 +55,9 @@ export const ObjectSchema = z.object({
   trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去（使用者定）；樹冠其他格照 passable
   // 佔地多大（直徑幾格），每棵從這裡用雜湊挑一個；重複寫的數字比較常出現（例如 4 格的老樹只寫一次）
   sizes: z.array(z.number().int().min(1).max(4)).min(1),
-  // 樹冠的形狀：round 是一團（直徑 3 時是九宮格，旁邊貼 8 邊），cross 是十字（旁邊貼 4 邊）
-  canopy: z.enum(['round', 'cross']).default('round'),
+  // 樹冠的形狀：round 是一團（直徑 3 時是九宮格，旁邊貼 8 邊），cross 是十字（旁邊貼 4 邊），
+  // pair 是對邊兩片（左右或上下，每棵用雜湊挑）
+  canopy: z.enum(['round', 'cross', 'pair']).default('round'),
   tile: z.string().nullable(),
 });
 

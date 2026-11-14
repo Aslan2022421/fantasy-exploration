@@ -16,11 +16,13 @@ export function trunkCell(d) {
 }
 
 // (i, j) 是相對錨點的位置（0～d-1）；在不在直徑 d 的那一團裡。
-// shape：round 接近圓形（直徑 3 是九宮格，樹幹旁邊貼 8 邊）；cross 是十字（旁邊貼 4 邊，只用在奇數直徑）
-export function inFootprint(i, j, d, shape = 'round') {
+// shape：round 接近圓形（直徑 3 是九宮格，樹幹旁邊貼 8 邊）；cross 是十字（旁邊貼 4 邊）；
+// pair 是對邊兩片（使用者定）：turn 為 false 時左右兩片、true 時上下兩片。cross、pair 只用在奇數直徑
+export function inFootprint(i, j, d, shape = 'round', turn = false) {
   if (i < 0 || j < 0 || i >= d || j >= d) return false;
   const c = (d - 1) / 2;
   if (shape === 'cross' && d % 2 === 1) return i === c || j === c;
+  if (shape === 'pair' && d % 2 === 1) return turn ? i === c : j === c;
   const r = d / 2 + 0.1;
   return (i - c) ** 2 + (j - c) ** 2 <= r * r;
 }

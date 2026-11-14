@@ -16,6 +16,25 @@ test('樹冠形狀：直徑 3 的 round 是九宮格（旁邊 8 邊），cross �
   expect(meanArea([3], 'cross')).toBe(5);
 });
 
+test('樹冠形狀 pair：對邊兩片，左右或上下', () => {
+  expect(areaOf(3, 'pair')).toBe(3);
+  const cells = (turn) => {
+    const out = [];
+    for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) if (inFootprint(i, j, 3, 'pair', turn)) out.push([i, j]);
+    return out;
+  };
+  expect(cells(false)).toEqual([
+    [0, 1],
+    [1, 1],
+    [2, 1],
+  ]); // 左右
+  expect(cells(true)).toEqual([
+    [1, 0],
+    [1, 1],
+    [1, 2],
+  ]); // 上下
+});
+
 test('平均佔地照 sizes 裡出現的次數算', () => {
   expect(meanArea([1])).toBe(1);
   expect(meanArea([2, 4])).toBe(8);

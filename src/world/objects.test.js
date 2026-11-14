@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
-import { mountainRing } from '../view/perspective.js';
 import { PART_TRUNK, trunkCell } from './footprint.js';
 import { LAND } from './landform.js';
 import { PLACE } from './objects.js';
@@ -26,18 +25,31 @@ describe('物件層的資源來源', () => {
   const worlds = SEEDS.map((s) => createWorld(s, DATA, SMALL));
   const count = { [WALL]: 0, [VEIN]: 0, [HERB]: 0 };
 
-  test('岩壁與礦脈：山上長在平台與山谷（東西兩邊同一圈，不壓在畫 / \\ 的山坡上），山以外長在岩石上；成片，礦脈在山腳或山以外', () => {
+  test('岩壁與礦脈：長在山與山之間的谷地（低處，三面有山或兩側相對有山），成片；有一部分是礦脈', () => {
     for (const w of worlds) {
+      const geo = w.geography;
+      const coarse = (x, y) => {
+        const i = Math.floor(x / 8);
+        const j = Math.floor(y / 8);
+        return i < 0 || j < 0 || i >= geo.W || j >= geo.H ? -1 : geo.elev[j * geo.W + i];
+      };
       for (const [x, y] of cells(w)) {
         const o = w.objectAt(x, y);
         if (!ROCKY.has(o)) continue;
         count[o]++;
-        const h = w.heightAt(x, y);
-        if (h > toH(LAND.mountain) + 1) {
-          expect(mountainRing(w.heightAt(x - 1, y))).toBe(mountainRing(h));
-          expect(mountainRing(w.heightAt(x + 1, y))).toBe(mountainRing(h));
-        } else if (h < toH(LAND.mountain) - 1) expect(w.surfaceAt(x, y)).toBe(S('rock'));
+        expect(w.heightAt(x, y)).toBeLessThanOrEqual(toH(LAND.mountain + PLACE.valleyTop) + 1);
         expect(w.isPassable(x, y)).toBe(false);
+        const hit = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ].map(([dx, dy]) => {
+          for (let k = 1; k <= PLACE.valleyReach; k++)
+            if (coarse(x + dx * k * 8, y + dy * k * 8) > LAND.mountain + PLACE.valleyRise) return true;
+          return false;
+        });
+        expect(hit.filter(Boolean).length >= PLACE.valleySides || (hit[0] && hit[1]) || (hit[2] && hit[3])).toBe(true);
         const linked = [
           [1, 0],
           [-1, 0],
@@ -45,13 +57,6 @@ describe('物件層的資源來源', () => {
           [0, -1],
         ].some(([dx, dy]) => ROCKY.has(w.objectAt(x + dx, y + dy)));
         expect(linked).toBe(true);
-        if (o !== VEIN || w.heightAt(x, y) <= toH(LAND.mountain)) continue;
-        let foot = false;
-        const r = PLACE.footRange;
-        for (let dy = -r; dy <= r; dy++)
-          for (let dx = -r; dx <= r; dx++)
-            if (w.waterAt(x + dx, y + dy) < 0 && w.heightAt(x + dx, y + dy) <= toH(LAND.mountain) + 1) foot = true;
-        expect(foot).toBe(true);
       }
     }
     expect(count[WALL]).toBeGreaterThan(0);

@@ -224,10 +224,7 @@ describe('世界的形狀', () => {
           if (!z.object[i]) continue;
           objects++;
           expect(z.water[i]).toBe(LAYER_NONE);
-          if (ROCKY.has(z.object[i] - 1)) {
-            if (!onMountain) expect(z.surface[i]).toBe(S('rock')); // 山以外的岩壁與礦脈長在岩石上（山上的見 objects.test.js）
-            continue;
-          }
+          if (ROCKY.has(z.object[i] - 1)) continue; // 岩壁與礦脈長在谷地，規則見 objects.test.js
           expect([S('rock'), S('ice')]).not.toContain(z.surface[i]);
           if (onMountain) expect(z.height[i]).toBeLessThanOrEqual(Math.max(treeline, ledgeTop) + 1); // 平坦的台階樹線放寬
         }

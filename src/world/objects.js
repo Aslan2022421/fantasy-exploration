@@ -1,9 +1,9 @@
 // 物件層的生成：
 // - 樹、矮叢照生態撒錨點，多格的樹冠互相讓位（樹幹永遠露出來，其餘取雜湊最小的那棵）；現在的樹都只佔一格
 // - 山上平坦的台階（平台）樹線放寬，高山的台階上也有幾棵樹
-// - 岩壁長在山上的平台與山谷（不壓在畫 / \ 的山坡上），山以外長在露出的岩石上，用雜訊撒成一片一片；
+// - 岩壁長在山與山之間的谷地（低處、三面以上有山圍住），用雜訊撒成一片一片，山坡上不放；
 //   單獨一格、四邊都沒有岩壁的不放
-// - 礦脈是貼著山腳的岩壁（附近有非山地的陸地），以及山以外的岩石露頭，各有一部分
+// - 谷地裡的岩壁有一部分是礦脈
 // - 草本長在低處（高度層 1～2）、溫和或炎熱、不乾燥、靠近河或湖的泥土上
 // 只看種子＋座標與周圍幾格，不看生成順序，跨區接得起來
 
@@ -14,10 +14,12 @@ import { fbm, hash01, makeNoise } from './noise.js';
 export const PLACE = {
   floraBase: 24, // 樹叢成片的大小
   wallBase: 10, // 岩壁成片的大小
-  wallCut: 0.08, // 山以外：雜訊高過這個的岩石格子長岩壁（約四成）
-  ledgeWallCut: 0.3, // 山上的平台、山谷：雜訊高過這個才長岩壁（平地比陡坡多很多，門檻高一點）
-  veinShare: 0.2, // 符合條件的岩壁有幾成是礦脈
-  footRange: 2, // 這麼多格內有非山地的陸地，就算山腳
+  wallCut: 0, // 谷地裡雜訊高過這個的格子長岩壁（約一半）
+  valleyTop: 0.1, // 谷地的地面最高只到山地門檻再高這麼多（山腳的低處）
+  valleyRise: 0.1, // 周圍要有比山地門檻高這麼多的山
+  valleyReach: 3, // 往東南西北各看幾個地理粗格（一格 8 格）找山
+  valleySides: 3, // 三面有山（山凹）；兩側相對有山（山谷）也算
+  veinShare: 0.25, // 岩壁有幾成是礦脈
   herbDensity: 0.08, // 符合條件的格子長草本的機率
   herbRange: 2, // 這麼多格內有河或湖
   herbMaxTier: 2, // 高度層到這裡為止才長草本
@@ -75,29 +77,32 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
     return { ...z, wall: new Int8Array(z.G * z.G).fill(-1) };
   }
 
-  // 山地的第幾圈：跟畫面（perspective.js 的 mountainRing）用同一套算法，連高度存成 0～255 的取整也一樣，
-  // 台階邊才會剛好對上畫 / \ 的格子
-  const ringOf = (h) =>
-    Math.floor(
-      (Math.round((Math.max(-1, Math.min(1, h)) + 1) * 127.5) / 127.5 - 1 - LAND.mountain) / LAND.mountainStep,
-    );
-
-  // 岩壁長得出來的地方：
-  // - 山上：坡與坡之間的平台、山谷（東西兩邊跟自己在同一圈，不是畫 / \ 的台階邊），岩壁不壓在山坡上
-  // - 山以外：陡到露出岩石的地方（丘陵的露頭）
-  function wallGround(z, c) {
-    if (z.wAll[c] !== NONE || z.sAll[c] === ICE) return false;
-    if (z.h[c] <= LAND.mountain) return z.sAll[c] === ROCK;
-    const ring = ringOf(z.h[c]);
-    return ringOf(z.h[c - 1]) === ring && ringOf(z.h[c + 1]) === ring;
+  // 岩壁長得出來的地方：山與山之間的谷地。地面低（最高到山腳），往東南西北看，至少三個方向不遠處有山把它圍住。
+  // 周圍的山用世界地理的粗格高度看（geography.js，一格 8 格），一區自己的格子看不了那麼遠
+  function wallGround(z, X, Y, c) {
+    if (!z.coarse || z.wAll[c] !== NONE || z.sAll[c] === ICE) return false;
+    if (z.h[c] > LAND.mountain + PLACE.valleyTop) return false;
+    const high = LAND.mountain + PLACE.valleyRise;
+    // 東、西、南、北各看 valleyReach 個粗格內有沒有山
+    const hit = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ].map(([dx, dy]) => {
+      for (let k = 1; k <= PLACE.valleyReach; k++) if (z.coarse(X + dx * k * 8, Y + dy * k * 8) > high) return true;
+      return false;
+    });
+    const sides = hit.filter(Boolean).length;
+    // 三面有山（山凹），或兩側相對有山（東西或南北夾住的山谷）
+    return sides >= PLACE.valleySides || (hit[0] && hit[1]) || (hit[2] && hit[3]);
   }
 
   function isWall(z, c) {
     if (z.wall[c] < 0) {
       const X = z.gx0 + (c % z.G);
       const Y = z.gy0 + Math.floor(c / z.G);
-      const cut = z.h[c] > LAND.mountain ? PLACE.ledgeWallCut : PLACE.wallCut;
-      z.wall[c] = wallGround(z, c) && fbm(nWall, X, Y, PLACE.wallBase, 2) > cut ? 1 : 0;
+      z.wall[c] = fbm(nWall, X, Y, PLACE.wallBase, 2) > PLACE.wallCut && wallGround(z, X, Y, c) ? 1 : 0;
     }
     return z.wall[c] === 1;
   }
@@ -134,9 +139,7 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
   function wallAt(z, c, X, Y) {
     if (WALL < 0 || !isWall(z, c)) return null;
     if (![1, -1, z.G, -z.G].some((d) => isWall(z, c + d))) return null;
-    const foot = (k) => z.wAll[k] === NONE && z.h[k] <= LAND.mountain;
-    const veinPlace = z.h[c] <= LAND.mountain || near(z, c, PLACE.footRange, foot);
-    const vein = veinPlace && hash01(seed, X, Y, 201) < PLACE.veinShare;
+    const vein = hash01(seed, X, Y, 201) < PLACE.veinShare; // 谷地裡的岩壁有一部分是礦脈
     return { object: vein ? VEIN : WALL, part: PART_MID, anchor: 0 };
   }
 

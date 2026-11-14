@@ -15,6 +15,9 @@ const SOFTEN = 0.6; // 交界的底色往周圍平均靠幾成
 const ROCK_INK = 0.65; // 山上岩石、碎石字元的亮度
 // 山坡兩面：光從右上照，東坡（\）是受光面、西坡（/）是背光面，一座山看得出亮暗兩面
 const FACE = { '/': 0.6, '\\': 1.05 };
+const FACE_RISE = 2; // 山坡的 / \ 往上多疊幾層（stackview.js），坡面像立起來
+// 山峰剪影：第 minRing 圈以上、radius 格內最高的山峰才畫；高 minRows 列起，每 ringsPerRow 圈多一列，最多 maxRows 列
+export const PEAK = { minRing: 2, radius: 6, minRows: 3, ringsPerRow: 3, maxRows: 5, edge: 1.2, body: 0.18 };
 // 疊層回饋：貼地資源（矮叢、草本）還能採時微微發亮、採過壓暗；被岩壁整圈圍住的岩壁壓暗，外圈是亮的
 const GLOW = 1.3;
 const PICKED = 0.5;
@@ -88,7 +91,7 @@ export function createWorldView(mapView, world, data) {
       const face = FACE[glyph] ?? (isStone[world.surfaceAt(x, y)] ? ROCK_INK : 1);
       fg = dimColor(fg, ringInk(x, y) * face);
     }
-    return { glyph, fg, bg: softBg(x, y), level };
+    return { glyph, fg, bg: softBg(x, y), level, rise: FACE[glyph] ? FACE_RISE : 0 };
   }
 
   // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色、頂層以下的顏色（礦脈）；山上的樹顏色往腳下材質靠
@@ -109,6 +112,27 @@ export function createWorldView(mapView, world, data) {
     };
   }
 
+  // 山峰剪影（stackview.js 畫）：夠高（第 PEAK.minRing 圈以上）、又是附近 PEAK.radius 格內最高的山峰，
+  // 回傳 { rows 幾列高, west 西面字色, east 東面字色, edge 稜線字色, bg 底色 }，不然 null。
+  // 越高的山剪影越大；底色塗滿，前面（南邊）的山會蓋住後面的
+  function peakLook(x, y) {
+    if (!world.peakAt(x, y)) return null;
+    const h = world.heightAt(x, y);
+    const ring = mountainRing(h);
+    if (ring < PEAK.minRing) return null;
+    const R = PEAK.radius;
+    for (let dy = -R; dy <= R; dy++)
+      for (let dx = -R; dx <= R; dx++) if ((dx || dy) && world.heightAt(x + dx, y + dy) > h) return null;
+    const g = groundLook(x, y);
+    return {
+      rows: Math.min(PEAK.maxRows, PEAK.minRows + Math.floor(ring / PEAK.ringsPerRow)),
+      west: dimColor(g.fg, FACE['/']),
+      east: dimColor(g.fg, FACE['\\']),
+      edge: dimColor(g.fg, PEAK.edge),
+      bg: mixColor(g.bg, g.fg, PEAK.body), // 山體的底色比地面亮一點，看得出是一整塊
+    };
+  }
+
   // 斜坡：坡度到 SLOPE_STACK.min、不是水也不是山，回傳 { gx 東邊減西邊的高度 }，不然 null
   function slopeLook(x, y) {
     if (world.waterAt(x, y) >= 0 || isMountain[world.landformAt(x, y)]) return null;
@@ -116,5 +140,10 @@ export function createWorldView(mapView, world, data) {
     return { gx: world.heightAt(x + 1, y) - world.heightAt(x - 1, y) };
   }
 
-  return createStackView(mapView, world, objects, { ground: groundLook, object: objectLook, slope: slopeLook });
+  return createStackView(mapView, world, objects, {
+    ground: groundLook,
+    object: objectLook,
+    slope: slopeLook,
+    peak: peakLook,
+  });
 }

@@ -19,14 +19,14 @@ import {
   upShiftCells,
   wallSouth,
 } from './perspective.js';
-import { dimColor, mixColor } from './shades.js';
+import { drawRoute } from './route.js';
+import { mixColor } from './shades.js';
 
 const CHUNK = 16; // 分塊邊長（格）
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
+const PEAK_LAYER = 1000; // 山峰剪影畫在所有地形與物件之後
+const PEAK_SPAN = 5; // 山峰剪影最多往上幾列、往左右幾格（worldview.js 的 PEAK.maxRows）
 const COVER = { below: 3, left: 1 }; // 會蓋到冒險者的樹冠：往南幾格、往西幾格裡的
-// 路線：亮度隨高度、線寬、虛線的 [畫, 空]（字元像素）、高度取前後幾格平均
-// smooth 取前後 5 格：從高山下來時落差攤成一段長斜坡，不會在岩壁那裡突然折下去（代價是線跟格子差幾個像素）
-const PATH_LIGHT = { base: 0.75, perLayer: 0.025, max: 1.2, width: 1.5, dash: [3, 3], smooth: 5 };
 
 const fadeCache = new Map();
 // a 往 b 壓淡 f（0 不變、1 變成 b）
@@ -68,7 +68,13 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     if (slope) {
       put(h0, { glyph, fg: fade(g.fg, g.bg, fadeAt(1)), bg: g.bg });
       put(h0 + 1, { glyph, fg: g.fg, bg: g.bg, ground: h0, tilt: slope.gx });
+    } else if (g.rise && o < 0) {
+      // 山坡的 / \ 往上疊 rise 層（只畫字、不塗底色），下面幾層壓淡，像樹幹那樣立起來
+      put(h0, { glyph, fg: fade(g.fg, g.bg, fadeAt(g.rise)), bg: g.bg });
+      for (let i = 1; i <= g.rise; i++) put(h0 + i, { glyph, fg: fade(g.fg, g.bg, fadeAt(g.rise - i)), bg: null });
     } else put(h0, { glyph, fg: g.fg, bg: g.bg });
+    const pk = look.peak?.(x, y);
+    if (pk) putPeak(pk, x, h0, put);
     if (o < 0) return;
     const ol = look.object(x, y, o);
     const layers = objectLayers(objects[o], ol.isTrunk);
@@ -86,9 +92,24 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 這一項畫在哪：地面高度、往上幾層（物件），斜坡那層再往上坡偏
+  // 山峰剪影：以山峰那格為底邊中央，往上 rows 列的三角形。頂點 ▲，兩條稜線 / \，西面 /、東面 \、中線 ^；
+  // 底色塗滿，畫在所有地形之後，同一層裡南邊的後畫，前面的山蓋住後面的
+  function putPeak(pk, x, h0, put) {
+    for (let r = 0; r < pk.rows; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        let glyph = dx < 0 ? '/' : dx > 0 ? '\\' : '^';
+        let fg = dx < 0 ? pk.west : pk.east;
+        if (r === 0) glyph = '▲';
+        if (r === 0 || Math.abs(dx) === r) fg = pk.edge;
+        put(PEAK_LAYER, { x: x + dx, glyph, fg, bg: pk.bg, ground: h0, rowsUp: pk.rows - 1 - r });
+      }
+    }
+  }
+
+  // 這一項畫在哪：地面高度、往上幾層（物件），斜坡那層再往上坡偏；山峰剪影再往上整列
   function offsetOf(it, k) {
     const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k, it.px);
+    if (it.rowsUp) s.oy -= it.rowsUp * 8;
     if (it.tilt === undefined) return s;
     const t = slopeTilt(it.tilt, k);
     return { ox: s.ox + t.ox, oy: s.oy + t.oy };
@@ -101,8 +122,9 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     const buckets = [];
     const k = layer.tile / 8;
     const below = upShiftCells(k) + 1; // 東西往右上錯開，往下、往左多畫幾格
-    for (let y = y0 - 1; y < y0 + CHUNK + below; y++) {
-      for (let x = x0 - below; x <= x0 + CHUNK; x++) if (world.inside(x, y)) collect(x, y, buckets);
+    // 山峰剪影往上、往左右各延伸最多 PEAK_SPAN 格，旁邊分塊裡的山峰也要收進來
+    for (let y = y0 - 1; y < y0 + CHUNK + below + PEAK_SPAN; y++) {
+      for (let x = x0 - below; x <= x0 + CHUNK + PEAK_SPAN; x++) if (world.inside(x, y)) collect(x, y, buckets);
     }
     for (const list of buckets) {
       if (!list) continue;
@@ -168,29 +190,6 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 路線：從冒險者連到每一步中心的虛線，跟著地面高度錯開，越高越亮。
-  // 每一點的高度取前後幾格的平均，爬坡時線慢慢升上去
-  function drawRoute(f, route, player) {
-    if (!route?.steps.length) return;
-    const cells = [player, ...route.steps];
-    const raw = cells.map((c) => groundHeight(world.tierAt(c.x, c.y)));
-    const r = PATH_LIGHT.smooth;
-    const pts = cells.map((c, i) => {
-      const near = raw.slice(Math.max(0, i - r), i + r + 1);
-      const h = near.reduce((a, v) => a + v, 0) / near.length;
-      const { px, py } = placeOf(f, c.x, c.y, h);
-      return { x: px + 4, y: py + 4, h };
-    });
-    let walked = 0;
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1];
-      const b = pts[i];
-      const k = Math.min(PATH_LIGHT.max, PATH_LIGHT.base + PATH_LIGHT.perLayer * Math.max(a.h, b.h));
-      mapView.line(a.x, a.y, b.x, b.y, dimColor(COLORS.path, k), PATH_LIGHT.width, PATH_LIGHT.dash, walked);
-      walked += Math.hypot(b.x - a.x, b.y - a.y);
-    }
-  }
-
   // 冒險者附近比他頭頂高的樹冠，在冒險者之後再畫一次。樹冠往右上錯開，會蓋到冒險者的是他那格與南邊、西邊幾格的
   function coverPlayer(f, player, top) {
     const near = [];
@@ -226,7 +225,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
           mapView.blit(chunkAt(cx, cy), (cx * CHUNK - f.x) * 8, (cy * CHUNK - f.y) * 8);
       }
       drawMarks(f, overlay);
-      drawRoute(f, overlay.route, player);
+      drawRoute(mapView, world, (x, y, h) => placeOf(f, x, y, h), overlay.route, player);
       // 冒險者疊 PLAYER_LAYERS 層，最底層在腳下那格的地面上，往上照地形的間距錯開；只畫字，下層往腳下底色壓淡
       const p0 = groundHeight(world.tierAt(player.x, player.y));
       const pg = look.ground(player.x, player.y).bg;

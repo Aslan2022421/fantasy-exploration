@@ -4,6 +4,8 @@
 import { COLORS } from './colors.js';
 import { ellipsis, wrap } from './wrap.js';
 
+const LABEL_BASE = 12; // 介面字的設計格（Fusion Pixel 12 像素）
+
 // entries：[{ time, text, color }]；time 是 null 的是說明文字（不是紀錄）
 function visualLines(font, entries, width, scale) {
   const out = [];
@@ -89,16 +91,18 @@ export function createPanels(font) {
       font.drawText(ctx, text, x, y, s.textScale, color);
     },
 
-    // 路線終點旁的步數；(px, py) 是終點格子的左上角（實體像素）
+    // 地圖上的小標籤（路線終點的步數、懸停提示框）；(px, py) 是那格的左上角（實體像素）。
+    // 字用介面字的一半（12 像素的整數倍），框比較矮，旁邊往上疊的樹冠才不會穿過字；描一圈框線跟地圖分開
     routeLabel(ctx, s, px, py, label, color) {
-      const { pad, textScale, lineHeight, tile, map } = s;
-      const w = font.measure(label, textScale);
+      const { pad, tile, map } = s;
+      const scale = Math.max(1, s.textScale / 2);
+      const lineHeight = (LABEL_BASE + 2) * scale;
+      const w = font.measure(label, scale);
       let lx = px + tile + pad;
       if (lx + w + pad * 2 > map.x + map.w) lx = px - w - pad * 3;
       const ly = Math.max(map.y, py - lineHeight);
-      ctx.fillStyle = COLORS.bg;
-      ctx.fillRect(lx - pad, ly, w + pad * 2, lineHeight);
-      font.drawText(ctx, label, lx, ly + textScale, textScale, color);
+      frame(ctx, { x: lx - pad, y: ly, w: w + pad * 2, h: lineHeight }, COLORS.bg, COLORS.line2);
+      font.drawText(ctx, label, lx, ly + scale, scale, color);
     },
   };
 }

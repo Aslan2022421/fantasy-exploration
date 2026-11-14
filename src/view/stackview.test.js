@@ -78,6 +78,30 @@ test('斜坡上貼地的物件（矮叢、碎石坑）畫在斜坡多疊的那�
   expect(here.filter((c) => c.bg).length).toBe(2); // 斜坡兩層地面都在物件之前
 });
 
+test('山峰剪影：以山峰那格為底邊中央的三角形，頂點 ▲、兩條稜線 / \\，塗滿底色、畫在最後', () => {
+  const calls = [];
+  let chunk = 0;
+  const mv = {
+    ...mapView,
+    layer: () => {
+      const id = chunk++;
+      return {
+        tile: 16,
+        drawShifted: (gx, gy, _ox, oy, ch, _fg, bg) => id === 0 && calls.push({ gx, gy, oy, ch, bg }),
+      };
+    },
+  };
+  const pk = { rows: 3, west: '#555555', east: '#aaaaaa', edge: '#ffffff', bg: '#222222' };
+  const lk = { ...look, peak: (x, y) => (x === 8 && y === 8 ? pk : null) };
+  const v = createStackView(mv, { ...world, tierAt: () => 1 }, [], lk, { now: () => 0 });
+  v.draw(screen, { x: 0, y: 0 }, { player: { x: 1, y: 1 } });
+  const stamp = calls.filter((c) => c.bg === pk.bg);
+  expect(stamp).toHaveLength(9); // 1＋3＋5
+  expect(stamp.filter((c) => c.ch === '▲')).toHaveLength(1);
+  expect(stamp.map((c) => c.gx).sort((a, b) => a - b)).toEqual([6, 7, 7, 8, 8, 8, 9, 9, 10]);
+  expect(calls.indexOf(stamp[0])).toBeGreaterThan(calls.findIndex((c) => c.gx === 8 && c.gy === 9)); // 畫在地形之後
+});
+
 test('樹往上每層錯得比地形多：預設大小（一格 16 像素）離地 4 層約兩格', () => {
   const s = liftUp(4, K);
   expect(-s.oy * K).toBeCloseTo(32); // 往上 32 螢幕像素＝兩格

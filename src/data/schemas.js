@@ -65,7 +65,8 @@ const Range = z.tuple([z.number().int().nonnegative(), z.number().int().nonnegat
 
 // 採集：action 決定動作（mine 挖礦、chop 伐木、pick 採集）；mine 的時間看產出材料的硬度，其餘用 time。
 // uses 一處能採幾次、amount 每次幾個、kinds 組成有幾種（第一次採時讀出來，之後固定）。
-// yields 是產出的權重表：條件（生態、最低高度層）符合的列加總；after 是採光之後留下的物件 id，
+// yields 是產出的權重表：條件都符合的列加總。條件是生態 biomes、高度層 minTier～maxTier、在不在山地 mountain、
+// nearWater 格內有河或湖（不算沼澤）；沒寫的條件不限。after 是採光之後留下的物件 id，
 // 或 picked（物件留著、壓暗，不能再採）
 const GatherSchema = z.object({
   action: z.enum(['mine', 'chop', 'pick']),
@@ -79,6 +80,9 @@ const GatherSchema = z.object({
       z.object({
         biomes: z.array(Id).optional(),
         minTier: z.number().int().optional(),
+        maxTier: z.number().int().optional(),
+        mountain: z.boolean().optional(),
+        nearWater: z.number().int().min(1).max(8).optional(),
         weights: z.record(Id, z.number().positive()),
       }),
     )

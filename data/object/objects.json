@@ -159,7 +159,8 @@
         },
         { "biomes": ["desert"], "weights": { "copper-ore": 30, "quartz": 30 } },
         { "biomes": ["savanna", "rainforest"], "weights": { "copper-ore": 30, "iron-ore": 20 } },
-        { "minTier": 8, "weights": { "quartz": 20, "gold-ore": 8 } }
+        { "minTier": 8, "weights": { "quartz": 20, "gold-ore": 8 } },
+        { "nearWater": 3, "weights": { "gold-ore": 6 } }
       ]
     }
   },

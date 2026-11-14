@@ -22,15 +22,19 @@ function share(counts) {
 
 console.log('一、各環境第一次挖、採到的材料（現存都是 0）');
 for (const [src, tiers] of [
-  ['vein', [3, 9]],
+  ['vein', [3, 9, 'river']],
   ['shrub', [2]],
 ]) {
-  for (const tier of tiers) {
-    console.log(`  ${data.objects[data.objectIndex.get(src)].name}（高度層 ${tier}）`);
+  for (const t of tiers) {
+    const river = t === 'river'; // 高度層 3、2 格外有河或湖
+    const tier = river ? 3 : t;
+    const label = river ? '高度層 3、2 格外有河或湖' : `高度層 ${tier}`;
+    console.log(`  ${data.objects[data.objectIndex.get(src)].name}（${label}）`);
     for (const b of data.biomes) {
       const counts = {};
+      const env = { biome: b.id, tier, mountain: tier > 4, waterDist: river ? 2 : Number.POSITIVE_INFINITY };
       for (let i = 0; i < 2000; i++) {
-        const comp = readComposition(def(src), { biome: b.id, tier }, data, {}, rng);
+        const comp = readComposition(def(src), env, data, {}, rng);
         const m = drawOne(comp, data, {}, rng);
         if (m) counts[m] = (counts[m] ?? 0) + 1;
       }

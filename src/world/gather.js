@@ -33,11 +33,44 @@ export function sourceAt(world, data, x, y) {
 export function weightsFor(def, env) {
   const out = {};
   for (const row of def.yields) {
-    if (row.biomes && !row.biomes.includes(env.biome)) continue;
-    if (row.minTier != null && env.tier < row.minTier) continue;
+    if (!rowFits(row, env)) continue;
     for (const [m, w] of Object.entries(row.weights)) out[m] = (out[m] ?? 0) + w;
   }
   return out;
+}
+
+// 一列的條件都符合才算：生態、高度層範圍、在不在山地、幾格內有河或湖
+function rowFits(row, env) {
+  if (row.biomes && !row.biomes.includes(env.biome)) return false;
+  if (row.minTier != null && env.tier < row.minTier) return false;
+  if (row.maxTier != null && env.tier > row.maxTier) return false;
+  if (row.mountain != null && row.mountain !== env.mountain) return false;
+  if (row.nearWater != null && !(env.waterDist <= row.nearWater)) return false;
+  return true;
+}
+
+// 一處來源的環境：生態 id、高度層、在不在山地、離最近的河或湖幾格（八方向，超過產出表用到的最遠距離算 Infinity）
+export function envAt(world, data, def, x, y) {
+  const reach = Math.max(0, ...def.yields.map((r) => r.nearWater ?? 0));
+  let waterDist = Number.POSITIVE_INFINITY;
+  const isWater = (wx, wy) => {
+    const w = world.waterAt(wx, wy);
+    return w >= 0 && data.waters[w].style !== 'swamp';
+  };
+  for (let r = 1; r <= reach && waterDist > reach; r++) {
+    for (let dy = -r; dy <= r && waterDist > reach; dy++)
+      for (let dx = -r; dx <= r; dx++)
+        if (Math.max(Math.abs(dx), Math.abs(dy)) === r && isWater(x + dx, y + dy)) {
+          waterDist = r;
+          break;
+        }
+  }
+  return {
+    biome: data.biomes[world.biomeAt(x, y)].id,
+    tier: world.tierAt(x, y),
+    mountain: data.landforms[world.landformAt(x, y)].style === 'mountain',
+    waterDist,
+  };
 }
 
 // 權重表乘上限係數後抽一個；全部是 0 回傳 null
@@ -83,7 +116,7 @@ export function planGather(world, data, state, src, rng) {
   const { def } = src;
   const key = `${src.x},${src.y}`;
   const prev = state.cells[key];
-  const env = { biome: data.biomes[world.biomeAt(src.x, src.y)].id, tier: world.tierAt(src.x, src.y) };
+  const env = envAt(world, data, def, src.x, src.y);
   const fresh = !prev || prev.left == null;
   const comp = fresh ? readComposition(def, env, data, state.stock, rng) : prev.comp;
   const left = fresh ? rng.getUniformInt(def.uses[0], def.uses[1]) : prev.left;

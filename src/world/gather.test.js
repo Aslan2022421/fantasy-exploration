@@ -2,7 +2,7 @@ import { RNG } from 'rot-js';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { CHECKPOINT_EVERY, loadGame, newGame } from './game.js';
-import { capFactor, readComposition, weightsFor } from './gather.js';
+import { capFactor, envAt, readComposition, weightsFor } from './gather.js';
 import { findPathNextTo, stepDirection } from './path.js';
 
 const SEED = 20261112;
@@ -49,6 +49,21 @@ describe('上限與組成', () => {
       quartz: 50,
       'gold-ore': 8,
     });
+  });
+
+  test('地理條件：幾格內有河或湖、高度層範圍、在不在山地；沒寫的條件不限', () => {
+    const vein = def('vein');
+    const base = { biome: 'taiga', tier: 3, mountain: true };
+    expect(weightsFor(vein, { ...base, waterDist: 2 })['gold-ore']).toBe(6); // 河邊的礦脈有砂金
+    expect(weightsFor(vein, { ...base, waterDist: 4 })['gold-ore']).toBeUndefined();
+    const toy = {
+      yields: [
+        { maxTier: 2, weights: { stone: 1 } },
+        { mountain: false, weights: { quartz: 1 } },
+      ],
+    };
+    expect(weightsFor(toy, { tier: 2, mountain: false })).toEqual({ stone: 1, quartz: 1 });
+    expect(weightsFor(toy, { tier: 3, mountain: true })).toEqual({});
   });
 
   test('讀組成：抽幾種照 kinds、不重複；到上限的材料讀不出來', () => {
@@ -105,6 +120,20 @@ describe('在世界裡採', () => {
     expect(g.world.objectAt(src.x, src.y)).toBe(O('pit'));
     expect(g.world.isPassable(src.x, src.y)).toBe(true);
     expect(g.gather(src)).toBeNull(); // 碎石坑不能再挖
+  });
+
+  test('來源的環境：離河或湖的距離照八方向一圈一圈量，超過產出表用到的最遠距離算 Infinity', () => {
+    const g = newGame(SEED);
+    const src = nearest(g, 'vein');
+    const env = envAt(g.world, DATA, src.def, src.x, src.y);
+    expect(env.biome).toBe(DATA.biomes[g.world.biomeAt(src.x, src.y)].id);
+    let d = Number.POSITIVE_INFINITY;
+    for (let dy = -3; dy <= 3; dy++)
+      for (let dx = -3; dx <= 3; dx++) {
+        const w = g.world.waterAt(src.x + dx, src.y + dy);
+        if (w >= 0 && DATA.waters[w].style !== 'swamp') d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)));
+      }
+    expect(env.waterDist).toBe(d);
   });
 
   test('採矮叢：採過的留在原地、不能再採；不在旁邊不能採', () => {

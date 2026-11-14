@@ -78,7 +78,7 @@ test('牆：比南、西、西南最低那格高才有，從那格的高度疊�
 });
 
 test('樹：依種類疊層，樹幹那格從地面（0）疊到 height-1、頂層是樹冠；旁邊的樹冠只有頂層一片；矮叢平的不疊', () => {
-  for (const id of ['broadleaf', 'conifer', 'palm']) {
+  for (const id of ['spruce', 'maple', 'oak', 'palm', 'date-palm']) {
     const o = obj(id);
     expect(o.height).toBeGreaterThanOrEqual(3);
     expect(o.height).toBeLessThanOrEqual(5);
@@ -89,8 +89,6 @@ test('樹：依種類疊層，樹幹那格從地面（0）疊到 height-1、頂�
     expect(trunk.at(-1)).toMatchObject({ dh: o.height, part: 'leaf' });
     expect(objectLayers(o, false)).toEqual([{ dh: o.height, part: 'leaf', j: 0 }]);
   }
-  expect(obj('conifer').canopy).toBe('cross');
-  expect(obj('broadleaf').canopy).toBe('round');
   expect(objectLayers(obj('shrub'), false)).toEqual([{ dh: 0, part: 'solid', j: 0 }]);
   expect(objectLayers(null, false)).toEqual([]);
 });

@@ -8,7 +8,6 @@ import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } 
 import { createStackView } from './stackview.js';
 
 const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65 }; // 樹冠右上亮、左下暗
-const TRUNK_GLYPH = 'Φ';
 const WOOD = '#6b5638'; // 樹幹往這個木頭色靠
 const MOUNTAIN_TINT = 0.5; // 山上的樹顏色往腳下材質靠幾成
 const SOFTEN = 0.6; // 交界的底色往周圍平均靠幾成
@@ -16,6 +15,12 @@ const ROCK_INK = 0.65; // 山上岩石、碎石字元的亮度
 // 山坡兩面：光從右上照，東坡（\）是受光面、西坡（/）是背光面，一座山看得出亮暗兩面
 const FACE = { '/': 0.6, '\\': 1.05 };
 const FACE_RISE = 2; // 山坡的 / \ 往上多疊幾層（stackview.js），坡面像立起來
+// 雪地或山上的樹：由頂往下三層各往地形顏色靠幾成、再調亮多少（頂端最像積雪、最亮，往下漸漸回到樹的顏色）
+const CAP = [
+  [0.6, 1.25],
+  [0.4, 1.12],
+  [0.2, 1],
+];
 // 山峰剪影：第 minRing 圈以上、radius 格內最高的山峰才畫；高 minRows 列起，每 ringsPerRow 圈多一列，最多 maxRows 列
 export const PEAK = { minRing: 2, radius: 6, minRows: 3, ringsPerRow: 3, maxRows: 5, edge: 1.2, body: 0.18 };
 // 疊層回饋：貼地資源（矮叢、草本）還能採時微微發亮、採過壓暗；被岩壁整圈圍住的岩壁壓暗，外圈是亮的
@@ -106,10 +111,19 @@ export function createWorldView(mapView, world, data) {
       glyph: objects[o].glyph,
       fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part] * k.top),
       lowFg: objects[o].baseColor ? dimColor(lowFg[o][level], k.low) : null,
-      trunkGlyph: TRUNK_GLYPH,
+      trunkGlyph: objects[o].glyph, // 整根用樹種那一類的字（針葉樹 ↑、闊葉樹 ♣、硬木闊葉樹 ♠、棕櫚類 Y）
       trunkFg: mixColor(dimColor(base, 0.8), WOOD, 0.6),
       isTrunk,
+      cap: snowCap(x, y), // 雪地或山上的樹，頂端幾層往地形顏色靠（stackview.js）
     };
+  }
+
+  // 雪地或山上的樹頂：回傳 [{ 第 j 層（由頂往下）的顏色往哪個色靠、靠幾成、再調亮多少 }]，不然 null
+  function snowCap(x, y) {
+    const snow = surfaces[world.surfaceAt(x, y)].id === 'snow';
+    if (!snow && !isMountain[world.landformAt(x, y)]) return null;
+    const ground = groundLook(x, y).fg;
+    return CAP.map(([mix, light]) => ({ color: ground, mix, light }));
   }
 
   // 山峰剪影（stackview.js 畫）：夠高（第 PEAK.minRing 圈以上）、又是附近 PEAK.radius 格內最高的山峰，

@@ -4,6 +4,7 @@ import { DATA } from '../data/load.js';
 import { PART_TRUNK } from './footprint.js';
 import { gradient, lightLevel, shadeLevel } from './hillshade.js';
 import { LAND, landTierOf, MAX_TIER, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
+import { PLACE } from './objects.js';
 import { createTerrainGen, GEN, LAYER_NONE, waterLevel } from './terrain.js';
 import { createWorld, startPosition, ZONE_SIZE } from './world.js';
 
@@ -206,6 +207,7 @@ describe('世界的形狀', () => {
 
   test('物件不長在水裡、岩石與冰上；山地越高樹越少，高過樹線就沒有；物件層跟地形層分開', () => {
     const treeline = Math.round((LAND.mountain + GEN.treelineRange + 1) * 127.5); // 換成 0～255 的高度
+    const ledgeTop = Math.round((LAND.mountain + PLACE.ledgeAbove + 1) * 127.5);
     const low = Math.round((LAND.mountain + 0.05 + 1) * 127.5);
     let objects = 0;
     const band = { lowCells: 0, lowTrees: 0, highCells: 0, highTrees: 0 };
@@ -227,7 +229,7 @@ describe('世界的形狀', () => {
             continue;
           }
           expect([S('rock'), S('ice')]).not.toContain(z.surface[i]);
-          if (onMountain) expect(z.height[i]).toBeLessThanOrEqual(treeline + 1);
+          if (onMountain) expect(z.height[i]).toBeLessThanOrEqual(Math.max(treeline, ledgeTop) + 1); // 平坦的台階樹線放寬
         }
       }
     }

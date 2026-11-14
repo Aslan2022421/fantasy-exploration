@@ -9,16 +9,18 @@ const SEED = 20261112;
 const O = (id) => DATA.objectIndex.get(id);
 const def = (id) => DATA.objects[O(id)].gather;
 const rng = (s) => RNG.clone().setSeed(s);
+const TREES = DATA.objects.filter((o) => o.trunk).map((o) => o.id); // 各樹種
 
-// 從冒險者往外一圈一圈找最近一處能採的 id（給 test 判斷的條件）
+// 從冒險者往外一圈一圈找最近一處能採的 id（id 可以是一串，任一種都算；給 test 判斷的條件）
 function nearest(game, id, test = () => true) {
   const p = game.state.player;
+  const want = new Set([id].flat().map(O));
   for (let r = 1; r < 400; r++) {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
         const at = { x: p.x + dx, y: p.y + dy };
-        if (game.world.objectAt(at.x, at.y) !== O(id)) continue;
+        if (!want.has(game.world.objectAt(at.x, at.y))) continue;
         const src = game.sourceAt(at);
         if (src && test(src) && findPathNextTo(game.world, p, src)) return src;
       }
@@ -84,7 +86,7 @@ describe('在世界裡採', () => {
 
   test('砍樹：一次砍倒，樹幹變成能走的樹樁、整棵樹冠消失，木頭看樹種', () => {
     const g = newGame(SEED);
-    const src = nearest(g, 'broadleaf') ?? nearest(g, 'conifer') ?? nearest(g, 'palm');
+    const src = nearest(g, TREES);
     const species = DATA.objects[src.object];
     const canopy = [];
     for (let dy = -3; dy <= 3; dy++)
@@ -153,7 +155,7 @@ describe('在世界裡採', () => {
   test('採集寫進紀錄：存讀檔、從檢查點重放、從頭重放，狀態都一樣；同樣的操作兩次結果一樣', () => {
     const play = () => {
       const g = newGame(SEED);
-      for (const id of ['rock-wall', 'shrub', 'broadleaf', 'conifer']) {
+      for (const id of ['rock-wall', 'shrub', TREES]) {
         const src = nearest(g, id);
         if (!src) continue;
         walkNextTo(g, src);

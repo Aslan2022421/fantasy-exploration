@@ -24,8 +24,9 @@ export function describePlace(world, x, y) {
   const state = c.picked ? '（採過了）' : c.worked ? '（挖過了）' : '';
   // 植物（含樹樁）「長在」地上，岩壁、礦脈、碎石坑「在」地上
   const grows = ['chop', 'pick'].includes(c.object?.gather?.action) || c.object?.id === 'stump';
-  if (c.object)
-    what = `${c.object.name}${c.trunk ? '的樹幹' : ''}${state}，${grows ? '長在' : '在'}${ground}上${landform}`;
+  // 樹寫樹種與類名：「雲杉（針葉樹）」，同一個字的不同樹靠這裡分得出來
+  const family = c.object?.family ? `（${c.object.family}）` : '';
+  if (c.object) what = `${c.object.name}${family}${state}，${grows ? '長在' : '在'}${ground}上${landform}`;
   else what = `${c.cover ? `${c.cover.name}，` : ''}${ground}${landform}`;
   return `${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
 }

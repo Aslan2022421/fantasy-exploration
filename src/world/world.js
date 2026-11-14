@@ -8,7 +8,7 @@ import { anchorOffset } from './objects.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 17;
+export const WORLD_VERSION = 18;
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;

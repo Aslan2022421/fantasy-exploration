@@ -1,9 +1,38 @@
 [
   {
-    "id": "broadleaf",
-    "name": "闊葉樹",
-    "glyph": "♣",
-    "color": "#5f8a4a",
+    "id": "spruce",
+    "name": "雲杉",
+    "family": "針葉樹",
+    "glyph": "↑",
+    "color": "#3f6a5a",
+    "passable": true,
+    "height": 5,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "spruce-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "larch",
+    "name": "落葉松",
+    "family": "針葉樹",
+    "glyph": "↑",
+    "color": "#8fa04a",
     "passable": true,
     "height": 4,
     "trunk": true,
@@ -17,19 +46,26 @@
       "amount": [2, 4],
       "kinds": [1, 1],
       "after": "stump",
-      "yields": [{ "weights": { "broadleaf-wood": 1 } }]
+      "yields": [
+        {
+          "weights": {
+            "larch-wood": 1
+          }
+        }
+      ]
     }
   },
   {
-    "id": "conifer",
-    "name": "針葉樹",
+    "id": "pine",
+    "name": "松樹",
+    "family": "針葉樹",
     "glyph": "↑",
-    "color": "#5a8a6a",
+    "color": "#6a8268",
     "passable": true,
     "height": 5,
     "trunk": true,
     "sizes": [1],
-    "canopy": "cross",
+    "canopy": "round",
     "tile": null,
     "gather": {
       "action": "chop",
@@ -38,19 +74,194 @@
       "amount": [2, 4],
       "kinds": [1, 1],
       "after": "stump",
-      "yields": [{ "weights": { "conifer-wood": 1 } }]
+      "yields": [
+        {
+          "weights": {
+            "pine-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "birch",
+    "name": "樺樹",
+    "family": "闊葉樹",
+    "glyph": "♣",
+    "color": "#9ec27a",
+    "passable": true,
+    "height": 4,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "birch-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "maple",
+    "name": "楓樹",
+    "family": "闊葉樹",
+    "glyph": "♣",
+    "color": "#94864c",
+    "passable": true,
+    "height": 4,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "maple-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "banyan",
+    "name": "榕樹",
+    "family": "闊葉樹",
+    "glyph": "♣",
+    "color": "#3f7a3f",
+    "passable": true,
+    "height": 4,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "banyan-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "oak",
+    "name": "橡樹",
+    "family": "硬木闊葉樹",
+    "glyph": "♠",
+    "color": "#4f7040",
+    "passable": true,
+    "height": 4,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "oak-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "acacia",
+    "name": "金合歡",
+    "family": "硬木闊葉樹",
+    "glyph": "♠",
+    "color": "#7d8a4a",
+    "passable": true,
+    "height": 3,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "acacia-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "mahogany",
+    "name": "桃花心木",
+    "family": "硬木闊葉樹",
+    "glyph": "♠",
+    "color": "#3d5a38",
+    "passable": true,
+    "height": 5,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "mahogany-wood": 1
+          }
+        }
+      ]
     }
   },
   {
     "id": "palm",
     "name": "棕櫚樹",
-    "glyph": "♠",
+    "family": "棕櫚類",
+    "glyph": "Y",
     "color": "#4f9a4a",
     "passable": true,
     "height": 4,
     "trunk": true,
     "sizes": [1],
-    "canopy": "pair",
+    "canopy": "round",
     "tile": null,
     "gather": {
       "action": "chop",
@@ -59,7 +270,41 @@
       "amount": [2, 4],
       "kinds": [1, 1],
       "after": "stump",
-      "yields": [{ "weights": { "palm-wood": 1 } }]
+      "yields": [
+        {
+          "weights": {
+            "palm-wood": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "date-palm",
+    "name": "棗椰",
+    "family": "棕櫚類",
+    "glyph": "Y",
+    "color": "#9aa45a",
+    "passable": true,
+    "height": 3,
+    "trunk": true,
+    "sizes": [1],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "chop",
+      "time": 6,
+      "uses": [1, 1],
+      "amount": [2, 4],
+      "kinds": [1, 1],
+      "after": "stump",
+      "yields": [
+        {
+          "weights": {
+            "date-palm-wood": 1
+          }
+        }
+      ]
     }
   },
   {
@@ -81,12 +326,42 @@
       "kinds": [1, 1],
       "after": "picked",
       "yields": [
-        { "biomes": ["taiga", "moss-forest"], "weights": { "cold-berry": 1 } },
-        { "biomes": ["tundra"], "weights": { "labrador-tea": 1 } },
-        { "biomes": ["grassland", "temperate-forest"], "weights": { "yarrow": 1 } },
-        { "biomes": ["temperate-rainforest"], "weights": { "mint": 1 } },
-        { "biomes": ["desert"], "weights": { "aloe": 1 } },
-        { "biomes": ["savanna", "rainforest"], "weights": { "lemongrass": 1 } }
+        {
+          "biomes": ["taiga", "moss-forest"],
+          "weights": {
+            "cold-berry": 1
+          }
+        },
+        {
+          "biomes": ["tundra"],
+          "weights": {
+            "labrador-tea": 1
+          }
+        },
+        {
+          "biomes": ["grassland", "temperate-forest"],
+          "weights": {
+            "yarrow": 1
+          }
+        },
+        {
+          "biomes": ["temperate-rainforest"],
+          "weights": {
+            "mint": 1
+          }
+        },
+        {
+          "biomes": ["desert"],
+          "weights": {
+            "aloe": 1
+          }
+        },
+        {
+          "biomes": ["savanna", "rainforest"],
+          "weights": {
+            "lemongrass": 1
+          }
+        }
       ]
     }
   },
@@ -108,7 +383,13 @@
       "amount": [1, 2],
       "kinds": [1, 1],
       "after": "picked",
-      "yields": [{ "weights": { "flax": 1 } }]
+      "yields": [
+        {
+          "weights": {
+            "flax": 1
+          }
+        }
+      ]
     }
   },
   {
@@ -129,7 +410,15 @@
       "amount": [1, 2],
       "kinds": [1, 2],
       "after": "pit",
-      "yields": [{ "weights": { "stone": 90, "iron-ore": 6, "copper-ore": 4 } }]
+      "yields": [
+        {
+          "weights": {
+            "stone": 90,
+            "iron-ore": 6,
+            "copper-ore": 4
+          }
+        }
+      ]
     }
   },
   {
@@ -152,17 +441,59 @@
       "kinds": [2, 3],
       "after": "pit",
       "yields": [
-        { "weights": { "stone": 20 } },
-        { "biomes": ["taiga", "moss-forest"], "weights": { "ice-crystal": 30, "iron-ore": 25 } },
-        { "biomes": ["tundra"], "weights": { "iron-ore": 30, "stone": 20 } },
+        {
+          "weights": {
+            "stone": 20
+          }
+        },
+        {
+          "biomes": ["taiga", "moss-forest"],
+          "weights": {
+            "ice-crystal": 30,
+            "iron-ore": 25
+          }
+        },
+        {
+          "biomes": ["tundra"],
+          "weights": {
+            "iron-ore": 30,
+            "stone": 20
+          }
+        },
         {
           "biomes": ["grassland", "temperate-forest", "temperate-rainforest"],
-          "weights": { "iron-ore": 30, "copper-ore": 25 }
+          "weights": {
+            "iron-ore": 30,
+            "copper-ore": 25
+          }
         },
-        { "biomes": ["desert"], "weights": { "copper-ore": 30, "quartz": 30 } },
-        { "biomes": ["savanna", "rainforest"], "weights": { "copper-ore": 30, "iron-ore": 20 } },
-        { "minTier": 8, "weights": { "quartz": 20, "gold-ore": 8 } },
-        { "nearWater": 3, "weights": { "gold-ore": 6 } }
+        {
+          "biomes": ["desert"],
+          "weights": {
+            "copper-ore": 30,
+            "quartz": 30
+          }
+        },
+        {
+          "biomes": ["savanna", "rainforest"],
+          "weights": {
+            "copper-ore": 30,
+            "iron-ore": 20
+          }
+        },
+        {
+          "minTier": 8,
+          "weights": {
+            "quartz": 20,
+            "gold-ore": 8
+          }
+        },
+        {
+          "nearWater": 3,
+          "weights": {
+            "gold-ore": 6
+          }
+        }
       ]
     }
   },

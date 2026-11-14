@@ -53,7 +53,7 @@ describe('選單與地圖', () => {
 describe('背包的內容', () => {
   test('依分類分組、寫數量與單位；空的寫背包是空的', () => {
     expect(bagEntries({}, DATA).map((e) => e.text)).toEqual(['背包是空的。']);
-    const text = bagEntries({ 'iron-ore': 3, 'broadleaf-wood': 2, flax: 1, quartz: 0 }, DATA).map((e) => e.text);
-    expect(text).toEqual(['礦物', '　鐵礦　3 塊', ' ', '木材', '　闊葉木　2 段', ' ', '植物', '　亞麻　1 株']);
+    const text = bagEntries({ 'iron-ore': 3, 'oak-wood': 2, flax: 1, quartz: 0 }, DATA).map((e) => e.text);
+    expect(text).toEqual(['礦物', '　鐵礦　3 塊', ' ', '木材', '　橡木　2 段', ' ', '植物', '　亞麻　1 株']);
   });
 });

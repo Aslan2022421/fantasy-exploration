@@ -1,5 +1,68 @@
 [
-  { "id": "broadleaf-wood", "name": "闊葉木", "category": "wood", "cap": 80 },
-  { "id": "conifer-wood", "name": "針葉木", "category": "wood", "cap": 80 },
-  { "id": "palm-wood", "name": "棕櫚木", "category": "wood", "cap": 40 }
+  {
+    "id": "spruce-wood",
+    "name": "雲杉木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "larch-wood",
+    "name": "落葉松木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "pine-wood",
+    "name": "松木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "birch-wood",
+    "name": "樺木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "maple-wood",
+    "name": "楓木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "banyan-wood",
+    "name": "榕木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "oak-wood",
+    "name": "橡木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "acacia-wood",
+    "name": "金合歡木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "mahogany-wood",
+    "name": "桃花心木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "palm-wood",
+    "name": "棕櫚木",
+    "category": "wood",
+    "cap": 40
+  },
+  {
+    "id": "date-palm-wood",
+    "name": "棗椰木",
+    "category": "wood",
+    "cap": 40
+  }
 ]

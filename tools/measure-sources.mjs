@@ -9,7 +9,7 @@ import { loadData } from './data.mjs';
 const data = loadData();
 const SEEDS = Number(process.argv[2] ?? 10);
 const ROCK = data.surfaceIndex.get('rock');
-const kinds = ['rock-wall', 'vein', 'herb', 'shrub', 'broadleaf', 'conifer', 'palm'];
+const kinds = ['rock-wall', 'vein', 'herb', 'shrub', ...data.objects.filter((o) => o.trunk).map((o) => o.id)];
 const idOf = Object.fromEntries(kinds.map((k) => [data.objectIndex.get(k), k]));
 
 let land = 0;

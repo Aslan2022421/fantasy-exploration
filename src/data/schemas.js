@@ -92,6 +92,7 @@ const GatherSchema = z.object({
 export const ObjectSchema = z.object({
   id: Id,
   name: z.string().min(1),
+  family: z.string().min(1).optional(), // 類名：同一類用同一個字（針葉樹 ↑、闊葉樹 ♣⋯⋯），樹種靠顏色與層數分
   glyph: Glyph,
   color: Color,
   baseColor: Color.optional(), // 疊層時頂層以下的顏色（礦脈頂層是礦脈色、下面是岩石色）；沒有就跟 color 一樣

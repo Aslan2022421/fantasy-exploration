@@ -36,6 +36,7 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
   const flora = data.biomes.map((b) => b.flora.map((f) => [objectId(f.object), f.density]));
   const objectArea = data.objects.map((o) => meanArea(o.sizes, o.canopy));
   // 資料裡沒有的就不放（測試用的小資料只有幾種物件）
+  const PINE = data.objectIndex.get('pine') ?? -1;
   const WALL = data.objectIndex.get('rock-wall') ?? -1;
   const VEIN = data.objectIndex.get('vein') ?? WALL;
   const HERB = data.objectIndex.get('herb') ?? -1;
@@ -57,9 +58,11 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
     for (let i = 0; i < list.length; i++) {
       const [object, density] = list[i];
       if (hash01(seed, x, y, i) < (Math.min(1, density * 2 * m) * line) / objectArea[object]) {
-        const sizes = data.objects[object].sizes;
+        // 山上長的樹都是松樹（生態照山腳那片的，樹種換成耐高山的）
+        const kind = h > LAND.mountain && data.objects[object].trunk && PINE >= 0 ? PINE : object;
+        const sizes = data.objects[kind].sizes;
         const size = sizes[Math.floor(hash01(seed, x, y, 50 + i) * sizes.length)];
-        return { object, size, turn: hash01(seed, x, y, 60 + i) < 0.5 }; // turn：對邊兩片的樹冠是上下還是左右
+        return { object: kind, size, turn: hash01(seed, x, y, 60 + i) < 0.5 }; // turn：對邊兩片的樹冠是上下還是左右
       }
     }
     return null;

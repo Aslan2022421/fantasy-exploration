@@ -70,6 +70,27 @@ describe('物件層的資源來源', () => {
     expect(count[HERB]).toBeGreaterThan(0);
   });
 
+  test('樹種：同一類用同一個字、有類名；山上長的樹都是松樹', () => {
+    const trees = DATA.objects.filter((o) => o.trunk);
+    for (const t of trees) expect(t.family).toBeTruthy();
+    const glyphOf = {};
+    for (const t of trees) {
+      glyphOf[t.family] ??= t.glyph;
+      expect(t.glyph).toBe(glyphOf[t.family]);
+    }
+    const pine = O('pine');
+    let onMountain = 0;
+    for (const w of worlds) {
+      for (const [x, y] of cells(w)) {
+        const o = w.objectAt(x, y);
+        if (o < 0 || !DATA.objects[o].trunk || w.heightAt(x, y) <= toH(LAND.mountain) + 1) continue;
+        expect(o).toBe(pine);
+        onMountain++;
+      }
+    }
+    expect(onMountain).toBeGreaterThan(0);
+  });
+
   test('樹冠的錨點往右下找得到同一棵樹的樹幹；單格物件的錨點是自己', () => {
     const w = worlds[0];
     let checked = 0;

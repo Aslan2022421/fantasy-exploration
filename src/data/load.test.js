@@ -49,7 +49,7 @@ describe('實際的資料', () => {
   });
 
   test('物件都有，樹與矮叢在物件層', () => {
-    expect(DATA.objects.map((o) => o.id)).toEqual(expect.arrayContaining(['broadleaf', 'conifer', 'palm', 'shrub']));
+    expect(DATA.objects.map((o) => o.id)).toEqual(expect.arrayContaining(['spruce', 'maple', 'oak', 'palm', 'shrub']));
   });
 
   test('溫度帶×濕度帶九格各有一種生態；草地與沼澤不是生態也不是材質', () => {

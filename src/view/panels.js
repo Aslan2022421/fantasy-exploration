@@ -60,21 +60,33 @@ export function createPanels(font) {
       return maxScroll;
     },
 
-    // 大視窗（H 紀錄、B 背包）：蓋在地圖上，標題一行，內容從上往下排；scroll 是往下捲了幾行。回傳最多能捲幾行
-    window(ctx, s, title, entries, scroll) {
+    // 大視窗的外框與標題（蓋在地圖上）；回傳內容區 { x, y, w, h }
+    windowBox(ctx, s, title) {
       const { map, pad, textScale, lineHeight } = s;
       const box = { x: map.x + pad * 2, y: map.y + pad * 2, w: map.w - pad * 4, h: map.h - pad * 4 };
       frame(ctx, box, COLORS.bg, COLORS.line2);
       font.drawText(ctx, title, box.x + pad * 2, box.y + pad, textScale, COLORS.head);
-      const bodyTop = box.y + pad * 2 + lineHeight;
-      const lines = visualLines(font, entries, box.w - pad * 4, textScale);
-      const visible = Math.max(1, Math.floor((box.y + box.h - pad - bodyTop) / lineHeight));
+      const top = box.y + pad * 2 + lineHeight;
+      return { x: box.x + pad * 2, y: top, w: box.w - pad * 4, h: box.y + box.h - pad - top };
+    },
+
+    // 大視窗（H 紀錄、B 背包、Esc 選單）：內容從上往下排；scroll 是往下捲了幾行。回傳最多能捲幾行
+    window(ctx, s, title, entries, scroll) {
+      const { textScale, lineHeight } = s;
+      const body = this.windowBox(ctx, s, title);
+      const lines = visualLines(font, entries, body.w, textScale);
+      const visible = Math.max(1, Math.floor(body.h / lineHeight));
       const maxScroll = Math.max(0, lines.length - visible);
       const start = Math.min(scroll, maxScroll);
       lines.slice(start, start + visible).forEach((line, i) => {
-        drawLine(ctx, font, line, box.x + pad * 2, bodyTop + i * lineHeight, textScale);
+        drawLine(ctx, font, line, body.x, body.y + i * lineHeight, textScale);
       });
       return maxScroll;
+    },
+
+    // 一行字（左上角在 x, y）
+    text(ctx, s, text, x, y, color = COLORS.text) {
+      font.drawText(ctx, text, x, y, s.textScale, color);
     },
 
     // 路線終點旁的步數；(px, py) 是終點格子的左上角（實體像素）

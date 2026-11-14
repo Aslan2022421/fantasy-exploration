@@ -116,7 +116,9 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     zonesX,
     zonesY,
     regions,
-    geography, // 世界的地理（河流、淺灘、濕度），除錯與量測用
+    geography, // 世界的地理（河流、淺灘、濕度），世界地圖、除錯與量測用
+    climateAt: gen.climateAt, // (x, y, 高度) → { t 溫度, w 濕度 }
+    biomeIndexOf: gen.biomeAt, // (溫度, 濕度) → 生態編號（data.biomes 的索引）
     region: (zx, zy) => regions[zy * zonesX + zx] ?? null,
     regionAt: (x, y) => (inside(x, y) ? regions[Math.floor(y / zoneSize) * zonesX + Math.floor(x / zoneSize)] : null),
     zone,

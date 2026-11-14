@@ -4,6 +4,7 @@
     "name": "凍原",
     "temperature": "cold",
     "moisture": "dry",
+    "mapColor": "#a3ab95",
     "flora": [
       {
         "object": "shrub",
@@ -26,6 +27,7 @@
     "name": "針葉林",
     "temperature": "cold",
     "moisture": "normal",
+    "mapColor": "#4f6f58",
     "flora": [
       {
         "object": "conifer",
@@ -52,6 +54,7 @@
     "name": "苔原林",
     "temperature": "cold",
     "moisture": "wet",
+    "mapColor": "#5f7d6a",
     "flora": [
       {
         "object": "conifer",
@@ -82,6 +85,7 @@
     "name": "草原",
     "temperature": "mild",
     "moisture": "dry",
+    "mapColor": "#94a862",
     "flora": [
       {
         "object": "shrub",
@@ -116,6 +120,7 @@
     "name": "溫帶森林",
     "temperature": "mild",
     "moisture": "normal",
+    "mapColor": "#5a8048",
     "flora": [
       {
         "object": "broadleaf",
@@ -142,6 +147,7 @@
     "name": "溫帶雨林",
     "temperature": "mild",
     "moisture": "wet",
+    "mapColor": "#40704a",
     "flora": [
       {
         "object": "broadleaf",
@@ -168,6 +174,7 @@
     "name": "沙漠",
     "temperature": "hot",
     "moisture": "dry",
+    "mapColor": "#c4ab6c",
     "flora": [
       {
         "object": "shrub",
@@ -190,6 +197,7 @@
     "name": "疏林草原",
     "temperature": "hot",
     "moisture": "normal",
+    "mapColor": "#a7a35c",
     "flora": [
       {
         "object": "broadleaf",
@@ -220,6 +228,7 @@
     "name": "雨林",
     "temperature": "hot",
     "moisture": "wet",
+    "mapColor": "#3b6c3c",
     "flora": [
       {
         "object": "broadleaf",

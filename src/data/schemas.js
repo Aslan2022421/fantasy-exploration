@@ -118,6 +118,7 @@ export const BiomeSchema = z.object({
   name: z.string().min(1),
   temperature: BAND,
   moisture: WETNESS,
+  mapColor: Color.optional(), // 世界地圖（M）上的顏色；沒有就畫灰色
   flora: z.array(z.object({ object: Id, density: Share })), // 依序撒的物件與密度
   cover: z.array(z.object({ cover: Id, density: Share })), // 泥土與沙地上長的生態覆蓋，各佔幾成
 });

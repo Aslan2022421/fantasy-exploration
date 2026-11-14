@@ -13,6 +13,7 @@ import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
 import { cssSize, gridLabel, layout } from '../view/screen.js';
 import { loadImage } from '../view/tiles.js';
+import { createWorldMap, drawMapWindow } from '../view/worldmap.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
@@ -21,6 +22,7 @@ import { createActions } from './actions.js';
 import { createKeyboard } from './input.js';
 import { showLoading } from './loading.js';
 import { bindMapMouse, drawMapLabels } from './mouse.js';
+import { downloadPlaylog } from './playlog.js';
 import { createWindows } from './windows.js';
 import { createZoom } from './zoom.js';
 
@@ -31,7 +33,7 @@ const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '滑鼠指著地圖看是什麼；左鍵走過去，空白鍵停下；右鍵查看並選定目標，再點一下收起。',
   'Q 對目標動手：岩壁、礦脈是挖礦，樹是伐木，矮叢、草本是採集；沒貼著會先走過去。撞上岩壁或樹幹會選定它。',
-  'B 背包，H 看完整紀錄。＋／－ 放大縮小地圖。',
+  'B 背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄）。＋／－ 放大縮小地圖。',
 ];
 
 const params = new URLSearchParams(location.search);
@@ -57,7 +59,31 @@ const player = () => game.state.player;
 const world = game.world; // 疊上採過的格子的世界
 const worldView = createWorldView(mapView, world, DATA);
 const camera = () => worldView.focus(screen, player());
-const windows = createWindows(panels, { history: entries, bag: () => bagEntries(game.state.bag, DATA) });
+const worldMap = createWorldMap(world, DATA);
+let exported = null; // 這次打開選單後匯出的檔名
+const windows = createWindows(panels, {
+  history: entries,
+  bag: () => bagEntries(game.state.bag, DATA),
+  map: (c, s, body) => {
+    const p = player();
+    drawMapWindow(
+      c,
+      s,
+      body,
+      worldMap,
+      panels,
+      p,
+      `你在${regionLabel(world, DATA, p.x, p.y)}｜整個世界 ${world.zonesX}×${world.zonesY} 區，方框是你所在的區`,
+    );
+  },
+  menu: () => [
+    { time: null, text: '1　匯出試玩紀錄（下載成 JSON 檔，交給 Claude 讀）' },
+    ...(exported ? [{ time: null, text: `已匯出：${exported}`, color: COLORS.good }] : []),
+  ],
+  export: () => {
+    exported = downloadPlaylog(game, VERSION);
+  },
+});
 const actions = createActions({
   game,
   turns,
@@ -142,6 +168,14 @@ const keyboard = createKeyboard((dx, dy) => {
 });
 
 window.addEventListener('keydown', (e) => {
+  // Esc：自動走路中先停下；沒開視窗時打開選單
+  if (e.code === 'Escape' && !windows.open && actions.walking.length) {
+    e.preventDefault();
+    actions.stop();
+    render();
+    return;
+  }
+  if (e.code === 'Escape' && !windows.open) exported = null;
   if (windows.key(e.code)) {
     e.preventDefault();
     actions.stop();
@@ -153,7 +187,7 @@ window.addEventListener('keydown', (e) => {
     if (zoom.press(e)) resize();
     return;
   }
-  if (e.code === 'KeyQ' || e.code === 'Space' || e.code === 'Escape') {
+  if (e.code === 'KeyQ' || e.code === 'Space') {
     e.preventDefault();
     if (e.code === 'KeyQ') actions.actOnTarget();
     else actions.stop();

@@ -3,7 +3,7 @@
 
 import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
 import { lookAt } from './glyphs.js';
-import { mountainRingFactor, SLOPE_STACK } from './perspective.js';
+import { mountainRing, mountainRingFactor, RING, SLOPE_STACK } from './perspective.js';
 import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
 import { createStackView } from './stackview.js';
 
@@ -17,6 +17,8 @@ const ROCK_INK = 0.65; // 山上岩石、碎石字元的亮度
 const GLOW = 1.3;
 const PICKED = 0.5;
 const INNER_WALL = 0.55;
+// 岩壁、礦脈跟著山一圈一圈變亮：山腳（和山以外的露頭）low，第 RING.full 圈以上 high，跟山地本身的明暗一起往上走
+const WALL_RING = { low: 0.6, high: 1.15 };
 
 export function createWorldView(mapView, world, data) {
   const { objects, surfaces } = data;
@@ -34,11 +36,24 @@ export function createWorldView(mapView, world, data) {
       for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !isRocky[world.objectAt(x + dx, y + dy)]) return false;
     return true;
   };
-  // 物件本身的亮暗回饋
+  // 岩壁在這個高度的亮度；取到 0.05 一級，染色表才不會多出太多種顏色
+  const wallRing = (x, y) => {
+    const f = Math.min(1, mountainRing(world.heightAt(x, y)) / RING.full);
+    return Math.round((WALL_RING.low + (WALL_RING.high - WALL_RING.low) * f) * 20) / 20;
+  };
+  // 物件本身的亮暗回饋：{ top 頂層, low 頂層以下 }。岩壁整個跟著高度；礦脈只有下面的岩石層跟著高度，
+  // 頂層的礦脈色不壓暗，山腳的礦脈才認得出來
   function feedback(x, y, o) {
-    if (isRocky[o]) return inner(x, y) ? INNER_WALL : 1;
-    if (isGround[o]) return world.changeAt?.(x, y)?.picked ? PICKED : GLOW;
-    return 1;
+    if (isRocky[o]) {
+      const k = inner(x, y) ? INNER_WALL : 1;
+      const ring = wallRing(x, y);
+      return { top: objects[o].baseColor ? k : ring * k, low: ring * k };
+    }
+    if (isGround[o]) {
+      const k = world.changeAt?.(x, y)?.picked ? PICKED : GLOW;
+      return { top: k, low: k };
+    }
+    return { top: 1, low: 1 };
   }
   const isMountain = data.landforms.map((l) => l.style === 'mountain');
   const isStone = surfaces.map((s) => s.style === 'rock' || s.style === 'gravel');
@@ -83,8 +98,8 @@ export function createWorldView(mapView, world, data) {
     const k = feedback(x, y, o);
     return {
       glyph: objects[o].glyph,
-      fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part] * k),
-      lowFg: objects[o].baseColor ? dimColor(lowFg[o][level], k) : null,
+      fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part] * k.top),
+      lowFg: objects[o].baseColor ? dimColor(lowFg[o][level], k.low) : null,
       trunkGlyph: TRUNK_GLYPH,
       trunkFg: mixColor(dimColor(base, 0.8), WOOD, 0.6),
       isTrunk,

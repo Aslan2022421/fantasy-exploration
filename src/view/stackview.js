@@ -71,6 +71,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     if (o < 0) return;
     const ol = look.object(x, y, o);
     const layers = objectLayers(objects[o], ol.isTrunk);
+    const liftPx = objects[o].layerPx; // 每層往上幾像素（岩壁、礦脈跟地形一樣）
     // 貼地的物件（矮叢、碎石坑）畫在地面最上面那層：斜坡多疊的那層有底色，畫在它下面會被蓋掉
     const flat = slope ? { h: h0 + 1, tilt: slope.gx } : { h: h0 };
     if (!layers.length) put(flat.h, { glyph: ol.glyph, fg: ol.fg, bg: null, ground: h0, tilt: flat.tilt });
@@ -78,7 +79,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       const trunk = l.part === 'trunk';
       const color = trunk ? ol.trunkFg : l.j > 0 && ol.lowFg ? ol.lowFg : ol.fg; // 礦脈頂層以下是岩石色
       const fg = fade(color, g.bg, fadeAt(l.j));
-      const item = { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh };
+      const item = { glyph: trunk ? ol.trunkGlyph : ol.glyph, fg, bg: null, ground: h0, lift: l.dh, px: liftPx };
       if (l.dh === 0) put(flat.h, { ...item, tilt: flat.tilt });
       else put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });
     }
@@ -86,7 +87,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
 
   // 這一項畫在哪：地面高度、往上幾層（物件），斜坡那層再往上坡偏
   function offsetOf(it, k) {
-    const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k);
+    const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k, it.px);
     if (it.tilt === undefined) return s;
     const t = slopeTilt(it.tilt, k);
     return { ox: s.ox + t.ox, oy: s.oy + t.oy };
@@ -125,15 +126,15 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   }
 
   // 地面高度 h 的東西、再往上 lift 層（物件、冒險者）錯開多少字元像素
-  function shiftOf(h, lift, k) {
+  function shiftOf(h, lift, k, px) {
     const a = shiftUp(h, k);
-    const b = liftUp(lift, k);
+    const b = liftUp(lift, k, px);
     return { ox: a.ox + b.ox, oy: a.oy + b.oy };
   }
 
   // 世界格 (x, y) 的地面（或往上 lift 層）畫在地圖區哪裡（字元像素，左上角）
-  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y)), lift = 0) {
-    const { ox, oy } = shiftOf(h, lift, mapView.tile() / 8);
+  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y)), lift = 0, px = undefined) {
+    const { ox, oy } = shiftOf(h, lift, mapView.tile() / 8, px);
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
@@ -145,8 +146,9 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       const bg = isTarget ? (route?.reachable ? COLORS.target : COLORS.blocked) : COLORS.examined;
       const o = world.objectAt(c.x, c.y);
       const h0 = groundHeight(world.tierAt(c.x, c.y));
+      const liftPx = o >= 0 ? objects[o].layerPx : undefined;
       const mark = (lift, glyph, fg) => {
-        const { px, py } = placeOf(f, c.x, c.y, h0, lift);
+        const { px, py } = placeOf(f, c.x, c.y, h0, lift, liftPx);
         mapView.drawShifted(0, 0, px, py, glyph, fg, bg);
       };
       if (o < 0) {
@@ -198,7 +200,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       if (!list) continue;
       for (const it of list) {
         if (!it.leaf || it.h <= top) continue;
-        const { px, py } = placeOf(f, it.x, it.y, it.ground, it.lift);
+        const { px, py } = placeOf(f, it.x, it.y, it.ground, it.lift, it.px);
         mapView.drawShifted(0, 0, px, py, it.glyph, it.fg, null);
       }
     }

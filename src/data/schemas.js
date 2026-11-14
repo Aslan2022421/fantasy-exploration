@@ -98,6 +98,8 @@ export const ObjectSchema = z.object({
   passable: z.boolean(),
   // 疊幾層：樹的樹幹往上疊、最頂層是樹冠；1 層是平的，不疊
   height: z.number().int().min(0).max(5),
+  // 每層往上錯開幾螢幕像素；沒寫用 8（樹）。岩壁、礦脈寫 4，跟地形每圈一樣，順著山坡一階一階疊
+  layerPx: z.number().int().positive().optional(),
   trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去；樹冠其他格照 passable
   // 佔地多大（直徑幾格），每棵從這裡用雜湊挑一個；重複寫的數字比較常出現（例如 4 格的老樹只寫一次）
   sizes: z.array(z.number().int().min(1).max(4)).min(1),

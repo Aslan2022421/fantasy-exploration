@@ -24,11 +24,15 @@ export const SLOPE_STACK = { min: 69, leanPx: 2 };
 
 export const PLAYER_LAYERS = 2;
 
+// 高度 height（0～255）在山地的第幾圈（山腳是 0）；不是山地也是 0
+export function mountainRing(height) {
+  const h = height / 127.5 - 1;
+  return Math.max(0, Math.floor((h - LAND.mountain) / LAND.mountainStep));
+}
+
 // 高度 height（0～255）的山地格，字色乘多少
 export function mountainRingFactor(height) {
-  const h = height / 127.5 - 1;
-  const ring = Math.max(0, Math.floor((h - LAND.mountain) / LAND.mountainStep));
-  return RING.foot + (1 - RING.foot) * Math.min(1, ring / RING.full);
+  return RING.foot + (1 - RING.foot) * Math.min(1, mountainRing(height) / RING.full);
 }
 
 export const fadeAt = (j) => STACK.fade[Math.min(j, STACK.fade.length - 1)];
@@ -46,10 +50,10 @@ export function shiftUp(h, k = 1) {
   return { ox: (n * UP.leanPx) / k || 0, oy: (-n * UP.px) / k || 0 }; // || 0 把 -0 變 0
 }
 
-// 物件從腳下地面往上 dh 層，再多錯開多少字元像素
-export function liftUp(dh, k = 1) {
+// 物件從腳下地面往上 dh 層，再多錯開多少字元像素；px 是每層往上幾螢幕像素（資料的 layerPx，沒寫用 UP.objPx）
+export function liftUp(dh, k = 1, px = UP.objPx) {
   const n = Math.min(UP.maxLift, Math.max(0, dh));
-  return { ox: (n * UP.objLeanPx) / k || 0, oy: (-n * UP.objPx) / k || 0 };
+  return { ox: (n * UP.objLeanPx) / k || 0, oy: (-n * px) / k || 0 };
 }
 
 // 斜坡那層再錯開多少字元像素：往上一層，往上坡方向（gx：東邊減西邊的高度）左右偏

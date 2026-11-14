@@ -16,8 +16,8 @@ export const LERP = { tau: 90, snap: 8, settle: 0.01 };
 export const RING = { foot: 0.75, full: 10 };
 
 // 錯開量（螢幕像素，不跟地圖縮放變）：地形每層往上 px、往右 leanPx，總量最多 maxPx；
-// 物件從腳下地面往上每層 objPx、往右 objLeanPx，最多 maxLift 層
-export const UP = { px: 4, leanPx: 1, maxPx: 64, objPx: 8, objLeanPx: 1, maxLift: 5 };
+// 物件從腳下地面垂直往上每層 objPx（objLeanPx 0：樹、礦脈等物件不往右偏），最多 maxLift 層
+export const UP = { px: 4, leanPx: 1, maxPx: 64, objPx: 8, objLeanPx: 0, maxLift: 5 };
 
 // 斜坡（坡度 min 以上、不是山也不是水）多疊一層，往上坡那側左右偏 leanPx 螢幕像素
 export const SLOPE_STACK = { min: 69, leanPx: 2 };

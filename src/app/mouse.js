@@ -33,13 +33,15 @@ export function drawMapLabels({ ctx, screen, panels, worldView, cam, route, targ
     return { px: screen.map.x + at.vx * screen.tile, py: screen.map.y + at.vy * screen.tile };
   };
   const same = tip && target && tip.cell.x === target.x && tip.cell.y === target.y;
-  if (route && target) {
+  // 已經貼著目標（撞上去選定的物件）：不標步數，懸停照常出提示框
+  const steps = route && target && !(route.reachable && route.steps.length === 0);
+  if (steps) {
     const { px, py } = place(target);
-    let label = !route.reachable ? '走不到' : route.steps.length ? `${route.steps.length} 步` : '就在旁邊';
+    let label = route.reachable ? `${route.steps.length} 步` : '走不到';
     if (same) label += `｜${tooltipText(tip.text)}`; // 懸停的正是終點：合成一個框，不疊在一起
     panels.routeLabel(ctx, screen, px, py, label, route.reachable ? COLORS.path : COLORS.text);
   }
-  if (tip && !(same && route)) {
+  if (tip && !(same && steps)) {
     const { px, py } = place(tip.cell);
     panels.routeLabel(ctx, screen, px, py, tooltipText(tip.text), COLORS.text);
   }

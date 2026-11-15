@@ -186,6 +186,7 @@ export function createTerrainGen(seed, data, size = null) {
       wAll,
       tBand,
       wBand,
+      biome: bAll,
       anchors,
       // 世界地理粗格的高度（找谷地周圍的山用，objects.js）；沒接地理時沒有
       coarse: geo

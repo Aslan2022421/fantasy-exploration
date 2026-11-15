@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { canStep } from './climb.js';
 import { tryMove } from './move.js';
 import { findPath, lineSteps, stepDirection } from './path.js';
 
@@ -55,6 +56,22 @@ test('點在牆上、走不到、點在原地都回傳空路線', () => {
   expect(findPath(m, { x: 0, y: 0 }, { x: 2, y: 0 })).toEqual([]);
   expect(findPath(m, { x: 0, y: 0 }, { x: 4, y: 0 })).toEqual([]);
   expect(findPath(m, { x: 1, y: 1 }, { x: 1, y: 1 })).toEqual([]);
+});
+
+test('高低差：差 1～2 層走得過去，差 3 層以上走不過去；尋路會從落差旁邊繞上去', () => {
+  // 高度層 1 是 2 層、2 是 4 層、3 是 6 層：1 → 3 差 4 層擋住，1 → 2 → 3 一步差 2 層可以
+  const tiers = ['1113', '1123', '1111'];
+  const m = { ...map(['....', '....', '....']), tierAt: (x, y) => Number(tiers[y][x]) };
+  expect(tryMove(m, { x: 2, y: 0 }, 'e')).toEqual({ x: 2, y: 0 });
+  expect(tryMove(m, { x: 2, y: 1 }, 'ne')).toEqual({ x: 3, y: 0 });
+  const from = { x: 0, y: 0 };
+  const path = findPath(m, from, { x: 3, y: 0 });
+  expect(path.at(-1)).toEqual({ x: 3, y: 0 });
+  let pos = from;
+  for (const step of path) {
+    expect(canStep(m, pos, step)).toBe(true);
+    pos = step;
+  }
 });
 
 test('方向對得上', () => {

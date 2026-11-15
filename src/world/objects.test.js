@@ -22,7 +22,7 @@ describe('物件層的資源來源', () => {
   const worlds = SEEDS.map((s) => createWorld(s, DATA, SMALL));
   let herbs = 0;
 
-  test('礦坑：每區 0～2 處、整處在那一區裡、兩處隔得夠遠；佔 3×3 格，九格同一個高度層、沒有水也不是冰、走不過去；在谷地或山腳的低處；層數在資料的範圍裡', () => {
+  test('礦坑：每區 0～2 處、整處在那一區裡、兩處隔得夠遠；佔 3×3 格，九格同一個高度層、沒有水也不是冰、走不過去；在谷地、山腳的低處，或平地區（不在山上）；層數在資料的範圍裡', () => {
     let mines = 0;
     for (const w of worlds) {
       const geo = w.geography;
@@ -69,7 +69,12 @@ describe('物件層的資源來源', () => {
               if (coarse(x + dx * k * 8, y + dy * k * 8) > LAND.mountain + PLACE.valleyRise) return true;
             return false;
           }).length;
-          expect(sides).toBeGreaterThanOrEqual(1); // 谷地或山腳，周圍至少一面有山
+          if (sides === 0) {
+            // 平地區：不在山上，生態要在 plainMines 的表裡
+            expect(w.heightAt(x, y)).toBeLessThanOrEqual(toH(LAND.mountain) + 1);
+            const biome = DATA.biomes[w.biomeAt(x + 1, y + 1)].id;
+            expect(PLACE.plainMines.some((r) => r.biomes.includes(biome))).toBe(true);
+          }
           const n = mineLayers(w.seed, DATA.objects[o], x, y);
           expect(n).toBeGreaterThanOrEqual(DATA.objects[o].layers[0]);
           expect(n).toBeLessThanOrEqual(DATA.objects[o].layers[1]);

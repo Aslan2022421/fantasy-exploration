@@ -3,7 +3,8 @@
 // - 山上平坦的台階（平台）樹線放寬，高山的台階上也有幾棵樹
 // - 草本長在低處（高度層 1～2）、溫和或炎熱、不乾燥、靠近河或湖的泥土上
 // - 礦坑每區 0～2 處，一處佔 3×3 格、整處落在那一區裡；先找谷地（三面有山或兩側相對有山的低處），
-//   不夠再找山腳的低處，九格要在同一個高度層、沒有水也不是冰；大類照權重挑，疊幾層照資料的 layers 挑
+//   不夠再找山腳的低處；兩種都沒有的平地區，照生態決定有幾處、偏哪一類，高度層高的（丘陵、高原）先挑。
+//   九格要在同一個高度層、沒有水也不是冰；疊幾層照資料的 layers 挑
 // 只看種子＋座標與周圍幾格，不看生成順序，跨區接得起來
 
 import { inFootprint, MAX_SIZE, meanArea, PART_MID, PART_TRUNK, partOf, trunkCell } from './footprint.js';
@@ -27,6 +28,23 @@ export const PLACE = {
     'metal-mine': { w: 3.5, perSide: 1 },
     'crystal-mine': { w: 1.5, cold: 3 },
   },
+  // 平地區（沒有谷地也沒有山腳）的礦坑照那一區中央的生態：count 一區 0、1、2 處的權重，kinds 大類權重。
+  // 寒帶有古老岩盤露出、沙漠岩石外露，礦多；森林與草原的地面被土蓋住，礦少、多半是石礦
+  plainMines: [
+    {
+      biomes: ['tundra', 'taiga', 'moss-forest'],
+      count: [1, 2, 1],
+      kinds: { 'stone-mine': 2, 'metal-mine': 4, 'crystal-mine': 3 },
+    },
+    { biomes: ['desert'], count: [1, 2, 1], kinds: { 'stone-mine': 5, 'metal-mine': 4, 'crystal-mine': 0.5 } },
+    { biomes: ['savanna'], count: [2, 1, 0], kinds: { 'stone-mine': 2, 'metal-mine': 5, 'crystal-mine': 0.5 } },
+    { biomes: ['grassland'], count: [3, 1, 0], kinds: { 'stone-mine': 6, 'metal-mine': 1, 'crystal-mine': 0.5 } },
+    {
+      biomes: ['temperate-forest', 'temperate-rainforest', 'rainforest'],
+      count: [3, 1, 0],
+      kinds: { 'stone-mine': 6, 'metal-mine': 1, 'crystal-mine': 0.5 },
+    },
+  ],
   footBelow: 0.1, // 山腳的低處：地面最低到山地門檻再低這麼多
   valleyTop: 0.1, // 谷地與山腳的地面最高只到山地門檻再高這麼多
   valleyRise: 0.1, // 周圍要有比山地門檻高這麼多的山
@@ -127,16 +145,18 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
     return list.length - 1;
   }
 
+  // 平地區用哪一列規則（照生態）；沒有對到的生態回傳 null（不放）
+  const plainRule = (biome) => PLACE.plainMines.find((r) => r.biomes.includes(data.biomes[biome]?.id)) ?? null;
+
   // 一區的礦坑：回傳 Map（區內格號 → 物件層的那一格）。只看這一區自己的格子與世界地理，不看生成順序
   function planMines(z) {
     const map = new Map();
     if (!mineKinds.length || !z.coarse) return map;
     const X0 = z.gx0 + z.E;
     const Y0 = z.gy0 + z.E;
-    const want = pickWeighted(PLACE.mineCount, hash01(seed, X0, Y0, 310));
-    if (!want) return map;
     const valley = [];
     const foot = [];
+    const plain = [];
     for (let y = 0; y + MINE_SIZE <= z.size; y += PLACE.mineStep)
       for (let x = 0; x + MINE_SIZE <= z.size; x += PLACE.mineStep) {
         const ac = (y + z.E) * z.G + x + z.E;
@@ -144,18 +164,28 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
         const X = X0 + x;
         const Y = Y0 + y;
         const m = mountainsAround(z, X, Y, ac);
-        if (m) (m.valley ? valley : foot).push({ ac, X, Y, sides: m.sides, rank: hash01(seed, X, Y, 311) });
+        const c = { ac, X, Y, sides: m?.sides ?? 0, rank: hash01(seed, X, Y, 311) };
+        if (m) (m.valley ? valley : foot).push(c);
+        else if (z.h[ac] <= LAND.mountain) plain.push(c); // 平地區不放在山上
       }
+    // 有谷地或山腳就照 mineCount；整區都是平地就照中央的生態
+    const center = (z.E + (z.size >> 1)) * z.G + z.E + (z.size >> 1);
+    const rule = valley.length || foot.length ? null : plainRule(z.biome[center]);
+    if (!valley.length && !foot.length && !rule) return map;
+    const want = pickWeighted(rule ? rule.count : PLACE.mineCount, hash01(seed, X0, Y0, 310));
+    if (!want) return map;
     const byRank = (a, b) => a.rank - b.rank;
+    const byHeight = (a, b) => z.tier[b.ac] - z.tier[a.ac] || a.rank - b.rank; // 平地區高度層高的先挑
+    const pool = rule ? plain.sort(byHeight) : [...valley.sort(byRank), ...foot.sort(byRank)];
     const picked = [];
-    for (const c of [...valley.sort(byRank), ...foot.sort(byRank)]) {
+    for (const c of pool) {
       if (picked.length >= want) break;
       if (picked.every((p) => Math.max(Math.abs(p.X - c.X), Math.abs(p.Y - c.Y)) >= PLACE.mineGap)) picked.push(c);
     }
     for (const c of picked) {
-      const weights = mineKinds.map(
-        (k) => k.w * (1 + (k.perSide ?? 0) * c.sides) * (k.cold && z.tBand[c.ac] === 0 ? k.cold : 1),
-      );
+      const weights = rule
+        ? mineKinds.map((k) => rule.kinds[data.objects[k.object].id] ?? 0)
+        : mineKinds.map((k) => k.w * (1 + (k.perSide ?? 0) * c.sides) * (k.cold && z.tBand[c.ac] === 0 ? k.cold : 1));
       const object = mineKinds[pickWeighted(weights, hash01(seed, c.X, c.Y, 302))].object;
       for (let j = 0; j < MINE_SIZE; j++)
         for (let i = 0; i < MINE_SIZE; i++)
@@ -209,7 +239,7 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
 
   // 這格的物件：{ object（data.objects 的編號）, part（footprint.js 的 PART_*）, anchor（錨點在左上幾格：k×MAX_SIZE＋j）} 或 null。
   // z 是一區生成時共用的格子（G×G，左上角是世界座標 gx0, gy0；這一區從第 E 格起、邊長 size）：
-  // 高度 h、高度層 tier、材質、水文、溫度帶、濕度帶、錨點，
+  // 高度 h、高度層 tier、材質、水文、溫度帶、濕度帶、生態 biome、錨點，
   // coarse(x, y) 是世界地理粗格的高度（沒接地理時沒有）
   function objectAt(z, c, X, Y) {
     return mineAt(z, c) ?? floraAt(z, c, X, Y) ?? herbAt(z, c, X, Y);

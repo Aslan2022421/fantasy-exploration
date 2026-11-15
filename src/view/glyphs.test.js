@@ -55,6 +55,14 @@ test('水文：深水大多空白、偶爾 ≈；淺水與沼澤是 - 與 ~；�
   expect(glyphs({ water: 'shallow', surface: 'ice' })).toEqual(new Set(['═', ' ']));
 });
 
+test('去噪：覆蓋、淺水與沼澤的水紋只畫一部分；緊貼著山坡 / \\ 的格子不畫 ^', () => {
+  expect(cellGlyph({ ...base, cover: ',', d: 0 }).glyph).toBe(',');
+  expect(cellGlyph({ ...base, cover: ',', d: 0.99 }).ink).toBe('surface');
+  expect(cellGlyph({ ...base, water: 'shallow', d: 0.99 }).glyph).toBe(' ');
+  expect(cellGlyph({ ...base, water: 'swamp', d: 0 }).glyph).toMatch(/[-~]/);
+  expect(cellGlyph({ ...base, mountain: true, b: 0, nearAspect: true }).glyph).not.toBe('^');
+});
+
 test('疊放順序：水文 > 生態覆蓋 > 山地 > 材質', () => {
   expect(cellGlyph({ ...base, water: 'shallow', cover: ',' }).ink).toBe('water');
   expect(cellGlyph({ ...base, cover: ',', mountain: true })).toEqual({ glyph: ',', ink: 'cover' });

@@ -9,6 +9,8 @@
 // - 地貌：山峰（山地裡附近最高的一格）是 ▲；山坡依朝向畫 /（西坡）、\（東坡），一座山看起來像畫出來的兩條稜線；
 //   朝南北的坡與山頂附近只有一部分格子畫 ^，剩下的露出材質（雪是起伏點、陡坡岩石 ■、緩坡碎石 °）
 // - 覆蓋：資料裡每種一個字元（, ' " : ; * τ Γ |）
+// 去噪（QUIET）：平原的覆蓋、淺水與沼澤的水紋只畫一部分；山坡的 / \ 上下至少接著一格才畫（零星的一格不畫）；
+// 緊貼著 / \ 的格子不畫 ^，山地的 ^ 與碎石 ° 也比較稀
 // 同一種樣子裡挑哪個字，用座標的雜湊決定，畫面不會閃。這裡只算字形，不碰畫布，可以在 Node 裡測
 
 import { hash01 } from '../world/noise.js';
@@ -17,7 +19,9 @@ import { mountainRing } from './perspective.js';
 export const RELIEF = [' ', '.', '·', '∙'];
 // 坡度門檻：只有比較陡的地方才畫起伏點，平地空著
 export const RELIEF_STEPS = [69, 85, 100];
-export const MOUNTAIN_MARK = 0.3; // 非山峰的山地格畫 ^ 的比例
+export const MOUNTAIN_MARK = 0.2; // 非山峰的山地格畫 ^ 的比例
+// 去噪：覆蓋、淺水與沼澤的水紋各畫幾成；碎石格畫 ° 的比例
+export const QUIET = { cover: 0.75, shallow: 0.7, gravel: 0.4 };
 export const ROCK_MARK = 0.25; // 岩石格畫 ■ 的比例
 export const DUNE_STEEP = 55; // 沙地坡度到這裡以上是沙丘 ^
 
@@ -42,7 +46,7 @@ export function surfaceGlyph(style, slope, a) {
     case 'rock':
       return a < ROCK_MARK ? '■' : reliefGlyph(slope);
     case 'gravel':
-      return a < 0.5 ? '°' : reliefGlyph(slope);
+      return a < QUIET.gravel ? '°' : reliefGlyph(slope);
     case 'ice':
       return a < 0.4 ? '═' : ' ';
     default:
@@ -52,15 +56,20 @@ export function surfaceGlyph(style, slope, a) {
 
 // 一格（不含物件）的字形與字元顏色。c：{ water（水文 style 或 null）, surface（材質 style）,
 // mountain（是不是山地）, peak（是不是山峰）, cover（覆蓋的字元或 null）, slope,
-// a（挑材質字元的雜湊）, b（決定山地這格畫不畫 ^ 的雜湊，跟 a 分開，免得 ^ 吃掉 ■ 與 °）}。
+// a（挑材質字元的雜湊）, b（決定山地這格畫不畫 ^ 的雜湊，跟 a 分開，免得 ^ 吃掉 ■ 與 °）,
+// d（去噪用的雜湊，沒給當 0：全畫）, nearAspect（東西鄰格是山坡的 / \）}。
 // 回傳 'water' | 'cover' | 'surface' 告訴呼叫的人字元顏色取哪一層
 export function cellGlyph(c) {
-  if (c.water && c.surface !== 'ice') return { glyph: waterGlyph(c.water, c.a), ink: 'water' };
+  const d = c.d ?? 0;
+  if (c.water && c.surface !== 'ice') {
+    const quiet = c.water !== 'deep' && d >= QUIET.shallow;
+    return { glyph: quiet ? ' ' : waterGlyph(c.water, c.a), ink: 'water' };
+  }
   if (c.surface === 'ice') return { glyph: surfaceGlyph('ice', 0, c.a), ink: 'surface' };
-  if (c.cover) return { glyph: c.cover, ink: 'cover' };
+  if (c.cover && d < QUIET.cover) return { glyph: c.cover, ink: 'cover' };
   if (c.peak) return { glyph: '▲', ink: 'surface' };
   if (c.mountain && c.aspect) return { glyph: c.aspect, ink: 'surface' };
-  if (c.mountain && c.b < MOUNTAIN_MARK) return { glyph: '^', ink: 'surface' };
+  if (c.mountain && !c.nearAspect && c.b < MOUNTAIN_MARK) return { glyph: '^', ink: 'surface' };
   return { glyph: surfaceGlyph(c.surface, c.slope, c.a), ink: 'surface' };
 }
 
@@ -76,7 +85,7 @@ export function slopeGlyph(gx, gy) {
 
 // 只有台階邊（東或西鄰格跟自己不在同一圈）才畫坡；同一圈裡的平處是平台，照原本的 ^ 與材質。
 // 一大片同方向的坡因此切成一條條台階線，中間夾著平台
-function aspectAt(world, x, y) {
+function rawAspect(world, x, y) {
   const ring = mountainRing(world.heightAt(x, y));
   if (mountainRing(world.heightAt(x + 1, y)) === ring && mountainRing(world.heightAt(x - 1, y)) === ring) return null;
   const d = ASPECT.span;
@@ -85,22 +94,32 @@ function aspectAt(world, x, y) {
   return slopeGlyph(gx, gy);
 }
 
+// 去噪：台階線上下（北或南）至少接著一格坡才畫，零星的一格不畫
+function aspectAt(world, x, y) {
+  const g = rawAspect(world, x, y);
+  if (!g) return null;
+  return rawAspect(world, x, y - 1) || rawAspect(world, x, y + 1) ? g : null;
+}
+
 // 世界上 (x, y) 那格地面的樣子：{ glyph, ink（字元色，data.palette 的索引） }
 export function lookAt(world, data, x, y) {
   const w = world.waterAt(x, y);
   const s = world.surfaceAt(x, y);
   const k = world.coverAt(x, y);
   const mountain = data.landforms[world.landformAt(x, y)].style === 'mountain';
+  const aspect = mountain ? aspectAt(world, x, y) : null;
   const r = cellGlyph({
     water: w >= 0 ? data.waters[w].style : null,
     surface: data.surfaces[s].style,
     mountain,
-    aspect: mountain ? aspectAt(world, x, y) : null,
+    aspect,
+    nearAspect: mountain && !aspect && !!(aspectAt(world, x - 1, y) || aspectAt(world, x + 1, y)),
     peak: world.peakAt(x, y),
     cover: k >= 0 ? data.covers[k].glyph : null,
     slope: world.slopeAt(x, y),
     a: hash01(world.seed, x, y, 103),
     b: hash01(world.seed, x, y, 104),
+    d: hash01(world.seed, x, y, 105),
   });
   const base = data.paletteBase;
   const ink = r.ink === 'water' ? base.water + w : r.ink === 'cover' ? base.cover + k : base.surface + s;

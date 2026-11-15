@@ -1,10 +1,10 @@
 // 疊層的幾何：高的東西同一個字疊好幾層做出體積，全部往畫面上方錯開（平行投影，錯開量只看高度，跟相機無關）。
 // 這裡只算層數、錯開量與壓淡的比例，不碰畫布；畫在 stackview.js
 
+import { groundLayers } from '../world/climb.js';
 import { LAND } from '../world/landform.js';
 
 export const STACK = {
-  tierLayers: 2, // 陸地每個高度層算幾層（山地每圈 1 層）
   maxWall: 8, // 牆最多疊幾層
   fade: [0, 0.35, 0.6, 0.75, 0.85], // 由頂往下各層往地面底色壓淡多少
 };
@@ -37,9 +37,8 @@ export function mountainRingFactor(height) {
 
 export const fadeAt = (j) => STACK.fade[Math.min(j, STACK.fade.length - 1)];
 
-// 地面高度（層）：陸地第 1～4 層每層 tierLayers 層，山地往上每圈 1 層
-export const groundHeight = (tier) =>
-  tier <= LAND.landTiers ? tier * STACK.tierLayers : LAND.landTiers * STACK.tierLayers + (tier - LAND.landTiers);
+// 地面高度（層）：陸地第 1～4 層每層 2 層，山地往上每圈 1 層；移動的高低差也看這個（climb.js）
+export const groundHeight = groundLayers;
 
 // 格子放大 k 倍（一個字元像素是 k 個螢幕像素）時，錯開最多幾格（地面加上物件）
 export const upShiftCells = (k) => Math.ceil((UP.maxPx + UP.maxLift * UP.objPx) / k / 8);

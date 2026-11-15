@@ -4,6 +4,7 @@
 // - 撞上能採的來源（樹幹）不動手，只選定成目標
 // - Q：沒貼著目標先走到旁邊再動手；沒選目標時採腳下那處（矮叢、草本）；採完還能採就留著當目標
 
+import { DATA } from '../data/load.js';
 import { findPath, findPathNextTo, stepDirection } from '../world/path.js';
 
 const STEP_MS = 70; // 自動走每一步間隔
@@ -78,9 +79,22 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     if (game.sourceAt(src)) examined = { x: src.x, y: src.y };
   }
 
+  // 這格上的生物當成一處目標：{ x, y（那一隻的錨點）, cells, species（資料的 id）}，不是生物回傳 null
+  function creatureSrc(cell) {
+    const cr = cell && world.creatureAt(cell.x, cell.y);
+    return cr ? { x: cr.member.x, y: cr.member.y, cells: cr.cells, species: DATA.species[cr.species].id } : null;
+  }
+
+  // 對生物動手：戰鬥還沒做，只記一筆被擋回來
+  function refuseAt(src, cause = null) {
+    note(() => game.refuse({ x: src.x, y: src.y }, src.species, cause));
+    examined = { x: src.x, y: src.y };
+  }
+
   function look(cell) {
     const src = game.sourceAt(cell);
-    const at = src ? { x: src.x, y: src.y } : cell;
+    const cr = src ? null : creatureSrc(cell);
+    const at = src || cr ? { x: (src ?? cr).x, y: (src ?? cr).y } : cell;
     if (same(examined, at)) {
       examined = null;
       return;
@@ -102,7 +116,7 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       stop();
       const to = { x: player().x + dx, y: player().y + dy };
       const rec = act(() => game.move(stepDirection(player(), to)));
-      const src = rec ? null : game.sourceAt(to);
+      const src = rec ? null : (game.sourceAt(to) ?? creatureSrc(to));
       if (src && !same(examined, src)) look(to);
     },
     go(cell) {
@@ -111,6 +125,14 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       if (steps.length) walk(steps, cell);
     },
     actOnTarget() {
+      const cr = creatureSrc(examined);
+      if (cr) {
+        const steps = findPathNextTo(world, player(), cr);
+        if (steps === null) return;
+        if (steps.length) walk(steps, cr, (cause) => refuseAt(cr, cause));
+        else refuseAt(cr);
+        return;
+      }
       const src = (examined && game.sourceAt(examined)) || game.sourceAt(player());
       if (!src) return;
       const steps = findPathNextTo(world, player(), src);
@@ -122,6 +144,11 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     shownPath() {
       if (walking.length) return { steps: walking, reachable: true };
       if (!examined) return null;
+      const cr = creatureSrc(examined);
+      if (cr) {
+        const steps = findPathNextTo(world, player(), cr);
+        return { steps: steps ?? [], reachable: steps !== null };
+      }
       const src = game.sourceAt(examined);
       if (src) {
         const steps = findPathNextTo(world, player(), src);

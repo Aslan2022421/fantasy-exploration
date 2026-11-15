@@ -1,6 +1,28 @@
 // 地點的文字：右鍵查看一格、狀態列顯示目前在哪一區
 
+import { blockText, buildBlock } from '../data/blocks.js';
+import { DATA } from '../data/load.js';
 import { CLIMATE_NAMES } from './labels.js';
+
+// 生物：「狼（一群 4 隻，d8，生命 6，護甲 1）。本能：把落單的獵物逼離同伴；招式：繞到側面包夾」。
+// 數值塊照當地的環境加答案（寒帶、山地、靠水）；第一句是懸停提示框用的
+const ADAPTATION_NAMES = {
+  climb: '善攀',
+  swim: '會游',
+  amphibious: '兩棲',
+  fly: '飛行',
+  'cold-hardy': '耐寒',
+  constrict: '纏繞',
+};
+
+export function creatureText({ herd, species }) {
+  const sp = DATA.species[species];
+  const adapt = buildBlock(sp.answers, herd.env)
+    .adaptations.map((a) => ADAPTATION_NAMES[a])
+    .join('、');
+  const head = `${sp.name}（一群 ${herd.members.length} 隻，${blockText(buildBlock(sp.answers, herd.env))}）`;
+  return `${head}。本能：${sp.instinct}；招式：${sp.moves.join('；')}${adapt ? `；特質：${adapt}` : ''}`;
+}
 
 // 地面叫什麼：有水寫水文（結冰的淺水寫冰），不然寫材質
 export function groundName(c) {
@@ -20,6 +42,7 @@ export function describePlace(world, x, y) {
   const ground = groundName(c);
   const lake = c.water && c.water.style !== 'swamp';
   const landform = lake ? '' : `，${c.landform.name}`;
+  if (c.creature) return `${creatureText(c.creature)}。${ground}${landform}。${b.name}（${climate}），高度 ${c.height}`;
   let what;
   const state = c.picked ? '（採過了）' : c.worked ? '（挖過了）' : '';
   // 植物（含樹樁）「長在」地上，礦坑「在」地上

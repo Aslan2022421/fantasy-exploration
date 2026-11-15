@@ -79,7 +79,9 @@ describe('物種成群', () => {
             expect(w.waterAt(x, y)).toBe(-1);
             expect(w.objectAt(x, y)).toBe(-1);
             expect(w.tierAt(x, y)).toBe(tier);
-            expect(w.isPassable(x, y)).toBe(true);
+            expect(w.cell(x, y).surface.passable).toBe(true);
+            expect(w.creatureAt(x, y)?.species, `${x},${y} 查不到生物`).toBe(herd.species);
+            expect(w.isPassable(x, y), '生物那格擋路').toBe(false);
             expect(used.has(`${x},${y}`), `${x},${y} 被兩隻佔了`).toBe(false);
             used.add(`${x},${y}`);
           }

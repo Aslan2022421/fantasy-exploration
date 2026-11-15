@@ -37,6 +37,7 @@ export function createWorldView(mapView, world, data) {
   const objectFgOn = surfaces.map((s) =>
     buildObjectShades(objects.map((o) => ({ ...o, color: mixColor(o.color, s.color, MOUNTAIN_TINT) }))),
   );
+  const creatureFg = buildObjectShades(data.species); // [物種][明暗級數]
   const isGround = objects.map((o) => o.gather?.action === 'pick');
   // 物件本身的亮暗回饋（乘在字色上）
   function feedback(x, y, o) {
@@ -98,6 +99,12 @@ export function createWorldView(mapView, world, data) {
     };
   }
 
+  // 生物那一格：物種的字與顏色，疊 height 層（物種資料自己寫的 2～3 層）
+  function creatureLook(x, y, cr) {
+    const sp = data.species[cr.species];
+    return { glyph: sp.glyph, fg: creatureFg[cr.species][world.shadeAt(x, y)], height: sp.height };
+  }
+
   // 礦坑的一格：畫資料 pattern 裡這一格的字（accent 的字暗一點），九格一起疊現在剩下的層數（越挖越矮）；
   // 顏色分大類，不往腳下材質靠
   function mineLook(x, y, o) {
@@ -152,6 +159,7 @@ export function createWorldView(mapView, world, data) {
   return createStackView(mapView, world, objects, {
     ground: groundLook,
     object: objectLook,
+    creature: creatureLook,
     slope: slopeLook,
     peak: peakLook,
   });

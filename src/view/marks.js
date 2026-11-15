@@ -2,7 +2,7 @@
 // placeOf(x, y, h, lift) → 那格（往上 lift 層）畫在地圖區哪裡（stackview.js 給）
 
 import { COLORS } from './colors.js';
-import { groundHeight, objectLayers } from './perspective.js';
+import { groundHeight, objectLayers, UP } from './perspective.js';
 
 export function drawMarks(mapView, world, objects, look, placeOf, { route, target, examined }) {
   for (const c of [examined, target]) {
@@ -15,6 +15,18 @@ export function drawMarks(mapView, world, objects, look, placeOf, { route, targe
       const p = placeOf(c.x, c.y, h0, lift);
       mapView.drawShifted(0, 0, p.px, p.py, glyph, fg, bg);
     };
+    const cr = o < 0 ? world.creatureAt?.(c.x, c.y) : null;
+    if (cr) {
+      // 生物：那一隻佔的每一格、疊的每一層都標，標記跟著生物疊上去
+      for (const cell of cr.cells) {
+        const cl = look.creature(cell.x, cell.y, cr);
+        for (let lift = 0; lift < cl.height; lift++) {
+          const p = placeOf(cell.x, cell.y, h0, lift, UP.minePx);
+          mapView.drawShifted(0, 0, p.px, p.py, cl.glyph, cl.fg, lift === 0 ? bg : null);
+        }
+      }
+      continue;
+    }
     if (o < 0) {
       const g = look.ground(c.x, c.y);
       mark(0, g.glyph, g.fg);

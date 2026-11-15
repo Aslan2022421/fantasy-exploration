@@ -52,8 +52,9 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   function collect(x, y, buckets) {
     const g = look.ground(x, y);
     const o = world.objectAt(x, y);
+    const cr = o < 0 ? world.creatureAt?.(x, y) : null;
     const h0 = groundHeight(world.tierAt(x, y));
-    const glyph = o >= 0 ? ' ' : g.glyph;
+    const glyph = o >= 0 || cr ? ' ' : g.glyph;
     const put = (h, item) => {
       if (!buckets[h]) buckets[h] = [];
       buckets[h].push({ x, y, h, ...item });
@@ -78,6 +79,10 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     } else put(h0, { glyph, fg: g.fg, bg: g.bg });
     const pk = look.peak?.(x, y);
     if (pk) putPeak(pk, x, h0, put);
+    if (cr) {
+      putCreature(look.creature(x, y, cr), x, h0, g.bg, put);
+      return;
+    }
     if (o < 0) return;
     const ol = look.object(x, y, o);
     if (ol.mine) {
@@ -103,6 +108,14 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       };
       if (l.dh === 0) put(flat.h, { ...item, tilt: flat.tilt });
       else put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });
+    }
+  }
+
+  // 生物的一格：同一個字從地面往上疊 height 層（每層往上 minePx，跟地形一樣），下面幾層往地面底色壓淡，只畫字
+  function putCreature(cl, x, h0, bg, put) {
+    for (let i = 0; i < cl.height; i++) {
+      const fg = fade(cl.fg, bg, fadeAt(cl.height - 1 - i));
+      put(h0 + i, { x, glyph: cl.glyph, fg, bg: null, ground: h0, lift: i, px: UP.minePx });
     }
   }
 

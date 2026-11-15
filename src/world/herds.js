@@ -39,6 +39,9 @@ export function speciesFootprint(cells) {
         ];
 }
 
+// 錨點在 (x, y) 的那一隻佔哪幾格（世界座標）
+export const creatureCells = (sp, { x, y }) => speciesFootprint(sp.cells).map(([dx, dy]) => ({ x: x + dx, y: y + dy }));
+
 // 一區的目標群數（記進世界層每區的 numbers）：只看種子與區座標
 export function herdTargets(seed, zx, zy) {
   const pick = ([lo, hi], salt) => lo + Math.floor(hash01(seed, zx, zy, salt) * (hi - lo + 1));

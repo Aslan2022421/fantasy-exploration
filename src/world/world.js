@@ -4,13 +4,13 @@
 
 import { PART_TRUNK } from './footprint.js';
 import { buildGeography } from './geography.js';
-import { herdTargets } from './herds.js';
+import { creatureCells, herdTargets } from './herds.js';
 import { LAND } from './landform.js';
 import { anchorOffset } from './objects.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 24;
+export const WORLD_VERSION = 25; // 25：生物佔格擋路（物種成群）
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -96,6 +96,44 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
 
   const orNull = (list, v) => (v === LAYER_NONE ? null : list[v]);
 
+  // 這格上的生物：{ herd, member（那一隻的錨點）, species（data.species 的編號）, cells（那一隻佔的格子）} 或 null。
+  // 每區第一次問時把整區的生物攤成格子對照表
+  function creatureAt(x, y) {
+    const i = locate(x, y);
+    if (i < 0) return null;
+    if (!last.creatures) {
+      last.creatures = new Map();
+      for (const herd of last.herds)
+        for (const member of herd.members) {
+          const cells = creatureCells(data.species[herd.species], member);
+          for (const c of cells)
+            last.creatures.set(c.y * zoneSize + c.x, { herd, member, species: herd.species, cells });
+        }
+    }
+    return last.creatures.get(y * zoneSize + x) ?? null;
+  }
+
+  // 離 (x, y) 不到 r 格（切比雪夫）的生物群：[{ herd, species, near: 最近那隻的錨點 }]
+  function herdsNear(x, y, r) {
+    const out = [];
+    const z0 = { x: Math.max(0, Math.floor((x - r) / zoneSize)), y: Math.max(0, Math.floor((y - r) / zoneSize)) };
+    const z1 = {
+      x: Math.min(zonesX - 1, Math.floor((x + r) / zoneSize)),
+      y: Math.min(zonesY - 1, Math.floor((y + r) / zoneSize)),
+    };
+    for (let zy = z0.y; zy <= z1.y; zy++)
+      for (let zx = z0.x; zx <= z1.x; zx++)
+        for (const herd of zone(zx, zy).herds) {
+          let near = null;
+          for (const m of herd.members) {
+            const d = Math.max(Math.abs(m.x - x), Math.abs(m.y - y));
+            if (d < r && (!near || d < near.d)) near = { ...m, d };
+          }
+          if (near) out.push({ herd, species: herd.species, near });
+        }
+    return out;
+  }
+
   function cell(x, y) {
     const i = locate(x, y);
     if (i < 0) return null;
@@ -107,6 +145,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       water: orNull(data.waters, last.water[i]),
       cover: orNull(data.covers, last.cover[i]),
       object: o ? data.objects[o - 1] : null,
+      creature: creatureAt(x, y),
       trunk: o ? last.objectPart[i] === PART_TRUNK : false,
       biome: data.biomes[last.biome[i]],
       height: last.height[i],
@@ -130,6 +169,8 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     regionAt: (x, y) => (inside(x, y) ? regions[Math.floor(y / zoneSize) * zonesX + Math.floor(x / zoneSize)] : null),
     zone,
     // 一區的物種群（herds.js）：[{ id, species（data.species 的編號）, members: [{ x, y }]（各隻的錨點）, env }]
+    creatureAt,
+    herdsNear,
     herdsOf: (zx, zy) => (zx < 0 || zy < 0 || zx >= zonesX || zy >= zonesY ? [] : zone(zx, zy).herds),
     generatedZones: () => zones.size,
     inside,
@@ -212,6 +253,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const w = last.water[i];
       if (w !== LAYER_NONE && !data.waters[w].passable) return false;
       if (!data.surfaces[last.surface[i]].passable) return false;
+      if (creatureAt(x, y)) return false; // 生物那幾格擋路
       const o = last.object[i];
       if (!o) return true;
       return data.objects[o - 1].passable && last.objectPart[i] !== PART_TRUNK;

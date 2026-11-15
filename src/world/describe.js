@@ -14,6 +14,8 @@ function gatherText(d) {
   return `${verb}${obj}，${d.action === 'mine' ? '挖到' : '得到'} ${got}。`;
 }
 
+const speciesName = (id) => DATA.species[DATA.speciesIndex.get(id)]?.name ?? id;
+
 const DIR_NAMES = { n: '北', ne: '東北', e: '東', se: '東南', s: '南', sw: '西南', w: '西', nw: '西北' };
 
 export function describeRecord(rec) {
@@ -31,6 +33,10 @@ export function describeRecord(rec) {
       return '有東西擋住了路，停了下來。';
     case 'gather':
       return gatherText(d);
+    case 'spot':
+      return `遠遠看見${speciesName(d.species)}（一群 ${d.count} 隻）。`;
+    case 'refuse':
+      return `還不能對${speciesName(d.species)}動手，戰鬥還沒做。`;
     default:
       return rec.verb;
   }

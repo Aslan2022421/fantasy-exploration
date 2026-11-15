@@ -15,7 +15,8 @@ import { applyGather, planGather, sourceAt, touches } from './gather.js';
 import { tryMove } from './move.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
-export const SAVE_FORMAT = 4; // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子
+export const SAVE_FORMAT = 5; // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種
+export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
 const PLAYER = 'player';
 
@@ -26,8 +27,9 @@ const StateSchema = z.object({
   bag: Counts, // 背包：材料 → 幾個
   stock: Counts, // 現存數量（算上限用）：採到的都算，之後消耗了才扣
   cells: z.record(z.string(), z.object({}).passthrough()), // 採過的格子（changes.js）
+  seen: z.record(z.string(), z.number()), // 見過的物種 → 第一次見到是哪一筆紀錄
 });
-const emptyState = () => ({ player: { x: 0, y: 0 }, time: 0, bag: {}, stock: {}, cells: {} });
+const emptyState = () => ({ player: { x: 0, y: 0 }, time: 0, bag: {}, stock: {}, cells: {}, seen: {} });
 export const SaveSchema = z.object({
   format: z.literal(SAVE_FORMAT),
   world: z.literal(WORLD_VERSION),
@@ -47,6 +49,8 @@ export function apply(state, rec) {
       return { ...state, player: { ...rec.data.to }, time: rec.time + rec.data.duration };
     case 'gather':
       return { ...applyGather(state, rec.data), time: rec.time + rec.data.duration };
+    case 'spot':
+      return { ...state, seen: { ...state.seen, [rec.data.species]: rec.id } };
     default:
       return state;
   }
@@ -86,7 +90,23 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
       const from = state.player;
       const to = tryMove(world, from, dir);
       if (to.x === from.x && to.y === from.y) return null;
-      return record({ verb: 'move', data: { from, to, dir, duration: 1 }, cause });
+      const rec = record({ verb: 'move', data: { from, to, dir, duration: 1 }, cause });
+      // 走到離一群生物 SIGHT_RANGE 格內，第一次見到這個物種就記一筆（起因是這一步，不花時間）
+      for (const { herd, near } of world.herdsNear(to.x, to.y, SIGHT_RANGE)) {
+        const id = DATA.species[herd.species].id;
+        if (state.seen[id] !== undefined) continue;
+        record({
+          verb: 'spot',
+          target: { x: near.x, y: near.y },
+          data: { species: id, herd: herd.id, count: herd.members.length },
+          cause: rec.id,
+        });
+      }
+      return rec;
+    },
+    // 對生物動手：戰鬥還沒做，記一筆被擋回來（不改狀態）
+    refuse(at, species, cause = null) {
+      return record({ verb: 'refuse', target: at, data: { species }, cause });
     },
     plan(to, steps) {
       return record({ verb: 'plan', target: to, data: { steps } });

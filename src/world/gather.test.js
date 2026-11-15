@@ -2,14 +2,15 @@ import { RNG } from 'rot-js';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { CHECKPOINT_EVERY, loadGame, newGame } from './game.js';
-import { capFactor, envAt, readComposition, weightsFor } from './gather.js';
+import { capFactor, envAt, layersNow, readComposition, touches, weightsFor } from './gather.js';
 import { findPathNextTo, stepDirection } from './path.js';
 
 const SEED = 20261112;
 const O = (id) => DATA.objectIndex.get(id);
 const rng = (s) => RNG.clone().setSeed(s);
 const TREES = DATA.objects.filter((o) => o.trunk).map((o) => o.id); // 各樹種
-// 測試用的挖礦產出表（資料裡現在沒有可挖的物件）
+const MINES = DATA.objects.filter((o) => o.layers).map((o) => o.id); // 各類礦坑
+// 測試用的挖礦產出表（固定的權重，不跟著資料調整變）
 const ORE = {
   action: 'mine',
   uses: [3, 6],
@@ -119,6 +120,33 @@ describe('在世界裡採', () => {
     expect(g.state.time).toBe(rec.time + 6);
   });
 
+  test('挖礦坑：貼著四格任一格都能挖，每層挖 per 次矮一層，最後一層挖完四格都變成能走的碎石坑', () => {
+    const g = newGame(SEED);
+    const src = nearest(g, MINES);
+    expect(src.cells).toHaveLength(4);
+    const def = DATA.objects[src.object];
+    const start = layersNow(g.world, def, src.x, src.y);
+    walkNextTo(g, src);
+    expect(touches(src, g.state.player)).toBe(true);
+    const first = g.gather(src);
+    expect(first.data.read).not.toBeNull();
+    const { per } = g.state.cells[`${src.x},${src.y}`];
+    expect(per).toBeGreaterThanOrEqual(def.gather.uses[0]);
+    expect(layersNow(g.world, def, src.x, src.y)).toBe(start);
+    let n = 1;
+    while (n < per) {
+      g.gather(src);
+      n++;
+    }
+    expect(layersNow(g.world, def, src.x, src.y)).toBe(start - 1); // 挖完一層矮一層
+    while (g.gather(src)) n++;
+    expect(n).toBe(start * per);
+    for (const c of src.cells) {
+      expect(g.world.objectAt(c.x, c.y)).toBe(O('pit'));
+      expect(g.world.isPassable(c.x, c.y)).toBe(true);
+    }
+  });
+
   test('來源的環境：離河或湖的距離照八方向一圈一圈量，超過產出表用到的最遠距離算 Infinity', () => {
     const g = newGame(SEED);
     const src = nearest(g, 'herb'); // 草本長在河或湖邊，量得到距離
@@ -150,7 +178,7 @@ describe('在世界裡採', () => {
   test('採集寫進紀錄：存讀檔、從檢查點重放、從頭重放，狀態都一樣；同樣的操作兩次結果一樣', () => {
     const play = () => {
       const g = newGame(SEED);
-      for (const id of ['herb', 'shrub', TREES]) {
+      for (const id of ['herb', 'shrub', TREES, MINES]) {
         const src = nearest(g, id);
         if (!src) continue;
         walkNextTo(g, src);

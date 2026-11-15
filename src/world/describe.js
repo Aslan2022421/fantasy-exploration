@@ -4,10 +4,10 @@ import { DATA } from '../data/load.js';
 
 const UNITS = { mineral: '塊', wood: '段', plant: '株', animal: '份' };
 
-// 採集：「挖○○，挖到 2 塊鐵礦。」「砍倒闊葉樹，得到 3 段闊葉木。」「採下矮叢，得到 1 株寒地漿果。」
+// 採集：「挖金屬礦，挖到 2 塊鐵礦。」「砍倒闊葉樹，得到 3 段闊葉木。」「採下矮叢，得到 1 株寒地漿果。」
 function gatherText(d) {
   const obj = DATA.objects[DATA.objectIndex.get(d.object)]?.name ?? d.object;
-  const verb = { mine: d.done ? '挖穿' : '挖', chop: '砍倒', pick: '採下' }[d.action];
+  const verb = { mine: d.done ? '挖空' : '挖', chop: '砍倒', pick: '採下' }[d.action];
   if (!d.got) return `${verb}${obj}，什麼都沒${d.action === 'mine' ? '挖到' : '得到'}。`;
   const m = DATA.materials[DATA.materialIndex.get(d.got.material)];
   const got = `${d.got.amount} ${UNITS[m?.category] ?? '個'}${m?.name ?? d.got.material}`;

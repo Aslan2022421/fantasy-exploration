@@ -7,6 +7,7 @@
 import { CLIMATE, createClimate } from './climate.js';
 import { createContinent } from './continent.js';
 import { MAX_SIZE } from './footprint.js';
+import { GEO } from './geography.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { hash01 } from './noise.js';
@@ -184,6 +185,14 @@ export function createTerrainGen(seed, data, size = null) {
       tBand,
       wBand,
       anchors,
+      // 世界地理粗格的高度（找谷地周圍的山用，objects.js）；沒接地理時沒有
+      coarse: geo
+        ? (x, y) => {
+            const i = Math.floor(x / GEO.cell);
+            const j = Math.floor(y / GEO.cell);
+            return i < 0 || j < 0 || i >= geo.W || j >= geo.H ? -1 : geo.elev[j * geo.W + i];
+          }
+        : null,
     };
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {

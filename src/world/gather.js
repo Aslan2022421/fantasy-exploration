@@ -2,19 +2,29 @@
 // - 第一次採一處來源時，照它的環境（生態、高度層）讀出組成：從產出權重表抽 kinds 種，之後固定
 // - 每次採從組成裡抽一種，權重乘上限係數＝（1 −現存／上限）²，越接近上限越少出現，到上限就不出現
 // - 一處能採 uses 次，採光後照 after 換成別的物件（樹樁、碎石坑），或留著標成採過了
+// - 礦坑（資料有 layers）佔 2×2 格、疊好幾層：uses 是每層挖幾次，挖完一層矮一層，最後一層挖完四格都變成 after
 // 骰子由呼叫的人給（game.js 用「主種子＋紀錄編號」開一顆），算出來的結果整筆寫進紀錄，重放時只照紀錄套
 
 import { MAX_SIZE, PART_TRUNK } from './footprint.js';
+import { mineLayers } from './objects.js';
 
 // 上限係數：現存 n、上限 cap
 export const capFactor = (n, cap) => Math.max(0, 1 - n / cap) ** 2;
 
-// 一處來源：(x, y) 指到的那格是哪一處（樹冠指到整棵樹，回傳樹幹那格）。不能採、採過了回傳 null
+// 一處來源：(x, y) 指到的那格是哪一處（樹冠指到整棵樹，回傳樹幹那格；礦坑回傳錨點，cells 是它佔的每一格）。
+// 不能採、採過了回傳 null
 export function sourceAt(world, data, x, y) {
   const o = world.objectAt(x, y);
   if (o < 0) return null;
   const def = data.objects[o].gather;
   if (!def || world.changeAt?.(x, y)?.picked) return null;
+  if (data.objects[o].layers) {
+    const a = world.anchorAt(x, y);
+    const d = data.objects[o].sizes[0];
+    const cells = [];
+    for (let j = 0; j < d; j++) for (let k = 0; k < d; k++) cells.push({ x: a.x + k, y: a.y + j });
+    return { x: a.x, y: a.y, object: o, def, cells };
+  }
   if (!data.objects[o].trunk || world.objectPartAt(x, y) === PART_TRUNK) return { x, y, object: o, def };
   const a = world.anchorAt(x, y);
   for (let j = 0; j < MAX_SIZE; j++) {
@@ -27,6 +37,18 @@ export function sourceAt(world, data, x, y) {
     }
   }
   return null;
+}
+
+// 站在 p 能不能採 src：貼著它佔的任一格（或站在上面）
+export function touches(src, p) {
+  return (src.cells ?? [src]).some((c) => Math.max(Math.abs(c.x - p.x), Math.abs(c.y - p.y)) <= 1);
+}
+
+// 礦坑在錨點 (x, y) 現在還有幾層：挖過的照剩下的次數算，還沒挖過的照生成時的層數
+export function layersNow(world, def, x, y) {
+  const ch = world.changeAt?.(x, y);
+  if (ch?.left != null && ch.per) return Math.ceil(ch.left / ch.per);
+  return mineLayers(world.seed, def, x, y);
 }
 
 // 這處來源的環境符合產出表的哪幾列，加總成 { 材料: 權重 }
@@ -119,17 +141,26 @@ export function planGather(world, data, state, src, rng) {
   const env = envAt(world, data, def, src.x, src.y);
   const fresh = !prev || prev.left == null;
   const comp = fresh ? readComposition(def, env, data, state.stock, rng) : prev.comp;
-  const left = fresh ? rng.getUniformInt(def.uses[0], def.uses[1]) : prev.left;
+  const layered = !!data.objects[src.object].layers;
+  // 礦坑：每層挖幾次（per）第一次挖時擲，總次數＝層數×每層幾次
+  const per = layered ? (fresh ? rng.getUniformInt(def.uses[0], def.uses[1]) : prev.per) : undefined;
+  const firstLeft = () =>
+    layered
+      ? per * mineLayers(world.seed, data.objects[src.object], src.x, src.y)
+      : rng.getUniformInt(def.uses[0], def.uses[1]);
+  const left = fresh ? firstLeft() : prev.left;
   const material = drawOne(comp, data, state.stock, rng);
   const amount = material ? rng.getUniformInt(def.amount[0], def.amount[1]) : 0;
   const remain = left - 1;
-  const cells = { [key]: { o: src.object, left: remain, comp } };
+  const cells = { [key]: layered ? { o: src.object, left: remain, comp, per } : { o: src.object, left: remain, comp } };
   let done = null;
   if (remain <= 0) {
     if (def.after === 'picked') cells[key] = { o: src.object, picked: true };
     else {
-      cells[key] = { o: data.objectIndex.get(def.after) };
+      const after = data.objectIndex.get(def.after);
+      cells[key] = { o: after };
       if (data.objects[src.object].trunk) Object.assign(cells, canopyOf(world, src));
+      for (const c of src.cells ?? []) cells[`${c.x},${c.y}`] = { o: after }; // 礦坑四格都變成碎石坑
     }
     done = def.after;
   }

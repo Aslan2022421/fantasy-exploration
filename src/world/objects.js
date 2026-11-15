@@ -2,6 +2,8 @@
 // - 樹、矮叢照生態撒錨點，多格的樹冠互相讓位（樹幹永遠露出來，其餘取雜湊最小的那棵）；現在的樹都只佔一格
 // - 山上平坦的台階（平台）樹線放寬，高山的台階上也有幾棵樹
 // - 草本長在低處（高度層 1～2）、溫和或炎熱、不乾燥、靠近河或湖的泥土上
+// - 礦坑長在山與山之間的谷地（低處、三面有山或兩側相對有山），一處佔 2×2 格，四格要在同一個高度層、
+//   沒有水也不是冰；大類（石礦、金屬礦、晶礦）照權重挑，疊幾層照資料的 layers 挑
 // 只看種子＋座標與周圍幾格，不看生成順序，跨區接得起來
 
 import { inFootprint, MAX_SIZE, meanArea, PART_MID, PART_TRUNK, partOf, trunkCell } from './footprint.js';
@@ -16,7 +18,21 @@ export const PLACE = {
   ledgeSlope: 25, // 山上坡度（SLOPE_SCALE 倍）比這個平的算平台
   ledgeAbove: 0.35, // 高出山地門檻這麼多以內的平台，樹線放寬
   ledgeTrees: 0.4, // 平台上長樹的機率至少是平地的幾成
+  mineDensity: 0.012, // 谷地裡每格當礦坑錨點的機率
+  mineKinds: { 'stone-mine': 5, 'metal-mine': 3.5, 'crystal-mine': 1.5 }, // 礦坑大類的權重
+  valleyTop: 0.1, // 谷地的地面最高只到山地門檻再高這麼多（山腳的低處）
+  valleyRise: 0.1, // 周圍要有比山地門檻高這麼多的山
+  valleyReach: 3, // 往東南西北各看幾個地理粗格（一格 8 格）找山
+  valleySides: 3, // 三面有山（山凹）；兩側相對有山（山谷）也算
 };
+
+const MINE_SIZE = 2; // 礦坑佔 2×2 格
+
+// 礦坑在錨點 (x, y) 疊幾層：照資料的 layers 範圍用雜湊挑（世界與畫面都用這個算，挖之前就看得到）
+export function mineLayers(seed, def, x, y) {
+  const [lo, hi] = def.layers;
+  return lo + Math.floor(hash01(seed, x, y, 303) * (hi - lo + 1));
+}
 
 // ids：地形編號（ROCK、DIRT、ICE、SHALLOW、DEEP、NONE）；treelineRange：山地高出門檻多少就沒有樹
 export function createObjectPlacer(seed, data, ids, treelineRange) {
@@ -31,6 +47,10 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
   // 資料裡沒有的就不放（測試用的小資料只有幾種物件）
   const PINE = data.objectIndex.get('pine') ?? -1;
   const HERB = data.objectIndex.get('herb') ?? -1;
+  const mineKinds = Object.entries(PLACE.mineKinds)
+    .filter(([id]) => data.objectIndex.has(id))
+    .map(([id, w]) => [data.objectIndex.get(id), w]);
+  const mineTotal = mineKinds.reduce((s, [, w]) => s + w, 0);
 
   // 植物長得出來的地方：沒有水、不是岩石或冰
   const canGrow = (water, surface) => water === NONE && surface !== ROCK && surface !== ICE;
@@ -56,6 +76,66 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
         return { object: kind, size, turn: hash01(seed, x, y, 60 + i) < 0.5 }; // turn：對邊兩片的樹冠是上下還是左右
       }
     }
+    return null;
+  }
+
+  // 谷地：地面低（最高到山腳），往東南西北看，至少三個方向不遠處有山把它圍住，或兩側相對有山。
+  // 周圍的山用世界地理的粗格高度看（geography.js，一格 8 格），一區自己的格子看不了那麼遠
+  function valleyAt(z, X, Y, c) {
+    if (!z.coarse || z.h[c] > LAND.mountain + PLACE.valleyTop) return false;
+    const high = LAND.mountain + PLACE.valleyRise;
+    const hit = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ].map(([dx, dy]) => {
+      for (let k = 1; k <= PLACE.valleyReach; k++) if (z.coarse(X + dx * k * 8, Y + dy * k * 8) > high) return true;
+      return false;
+    });
+    const sides = hit.filter(Boolean).length;
+    return sides >= PLACE.valleySides || (hit[0] && hit[1]) || (hit[2] && hit[3]);
+  }
+
+  const mineRoll = (X, Y) => hash01(seed, X, Y, 301);
+
+  // 錨點 ac（世界座標 X, Y）長不長礦坑：回傳物件編號或 -1。擲到的格子還要四格都能放、在谷地，
+  // 而且是周圍一圈擲到的格子裡雜湊最小的（兩處不會疊在一起）
+  function mineAnchor(z, ac, X, Y) {
+    if (!mineKinds.length) return -1;
+    z.mine ??= new Int16Array(z.G * z.G).fill(-2);
+    if (z.mine[ac] !== -2) return z.mine[ac];
+    let out = -1;
+    const r = mineRoll(X, Y);
+    if (r < PLACE.mineDensity) {
+      const cells = [ac, ac + 1, ac + z.G, ac + z.G + 1];
+      const fits = cells.every((k) => z.wAll[k] === NONE && z.sAll[k] !== ICE && z.tier[k] === z.tier[ac]);
+      let lowest = true;
+      for (let dy = -1; dy <= 1 && lowest; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const q = mineRoll(X + dx, Y + dy);
+          if ((dx || dy) && q < PLACE.mineDensity && q < r) lowest = false;
+        }
+      if (fits && lowest && valleyAt(z, X, Y, ac)) {
+        let pick = hash01(seed, X, Y, 302) * mineTotal;
+        for (const [o, w] of mineKinds) {
+          out = o;
+          pick -= w;
+          if (pick < 0) break;
+        }
+      }
+    }
+    z.mine[ac] = out;
+    return out;
+  }
+
+  // 礦坑：往左上找 2×2 會蓋到這格的錨點
+  function mineAt(z, c, X, Y) {
+    for (let j = 0; j < MINE_SIZE; j++)
+      for (let k = 0; k < MINE_SIZE; k++) {
+        const o = mineAnchor(z, c - j * z.G - k, X - k, Y - j);
+        if (o >= 0) return { object: o, part: PART_MID, anchor: k * MAX_SIZE + j };
+      }
     return null;
   }
 
@@ -98,9 +178,10 @@ export function createObjectPlacer(seed, data, ids, treelineRange) {
   }
 
   // 這格的物件：{ object（data.objects 的編號）, part（footprint.js 的 PART_*）, anchor（錨點在左上幾格：k×MAX_SIZE＋j）} 或 null。
-  // z 是一區生成時共用的格子（G×G，左上角是世界座標 gx0, gy0）：高度 h、高度層 tier、材質、水文、溫度帶、濕度帶、錨點
+  // z 是一區生成時共用的格子（G×G，左上角是世界座標 gx0, gy0）：高度 h、高度層 tier、材質、水文、溫度帶、濕度帶、錨點，
+  // coarse(x, y) 是世界地理粗格的高度（沒接地理時沒有）
   function objectAt(z, c, X, Y) {
-    return floraAt(z, c, X, Y) ?? herbAt(z, c, X, Y);
+    return mineAt(z, c, X, Y) ?? floraAt(z, c, X, Y) ?? herbAt(z, c, X, Y);
   }
 
   return { anchorAt, objectAt };

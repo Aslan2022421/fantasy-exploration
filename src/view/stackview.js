@@ -7,6 +7,7 @@
 // 地圖內容改變時要呼叫 invalidate() 丟掉快取；只改了幾格（採集）用 invalidateCells
 
 import { COLORS } from './colors.js';
+import { drawMarks } from './marks.js';
 import {
   approach,
   fadeAt,
@@ -16,6 +17,7 @@ import {
   PLAYER_LAYERS,
   shiftUp,
   slopeTilt,
+  UP,
   upShiftCells,
   wallSouth,
 } from './perspective.js';
@@ -41,7 +43,8 @@ function fade(a, b, f) {
   return out;
 }
 
-// look：{ ground(x, y) → { glyph, fg, bg }, object(x, y, o) → { glyph, fg, trunkGlyph, trunkFg, isTrunk } }
+// look：{ ground(x, y) → { glyph, fg, bg }, object(x, y, o) → { glyph, fg, trunkGlyph, trunkFg, isTrunk }
+// 或礦坑的 { glyph, fg, big 放大幾倍, layers 疊幾層 }／{ covered: true }（錨點以外的格子）}
 export function createStackView(mapView, world, objects, look, { now = () => performance.now() } = {}) {
   const chunks = new Map(); // "cx,cy" → 圖層
   let view = null; // { x, y 相機左上（小數）, t 上次畫的時間 }
@@ -77,6 +80,11 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     if (pk) putPeak(pk, x, h0, put);
     if (o < 0) return;
     const ol = look.object(x, y, o);
+    if (ol.covered) return; // 礦坑錨點以外的格子，由錨點那個大字蓋住
+    if (ol.big) {
+      putBig(ol, x, h0, g.bg, put);
+      return;
+    }
     const layers = objectLayers(objects[o], ol.isTrunk);
     // 貼地的物件（矮叢、碎石坑）畫在地面最上面那層：斜坡多疊的那層有底色，畫在它下面會被蓋掉
     const flat = slope ? { h: h0 + 1, tilt: slope.gx } : { h: h0 };
@@ -99,6 +107,15 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
+  // 礦坑：錨點那格往右下畫一個放大 ol.big 倍的字，從地面疊 ol.layers 層，下面幾層往地面底色壓淡。
+  // 放進比地面高一層的桶子：同高度的地面先畫完，大字的下半才不會被南邊那列的地面蓋掉
+  function putBig(ol, x, h0, bg, put) {
+    for (let i = 0; i < ol.layers; i++) {
+      const fg = fade(ol.fg, bg, fadeAt(ol.layers - 1 - i));
+      put(h0 + i + 1, { x, glyph: ol.glyph, fg, bg: null, ground: h0, lift: i, px: UP.bigPx, scale: ol.big });
+    }
+  }
+
   // 山峰剪影：以山峰那格為底邊中央，往上 rows 列的三角形。頂點 ▲，兩條稜線 / \，西面 /、東面 \、中線 ^；
   // 底色塗滿，畫在所有地形之後，同一層裡南邊的後畫，前面的山蓋住後面的
   function putPeak(pk, x, h0, put) {
@@ -115,7 +132,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
 
   // 這一項畫在哪：地面高度、往上幾層（物件），斜坡那層再往上坡偏；山峰剪影再往上整列
   function offsetOf(it, k) {
-    const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k);
+    const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k, it.px);
     if (it.rowsUp) s.oy -= it.rowsUp * 8;
     if (it.tilt === undefined) return s;
     const t = slopeTilt(it.tilt, k);
@@ -137,7 +154,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       if (!list) continue;
       for (const it of list) {
         const { ox, oy } = offsetOf(it, k);
-        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg);
+        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg, it.scale);
       }
     }
     return layer;
@@ -156,43 +173,16 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   }
 
   // 地面高度 h 的東西、再往上 lift 層（物件、冒險者）錯開多少字元像素
-  function shiftOf(h, lift, k) {
+  function shiftOf(h, lift, k, px) {
     const a = shiftUp(h, k);
-    const b = liftUp(lift, k);
+    const b = liftUp(lift, k, px);
     return { ox: a.ox + b.ox, oy: a.oy + b.oy };
   }
 
   // 世界格 (x, y) 的地面（或往上 lift 層）畫在地圖區哪裡（字元像素，左上角）
-  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y)), lift = 0) {
-    const { ox, oy } = shiftOf(h, lift, mapView.tile() / 8);
+  function placeOf(f, x, y, h = groundHeight(world.tierAt(x, y)), lift = 0, px = undefined) {
+    const { ox, oy } = shiftOf(h, lift, mapView.tile() / 8, px);
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
-  }
-
-  // 目標、查看中的格子：標底色。有物件時物件疊的每一層都標，標記跟著物件疊上去，不會留在地面跟物件分開
-  function drawMarks(f, { route, target, examined }) {
-    for (const c of [examined, target]) {
-      if (!c || !world.inside(c.x, c.y)) continue;
-      const isTarget = target?.x === c.x && target?.y === c.y;
-      const bg = isTarget ? (route?.reachable ? COLORS.target : COLORS.blocked) : COLORS.examined;
-      const o = world.objectAt(c.x, c.y);
-      const h0 = groundHeight(world.tierAt(c.x, c.y));
-      const mark = (lift, glyph, fg) => {
-        const { px, py } = placeOf(f, c.x, c.y, h0, lift);
-        mapView.drawShifted(0, 0, px, py, glyph, fg, bg);
-      };
-      if (o < 0) {
-        const g = look.ground(c.x, c.y);
-        mark(0, g.glyph, g.fg);
-        continue;
-      }
-      const ol = look.object(c.x, c.y, o);
-      const layers = objectLayers(objects[o], ol.isTrunk);
-      if (!layers.some((l) => l.dh === 0)) mark(0, ' ', ol.fg); // 物件底下那格地面也標，跟上面幾層連成一塊
-      for (const l of layers) {
-        const trunk = l.part === 'trunk';
-        mark(l.dh, trunk ? ol.trunkGlyph : ol.glyph, trunk ? ol.trunkFg : ol.fg);
-      }
-    }
   }
 
   // 冒險者附近比他頭頂高的樹冠，在冒險者之後再畫一次。樹冠往右上錯開，會蓋到冒險者的是他那格與南邊、西邊幾格的
@@ -229,7 +219,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
         for (let cx = cx0; cx <= cx1; cx++)
           mapView.blit(chunkAt(cx, cy), (cx * CHUNK - f.x) * 8, (cy * CHUNK - f.y) * 8);
       }
-      drawMarks(f, overlay);
+      drawMarks(mapView, world, objects, look, (x, y, h, lift, px) => placeOf(f, x, y, h, lift, px), overlay);
       drawRoute(mapView, world, (x, y, h) => placeOf(f, x, y, h), overlay.route, player);
       // 冒險者疊 PLAYER_LAYERS 層，最底層在腳下那格的地面上，往上照地形的間距錯開；只畫字，下層往腳下底色壓淡
       const p0 = groundHeight(world.tierAt(player.x, player.y));

@@ -11,7 +11,7 @@ import { createLog, RecordSchema } from '../core/records.js';
 import { createStreams, streamSeed } from '../core/rng.js';
 import { DATA } from '../data/load.js';
 import { withChanges } from './changes.js';
-import { applyGather, planGather, sourceAt } from './gather.js';
+import { applyGather, planGather, sourceAt, touches } from './gather.js';
 import { tryMove } from './move.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
@@ -104,7 +104,7 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     gather(at, cause = null) {
       const src = sourceAt(world, DATA, at.x, at.y);
       const p = state.player;
-      if (!src || Math.max(Math.abs(src.x - p.x), Math.abs(src.y - p.y)) > 1) return null;
+      if (!src || !touches(src, p)) return null;
       const dice = RNG.clone().setSeed(streamSeed(seed, `gather:${log.size}`));
       return record({
         verb: 'gather',

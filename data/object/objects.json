@@ -393,6 +393,140 @@
     }
   },
   {
+    "id": "stone-mine",
+    "name": "石礦",
+    "family": "礦坑",
+    "glyph": "∩",
+    "color": "#8c8c84",
+    "passable": false,
+    "height": 5,
+    "layers": [3, 5],
+    "trunk": false,
+    "sizes": [2],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "mine",
+      "uses": [4, 4],
+      "amount": [1, 2],
+      "kinds": [1, 2],
+      "after": "pit",
+      "yields": [
+        {
+          "weights": {
+            "stone": 80,
+            "coal": 20
+          }
+        },
+        {
+          "biomes": ["temperate-forest", "temperate-rainforest", "rainforest", "moss-forest"],
+          "weights": {
+            "coal": 20
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "metal-mine",
+    "name": "金屬礦",
+    "family": "礦坑",
+    "glyph": "∩",
+    "color": "#a0663c",
+    "passable": false,
+    "height": 5,
+    "layers": [3, 5],
+    "trunk": false,
+    "sizes": [2],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "mine",
+      "uses": [4, 4],
+      "amount": [1, 2],
+      "kinds": [2, 3],
+      "after": "pit",
+      "yields": [
+        {
+          "weights": {
+            "stone": 10,
+            "iron-ore": 20,
+            "copper-ore": 20,
+            "tin-ore": 12,
+            "silver-ore": 6
+          }
+        },
+        {
+          "biomes": ["taiga", "moss-forest", "tundra"],
+          "weights": {
+            "iron-ore": 25
+          }
+        },
+        {
+          "biomes": ["grassland", "temperate-forest", "temperate-rainforest"],
+          "weights": {
+            "iron-ore": 10,
+            "copper-ore": 10,
+            "tin-ore": 10
+          }
+        },
+        {
+          "biomes": ["desert", "savanna", "rainforest"],
+          "weights": {
+            "copper-ore": 25
+          }
+        },
+        {
+          "minTier": 8,
+          "weights": {
+            "silver-ore": 10,
+            "gold-ore": 8
+          }
+        },
+        {
+          "nearWater": 3,
+          "weights": {
+            "gold-ore": 6
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "crystal-mine",
+    "name": "晶礦",
+    "family": "礦坑",
+    "glyph": "∩",
+    "color": "#8ec8d0",
+    "passable": false,
+    "height": 5,
+    "layers": [3, 5],
+    "trunk": false,
+    "sizes": [2],
+    "canopy": "round",
+    "tile": null,
+    "gather": {
+      "action": "mine",
+      "uses": [4, 4],
+      "amount": [1, 2],
+      "kinds": [1, 2],
+      "after": "pit",
+      "yields": [
+        {
+          "weights": {
+            "quartz": 60
+          }
+        },
+        {
+          "biomes": ["taiga", "moss-forest", "tundra"],
+          "weights": {
+            "ice-crystal": 40
+          }
+        }
+      ]
+    }
+  },
+  {
     "id": "stump",
     "name": "樹樁",
     "glyph": "φ",

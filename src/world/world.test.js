@@ -223,6 +223,7 @@ describe('世界的形狀', () => {
           if (!z.object[i]) continue;
           objects++;
           expect(z.water[i]).toBe(LAYER_NONE);
+          if (DATA.objects[z.object[i] - 1].layers) continue; // 礦坑長在谷地，規則見 objects.test.js
           expect([S('rock'), S('ice')]).not.toContain(z.surface[i]);
           if (onMountain) expect(z.height[i]).toBeLessThanOrEqual(Math.max(treeline, ledgeTop) + 1); // 平坦的台階樹線放寬
         }
@@ -240,7 +241,7 @@ describe('世界的形狀', () => {
     let trunks = 0;
     let canopy = 0;
     for (let i = 0; i < z.object.length; i++) {
-      if (!z.object[i]) continue;
+      if (!z.object[i] || DATA.objects[z.object[i] - 1].layers) continue;
       const x = Z + (i % Z);
       const y = Z + Math.floor(i / Z);
       if (z.objectPart[i] === PART_TRUNK) {

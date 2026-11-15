@@ -2,6 +2,7 @@
 // 字形看四層（glyphs.js），顏色查 shades.js 先算好的表；亮度是生成時算好的級數（陸地看高度層＋坡向，水看深度）
 
 import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
+import { layersNow } from '../world/gather.js';
 import { lookAt } from './glyphs.js';
 import { mountainRing, mountainRingFactor, SLOPE_STACK } from './perspective.js';
 import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
@@ -76,6 +77,7 @@ export function createWorldView(mapView, world, data) {
 
   // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色；山上的樹顏色往腳下材質靠
   function objectLook(x, y, o) {
+    if (objects[o].layers) return mineLook(x, y, o);
     const part = world.objectPartAt(x, y);
     const table = isMountain[world.landformAt(x, y)] ? objectFgOn[world.surfaceAt(x, y)] : objectFg;
     const level = world.shadeAt(x, y);
@@ -88,6 +90,18 @@ export function createWorldView(mapView, world, data) {
       trunkFg: mixColor(dimColor(base, 0.8), WOOD, 0.6),
       isTrunk,
       cap: snowCap(x, y), // 雪地或山上的樹，頂端幾層往地形顏色靠（stackview.js）
+    };
+  }
+
+  // 礦坑：錨點那格是一個放大到佔地大小的字，疊現在剩下的層數（越挖越矮）；顏色分大類，不往腳下材質靠
+  function mineLook(x, y, o) {
+    const a = world.anchorAt(x, y);
+    if (!a || a.x !== x || a.y !== y) return { covered: true };
+    return {
+      glyph: objects[o].glyph,
+      fg: objectFg[o][world.shadeAt(x, y)],
+      big: objects[o].sizes[0],
+      layers: layersNow(world, objects[o], x, y),
     };
   }
 

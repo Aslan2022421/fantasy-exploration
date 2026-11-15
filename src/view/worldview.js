@@ -27,6 +27,7 @@ export const PEAK = { minRing: 2, radius: 6, minRows: 3, ringsPerRow: 3, maxRows
 // 疊層回饋：貼地資源（矮叢、草本）還能採時微微發亮、採過壓暗
 const GLOW = 1.3;
 const PICKED = 0.5;
+const ACCENT = 0.7; // 礦坑圖樣裡的點綴字（accent）比主體暗多少
 
 export function createWorldView(mapView, world, data) {
   const { objects, surfaces } = data;
@@ -72,7 +73,10 @@ export function createWorldView(mapView, world, data) {
       const face = FACE[glyph] ?? (isStone[world.surfaceAt(x, y)] ? ROCK_INK : 1);
       fg = dimColor(fg, ringInk(x, y) * face);
     }
-    return { glyph, fg, bg: softBg(x, y), level, rise: FACE[glyph] ? FACE_RISE : 0 };
+    // 礦坑佔的格子塗大類的底色，九格看起來是一整處
+    const o = world.objectAt(x, y);
+    const bg = o >= 0 && objects[o].tint ? objects[o].tint : softBg(x, y);
+    return { glyph, fg, bg, level, rise: FACE[glyph] ? FACE_RISE : 0 };
   }
 
   // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色；山上的樹顏色往腳下材質靠
@@ -93,15 +97,18 @@ export function createWorldView(mapView, world, data) {
     };
   }
 
-  // 礦坑：錨點那格是一個放大到佔地大小的字，疊現在剩下的層數（越挖越矮）；顏色分大類，不往腳下材質靠
+  // 礦坑的一格：畫資料 pattern 裡這一格的字（accent 的字暗一點），九格一起疊現在剩下的層數（越挖越矮）；
+  // 顏色分大類，不往腳下材質靠
   function mineLook(x, y, o) {
+    const def = objects[o];
     const a = world.anchorAt(x, y);
-    if (!a || a.x !== x || a.y !== y) return { covered: true };
+    const glyph = [...(def.pattern[y - a.y] ?? '')][x - a.x] ?? ' ';
+    const fg = objectFg[o][world.shadeAt(x, y)];
     return {
-      glyph: objects[o].glyph,
-      fg: objectFg[o][world.shadeAt(x, y)],
-      big: objects[o].sizes[0],
-      layers: layersNow(world, objects[o], x, y),
+      mine: true,
+      glyph,
+      fg: def.accent?.includes(glyph) ? dimColor(fg, ACCENT) : fg,
+      layers: layersNow(world, def, a.x, a.y),
     };
   }
 

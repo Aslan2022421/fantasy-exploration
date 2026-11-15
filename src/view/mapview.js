@@ -11,12 +11,11 @@ export function createMapView(image, ctx) {
     resize(screen) {
       s = screen;
     },
-    // 在地圖區第 (vx, vy) 格、再錯開 (ox, oy) 個字元像素（一格 8 個）畫一個字。bg 可省略，只畫字；
-    // scale 是字放大幾倍（礦坑佔 2×2 格，從這格往右下畫一個兩倍大的字）。
+    // 在地圖區第 (vx, vy) 格、再錯開 (ox, oy) 個字元像素（一格 8 個）畫一個字。bg 可省略，只畫字
     // 背景四邊各多塗 1 個字元像素：相鄰兩格錯開量四捨五入不同時，中間才不會露出細縫
-    drawShifted(vx, vy, ox, oy, ch, fg, bg, scale = 1) {
+    drawShifted(vx, vy, ox, oy, ch, fg, bg) {
       const k = s.tile / 8;
-      const size = s.tile * scale;
+      const size = s.tile;
       const px = Math.round(s.map.x + vx * s.tile + ox * k); // 錯開量可以是小數，落到整數像素才不會糊
       const py = Math.round(s.map.y + vy * s.tile + oy * k);
       if (bg) {
@@ -38,8 +37,8 @@ export function createMapView(image, ctx) {
       return {
         canvas,
         tile,
-        drawShifted(vx, vy, ox, oy, ch, fg, bg, scale = 1) {
-          const size = tile * scale;
+        drawShifted(vx, vy, ox, oy, ch, fg, bg) {
+          const size = tile;
           const px = Math.round(vx * tile + ox * k);
           const py = Math.round(vy * tile + oy * k);
           if (bg) {

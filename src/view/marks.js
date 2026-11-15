@@ -1,8 +1,8 @@
 // 目標、查看中的格子：標底色。有物件時物件疊的每一層都標，標記跟著物件疊上去，不會留在地面跟物件分開。
-// placeOf(x, y, h, lift, px) → 那格（往上 lift 層）畫在地圖區哪裡（stackview.js 給）
+// placeOf(x, y, h, lift) → 那格（往上 lift 層）畫在地圖區哪裡（stackview.js 給）
 
 import { COLORS } from './colors.js';
-import { groundHeight, objectLayers, UP } from './perspective.js';
+import { groundHeight, objectLayers } from './perspective.js';
 
 export function drawMarks(mapView, world, objects, look, placeOf, { route, target, examined }) {
   for (const c of [examined, target]) {
@@ -11,9 +11,9 @@ export function drawMarks(mapView, world, objects, look, placeOf, { route, targe
     const bg = isTarget ? (route?.reachable ? COLORS.target : COLORS.blocked) : COLORS.examined;
     const o = world.objectAt(c.x, c.y);
     const h0 = groundHeight(world.tierAt(c.x, c.y));
-    const mark = (lift, glyph, fg, px, scale) => {
-      const p = placeOf(c.x, c.y, h0, lift, px);
-      mapView.drawShifted(0, 0, p.px, p.py, glyph, fg, bg, scale);
+    const mark = (lift, glyph, fg) => {
+      const p = placeOf(c.x, c.y, h0, lift);
+      mapView.drawShifted(0, 0, p.px, p.py, glyph, fg, bg);
     };
     if (o < 0) {
       const g = look.ground(c.x, c.y);
@@ -21,13 +21,18 @@ export function drawMarks(mapView, world, objects, look, placeOf, { route, targe
       continue;
     }
     const ol = look.object(c.x, c.y, o);
-    if (ol.big) {
-      // 礦坑：大字的每一層都標
-      for (let i = 0; i < ol.layers; i++) mark(i, ol.glyph, ol.fg, UP.bigPx, ol.big);
-      continue;
-    }
-    if (ol.covered) {
-      mark(0, ' ', null);
+    if (ol.mine) {
+      // 礦坑：只標佔的那幾格的地面（畫最底層的字），上面疊的層不塗
+      const a = world.anchorAt(c.x, c.y);
+      const d = objects[o].sizes[0];
+      for (let j = 0; j < d; j++)
+        for (let i = 0; i < d; i++) {
+          const x = a.x + i;
+          const y = a.y + j;
+          const ml = look.object(x, y, o);
+          const p = placeOf(x, y, h0, 0);
+          mapView.drawShifted(0, 0, p.px, p.py, ml.glyph, ml.fg, bg);
+        }
       continue;
     }
     const layers = objectLayers(objects[o], ol.isTrunk);

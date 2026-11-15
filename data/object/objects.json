@@ -396,13 +396,15 @@
     "id": "stone-mine",
     "name": "石礦",
     "family": "礦坑",
-    "glyph": "∩",
-    "color": "#8c8c84",
+    "glyph": "#",
+    "color": "#b09a78",
+    "tint": "#2a2620",
+    "pattern": [" # ", "###", "###"],
     "passable": false,
     "height": 5,
     "layers": [3, 5],
     "trunk": false,
-    "sizes": [2],
+    "sizes": [3],
     "canopy": "round",
     "tile": null,
     "gather": {
@@ -410,7 +412,7 @@
       "uses": [4, 4],
       "amount": [1, 2],
       "kinds": [1, 2],
-      "after": "pit",
+      "after": "gravel",
       "yields": [
         {
           "weights": {
@@ -431,13 +433,16 @@
     "id": "metal-mine",
     "name": "金屬礦",
     "family": "礦坑",
-    "glyph": "∩",
-    "color": "#a0663c",
+    "glyph": "♦",
+    "color": "#8fa0c8",
+    "tint": "#1c2030",
+    "pattern": ["•♦•", "♦♦♦", "•♦•"],
+    "accent": "•",
     "passable": false,
     "height": 5,
     "layers": [3, 5],
     "trunk": false,
-    "sizes": [2],
+    "sizes": [3],
     "canopy": "round",
     "tile": null,
     "gather": {
@@ -445,7 +450,7 @@
       "uses": [4, 4],
       "amount": [1, 2],
       "kinds": [2, 3],
-      "after": "pit",
+      "after": "gravel",
       "yields": [
         {
           "weights": {
@@ -496,13 +501,16 @@
     "id": "crystal-mine",
     "name": "晶礦",
     "family": "礦坑",
-    "glyph": "∩",
+    "glyph": "☼",
     "color": "#8ec8d0",
+    "tint": "#1a2628",
+    "pattern": [" ☼ ", "☼+☼", "+☼+"],
+    "accent": "+",
     "passable": false,
     "height": 5,
     "layers": [3, 5],
     "trunk": false,
-    "sizes": [2],
+    "sizes": [3],
     "canopy": "round",
     "tile": null,
     "gather": {
@@ -510,7 +518,7 @@
       "uses": [4, 4],
       "amount": [1, 2],
       "kinds": [1, 2],
-      "after": "pit",
+      "after": "gravel",
       "yields": [
         {
           "weights": {
@@ -531,18 +539,6 @@
     "name": "樹樁",
     "glyph": "φ",
     "color": "#5a4630",
-    "passable": true,
-    "height": 1,
-    "trunk": false,
-    "sizes": [1],
-    "canopy": "round",
-    "tile": null
-  },
-  {
-    "id": "pit",
-    "name": "碎石坑",
-    "glyph": "°",
-    "color": "#9a9a92",
     "passable": true,
     "height": 1,
     "trunk": false,

@@ -16,7 +16,7 @@ const ORE = {
   uses: [3, 6],
   amount: [1, 2],
   kinds: [2, 3],
-  after: 'pit',
+  after: 'gravel',
   yields: [
     { weights: { stone: 20 } },
     { biomes: ['taiga', 'moss-forest'], weights: { 'ice-crystal': 30, 'iron-ore': 25 } },
@@ -120,10 +120,10 @@ describe('在世界裡採', () => {
     expect(g.state.time).toBe(rec.time + 6);
   });
 
-  test('挖礦坑：貼著四格任一格都能挖，每層挖 per 次矮一層，最後一層挖完四格都變成能走的碎石坑', () => {
+  test('挖礦坑：貼著九格任一格都能挖，每層挖 per 次矮一層，最後一層挖完九格的地表都變成能走的碎石地', () => {
     const g = newGame(SEED);
     const src = nearest(g, MINES);
-    expect(src.cells).toHaveLength(4);
+    expect(src.cells).toHaveLength(9);
     const def = DATA.objects[src.object];
     const start = layersNow(g.world, def, src.x, src.y);
     walkNextTo(g, src);
@@ -142,7 +142,8 @@ describe('在世界裡採', () => {
     while (g.gather(src)) n++;
     expect(n).toBe(start * per);
     for (const c of src.cells) {
-      expect(g.world.objectAt(c.x, c.y)).toBe(O('pit'));
+      expect(g.world.objectAt(c.x, c.y)).toBe(-1);
+      expect(g.world.surfaceAt(c.x, c.y)).toBe(DATA.surfaceIndex.get('gravel'));
       expect(g.world.isPassable(c.x, c.y)).toBe(true);
     }
   });

@@ -2,7 +2,7 @@
 // 引用一律只認 id；id 寫在條目裡，拆檔、搬檔都不影響引用。
 // 地圖每格分四層：地貌（地勢、高度、坡度）、地表材質（外觀與通行）、水文（水體）、
 // 生態覆蓋（地面長什麼）；另有物件層，是站在地面上、會變成資源的東西（樹、矮叢、草本、礦坑），
-// 以及採光之後留下的樹樁、碎石坑。
+// 以及砍倒之後留下的樹樁。
 // 地貌、材質、水文、覆蓋都放在 data/terrain，用 layer 分；生態群落在 data/biome；採得到的材料在 data/material
 
 import { z } from 'zod';
@@ -66,8 +66,8 @@ const Range = z.tuple([z.number().int().nonnegative(), z.number().int().nonnegat
 // 採集：action 決定動作（mine 挖礦、chop 伐木、pick 採集）；mine 的時間看產出材料的硬度，其餘用 time。
 // uses 一處能採幾次、amount 每次幾個、kinds 組成有幾種（第一次採時讀出來，之後固定）。
 // yields 是產出的權重表：條件都符合的列加總。條件是生態 biomes、高度層 minTier～maxTier、在不在山地 mountain、
-// nearWater 格內有河或湖（不算沼澤）；沒寫的條件不限。after 是採光之後留下的物件 id，
-// 或 picked（物件留著、壓暗，不能再採）
+// nearWater 格內有河或湖（不算沼澤）；沒寫的條件不限。after 是採光之後留下的物件 id（樹樁）、
+// 地表材質 id（礦坑挖空，佔的每一格地表換成它、物件拿掉），或 picked（物件留著、壓暗，不能再採）
 const GatherSchema = z.object({
   action: z.enum(['mine', 'chop', 'pick']),
   time: z.number().int().positive().optional(),
@@ -98,9 +98,13 @@ export const ObjectSchema = z.object({
   passable: z.boolean(),
   // 疊幾層：樹的樹幹往上疊、最頂層是樹冠；1 層是平的，不疊
   height: z.number().int().min(0).max(5),
-  // 礦坑：每處疊幾層，從錨點的雜湊在範圍裡挑；越挖越矮，這時 gather.uses 是每層挖幾次。
-  // 佔多格又沒有樹幹的物件，在錨點畫一個放大到佔地大小的字
+  // 礦坑：每處疊幾層（表現有多大），從錨點的雜湊在範圍裡挑；越挖越矮，這時 gather.uses 是每層挖幾次
   layers: z.tuple([z.number().int().min(1).max(5), z.number().int().min(1).max(5)]).optional(),
+  // 礦坑佔的每一格畫什麼：一列一個字串，從錨點（左上）往右下；空白是不畫字。accent 裡的字畫暗一點，
+  // tint 是這幾格的底色
+  pattern: z.array(z.string()).optional(),
+  accent: z.string().optional(),
+  tint: Color.optional(),
   trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去；樹冠其他格照 passable
   // 佔地多大（直徑幾格），每棵從這裡用雜湊挑一個；重複寫的數字比較常出現（例如 4 格的老樹只寫一次）
   sizes: z.array(z.number().int().min(1).max(4)).min(1),

@@ -176,6 +176,8 @@ export function createTerrainGen(seed, data, size = null) {
     }
     const z = {
       G,
+      E,
+      size,
       gx0: x0 - E,
       gy0: y0 - E,
       h: g.h,

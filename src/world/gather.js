@@ -1,8 +1,8 @@
 // 採集：挖礦、伐木、採集共用一套規則（觀測時擲骰）。
 // - 第一次採一處來源時，照它的環境（生態、高度層）讀出組成：從產出權重表抽 kinds 種，之後固定
 // - 每次採從組成裡抽一種，權重乘上限係數＝（1 −現存／上限）²，越接近上限越少出現，到上限就不出現
-// - 一處能採 uses 次，採光後照 after 換成別的物件（樹樁、碎石坑），或留著標成採過了
-// - 礦坑（資料有 layers）佔 2×2 格、疊好幾層：uses 是每層挖幾次，挖完一層矮一層，最後一層挖完四格都變成 after
+// - 一處能採 uses 次，採光後照 after 換成別的物件（樹樁），或留著標成採過了
+// - 礦坑（資料有 layers）佔 3×3 格、疊好幾層：uses 是每層挖幾次，挖完一層矮一層，最後一層挖完九格的地表都換成 after（碎石）
 // 骰子由呼叫的人給（game.js 用「主種子＋紀錄編號」開一顆），算出來的結果整筆寫進紀錄，重放時只照紀錄套
 
 import { MAX_SIZE, PART_TRUNK } from './footprint.js';
@@ -156,11 +156,13 @@ export function planGather(world, data, state, src, rng) {
   let done = null;
   if (remain <= 0) {
     if (def.after === 'picked') cells[key] = { o: src.object, picked: true };
-    else {
-      const after = data.objectIndex.get(def.after);
-      cells[key] = { o: after };
+    else if (data.objectIndex.has(def.after)) {
+      cells[key] = { o: data.objectIndex.get(def.after) };
       if (data.objects[src.object].trunk) Object.assign(cells, canopyOf(world, src));
-      for (const c of src.cells ?? []) cells[`${c.x},${c.y}`] = { o: after }; // 礦坑四格都變成碎石坑
+    } else {
+      // 礦坑挖空：佔的每一格物件拿掉、地表換成 after 那種材質
+      const s = data.surfaceIndex.get(def.after);
+      for (const c of src.cells ?? [src]) cells[`${c.x},${c.y}`] = { o: -1, s };
     }
     done = def.after;
   }

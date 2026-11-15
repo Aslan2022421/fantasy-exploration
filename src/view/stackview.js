@@ -44,7 +44,7 @@ function fade(a, b, f) {
 }
 
 // look：{ ground(x, y) → { glyph, fg, bg }, object(x, y, o) → { glyph, fg, trunkGlyph, trunkFg, isTrunk }
-// 或礦坑的 { glyph, fg, big 放大幾倍, layers 疊幾層 }／{ covered: true }（錨點以外的格子）}
+// 或礦坑那一格的 { mine: true, glyph, fg, layers 疊幾層 }
 export function createStackView(mapView, world, objects, look, { now = () => performance.now() } = {}) {
   const chunks = new Map(); // "cx,cy" → 圖層
   let view = null; // { x, y 相機左上（小數）, t 上次畫的時間 }
@@ -80,13 +80,12 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     if (pk) putPeak(pk, x, h0, put);
     if (o < 0) return;
     const ol = look.object(x, y, o);
-    if (ol.covered) return; // 礦坑錨點以外的格子，由錨點那個大字蓋住
-    if (ol.big) {
-      putBig(ol, x, h0, g.bg, put);
+    if (ol.mine) {
+      putMine(ol, x, h0, g.bg, put);
       return;
     }
     const layers = objectLayers(objects[o], ol.isTrunk);
-    // 貼地的物件（矮叢、碎石坑）畫在地面最上面那層：斜坡多疊的那層有底色，畫在它下面會被蓋掉
+    // 貼地的物件（矮叢、草本、樹樁）畫在地面最上面那層：斜坡多疊的那層有底色，畫在它下面會被蓋掉
     const flat = slope ? { h: h0 + 1, tilt: slope.gx } : { h: h0 };
     if (!layers.length) put(flat.h, { glyph: ol.glyph, fg: ol.fg, bg: null, ground: h0, tilt: flat.tilt });
     for (const l of layers) {
@@ -107,12 +106,12 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 礦坑：錨點那格往右下畫一個放大 ol.big 倍的字，從地面疊 ol.layers 層，下面幾層往地面底色壓淡。
-  // 放進比地面高一層的桶子：同高度的地面先畫完，大字的下半才不會被南邊那列的地面蓋掉
-  function putBig(ol, x, h0, bg, put) {
+  // 礦坑的一格：圖樣那個字從地面疊 ol.layers 層（每層往上 UP.minePx），下面幾層往地面底色壓淡；空白格不疊
+  function putMine(ol, x, h0, bg, put) {
+    if (ol.glyph === ' ') return;
     for (let i = 0; i < ol.layers; i++) {
       const fg = fade(ol.fg, bg, fadeAt(ol.layers - 1 - i));
-      put(h0 + i + 1, { x, glyph: ol.glyph, fg, bg: null, ground: h0, lift: i, px: UP.bigPx, scale: ol.big });
+      put(h0 + i, { x, glyph: ol.glyph, fg, bg: null, ground: h0, lift: i, px: UP.minePx });
     }
   }
 
@@ -154,7 +153,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       if (!list) continue;
       for (const it of list) {
         const { ox, oy } = offsetOf(it, k);
-        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg, it.scale);
+        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg);
       }
     }
     return layer;

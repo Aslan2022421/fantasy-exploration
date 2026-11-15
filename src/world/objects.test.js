@@ -22,7 +22,7 @@ describe('物件層的資源來源', () => {
   const worlds = SEEDS.map((s) => createWorld(s, DATA, SMALL));
   let herbs = 0;
 
-  test('礦坑：長在谷地，一處佔 2×2 格、四格同一個高度層、沒有水也不是冰、走不過去；層數在資料的範圍裡', () => {
+  test('礦坑：每區 0～2 處、整處在那一區裡、兩處隔得夠遠；佔 3×3 格，九格同一個高度層、沒有水也不是冰、走不過去；在谷地或山腳的低處；層數在資料的範圍裡', () => {
     let mines = 0;
     for (const w of worlds) {
       const geo = w.geography;
@@ -31,42 +31,50 @@ describe('物件層的資源來源', () => {
         const j = Math.floor(y / 8);
         return i < 0 || j < 0 || i >= geo.W || j >= geo.H ? -1 : geo.elev[j * geo.W + i];
       };
-      for (const [x, y] of cells(w)) {
-        const o = w.objectAt(x, y);
-        if (o < 0 || !DATA.objects[o].layers) continue;
-        const a = w.anchorAt(x, y);
-        if (a.x !== x || a.y !== y) continue;
-        mines++;
-        const four = [
-          [0, 0],
-          [1, 0],
-          [0, 1],
-          [1, 1],
-        ].map(([dx, dy]) => ({ x: x + dx, y: y + dy }));
-        for (const c of four) {
-          expect(w.objectAt(c.x, c.y)).toBe(o);
-          expect(w.anchorAt(c.x, c.y)).toEqual(a);
-          expect(w.tierAt(c.x, c.y)).toBe(w.tierAt(x, y));
-          expect(w.waterAt(c.x, c.y)).toBe(-1);
-          expect(w.surfaceAt(c.x, c.y)).not.toBe(S('ice'));
-          expect(w.isPassable(c.x, c.y)).toBe(false);
+      const perZone = new Map();
+      for (let y = 0; y < w.height; y++)
+        for (let x = 0; x < w.width; x++) {
+          const o = w.objectAt(x, y);
+          if (o < 0 || !DATA.objects[o].layers) continue;
+          const a = w.anchorAt(x, y);
+          if (a.x !== x || a.y !== y) continue;
+          mines++;
+          const Z = w.zoneSize;
+          const zone = `${Math.floor(x / Z)},${Math.floor(y / Z)}`;
+          expect(Math.floor((x + 2) / Z)).toBe(Math.floor(x / Z));
+          expect(Math.floor((y + 2) / Z)).toBe(Math.floor(y / Z));
+          const list = perZone.get(zone) ?? [];
+          for (const b of list)
+            expect(Math.max(Math.abs(b.x - x), Math.abs(b.y - y))).toBeGreaterThanOrEqual(PLACE.mineGap);
+          list.push({ x, y });
+          perZone.set(zone, list);
+          for (let j = 0; j < 3; j++)
+            for (let i = 0; i < 3; i++) {
+              const c = { x: x + i, y: y + j };
+              expect(w.objectAt(c.x, c.y)).toBe(o);
+              expect(w.anchorAt(c.x, c.y)).toEqual(a);
+              expect(w.tierAt(c.x, c.y)).toBe(w.tierAt(x, y));
+              expect(w.waterAt(c.x, c.y)).toBe(-1);
+              expect(w.surfaceAt(c.x, c.y)).not.toBe(S('ice'));
+              expect(w.isPassable(c.x, c.y)).toBe(false);
+            }
+          expect(w.heightAt(x, y)).toBeLessThanOrEqual(toH(LAND.mountain + PLACE.valleyTop) + 1);
+          const sides = [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ].filter(([dx, dy]) => {
+            for (let k = 1; k <= PLACE.valleyReach; k++)
+              if (coarse(x + dx * k * 8, y + dy * k * 8) > LAND.mountain + PLACE.valleyRise) return true;
+            return false;
+          }).length;
+          expect(sides).toBeGreaterThanOrEqual(1); // 谷地或山腳，周圍至少一面有山
+          const n = mineLayers(w.seed, DATA.objects[o], x, y);
+          expect(n).toBeGreaterThanOrEqual(DATA.objects[o].layers[0]);
+          expect(n).toBeLessThanOrEqual(DATA.objects[o].layers[1]);
         }
-        expect(w.heightAt(x, y)).toBeLessThanOrEqual(toH(LAND.mountain + PLACE.valleyTop) + 1);
-        const hit = [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ].map(([dx, dy]) => {
-          for (let k = 1; k <= PLACE.valleyReach; k++)
-            if (coarse(x + dx * k * 8, y + dy * k * 8) > LAND.mountain + PLACE.valleyRise) return true;
-          return false;
-        });
-        expect(hit.filter(Boolean).length >= PLACE.valleySides || (hit[0] && hit[1]) || (hit[2] && hit[3])).toBe(true);
-        const n = mineLayers(w.seed, DATA.objects[o], x, y);
-        expect(n).toBeGreaterThanOrEqual(DATA.objects[o].layers[0]);
-        expect(n).toBeLessThanOrEqual(DATA.objects[o].layers[1]);
-      }
+      for (const list of perZone.values()) expect(list.length).toBeLessThanOrEqual(PLACE.mineCount.length - 1);
     }
     expect(mines).toBeGreaterThan(0);
   });

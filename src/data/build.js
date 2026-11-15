@@ -39,10 +39,10 @@ export function buildData({ terrain, object = {}, biome, material = {}, worldsha
   const biomes = merge(biome, BiomeSchema, '生態', errors);
   const materials = merge(material, MaterialSchema, '材料', errors);
   const materialIndex = indexOf(materials);
-  checkGather(objects, indexOf(objects), materialIndex, indexOf(biomes), materials, errors);
   const layer = (name) => terrains.filter((t) => t.layer === name);
   const landforms = layer('landform');
   const surfaces = layer('surface');
+  checkGather(objects, indexOf(objects), indexOf(surfaces), materialIndex, indexOf(biomes), materials, errors);
   const waters = layer('water');
   const covers = layer('cover');
   const objectIndex = indexOf(objects);
@@ -77,11 +77,12 @@ export function buildData({ terrain, object = {}, biome, material = {}, worldsha
 }
 
 // 物件的採集規則：產出的材料、條件裡的生態、採光後留下的物件都要找得到；挖礦的時間看硬度，所以挖得到的材料要有硬度
-function checkGather(objects, objectIndex, materialIndex, biomeIndex, materials, errors) {
+function checkGather(objects, objectIndex, surfaceIndex, materialIndex, biomeIndex, materials, errors) {
   for (const o of objects) {
     const g = o.gather;
     if (!g) continue;
-    if (g.after !== 'picked' && !objectIndex.has(g.after)) errors.push(`物件 ${o.id} 的 after 找不到物件：${g.after}`);
+    if (g.after !== 'picked' && !objectIndex.has(g.after) && !surfaceIndex.has(g.after))
+      errors.push(`物件 ${o.id} 的 after 找不到物件或地表材質：${g.after}`);
     if (g.action !== 'mine' && !g.time) errors.push(`物件 ${o.id} 不是挖礦，要寫 time`);
     for (const [name, [lo, hi]] of Object.entries({ uses: g.uses, amount: g.amount, kinds: g.kinds }))
       if (lo > hi || hi < 1) errors.push(`物件 ${o.id} 的 ${name} 範圍不對：${lo}～${hi}`);

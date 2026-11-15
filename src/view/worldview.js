@@ -28,6 +28,7 @@ export const PEAK = { minRing: 2, radius: 6, minRows: 3, ringsPerRow: 3, maxRows
 const GLOW = 1.3;
 const PICKED = 0.5;
 const ACCENT = 0.7; // 礦坑圖樣裡的點綴字（accent）比主體暗多少
+const MINE_BG = 0.12; // 礦坑佔的格子，底色往大類顏色靠幾成
 
 export function createWorldView(mapView, world, data) {
   const { objects, surfaces } = data;
@@ -73,9 +74,9 @@ export function createWorldView(mapView, world, data) {
       const face = FACE[glyph] ?? (isStone[world.surfaceAt(x, y)] ? ROCK_INK : 1);
       fg = dimColor(fg, ringInk(x, y) * face);
     }
-    // 礦坑佔的格子塗大類的底色，九格看起來是一整處
+    // 礦坑佔的格子：地形的底色往大類的顏色靠一點，九格看得出是一整處，亮暗還是跟著腳下的地形
     const o = world.objectAt(x, y);
-    const bg = o >= 0 && objects[o].tint ? objects[o].tint : softBg(x, y);
+    const bg = o >= 0 && objects[o].layers ? mixColor(softBg(x, y), objects[o].color, MINE_BG) : softBg(x, y);
     return { glyph, fg, bg, level, rise: FACE[glyph] ? FACE_RISE : 0 };
   }
 

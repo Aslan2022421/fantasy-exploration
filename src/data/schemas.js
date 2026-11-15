@@ -100,11 +100,9 @@ export const ObjectSchema = z.object({
   height: z.number().int().min(0).max(5),
   // 礦坑：每處疊幾層（表現有多大），從錨點的雜湊在範圍裡挑；越挖越矮，這時 gather.uses 是每層挖幾次
   layers: z.tuple([z.number().int().min(1).max(5), z.number().int().min(1).max(5)]).optional(),
-  // 礦坑佔的每一格畫什麼：一列一個字串，從錨點（左上）往右下；空白是不畫字。accent 裡的字畫暗一點，
-  // tint 是這幾格的底色
+  // 礦坑佔的每一格畫什麼：一列一個字串，從錨點（左上）往右下；空白是不畫字。accent 裡的字畫暗一點
   pattern: z.array(z.string()).optional(),
   accent: z.string().optional(),
-  tint: Color.optional(),
   trunk: z.boolean(), // 有樹幹：樹冠正中間那一格是樹幹，走不過去；樹冠其他格照 passable
   // 佔地多大（直徑幾格），每棵從這裡用雜湊挑一個；重複寫的數字比較常出現（例如 4 格的老樹只寫一次）
   sizes: z.array(z.number().int().min(1).max(4)).min(1),

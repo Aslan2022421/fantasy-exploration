@@ -24,6 +24,14 @@ export function createMapView(image, ctx) {
       }
       tiles.draw(ctx, ch, px, py, w * s.tile, fg, null, h * s.tile);
     },
+    // 塗一塊底色：剛好 w×h 格，不往四邊多塗（選定目標的標記用，底色跟字對齊）
+    paint(vx, vy, ox, oy, color, w = 1, h = 1) {
+      const k = s.tile / 8;
+      const px = Math.round(s.map.x + vx * s.tile + ox * k);
+      const py = Math.round(s.map.y + vy * s.tile + oy * k);
+      ctx.fillStyle = color;
+      ctx.fillRect(px, py, w * s.tile, h * s.tile);
+    },
     // 離屏圖層：寬 w、高 h 格的小畫布，畫法跟 drawShifted 一樣（座標從圖層左上角算），
     // 畫好之後用 blit 整張貼上來。格子大小（tile）變了圖層就不能用，呼叫的人看 layer.tile 自己丟掉
     layer(w, h) {

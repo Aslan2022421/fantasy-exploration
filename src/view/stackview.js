@@ -17,31 +17,17 @@ import {
   PLAYER_LAYERS,
   shiftUp,
   slopeTilt,
-  UP,
   upShiftCells,
   wallSouth,
 } from './perspective.js';
 import { drawRoute } from './route.js';
 import { dimColor, mixColor } from './shades.js';
+import { fade, putCreature, putMine, putPeak } from './stackitems.js';
 
 const CHUNK = 16; // 分塊邊長（格）
 const MAX_CHUNKS = 160; // 快取最多留幾塊，超過丟最久沒用的
-const PEAK_LAYER = 1000; // 山峰剪影畫在所有地形與物件之後
 const PEAK_SPAN = 5; // 山峰剪影最多往上幾列、往左右幾格（worldview.js 的 PEAK.maxRows）
 const COVER = { below: 3, left: 1 }; // 會蓋到冒險者的樹冠：往南幾格、往西幾格裡的
-
-const fadeCache = new Map();
-// a 往 b 壓淡 f（0 不變、1 變成 b）
-function fade(a, b, f) {
-  if (!f) return a;
-  const key = `${a}|${b}|${f}`;
-  let out = fadeCache.get(key);
-  if (!out) {
-    out = mixColor(a, b, f);
-    fadeCache.set(key, out);
-  }
-  return out;
-}
 
 // look：{ ground(x, y) → { glyph, fg, bg }, object(x, y, o) → { glyph, fg, trunkGlyph, trunkFg, isTrunk }
 // 或礦坑那一格的 { mine: true, glyph, fg, layers 疊幾層 }
@@ -112,38 +98,6 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 生物（一隻）：一個字放大成 cl.w×cl.h 格，從地面往上疊 height 層（每層往上 minePx，跟地形一樣），
-  // 下面幾層往地面底色壓淡，只畫字
-  function putCreature(cl, x, h0, bg, put) {
-    for (let i = 0; i < cl.height; i++) {
-      const fg = fade(cl.fg, bg, fadeAt(cl.height - 1 - i));
-      put(h0 + i, { x, glyph: cl.glyph, fg, bg: null, ground: h0, lift: i, px: UP.minePx, w: cl.w, h2: cl.h });
-    }
-  }
-
-  // 礦坑的一格：圖樣那個字從地面疊 ol.layers 層（每層往上 UP.minePx），下面幾層往地面底色壓淡；空白格不疊
-  function putMine(ol, x, h0, bg, put) {
-    if (ol.glyph === ' ') return;
-    for (let i = 0; i < ol.layers; i++) {
-      const fg = fade(ol.fg, bg, fadeAt(ol.layers - 1 - i));
-      put(h0 + i, { x, glyph: ol.glyph, fg, bg: null, ground: h0, lift: i, px: UP.minePx });
-    }
-  }
-
-  // 山峰剪影：以山峰那格為底邊中央，往上 rows 列的三角形。頂點 ▲，兩條稜線 / \，西面 /、東面 \、中線 ^；
-  // 底色塗滿，畫在所有地形之後，同一層裡南邊的後畫，前面的山蓋住後面的
-  function putPeak(pk, x, h0, put) {
-    for (let r = 0; r < pk.rows; r++) {
-      for (let dx = -r; dx <= r; dx++) {
-        let glyph = dx < 0 ? '/' : dx > 0 ? '\\' : '^';
-        let fg = dx < 0 ? pk.west : pk.east;
-        if (r === 0) glyph = '▲';
-        if (r === 0 || Math.abs(dx) === r) fg = pk.edge;
-        put(PEAK_LAYER, { x: x + dx, glyph, fg, bg: pk.bg, ground: h0, rowsUp: pk.rows - 1 - r });
-      }
-    }
-  }
-
   // 這一項畫在哪：地面高度、往上幾層（物件），斜坡那層再往上坡偏；山峰剪影再往上整列
   function offsetOf(it, k) {
     const s = shiftOf(it.ground ?? it.h, it.lift ?? 0, k, it.px);
@@ -199,6 +153,13 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     return { px: (x - f.x) * 8 + ox, py: (y - f.y) * 8 + oy };
   }
 
+  // 斜坡那層再加的偏移（跟 offsetOf 一樣）：tilt 沒給就不偏
+  function tilted(p, tilt) {
+    if (tilt === undefined) return p;
+    const t = slopeTilt(tilt, mapView.tile() / 8);
+    return { px: p.px + t.ox, py: p.py + t.oy };
+  }
+
   // 冒險者附近比他頭頂高的樹冠，在冒險者之後再畫一次。樹冠往右上錯開，會蓋到冒險者的是他那格與南邊、西邊幾格的
   function coverPlayer(f, player, top) {
     const near = [];
@@ -233,7 +194,14 @@ export function createStackView(mapView, world, objects, look, { now = () => per
         for (let cx = cx0; cx <= cx1; cx++)
           mapView.blit(chunkAt(cx, cy), (cx * CHUNK - f.x) * 8, (cy * CHUNK - f.y) * 8);
       }
-      drawMarks(mapView, world, objects, look, (x, y, h, lift, px) => placeOf(f, x, y, h, lift, px), overlay);
+      drawMarks(
+        mapView,
+        world,
+        objects,
+        look,
+        (x, y, h, lift, px, tilt) => tilted(placeOf(f, x, y, h, lift, px), tilt),
+        overlay,
+      );
       drawRoute(mapView, world, (x, y, h) => placeOf(f, x, y, h), overlay.route, player);
       // 冒險者疊 PLAYER_LAYERS 層，最底層在腳下那格的地面上，往上照地形的間距錯開；只畫字，下層往腳下底色壓淡
       const p0 = groundHeight(world.tierAt(player.x, player.y));

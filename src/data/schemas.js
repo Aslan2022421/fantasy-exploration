@@ -136,6 +136,7 @@ export const DESCRIBE_ANSWERS = [
   'ancient',
   'pacifist',
 ];
+export const FOOTPRINTS = ['1x1', '2x1', '2x2', '3x2'];
 export const ADAPTATIONS = ['climb', 'swim', 'amphibious', 'fly', 'cold-hardy', 'constrict'];
 
 export const AnswersSchema = z.object({
@@ -157,7 +158,7 @@ export const SpeciesSchema = z
     tile: z.string().nullable(),
     diet: z.enum(['herbivore', 'predator']),
     height: z.number().int().min(2).max(3),
-    cells: z.union([z.literal(1), z.literal(2), z.literal(4)]),
+    footprint: z.enum(FOOTPRINTS), // 寬×高幾格，一隻只畫一個字、放大蓋滿
     count: Range,
     answers: AnswersSchema,
     instinct: z.string().min(1),

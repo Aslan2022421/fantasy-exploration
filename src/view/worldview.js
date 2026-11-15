@@ -3,6 +3,7 @@
 
 import { PART_DARK, PART_LIT, PART_MID, PART_TRUNK } from '../world/footprint.js';
 import { layersNow } from '../world/gather.js';
+import { footprintSize } from '../world/herds.js';
 import { lookAt } from './glyphs.js';
 import { mountainRing, mountainRingFactor, SLOPE_STACK } from './perspective.js';
 import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
@@ -99,10 +100,13 @@ export function createWorldView(mapView, world, data) {
     };
   }
 
-  // 生物那一格：物種的字與顏色，疊 height 層（物種資料自己寫的 2～3 層）
-  function creatureLook(x, y, cr) {
+  // 生物（一隻）：物種的字與顏色，放大成佔地的寬 w、高 h 格，疊 height 層（物種資料自己寫的 2～3 層）；
+  // 亮暗照錨點那格的地形
+  function creatureLook(cr) {
     const sp = data.species[cr.species];
-    return { glyph: sp.glyph, fg: creatureFg[cr.species][world.shadeAt(x, y)], height: sp.height };
+    const { w, h } = footprintSize(sp.footprint);
+    const level = world.shadeAt(cr.member.x, cr.member.y);
+    return { glyph: sp.glyph, fg: creatureFg[cr.species][level], height: sp.height, w, h };
   }
 
   // 礦坑的一格：畫資料 pattern 裡這一格的字（accent 的字暗一點），九格一起疊現在剩下的層數（越挖越矮）；

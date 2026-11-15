@@ -71,7 +71,7 @@ describe('物種成群', () => {
         const Z = w.zoneSize;
         for (const m of herd.members) {
           const tier = w.tierAt(m.x, m.y);
-          for (const [dx, dy] of speciesFootprint(sp.cells)) {
+          for (const [dx, dy] of speciesFootprint(sp.footprint)) {
             const x = m.x + dx;
             const y = m.y + dy;
             expect(Math.floor(x / Z), `${sp.id} 的格子跨出那一區`).toBe(zx);
@@ -157,12 +157,16 @@ describe('物種成群', () => {
 });
 
 describe('佔格', () => {
-  test('1 格、2 格橫排、4 格 2×2', () => {
-    expect(speciesFootprint(1)).toEqual([[0, 0]]);
-    expect(speciesFootprint(2)).toEqual([
+  test('寬×高：1×1、2×1 橫排、2×2、3×2，錨點在左上', () => {
+    expect(speciesFootprint('1x1')).toEqual([[0, 0]]);
+    expect(speciesFootprint('2x1')).toEqual([
       [0, 0],
       [1, 0],
     ]);
-    expect(speciesFootprint(4)).toHaveLength(4);
+    expect(speciesFootprint('2x2')).toHaveLength(4);
+    const big = speciesFootprint('3x2');
+    expect(big).toHaveLength(6);
+    expect(Math.max(...big.map(([x]) => x))).toBe(2);
+    expect(Math.max(...big.map(([, y]) => y))).toBe(1);
   });
 });

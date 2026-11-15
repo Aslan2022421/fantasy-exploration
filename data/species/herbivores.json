@@ -7,7 +7,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 3,
-    "cells": 4,
+    "footprint": "3x2",
     "count": [2, 4],
     "answers": {
       "organization": "group",
@@ -40,7 +40,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [4, 8],
     "answers": {
       "organization": "horde",
@@ -73,7 +73,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 3,
-    "cells": 2,
+    "footprint": "2x2",
     "count": [2, 3],
     "answers": {
       "organization": "group",
@@ -106,7 +106,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [4, 8],
     "answers": {
       "organization": "horde",
@@ -139,7 +139,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [1, 4],
     "answers": {
       "organization": "group",
@@ -177,7 +177,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 3,
-    "cells": 2,
+    "footprint": "2x2",
     "count": [2, 6],
     "answers": {
       "organization": "group",
@@ -210,7 +210,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 3,
-    "cells": 4,
+    "footprint": "3x2",
     "count": [2, 5],
     "answers": {
       "organization": "group",
@@ -243,7 +243,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [3, 8],
     "answers": {
       "organization": "group",
@@ -276,7 +276,7 @@
     "tile": null,
     "diet": "herbivore",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [2, 6],
     "answers": {
       "organization": "group",

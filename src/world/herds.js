@@ -1,10 +1,11 @@
 // 物種成群出現：每區有幾群草食、幾群掠食，各群的落腳處與成員位置。
 // 只看「種子＋區座標」與這一區自己的格子，不看生成順序與玩家位置，讀檔重生結果一樣；生物的位置不進存檔。
 // - 每區草食、掠食各幾群由 herdTargets 擲（建世界時記進每區的 numbers）；沒有草食的區不放掠食
-// - 一群先挑落腳處：候選每 HERD.step 格取一個，照雜湊排名，要放得下、離別群與起點夠遠；
-//   再看那格的環境（生態、高度層、在不在山地、離水多遠），照物種的棲地權重抽一種；所以同一區山上是山羊、水邊是鱷魚
+// - 一群：候選落腳處每 HERD.step 格取一個，照雜湊排名，離別群與起點要夠遠；每個物種各自找排名最前面、
+//   棲地符合（生態、高度層、在不在山地、離水多遠）又放得下的一處，再照權重抽一種，這一區已經有的物種打折；
+//   所以同一區山上是山羊、水邊是鱷魚
 // - 一群幾隻：物種自己的範圍；乾燥的地方取下半、潮濕的取上半；15% 只有落單的 1 隻；成員散在落腳處周圍 2～5 格
-// - 每隻佔 1、2、4 格（2 格橫排、4 格是 2×2），錨點在左上；整隻要在這一區裡、同一個高度層、沒有水、沒有物件
+// - 每隻佔 1×1、2×1、2×2、3×2 格（寬×高），錨點在左上；整隻要在這一區裡、同一個高度層、沒有水、沒有物件
 
 import { RNG } from 'rot-js';
 import { streamSeed } from '../core/rng.js';
@@ -23,25 +24,23 @@ export const HERD = {
   repeat: 0.3, // 這一區已經有的物種，再抽到的權重乘幾倍
 };
 
-// 一隻佔的格子（相對錨點）：1 格、2 格橫排、4 格 2×2
-export function speciesFootprint(cells) {
-  return cells === 1
-    ? [[0, 0]]
-    : cells === 2
-      ? [
-          [0, 0],
-          [1, 0],
-        ]
-      : [
-          [0, 0],
-          [1, 0],
-          [0, 1],
-          [1, 1],
-        ];
+// 佔地 '寬x高' → { w, h }
+export function footprintSize(footprint) {
+  const [w, h] = footprint.split('x').map(Number);
+  return { w, h };
+}
+
+// 一隻佔的格子（相對錨點，左上起往右、往下）
+export function speciesFootprint(footprint) {
+  const { w, h } = footprintSize(footprint);
+  const out = [];
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) out.push([i, j]);
+  return out;
 }
 
 // 錨點在 (x, y) 的那一隻佔哪幾格（世界座標）
-export const creatureCells = (sp, { x, y }) => speciesFootprint(sp.cells).map(([dx, dy]) => ({ x: x + dx, y: y + dy }));
+export const creatureCells = (sp, { x, y }) =>
+  speciesFootprint(sp.footprint).map(([dx, dy]) => ({ x: x + dx, y: y + dy }));
 
 // 一區的目標群數（記進世界層每區的 numbers）：只看種子與區座標
 export function herdTargets(seed, zx, zy) {
@@ -67,7 +66,7 @@ export function habitatWeight(sp, cell) {
 export function createHerdPlacer(seed, data, { NONE }) {
   const species = data.species ?? [];
   const biomeIds = data.biomes.map((b) => b.id);
-  const feet = species.map((s) => speciesFootprint(s.cells));
+  const feet = species.map((s) => speciesFootprint(s.footprint));
 
   // ctx：一區生完之後的格子。G×G 的陣列（含外圍 E 圈）：biome 生態、h 高度、tier 高度層、wAll 水文、sAll 材質、tBand、wBand；
   // object 是這一區自己的物件層（size×size）；start 是起點的格子座標；target 是 { herbivores, predators }

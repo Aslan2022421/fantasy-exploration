@@ -80,7 +80,8 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     const pk = look.peak?.(x, y);
     if (pk) putPeak(pk, x, h0, put);
     if (cr) {
-      putCreature(look.creature(x, y, cr), x, h0, g.bg, put);
+      // 一隻只畫一個字：在錨點那格放大蓋滿佔地，其他格只留地面底色
+      if (cr.member.x === x && cr.member.y === y) putCreature(look.creature(cr), x, h0, g.bg, put);
       return;
     }
     if (o < 0) return;
@@ -111,11 +112,12 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     }
   }
 
-  // 生物的一格：同一個字從地面往上疊 height 層（每層往上 minePx，跟地形一樣），下面幾層往地面底色壓淡，只畫字
+  // 生物（一隻）：一個字放大成 cl.w×cl.h 格，從地面往上疊 height 層（每層往上 minePx，跟地形一樣），
+  // 下面幾層往地面底色壓淡，只畫字
   function putCreature(cl, x, h0, bg, put) {
     for (let i = 0; i < cl.height; i++) {
       const fg = fade(cl.fg, bg, fadeAt(cl.height - 1 - i));
-      put(h0 + i, { x, glyph: cl.glyph, fg, bg: null, ground: h0, lift: i, px: UP.minePx });
+      put(h0 + i, { x, glyph: cl.glyph, fg, bg: null, ground: h0, lift: i, px: UP.minePx, w: cl.w, h2: cl.h });
     }
   }
 
@@ -166,7 +168,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
       if (!list) continue;
       for (const it of list) {
         const { ox, oy } = offsetOf(it, k);
-        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg);
+        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg, it.w, it.h2);
       }
     }
     return layer;

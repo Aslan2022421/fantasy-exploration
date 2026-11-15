@@ -111,11 +111,12 @@ describe('實際的物種資料', () => {
     }
   });
 
-  test('疊層與佔格數：象類 4 格 3 層、巨蟒 4 格 2 層；貨車大小以上的字元大寫，其餘小寫', () => {
+  test('疊層與佔地：象類 3×2 疊 3 層、巨蟒 3×2 疊 2 層、狼 1×1、獅子 2×1、駱駝 2×2；貨車大小以上的字元大寫，其餘小寫', () => {
     const by = (id) => DATA.species[DATA.speciesIndex.get(id)];
-    expect([by('mammoth').cells, by('mammoth').height]).toEqual([4, 3]);
-    expect([by('elephant').cells, by('elephant').height]).toEqual([4, 3]);
-    expect([by('giant-constrictor-snake').cells, by('giant-constrictor-snake').height]).toEqual([4, 2]);
+    expect([by('mammoth').footprint, by('mammoth').height]).toEqual(['3x2', 3]);
+    expect([by('elephant').footprint, by('elephant').height]).toEqual(['3x2', 3]);
+    expect([by('giant-constrictor-snake').footprint, by('giant-constrictor-snake').height]).toEqual(['3x2', 2]);
+    expect(['wolf', 'lion', 'camel'].map((id) => by(id).footprint)).toEqual(['1x1', '2x1', '2x2']);
     for (const s of DATA.species) {
       const big = ['large', 'huge'].includes(s.answers.size);
       expect(s.glyph === s.glyph.toUpperCase(), s.id).toBe(big);

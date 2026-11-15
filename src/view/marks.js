@@ -17,13 +17,12 @@ export function drawMarks(mapView, world, objects, look, placeOf, { route, targe
     };
     const cr = o < 0 ? world.creatureAt?.(c.x, c.y) : null;
     if (cr) {
-      // 生物：那一隻佔的每一格、疊的每一層都標，標記跟著生物疊上去
-      for (const cell of cr.cells) {
-        const cl = look.creature(cell.x, cell.y, cr);
-        for (let lift = 0; lift < cl.height; lift++) {
-          const p = placeOf(cell.x, cell.y, h0, lift, UP.minePx);
-          mapView.drawShifted(0, 0, p.px, p.py, cl.glyph, cl.fg, lift === 0 ? bg : null);
-        }
+      // 生物：佔地整塊塗底色，放大的字疊的每一層都重畫在上面，標記跟著生物疊上去
+      const a = cr.member;
+      const cl = look.creature(cr);
+      for (let lift = 0; lift < cl.height; lift++) {
+        const p = placeOf(a.x, a.y, h0, lift, UP.minePx);
+        mapView.drawShifted(0, 0, p.px, p.py, cl.glyph, cl.fg, lift === 0 ? bg : null, cl.w, cl.h);
       }
       continue;
     }

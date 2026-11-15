@@ -76,7 +76,7 @@ console.log(
 );
 console.log('\n各物種的數值塊（沒加環境）：');
 for (const sp of data.species)
-  console.log(`  ${sp.name}（${sp.cells} 格 ${sp.height} 層）${blockText(buildBlock(sp.answers))}`);
+  console.log(`  ${sp.name}（${sp.footprint} ${sp.height} 層）${blockText(buildBlock(sp.answers))}`);
 
 // 一區生成多花多少時間（有物種跟沒有物種）
 const withSp = createWorld(1000, data, SMALL);

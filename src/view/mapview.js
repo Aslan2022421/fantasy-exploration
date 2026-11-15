@@ -12,17 +12,17 @@ export function createMapView(image, ctx) {
       s = screen;
     },
     // 在地圖區第 (vx, vy) 格、再錯開 (ox, oy) 個字元像素（一格 8 個）畫一個字。bg 可省略，只畫字
-    // 背景四邊各多塗 1 個字元像素：相鄰兩格錯開量四捨五入不同時，中間才不會露出細縫
-    drawShifted(vx, vy, ox, oy, ch, fg, bg) {
+    // 背景四邊各多塗 1 個字元像素：相鄰兩格錯開量四捨五入不同時，中間才不會露出細縫。
+    // w、h：這個字蓋滿幾格寬、幾格高（大生物一隻一個字放大），省略是 1 格
+    drawShifted(vx, vy, ox, oy, ch, fg, bg, w = 1, h = 1) {
       const k = s.tile / 8;
-      const size = s.tile;
       const px = Math.round(s.map.x + vx * s.tile + ox * k); // 錯開量可以是小數，落到整數像素才不會糊
       const py = Math.round(s.map.y + vy * s.tile + oy * k);
       if (bg) {
         ctx.fillStyle = bg;
-        ctx.fillRect(px - k, py - k, size + 2 * k, size + 2 * k);
+        ctx.fillRect(px - k, py - k, w * s.tile + 2 * k, h * s.tile + 2 * k);
       }
-      tiles.draw(ctx, ch, px, py, size, fg, null);
+      tiles.draw(ctx, ch, px, py, w * s.tile, fg, null, h * s.tile);
     },
     // 離屏圖層：寬 w、高 h 格的小畫布，畫法跟 drawShifted 一樣（座標從圖層左上角算），
     // 畫好之後用 blit 整張貼上來。格子大小（tile）變了圖層就不能用，呼叫的人看 layer.tile 自己丟掉
@@ -37,15 +37,14 @@ export function createMapView(image, ctx) {
       return {
         canvas,
         tile,
-        drawShifted(vx, vy, ox, oy, ch, fg, bg) {
-          const size = tile;
+        drawShifted(vx, vy, ox, oy, ch, fg, bg, w = 1, h = 1) {
           const px = Math.round(vx * tile + ox * k);
           const py = Math.round(vy * tile + oy * k);
           if (bg) {
             g.fillStyle = bg;
-            g.fillRect(px - k, py - k, size + 2 * k, size + 2 * k);
+            g.fillRect(px - k, py - k, w * tile + 2 * k, h * tile + 2 * k);
           }
-          tiles.draw(g, ch, px, py, size, fg, null);
+          tiles.draw(g, ch, px, py, w * tile, fg, null, h * tile);
         },
       };
     },

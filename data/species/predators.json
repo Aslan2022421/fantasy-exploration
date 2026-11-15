@@ -7,7 +7,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [1, 2],
     "answers": {
       "organization": "solitary",
@@ -40,7 +40,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [2, 4],
     "answers": {
       "organization": "group",
@@ -73,7 +73,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [2, 6],
     "answers": {
       "organization": "group",
@@ -111,7 +111,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [1, 2],
     "answers": {
       "organization": "solitary",
@@ -144,7 +144,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [2, 5],
     "answers": {
       "organization": "group",
@@ -177,7 +177,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [1, 2],
     "answers": {
       "organization": "solitary",
@@ -215,7 +215,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x2",
     "count": [1, 3],
     "answers": {
       "organization": "solitary",
@@ -253,7 +253,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [1, 1],
     "answers": {
       "organization": "solitary",
@@ -286,7 +286,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [2, 6],
     "answers": {
       "organization": "group",
@@ -319,7 +319,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [1, 2],
     "answers": {
       "organization": "solitary",
@@ -352,7 +352,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [3, 8],
     "answers": {
       "organization": "horde",
@@ -385,7 +385,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [1, 3],
     "answers": {
       "organization": "group",
@@ -418,7 +418,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [1, 1],
     "answers": {
       "organization": "solitary",
@@ -451,7 +451,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 4,
+    "footprint": "3x2",
     "count": [1, 2],
     "answers": {
       "organization": "solitary",
@@ -484,7 +484,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [1, 3],
     "answers": {
       "organization": "group",
@@ -518,7 +518,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 1,
+    "footprint": "1x1",
     "count": [2, 6],
     "answers": {
       "organization": "group",
@@ -552,7 +552,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x2",
     "count": [1, 2],
     "answers": {
       "organization": "solitary",
@@ -584,7 +584,7 @@
     "tile": null,
     "diet": "predator",
     "height": 2,
-    "cells": 2,
+    "footprint": "2x1",
     "count": [1, 1],
     "answers": {
       "organization": "solitary",

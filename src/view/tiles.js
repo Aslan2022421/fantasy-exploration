@@ -34,17 +34,17 @@ export function createTileset(image) {
     return sheet;
   }
 
-  // 在 (px, py) 畫一格，size 是畫面上一格的實體像素（8 的倍數）
-  function draw(ctx, ch, px, py, size, color, background) {
+  // 在 (px, py) 畫一個字，size 是畫面上一格的實體像素（8 的倍數）；放大的字寬 size、高 h（大生物蓋滿好幾格，h 省略就是正方形）
+  function draw(ctx, ch, px, py, size, color, background, h = size) {
     if (background) {
       ctx.fillStyle = background;
-      ctx.fillRect(px, py, size, size);
+      ctx.fillRect(px, py, size, h);
     }
     const index = cp437Index(ch);
     if (index <= 0 || ch === ' ') return;
     const sx = (index % 16) * CELL;
     const sy = Math.floor(index / 16) * CELL;
-    ctx.drawImage(sheetFor(color), sx, sy, CELL, CELL, px, py, size, size);
+    ctx.drawImage(sheetFor(color), sx, sy, CELL, CELL, px, py, size, h);
   }
 
   return { draw };

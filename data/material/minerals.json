@@ -40,6 +40,30 @@
     "source": "Handbook of Mineralogy, Gold：Hardness 2.5–3，取中間"
   },
   {
+    "id": "tin-ore",
+    "name": "錫礦",
+    "category": "mineral",
+    "cap": 40,
+    "hardness": 6.5,
+    "source": "Handbook of Mineralogy, Cassiterite：Hardness 6–7，取中間"
+  },
+  {
+    "id": "silver-ore",
+    "name": "銀礦",
+    "category": "mineral",
+    "cap": 15,
+    "hardness": 2.75,
+    "source": "Handbook of Mineralogy, Silver：Hardness 2.5–3，取中間"
+  },
+  {
+    "id": "coal",
+    "name": "煤",
+    "category": "mineral",
+    "cap": 120,
+    "hardness": 2.5,
+    "source": "提議：煤是岩石不是單一礦物，Handbook of Mineralogy 沒有收，先取 2.5"
+  },
+  {
     "id": "ice-crystal",
     "name": "冰晶礦",
     "category": "mineral",

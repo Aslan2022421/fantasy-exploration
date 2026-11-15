@@ -118,12 +118,13 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       if (steps.length) walk(steps, src, (cause) => gatherAt(src, cause));
       else gatherAt(src);
     },
-    // 要畫的路線：走路中顯示剩下的路，否則顯示目標怎麼走（能採的來源走到旁邊）
+    // 要畫的路線：走路中顯示剩下的路，否則顯示目標怎麼走（能採的來源走到旁邊；礦坑貼著佔的任一格就算，跟 Q 一樣）
     shownPath() {
       if (walking.length) return { steps: walking, reachable: true };
       if (!examined) return null;
-      if (game.sourceAt(examined)) {
-        const steps = findPathNextTo(world, player(), examined);
+      const src = game.sourceAt(examined);
+      if (src) {
+        const steps = findPathNextTo(world, player(), src);
         return { steps: steps ?? [], reachable: steps !== null };
       }
       const steps = findPath(world, player(), examined);

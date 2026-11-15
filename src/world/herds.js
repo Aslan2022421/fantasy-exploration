@@ -20,6 +20,7 @@ export const HERD = {
   soloChance: 0.15, // 一群只有落單 1 隻的機率
   spread: [2, 5], // 成員散在落腳處周圍幾格
   tries: 16, // 每個成員最多試幾次
+  repeat: 0.3, // 這一區已經有的物種，再抽到的權重乘幾倍
 };
 
 // 一隻佔的格子（相對錨點）：1 格、2 格橫排、4 格 2×2
@@ -101,6 +102,13 @@ export function createHerdPlacer(seed, data, { NONE }) {
       };
     };
 
+    const envCache = new Map(); // 落腳處 → 環境（離水幾格要掃周圍，每個候選只算一次）
+    const envOf = (spot) => {
+      const key = spot.y * size + spot.x;
+      if (!envCache.has(key)) envCache.set(key, envAt(spot.x, spot.y));
+      return envCache.get(key);
+    };
+
     const taken = new Set(); // 已經有東西的格子（區內編號 y×size＋x）
     const fits = (k, x, y) => {
       const tier0 = ctx.tier[g(x, y)];
@@ -136,20 +144,40 @@ export function createHerdPlacer(seed, data, { NONE }) {
       const ranked = spots
         .map(([x, y]) => ({ x, y, rank: hash01(seed, x0 + x, y0 + y, 4200 + s) }))
         .sort((a, b) => a.rank - b.rank);
-      for (const spot of ranked) {
+      // 離起點夠遠、離別群夠遠的候選，照這個槽的雜湊排名
+      const pool = ranked.filter((spot) => {
         const X = x0 + spot.x;
         const Y = y0 + spot.y;
-        if (Math.max(Math.abs(X - sx), Math.abs(Y - sy)) < HERD.startClear) continue;
-        if (herds.some((h) => Math.max(Math.abs(h.members[0].x - X), Math.abs(h.members[0].y - Y)) < HERD.gap))
-          continue;
-        const env = envAt(spot.x, spot.y);
-        const weights = {};
-        species.forEach((sp, k) => {
-          const w = sp.diet === diet ? habitatWeight(sp, env) : 0;
-          if (w > 0 && fits(k, spot.x, spot.y)) weights[k] = w;
-        });
+        if (Math.max(Math.abs(X - sx), Math.abs(Y - sy)) < HERD.startClear) return false;
+        return !herds.some((h) => Math.max(Math.abs(h.members[0].x - X), Math.abs(h.members[0].y - Y)) < HERD.gap);
+      });
+      // 每個物種各自找排名最前面、棲地符合又放得下的落腳處；這一區住得下的物種照權重抽一種
+      // （水邊的鱷魚、山上的山羊不會因為落腳處少就永遠抽不到）
+      const best = {};
+      species.forEach((sp, k) => {
+        if (sp.diet !== diet) return;
+        for (const spot of pool) {
+          const env = envOf(spot);
+          const w = habitatWeight(sp, env);
+          if (w > 0 && fits(k, spot.x, spot.y)) {
+            best[k] = { spot, env, w };
+            return;
+          }
+        }
+      });
+      {
+        // 這一區已經有的物種權重打折，同一區才會有幾種不同的生物
+        const weights = Object.fromEntries(
+          Object.entries(best).map(([k, b]) => [
+            k,
+            b.w * (herds.some((h) => h.species === Number(k)) ? HERD.repeat : 1),
+          ]),
+        );
         if (!Object.keys(weights).length) continue;
         const k = Number(rng.getWeightedValue(weights));
+        const { spot, env } = best[k];
+        const X = x0 + spot.x;
+        const Y = y0 + spot.y;
         const sp = species[k];
         const [lo, hi] = sp.count;
         const mid = Math.ceil((lo + hi) / 2);
@@ -177,7 +205,6 @@ export function createHerdPlacer(seed, data, { NONE }) {
           // 當地的環境，數值塊照它加答案（data/blocks.js 的 envExtras）
           env: { cold: env.cold, mountain: env.mountain, water: env.wet && env.water <= 3 },
         });
-        break;
       }
     }
     return herds;

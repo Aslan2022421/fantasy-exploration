@@ -124,6 +124,15 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       const steps = findPath(world, player(), cell);
       if (steps.length) walk(steps, cell);
     },
+    // 空白鍵：有選定的目標、畫出路線時出發，走到路線終點；能採的來源與生物走到旁邊，不動手（動手按 Q）
+    startRoute() {
+      if (!examined || walking.length) return false;
+      const target = examined;
+      const route = this.shownPath();
+      if (!route?.reachable || !route.steps.length) return false;
+      walk(route.steps, target);
+      return true;
+    },
     actOnTarget() {
       const cr = creatureSrc(examined);
       if (cr) {

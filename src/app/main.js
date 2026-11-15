@@ -31,7 +31,7 @@ const SAVE_KEY = 'world';
 const SEED = 20261112;
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
-  '滑鼠指著地圖看是什麼；左鍵走過去，空白鍵停下；右鍵查看並選定目標，再點一下收起。',
+  '滑鼠指著地圖看是什麼；左鍵走過去；右鍵查看並選定目標，再點一下收起；空白鍵沿路線出發，走路中再按停下。',
   'Q 對目標動手：樹是伐木，矮叢、草本是採集；沒貼著會先走過去。撞上樹幹會選定它。',
   'B 背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄）。＋／－ 放大縮小地圖。',
 ];
@@ -189,8 +189,10 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyQ' || e.code === 'Space') {
     e.preventDefault();
+    // 空白鍵：走路中停下；選定了目標、畫出路線時出發
     if (e.code === 'KeyQ') actions.actOnTarget();
-    else actions.stop();
+    else if (actions.walking.length) actions.stop();
+    else if (!windows.open && !e.repeat) actions.startRoute();
     render();
     return;
   }

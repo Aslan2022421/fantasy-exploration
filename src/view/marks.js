@@ -1,8 +1,12 @@
-// 目標、查看中的格子：標底色。有物件時物件疊的每一層都標，標記跟著物件疊上去，不會留在地面跟物件分開。
-// placeOf(x, y, h, lift) → 那格（往上 lift 層）畫在地圖區哪裡（stackview.js 給）
+// 目標、查看中的格子：底色只塗在腳下那一塊（樹幹那格、礦坑九格、生物佔的格子），往上疊的各層照地圖原本的畫法
+// （下層往底色壓淡）重畫在底色上面，選定的東西照樣看得出高度，不會變成平的一塊。
+// placeOf(x, y, h, lift, px) → 那格（往上 lift 層，每層 px）畫在地圖區哪裡（stackview.js 給）
 
 import { COLORS } from './colors.js';
-import { groundHeight, objectLayers, UP } from './perspective.js';
+import { fadeAt, groundHeight, objectLayers, UP } from './perspective.js';
+import { dimColor, mixColor } from './shades.js';
+
+const fade = (color, toward, j) => (j ? mixColor(color, toward, fadeAt(j)) : color);
 
 export function drawMarks(mapView, world, objects, look, placeOf, { route, target, examined }) {
   for (const c of [examined, target]) {
@@ -11,46 +15,58 @@ export function drawMarks(mapView, world, objects, look, placeOf, { route, targe
     const bg = isTarget ? (route?.reachable ? COLORS.target : COLORS.blocked) : COLORS.examined;
     const o = world.objectAt(c.x, c.y);
     const h0 = groundHeight(world.tierAt(c.x, c.y));
-    const mark = (lift, glyph, fg) => {
-      const p = placeOf(c.x, c.y, h0, lift);
-      mapView.drawShifted(0, 0, p.px, p.py, glyph, fg, bg);
+    // 腳下塗底色（w×h 格，從 (x, y) 往右下）
+    const paint = (x, y, w = 1, h = 1) => {
+      const p = placeOf(x, y, h0, 0);
+      mapView.drawShifted(0, 0, p.px, p.py, ' ', null, bg, w, h);
     };
+    // 往上第 lift 層畫一個字（只畫字，不塗底色）
+    const ink = (x, y, lift, px, glyph, fg, w = 1, h = 1) => {
+      const p = placeOf(x, y, h0, lift, px);
+      mapView.drawShifted(0, 0, p.px, p.py, glyph, fg, null, w, h);
+    };
+
     const cr = o < 0 ? world.creatureAt?.(c.x, c.y) : null;
     if (cr) {
-      // 生物：佔地整塊塗底色，放大的字疊的每一層都重畫在上面，標記跟著生物疊上去
+      // 生物：佔地整塊塗底色，放大的字從地面往上疊，下層往底色壓淡（跟地圖上一樣）
       const a = cr.member;
       const cl = look.creature(cr);
-      for (let lift = 0; lift < cl.height; lift++) {
-        const p = placeOf(a.x, a.y, h0, lift, UP.minePx);
-        mapView.drawShifted(0, 0, p.px, p.py, cl.glyph, cl.fg, lift === 0 ? bg : null, cl.w, cl.h);
-      }
+      paint(a.x, a.y, cl.w, cl.h);
+      for (let lift = 0; lift < cl.height; lift++)
+        ink(a.x, a.y, lift, UP.minePx, cl.glyph, fade(cl.fg, bg, cl.height - 1 - lift), cl.w, cl.h);
       continue;
     }
     if (o < 0) {
       const g = look.ground(c.x, c.y);
-      mark(0, g.glyph, g.fg);
+      paint(c.x, c.y);
+      ink(c.x, c.y, 0, undefined, g.glyph, g.fg);
       continue;
     }
     const ol = look.object(c.x, c.y, o);
     if (ol.mine) {
-      // 礦坑：只標佔的那幾格的地面（畫最底層的字），上面疊的層不塗
+      // 礦坑：九格的地面塗底色，再一層一層往上疊（同一層北邊先畫），下層往底色壓淡
       const a = world.anchorAt(c.x, c.y);
       const d = objects[o].sizes[0];
-      for (let j = 0; j < d; j++)
-        for (let i = 0; i < d; i++) {
-          const x = a.x + i;
-          const y = a.y + j;
-          const ml = look.object(x, y, o);
-          const p = placeOf(x, y, h0, 0);
-          mapView.drawShifted(0, 0, p.px, p.py, ml.glyph, ml.fg, bg);
-        }
+      const cells = [];
+      for (let j = 0; j < d; j++) for (let i = 0; i < d; i++) cells.push({ x: a.x + i, y: a.y + j });
+      for (const p of cells) paint(p.x, p.y);
+      const looks = cells.map((p) => ({ ...p, ml: look.object(p.x, p.y, o) }));
+      const layers = looks[0].ml.layers;
+      for (let lift = 0; lift < layers; lift++)
+        for (const { x, y, ml } of looks)
+          if (ml.glyph !== ' ') ink(x, y, lift, UP.minePx, ml.glyph, fade(ml.fg, bg, layers - 1 - lift));
       continue;
     }
+    // 樹、矮叢：腳下那格塗底色，樹幹與樹冠照地圖的壓淡與積雪重畫
+    paint(c.x, c.y);
     const layers = objectLayers(objects[o], ol.isTrunk);
-    if (!layers.some((l) => l.dh === 0)) mark(0, ' ', ol.fg); // 物件底下那格地面也標，跟上面幾層連成一塊
+    if (!layers.length) ink(c.x, c.y, 0, undefined, ol.glyph, ol.fg);
     for (const l of layers) {
       const trunk = l.part === 'trunk';
-      mark(l.dh, trunk ? ol.trunkGlyph : ol.glyph, trunk ? ol.trunkFg : ol.fg);
+      let color = trunk ? ol.trunkFg : ol.fg;
+      const cap = ol.cap?.[l.j];
+      if (cap) color = dimColor(mixColor(color, cap.color, cap.mix), cap.light);
+      ink(c.x, c.y, l.dh, undefined, trunk ? ol.trunkGlyph : ol.glyph, fade(color, bg, trunk ? Math.min(l.j, 1) : l.j));
     }
   }
 }

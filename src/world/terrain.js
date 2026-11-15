@@ -8,6 +8,7 @@ import { CLIMATE, createClimate } from './climate.js';
 import { createContinent } from './continent.js';
 import { MAX_SIZE } from './footprint.js';
 import { GEO } from './geography.js';
+import { createHerdPlacer } from './herds.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { hash01 } from './noise.js';
@@ -89,6 +90,8 @@ export function createTerrainGen(seed, data, size = null) {
     }
   }
   const placer = createObjectPlacer(seed, data, { ROCK, DIRT, ICE, SHALLOW, DEEP, NONE }, GEN.treelineRange);
+  const planHerds = createHerdPlacer(seed, data, { NONE });
+  let herdTargets = null; // (zx, zy) → { herbivores, predators }，建世界時由 world.js 接上；沒接就不放生物
   const covers = data.biomes.map((b) => b.cover.map((c) => [cv(c.cover), c.density]));
 
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
@@ -249,10 +252,14 @@ export function createTerrainGen(seed, data, size = null) {
       return NONE;
     }
 
+    // 物種成群（herds.js）：物件層生完才放，避開樹與礦坑
+    const herds = planHerds({ ...z, zx, zy, object, swamp: SWAMP, start: geo?.start, target: herdTargets?.(zx, zy) });
+
     return {
       zx,
       zy,
       size,
+      herds,
       height,
       landform,
       peak,
@@ -274,7 +281,11 @@ export function createTerrainGen(seed, data, size = null) {
     setMoisture(x.moistureAt);
   }
 
-  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt, setGeography, shape };
+  const setHerdTargets = (fn) => {
+    herdTargets = fn;
+  };
+
+  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt, setGeography, setHerdTargets, shape };
 }
 
 export { NONE as LAYER_NONE };

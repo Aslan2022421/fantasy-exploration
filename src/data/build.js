@@ -3,7 +3,16 @@
 // 這裡不讀檔：遊戲由 load.js 用 Vite 載入，Node 的工具腳本自己讀 JSON 再交進來
 
 import { z } from 'zod';
-import { BiomeSchema, MaterialSchema, ObjectSchema, TerrainSchema, WorldShapeSchema } from './schemas.js';
+import { buildBlock, ENV_VARIANTS } from './blocks.js';
+import {
+  BiomeSchema,
+  BlockSchema,
+  MaterialSchema,
+  ObjectSchema,
+  SpeciesSchema,
+  TerrainSchema,
+  WorldShapeSchema,
+} from './schemas.js';
 
 // files：{ 檔名: 條目陣列 }。回傳 [條目⋯⋯]，順序照檔名再照檔內順序（編號就是這個順序）
 function merge(files, schema, kind, errors) {
@@ -31,7 +40,7 @@ const indexOf = (list) => new Map(list.map((t, i) => [t.id, i]));
 // - terrains：四層全部的條目（文字檢查等用）；landforms、surfaces、waters、covers 各層分開，編號是各層自己的
 // - palette：畫面上有顏色的條目（材質、水文、覆蓋）排成一列，shades.js 依這個建顏色表；
 //   paletteBase 是各層在 palette 裡的起點
-export function buildData({ terrain, object = {}, biome, material = {}, worldshape = {} }) {
+export function buildData({ terrain, object = {}, biome, material = {}, worldshape = {}, species: speciesFiles = {} }) {
   const errors = [];
   const worldShapes = merge(worldshape, WorldShapeSchema, '世界形狀', errors);
   const terrains = merge(terrain, TerrainSchema, '地形', errors);
@@ -53,6 +62,8 @@ export function buildData({ terrain, object = {}, biome, material = {}, worldsha
     for (const c of b.cover)
       if (!coverIndex.has(c.cover)) errors.push(`生態 ${b.id} 的 cover 找不到生態覆蓋：${c.cover}`);
   }
+  const species = merge(speciesFiles, SpeciesSchema, '物種', errors);
+  checkSpecies(species, indexOf(biomes), errors);
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
   const palette = [...surfaces, ...waters, ...covers].map((t) => ({ ...t, shade: true }));
   return {
@@ -73,7 +84,21 @@ export function buildData({ terrain, object = {}, biome, material = {}, worldsha
     materials,
     materialIndex,
     worldShapes,
+    species,
+    speciesIndex: indexOf(species),
   };
+}
+
+// 物種：棲地條件裡的生態要找得到；數值塊在每種環境變體下都要過 Zod，單獨找得到的錯就在這裡報
+function checkSpecies(species, biomeIndex, errors) {
+  for (const s of species) {
+    for (const row of s.habitat)
+      for (const b of row.biomes ?? []) if (!biomeIndex.has(b)) errors.push(`物種 ${s.id} 的棲地找不到生態：${b}`);
+    for (const env of ENV_VARIANTS) {
+      const r = BlockSchema.safeParse(buildBlock(s.answers, env));
+      if (!r.success) errors.push(`物種 ${s.id} 的數值塊不合規格：${r.error.issues.map((i) => i.message).join('；')}`);
+    }
+  }
 }
 
 // 物件的採集規則：產出的材料、條件裡的生態、採光後留下的物件都要找得到；挖礦的時間看硬度，所以挖得到的材料要有硬度

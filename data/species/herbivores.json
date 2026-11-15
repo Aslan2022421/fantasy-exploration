@@ -1,0 +1,303 @@
+[
+  {
+    "id": "mammoth",
+    "name": "長毛象",
+    "glyph": "M",
+    "color": "#9a7b5a",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 3,
+    "cells": 4,
+    "count": [2, 4],
+    "answers": {
+      "organization": "group",
+      "size": "huge",
+      "armor": "hide",
+      "known": ["strength"],
+      "attack": {
+        "form": "象牙",
+        "marks": ["vicious"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "沿著祖傳的路線遷徙，擋路的一律踩過去",
+    "moves": ["衝撞：筆直衝過一段距離後，第一下會把對方撞倒"],
+    "habitat": [
+      {
+        "biomes": ["tundra"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Mammoth"
+  },
+  {
+    "id": "elk",
+    "name": "麋鹿",
+    "glyph": "Q",
+    "color": "#a8825a",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 2,
+    "cells": 2,
+    "count": [4, 8],
+    "answers": {
+      "organization": "horde",
+      "size": "large",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "角撞",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "成群遷往有草的地方",
+    "moves": ["受驚時整群一起衝散"],
+    "habitat": [
+      {
+        "biomes": ["taiga"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Elk"
+  },
+  {
+    "id": "giant-elk",
+    "name": "巨麋鹿",
+    "glyph": "Q",
+    "color": "#c9a66b",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 3,
+    "cells": 2,
+    "count": [2, 3],
+    "answers": {
+      "organization": "group",
+      "size": "huge",
+      "armor": "hide",
+      "known": ["strength"],
+      "attack": {
+        "form": "角撞",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "守著領地裡的草場",
+    "moves": ["低頭衝撞，把擋路的人頂飛"],
+    "habitat": [
+      {
+        "biomes": ["moss-forest"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Giant Elk"
+  },
+  {
+    "id": "deer",
+    "name": "鹿",
+    "glyph": "q",
+    "color": "#c08a54",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 2,
+    "cells": 1,
+    "count": [4, 8],
+    "answers": {
+      "organization": "horde",
+      "size": "human",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "頭撞",
+        "marks": ["weak"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "吃草，一有動靜就跑",
+    "moves": ["發出警訊，整群一起逃"],
+    "habitat": [
+      {
+        "biomes": ["grassland", "temperate-forest", "temperate-rainforest"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Deer"
+  },
+  {
+    "id": "boar",
+    "name": "野豬",
+    "glyph": "q",
+    "color": "#7a5a4a",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 2,
+    "cells": 1,
+    "count": [1, 4],
+    "answers": {
+      "organization": "group",
+      "size": "human",
+      "armor": "hide",
+      "known": [],
+      "attack": {
+        "form": "獠牙",
+        "marks": ["vicious"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "拱土找食，被逼急就衝撞",
+    "moves": ["低頭猛衝，用獠牙挑起"],
+    "habitat": [
+      {
+        "biomes": ["grassland"],
+        "mountain": false,
+        "weight": 2
+      },
+      {
+        "biomes": ["temperate-forest"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Boar"
+  },
+  {
+    "id": "camel",
+    "name": "駱駝",
+    "glyph": "Q",
+    "color": "#c9a060",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 3,
+    "cells": 2,
+    "count": [2, 6],
+    "answers": {
+      "organization": "group",
+      "size": "large",
+      "armor": "flesh",
+      "known": ["endurance"],
+      "attack": {
+        "form": "咬",
+        "marks": ["weak"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "走很遠的路找水",
+    "moves": ["忍著不動，被逼急了才咬"],
+    "habitat": [
+      {
+        "biomes": ["desert"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Camel"
+  },
+  {
+    "id": "elephant",
+    "name": "大象",
+    "glyph": "M",
+    "color": "#8a8a8a",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 3,
+    "cells": 4,
+    "count": [2, 5],
+    "answers": {
+      "organization": "group",
+      "size": "huge",
+      "armor": "hide",
+      "known": ["strength", "endurance"],
+      "attack": {
+        "form": "象牙",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "護著象群，沿水源遷徙",
+    "moves": ["舉鼻嘶吼，再整群壓過來"],
+    "habitat": [
+      {
+        "biomes": ["savanna"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Elephant"
+  },
+  {
+    "id": "ape",
+    "name": "猿",
+    "glyph": "a",
+    "color": "#7a5a3a",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 2,
+    "cells": 1,
+    "count": [3, 8],
+    "answers": {
+      "organization": "group",
+      "size": "human",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "拳",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["climb"]
+    },
+    "instinct": "在樹上結群生活，守著果樹",
+    "moves": ["拋擲東西嚇阻入侵者"],
+    "habitat": [
+      {
+        "biomes": ["rainforest"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Ape"
+  },
+  {
+    "id": "goat",
+    "name": "山羊",
+    "glyph": "q",
+    "color": "#d8d2c4",
+    "tile": null,
+    "diet": "herbivore",
+    "height": 2,
+    "cells": 1,
+    "count": [2, 6],
+    "answers": {
+      "organization": "group",
+      "size": "human",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "頭撞",
+        "marks": ["weak"]
+      },
+      "describe": [],
+      "adaptations": ["climb"]
+    },
+    "instinct": "在峭壁上吃草，被逼近就頂人",
+    "moves": ["從高處衝下來撞人"],
+    "habitat": [
+      {
+        "mountain": true,
+        "weight": 3
+      }
+    ],
+    "source": "Goat"
+  }
+]

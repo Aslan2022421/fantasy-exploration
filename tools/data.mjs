@@ -20,5 +20,6 @@ export function loadData() {
     biome: readKind('biome'),
     material: readKind('material'),
     worldshape: readKind('worldshape'),
+    species: readKind('species'),
   });
 }

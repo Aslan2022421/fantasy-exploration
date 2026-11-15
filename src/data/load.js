@@ -7,6 +7,7 @@ const objectFiles = import.meta.glob('../../data/object/*.json', { eager: true, 
 const biomeFiles = import.meta.glob('../../data/biome/*.json', { eager: true, import: 'default' });
 const materialFiles = import.meta.glob('../../data/material/*.json', { eager: true, import: 'default' });
 const worldshapeFiles = import.meta.glob('../../data/worldshape/*.json', { eager: true, import: 'default' });
+const speciesFiles = import.meta.glob('../../data/species/*.json', { eager: true, import: 'default' });
 
 export const DATA = buildData({
   terrain: terrainFiles,
@@ -14,4 +15,5 @@ export const DATA = buildData({
   biome: biomeFiles,
   material: materialFiles,
   worldshape: worldshapeFiles,
+  species: speciesFiles,
 });

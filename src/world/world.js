@@ -4,6 +4,8 @@
 
 import { PART_TRUNK } from './footprint.js';
 import { buildGeography } from './geography.js';
+import { herdTargets } from './herds.js';
+import { LAND } from './landform.js';
 import { anchorOffset } from './objects.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
@@ -48,6 +50,9 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const k = SAMPLES * SAMPLES;
       const temperature = t / k;
       const moisture = w / k;
+      // 湖海的區沒有陸上生物；其餘照種子與區座標擲，生區時 herds.js 依這個放
+      const sea = h / k < LAND.water;
+      const targets = sea ? { herbivores: 0, predators: 0 } : herdTargets(seed, zx, zy);
       regions.push({
         zx,
         zy,
@@ -56,10 +61,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
         height: h / k,
         climate: { temperature: TEMP_BANDS[bandOf(temperature)], moisture: WET_BANDS[bandOf(moisture)] },
         biome: data.biomes[gen.biomeAt(temperature, moisture)].id,
-        numbers: {},
+        numbers: { herbivores: targets.herbivores, predators: targets.predators }, // 草食、掠食各幾群（目標）
       });
     }
   }
+  gen.setHerdTargets((zx, zy) => regions[zy * zonesX + zx].numbers);
 
   const zones = new Map(); // "zx,zy" → 生好的區
   let last = null; // 查格子是最常做的事：先看是不是跟上一次同一區
@@ -123,6 +129,8 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     region: (zx, zy) => regions[zy * zonesX + zx] ?? null,
     regionAt: (x, y) => (inside(x, y) ? regions[Math.floor(y / zoneSize) * zonesX + Math.floor(x / zoneSize)] : null),
     zone,
+    // 一區的物種群（herds.js）：[{ id, species（data.species 的編號）, members: [{ x, y }]（各隻的錨點）, env }]
+    herdsOf: (zx, zy) => (zx < 0 || zy < 0 || zx >= zonesX || zy >= zonesY ? [] : zone(zx, zy).herds),
     generatedZones: () => zones.size,
     inside,
     cell,

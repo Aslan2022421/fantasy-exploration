@@ -1,0 +1,612 @@
+[
+  {
+    "id": "polar-bear",
+    "name": "北極熊",
+    "glyph": "B",
+    "color": "#e6ecef",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 2],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "hide",
+      "known": ["strength"],
+      "attack": {
+        "form": "爪",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["swim"]
+    },
+    "instinct": "守著冰面上的獵場",
+    "moves": ["從水裡或雪堆後突然撲出"],
+    "habitat": [
+      {
+        "biomes": ["tundra"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Polar Bear"
+  },
+  {
+    "id": "winter-wolf",
+    "name": "冬狼",
+    "glyph": "D",
+    "color": "#b8d4e8",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [2, 4],
+    "answers": {
+      "organization": "group",
+      "size": "large",
+      "armor": "hide",
+      "known": [],
+      "attack": {
+        "form": "咬",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["cold-hardy"]
+    },
+    "instinct": "在風雪裡把獵物圍住",
+    "moves": ["吐出一口寒氣，周圍一片結霜"],
+    "habitat": [
+      {
+        "biomes": ["tundra"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Winter Wolf"
+  },
+  {
+    "id": "wolf",
+    "name": "狼",
+    "glyph": "d",
+    "color": "#9aa0a6",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 1,
+    "count": [2, 6],
+    "answers": {
+      "organization": "group",
+      "size": "human",
+      "armor": "hide",
+      "known": [],
+      "attack": {
+        "form": "咬",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "把落單的獵物逼離同伴",
+    "moves": ["繞到側面包夾"],
+    "habitat": [
+      {
+        "biomes": ["taiga"],
+        "mountain": false,
+        "weight": 2
+      },
+      {
+        "biomes": ["grassland"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Wolf"
+  },
+  {
+    "id": "brown-bear",
+    "name": "棕熊",
+    "glyph": "B",
+    "color": "#8a5a3a",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 2],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "hide",
+      "known": ["strength"],
+      "attack": {
+        "form": "咬",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["climb"]
+    },
+    "instinct": "護著自己的獵場與幼熊",
+    "moves": ["直立起身嚇阻，對方不退就撲上去"],
+    "habitat": [
+      {
+        "biomes": ["taiga"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Brown Bear"
+  },
+  {
+    "id": "dire-wolf",
+    "name": "恐狼",
+    "glyph": "D",
+    "color": "#6f757c",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [2, 5],
+    "answers": {
+      "organization": "group",
+      "size": "large",
+      "armor": "hide",
+      "known": [],
+      "attack": {
+        "form": "咬",
+        "marks": ["vicious"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "追著獵物不放",
+    "moves": ["咬住不放，把對方拖倒"],
+    "habitat": [
+      {
+        "biomes": ["moss-forest"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Dire Wolf"
+  },
+  {
+    "id": "black-bear",
+    "name": "黑熊",
+    "glyph": "b",
+    "color": "#4a4038",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 1,
+    "count": [1, 2],
+    "answers": {
+      "organization": "solitary",
+      "size": "human",
+      "armor": "hide",
+      "known": [],
+      "attack": {
+        "form": "爪",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["climb", "swim"]
+    },
+    "instinct": "翻找吃的，不願與人起衝突",
+    "moves": ["爬上樹躲開"],
+    "habitat": [
+      {
+        "biomes": ["moss-forest"],
+        "mountain": false,
+        "weight": 2
+      },
+      {
+        "biomes": ["temperate-forest"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Black Bear"
+  },
+  {
+    "id": "giant-spider",
+    "name": "巨蜘蛛",
+    "glyph": "S",
+    "color": "#5a4a6a",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 3],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "scale",
+      "known": ["trickery"],
+      "attack": {
+        "form": "毒牙",
+        "marks": []
+      },
+      "describe": ["devious"],
+      "adaptations": ["climb"]
+    },
+    "instinct": "在暗處織網等獵物",
+    "moves": ["用蛛絲纏住獵物，再注入毒"],
+    "habitat": [
+      {
+        "biomes": ["temperate-forest"],
+        "mountain": false,
+        "weight": 2
+      },
+      {
+        "biomes": ["temperate-rainforest"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Giant Spider"
+  },
+  {
+    "id": "panther",
+    "name": "黑豹",
+    "glyph": "f",
+    "color": "#3a3a46",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 1,
+    "count": [1, 1],
+    "answers": {
+      "organization": "solitary",
+      "size": "human",
+      "armor": "flesh",
+      "known": ["trickery", "piercing"],
+      "attack": {
+        "form": "爪",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["climb"]
+    },
+    "instinct": "在樹上或暗處埋伏",
+    "moves": ["悄無聲息地靠近，一擊就走"],
+    "habitat": [
+      {
+        "biomes": ["temperate-rainforest"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Panther"
+  },
+  {
+    "id": "jackal",
+    "name": "胡狼",
+    "glyph": "d",
+    "color": "#b08a50",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 1,
+    "count": [2, 6],
+    "answers": {
+      "organization": "group",
+      "size": "small",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "咬",
+        "marks": ["weak"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "撿別人吃剩的，成群時才敢上前",
+    "moves": ["圍著獵物嚎叫，引來同伴"],
+    "habitat": [
+      {
+        "biomes": ["desert"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Jackal"
+  },
+  {
+    "id": "giant-scorpion",
+    "name": "巨蠍",
+    "glyph": "S",
+    "color": "#a8683a",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 2],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "bone",
+      "known": [],
+      "attack": {
+        "form": "螫",
+        "marks": ["vicious"]
+      },
+      "describe": ["devious"],
+      "adaptations": []
+    },
+    "instinct": "躲在沙裡等獵物經過",
+    "moves": ["用鉗夾住對方，再用尾刺注入毒"],
+    "habitat": [
+      {
+        "biomes": ["desert"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Giant Scorpion"
+  },
+  {
+    "id": "hyena",
+    "name": "鬣狗",
+    "glyph": "d",
+    "color": "#b09a62",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 1,
+    "count": [3, 8],
+    "answers": {
+      "organization": "horde",
+      "size": "human",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "咬",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "跟著獵食者撿食，成群時什麼都敢咬",
+    "moves": ["用笑一般的叫聲呼朋引伴"],
+    "habitat": [
+      {
+        "biomes": ["savanna"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Hyena"
+  },
+  {
+    "id": "lion",
+    "name": "獅子",
+    "glyph": "F",
+    "color": "#d2a64a",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 3],
+    "answers": {
+      "organization": "group",
+      "size": "large",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "爪",
+        "marks": ["vicious"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "在草叢中伏著，等獵物靠近",
+    "moves": ["全群分兩側包抄"],
+    "habitat": [
+      {
+        "biomes": ["savanna"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Lion"
+  },
+  {
+    "id": "tiger",
+    "name": "老虎",
+    "glyph": "F",
+    "color": "#e08a2a",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 1],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "flesh",
+      "known": ["trickery"],
+      "attack": {
+        "form": "爪",
+        "marks": ["vicious"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "獨佔一片獵場",
+    "moves": ["從草叢中撲出，一擊斃命"],
+    "habitat": [
+      {
+        "biomes": ["rainforest"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Tiger"
+  },
+  {
+    "id": "giant-constrictor-snake",
+    "name": "巨蟒",
+    "glyph": "R",
+    "color": "#5a8a4a",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 4,
+    "count": [1, 2],
+    "answers": {
+      "organization": "solitary",
+      "size": "huge",
+      "armor": "hide",
+      "known": ["strength"],
+      "attack": {
+        "form": "咬與纏繞",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["swim", "constrict"]
+    },
+    "instinct": "盤在水邊或樹上等獵物",
+    "moves": ["纏緊獵物，越掙扎越緊"],
+    "habitat": [
+      {
+        "biomes": ["rainforest"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Giant Constrictor Snake"
+  },
+  {
+    "id": "crocodile",
+    "name": "鱷魚",
+    "glyph": "R",
+    "color": "#4f7a52",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 3],
+    "answers": {
+      "organization": "group",
+      "size": "large",
+      "armor": "scale",
+      "known": ["trickery"],
+      "attack": {
+        "form": "咬",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["amphibious"]
+    },
+    "instinct": "潛在水裡，等獵物到水邊",
+    "moves": ["把獵物拖進水裡"],
+    "habitat": [
+      {
+        "biomes": ["savanna", "rainforest", "temperate-rainforest"],
+        "mountain": false,
+        "weight": 3,
+        "nearWater": 2
+      }
+    ],
+    "source": "Crocodile"
+  },
+  {
+    "id": "giant-frog",
+    "name": "巨蛙",
+    "glyph": "r",
+    "color": "#6aa04a",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 1,
+    "count": [2, 6],
+    "answers": {
+      "organization": "group",
+      "size": "human",
+      "armor": "flesh",
+      "known": [],
+      "attack": {
+        "form": "咬",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["amphibious"]
+    },
+    "instinct": "守著水邊，吞下任何裝得下的東西",
+    "moves": ["舌頭彈出，把對方捲回口中"],
+    "habitat": [
+      {
+        "biomes": ["grassland", "temperate-forest", "temperate-rainforest", "rainforest", "savanna"],
+        "mountain": false,
+        "nearWater": 3,
+        "weight": 3
+      }
+    ],
+    "source": "Giant Frog"
+  },
+  {
+    "id": "giant-eagle",
+    "name": "巨鷹",
+    "glyph": "E",
+    "color": "#c8b080",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 2],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "flesh",
+      "known": ["piercing"],
+      "attack": {
+        "form": "爪",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": ["fly"]
+    },
+    "instinct": "在高處盤旋找獵物",
+    "moves": ["俯衝，抓起獵物就飛走"],
+    "habitat": [
+      {
+        "mountain": true,
+        "weight": 2
+      }
+    ],
+    "source": "Giant Eagle"
+  },
+  {
+    "id": "saber-toothed-tiger",
+    "name": "劍齒虎",
+    "glyph": "F",
+    "color": "#b8b4a8",
+    "tile": null,
+    "diet": "predator",
+    "height": 2,
+    "cells": 2,
+    "count": [1, 1],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "hide",
+      "known": ["strength"],
+      "attack": {
+        "form": "咬",
+        "marks": ["vicious"]
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "instinct": "在雪地裡伏擊大型獵物",
+    "moves": ["用長牙一口刺穿"],
+    "habitat": [
+      {
+        "biomes": ["tundra", "taiga", "moss-forest"],
+        "mountain": true,
+        "weight": 2
+      }
+    ],
+    "source": "Saber-Toothed Tiger"
+  }
+]

@@ -24,6 +24,22 @@
 - 授權：只取莫氏硬度的數值（事實資料），沒有收錄原文
 - 修改：範圍取中間值（例如 5–6 取 5.5）；每筆的出處寫在該筆的 `source`
 
+## 物種名單與體型
+
+- 檔案：`data/species/*.json` 的 `name`（中文名是自取的）、`source`（SRD 原名）、體型與攻擊方式
+- 來源：System Reference Document 5.2.1，(c) Wizards of the Coast LLC。名單只取 SRD 5.2.1 收錄的生物，不取只在 OGL 名單上的怪物
+- 授權：CC BY 4.0，<https://creativecommons.org/licenses/by/4.0/legalcode>
+- 出處聲明：This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC, available at <https://www.dndbeyond.com/srd>. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at <https://creativecommons.org/licenses/by/4.0/legalcode>.
+- 核對：這段聲明讀自轉載 SRD 法律段的網頁（<https://rules.omnisgm.com/en/dnd/srd-5.2/legal/>），還沒對照官方 PDF 原文，上架前要核對一次
+- 修改：只取名字、體型分類與攻擊方式當參考；數值塊不用 SRD 的（戰鬥不用 d20 對 AC），照下一條的問答換算
+
+## 建怪問答與數值換算
+
+- 檔案：`src/data/blocks.js`、`data/species/*.json` 的 `answers`
+- 來源：Dungeon World，(c) Sage Kobold Productions（作者 Sage LaTorra、Adam Koebel），<https://github.com/Sagelt/Dungeon-World>，其中 Making Monsters 的問答順序與各答案對應的傷害骰、生命、護甲數字
+- 授權：CC BY 3.0 Unported，<https://creativecommons.org/licenses/by/3.0/>
+- 修改：只取問答的結構與數字，改成資料檔的選項與換算函式；本能與招式的句子是自己寫的，不照搬原文。Dungeon World 的儲存庫另含 SRD 5.1 的內容，這裡沒有取用
+
 ## 程式套件
 
 執行時用到的套件，授權全文在各套件的 `node_modules/<套件>/LICENSE`，打包時一起附上：

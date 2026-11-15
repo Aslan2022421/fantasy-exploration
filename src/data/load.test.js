@@ -44,7 +44,7 @@ describe('實際的資料', () => {
   });
 
   test('每種地形與物件的字元都在 CP437 字元表裡', () => {
-    for (const t of [...DATA.terrains, ...DATA.objects])
+    for (const t of [...DATA.terrains, ...DATA.objects, ...DATA.species])
       for (const ch of [t.glyph, ...(t.pattern ?? []).flatMap((row) => [...row])].filter((c) => c !== ' '))
         expect(cp437Index(ch), `${t.id} 的字元 ${ch}`).toBeGreaterThan(0);
   });

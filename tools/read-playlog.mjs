@@ -22,13 +22,16 @@ const gathers = [];
 for (const r of records) {
   verbs[r.verb] = (verbs[r.verb] ?? 0) + 1;
   lastTime = Math.max(lastTime, r.time + (r.data?.duration ?? 0));
-  const at = r.data?.to ?? r.data?.at;
+  const at = r.actor === 'player' ? (r.data?.to ?? r.data?.at) : null; // 生物移動不算冒險者到過的區
   if (at) zones.add(`${Math.floor(at.x / 96)},${Math.floor(at.y / 96)}`);
   if (r.verb === 'gather') gathers.push(r);
 }
 
 console.log(`匯出：${log.exported ?? '?'}｜遊戲版本 ${log.version ?? '?'}｜世界版本 ${log.world}｜種子 ${log.seed}`);
-console.log(`紀錄 ${records.length} 筆，遊戲時間 ${lastTime} 回合；到過 ${zones.size} 區`);
+// 時間的單位是刻（1 刻＝0.25 秒）
+console.log(
+  `紀錄 ${records.length} 筆，遊戲時間 ${lastTime} 刻（約 ${Math.round(lastTime / 240)} 分鐘）；到過 ${zones.size} 區`,
+);
 console.log(
   `動作：${Object.entries(verbs)
     .map(([v, n]) => `${v} ${n}`)

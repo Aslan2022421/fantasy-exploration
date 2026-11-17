@@ -91,14 +91,21 @@ export function createPanels(font) {
 
     // 地圖上的小標籤（路線終點的步數、懸停提示框）；(px, py) 是那格的左上角（實體像素）。
     // 字跟介面字一樣大；描一圈框線跟地圖分開
+    // 地圖上那格旁邊的小框：太長就換行（最寬地圖的四成），先放右邊、放不下放左邊，整個框不超出地圖
     routeLabel(ctx, s, px, py, label, color) {
       const { pad, tile, map, lineHeight, textScale: scale } = s;
-      const w = font.measure(label, scale);
+      const measure = (ch) => font.measure(ch, scale);
+      const lines = wrap(label, Math.floor(map.w * 0.4), measure);
+      const w = Math.max(...lines.map((l) => font.measure(l, scale)));
+      const h = lineHeight * lines.length;
       let lx = px + tile + pad;
       if (lx + w + pad * 2 > map.x + map.w) lx = px - w - pad * 3;
-      const ly = Math.max(map.y, py - lineHeight);
-      frame(ctx, { x: lx - pad, y: ly, w: w + pad * 2, h: lineHeight }, COLORS.bg, COLORS.line2);
-      font.drawText(ctx, label, lx, ly + scale, scale, color);
+      lx = Math.max(map.x + pad, Math.min(lx, map.x + map.w - w - pad));
+      const ly = Math.max(map.y, Math.min(py - lineHeight, map.y + map.h - h));
+      frame(ctx, { x: lx - pad, y: ly, w: w + pad * 2, h }, COLORS.bg, COLORS.line2);
+      lines.forEach((l, i) => {
+        font.drawText(ctx, l, lx, ly + i * lineHeight + scale, scale, color);
+      });
     },
   };
 }

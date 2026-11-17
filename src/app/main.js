@@ -105,7 +105,11 @@ const actions = createActions({
 function entries() {
   return [
     ...HELP.map((text) => ({ time: null, text, color: COLORS.dim })),
-    ...logLines(game.log.all()).map((l) => ({ time: clockOf(l.time), text: l.text })),
+    // 生物的回合播放中，訊息只顯示到播到的那一筆
+    ...logLines(game.log.all().slice(0, actions.logUpTo ?? undefined)).map((l) => ({
+      time: clockOf(l.time),
+      text: l.text,
+    })),
   ];
 }
 
@@ -178,6 +182,11 @@ const keyboard = createKeyboard((dx, dy) => {
 });
 
 window.addEventListener('keydown', (e) => {
+  // 生物的回合還在播放：先不接受任何鍵（一兩秒內播完）
+  if (actions.busy) {
+    e.preventDefault();
+    return;
+  }
   // Esc：自動走路中先停下；沒開視窗時打開選單
   if (e.code === 'Escape' && !windows.open && actions.walking.length) {
     e.preventDefault();
@@ -243,14 +252,14 @@ bindMapMouse(mapView.canvas, {
   },
   // 右鍵：查看那一格兼選定成目標（訊息欄寫結果、地圖畫路線），再按同一格收起
   look(cell) {
-    if (windows.open) return;
+    if (windows.open || actions.busy) return;
     actions.stop();
     actions.look(cell);
     render();
   },
   // 左鍵：直接走過去，查看開著也順便收起
   go(cell) {
-    if (windows.open) return;
+    if (windows.open || actions.busy) return;
     actions.go(cell);
     render();
   },

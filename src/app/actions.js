@@ -9,6 +9,7 @@
 import { DATA } from '../data/load.js';
 import { distanceTo } from '../world/chase.js';
 import { findPath, findPathNextTo, stepDirection } from '../world/path.js';
+import { createPlayback } from './playback.js';
 
 const STEP_MS = 70; // 自動走每一步間隔
 
@@ -23,6 +24,11 @@ export function createActions({ game, turns, worldView, describe, persist, redra
   let onArrive = null; // 走到了之後要做的事
   let examined = null; // 查看中、選定成目標的那一格
   let targetId = null; // 選定的是生物時記牠的 id（牠會移動，格子跟著換）
+  const playback = createPlayback({
+    game,
+    redraw: () => redraw(),
+    invalidate: (ids) => worldView.invalidateCells(ids.flatMap((id) => world.creatureById(id)?.cells ?? [])),
+  });
 
   // 新寫進的紀錄裡動到的生物格子（移動、倒下，紀錄的 cells 是格子陣列）：丟掉畫面快取
   function refresh(fromId) {
@@ -41,10 +47,19 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     if (!now) targetId = null;
   }
 
+  // 做完之後，有生物移動就逐格播放（播放中不接受輸入）
+  function played(fn) {
+    const creatures = game.state.creatures;
+    const fromId = game.log.size;
+    const r = fn();
+    playback.play(creatures, fromId);
+    return r;
+  }
+
   function act(fn) {
-    if (!turns.playersTurn) return null;
+    if (!turns.playersTurn || playback.busy) return null;
     const before = game.log.size;
-    const rec = fn();
+    const rec = played(fn);
     if (rec && !rec.refused) {
       turns.endTurn(rec.data?.duration ?? 0);
       refresh(before);
@@ -85,7 +100,7 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     onArrive = arrive;
     // 每一拍走一步；走完的下一拍（又輪到冒險者時）才做走到之後的事
     walkTimer = setInterval(() => {
-      if (!turns.playersTurn) return; // 還沒輪到，下一拍再走
+      if (!turns.playersTurn || playback.busy) return; // 還沒輪到或還在播放，下一拍再走
       if (!walking.length) {
         const then = onArrive;
         const cause = walkPlan;
@@ -136,8 +151,9 @@ export function createActions({ game, turns, worldView, describe, persist, redra
 
   // 結束回合不花排程上的時間（回合的時間在紀錄裡算），所以不等排程輪到，攻擊完可以馬上接著做
   function endTurnNow() {
+    if (playback.busy) return null;
     const before = game.log.size;
-    if (!game.endTurn()) return null;
+    if (!played(() => game.endTurn())) return null;
     refresh(before);
     if (targetId) followTarget();
     persist();
@@ -161,6 +177,13 @@ export function createActions({ game, turns, worldView, describe, persist, redra
   return {
     get examined() {
       return examined;
+    },
+    // 生物的回合還在播放：不接受輸入；訊息欄只顯示到 logUpTo 那一筆（null＝全部）
+    get busy() {
+      return playback.busy;
+    },
+    get logUpTo() {
+      return playback.upTo;
     },
     get walking() {
       return walking;

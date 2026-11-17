@@ -91,10 +91,11 @@ function build(seed) {
 function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   let state = initialState;
   let lastCheckpoint = checkpoint;
+  let shown = null; // 畫面逐格播放時暫時顯示的生物樣子（null＝照狀態）
   const world = withCreatures(
     withChanges(baseWorld, DATA, () => state.cells),
     DATA,
-    () => state.creatures,
+    () => shown ?? state.creatures,
   );
 
   function record(entry) {
@@ -126,6 +127,10 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     },
     get hero() {
       return heroStats(DATA, state.hero);
+    },
+    // 畫面播放用：暫時讓世界照 creatures 顯示生物（只在播放中、不接受輸入時用），null 回到現在的狀態
+    showCreatures(creatures) {
+      shown = creatures;
     },
     fight,
     // 移動一步；擋住（或戰鬥中這回合走完了）回傳 null，不記錄。

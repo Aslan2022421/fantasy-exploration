@@ -129,7 +129,8 @@ export function createFight(env) {
         env.record({
           verb: 'cmove',
           actor: id,
-          data: { from: f.member, to, steps: steps.length, species: sp.id, cells: [...f.cells, ...cells] },
+          // path：走過的每一格錨點（畫面逐格播放用）；cells：起點與終點佔的格子（丟畫面快取用）
+          data: { from: f.member, to, path: steps, species: sp.id, cells: [...f.cells, ...cells] },
           cause,
         });
       }

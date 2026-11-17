@@ -12,12 +12,14 @@ import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
 import { cssSize, gridLabel, layout } from '../view/screen.js';
+import { sheetEntries } from '../view/sheet.js';
 import { loadImage } from '../view/tiles.js';
 import { createWorldMap, drawMapWindow } from '../view/worldmap.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
 import { describePlace, regionLabel } from '../world/place.js';
+import { clockOf, dayOf } from '../world/rules.js';
 import { createActions } from './actions.js';
 import { createKeyboard } from './input.js';
 import { showLoading } from './loading.js';
@@ -26,18 +28,21 @@ import { downloadPlaylog } from './playlog.js';
 import { createWindows } from './windows.js';
 import { createZoom } from './zoom.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.1.1';
 const SAVE_KEY = 'world';
 const SEED = 20261112;
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '滑鼠指著地圖看是什麼；左鍵走過去；右鍵查看並選定目標，再點一下收起；空白鍵沿路線出發，走路中再按停下。',
-  'Q 對目標動手：樹是伐木，矮叢、草本是採集；沒貼著會先走過去。撞上樹幹會選定它。',
-  'B 背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄）。＋／－ 放大縮小地圖。',
+  'Q 對目標動手：樹是伐木，矮叢、草本是採集，生物是攻擊；沒貼著會先走過去。撞上樹幹或生物會選定它。',
+  '戰鬥中每回合可以走到速度上限、攻擊一次，空白鍵結束回合。R 休息 1 小時（每天一次）。',
+  'C 角色，B 背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄）。＋／－ 放大縮小地圖。',
 ];
 
 const params = new URLSearchParams(location.search);
 const store = params.has('nosave') ? memoryStore() : browserStore();
+// 測試用：網址加 ?class=rogue&race=dwarf 換預設角色（只在開新遊戲時有用）
+const heroOptions = { race: params.get('race') ?? undefined, cls: params.get('class') ?? undefined };
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d');
 
@@ -46,7 +51,7 @@ const mapView = createMapView(image, ctx);
 const panels = createPanels(font);
 
 await showLoading(canvas, ctx, panels, '生成世界中');
-const game = loadGame(store.load(SAVE_KEY, null)) ?? newGame(SEED);
+const game = loadGame(store.load(SAVE_KEY, null)) ?? newGame(SEED, heroOptions);
 const turns = createTurnLoop();
 turns.start();
 
@@ -64,6 +69,7 @@ let exported = null; // 這次打開選單後匯出的檔名
 const windows = createWindows(panels, {
   history: entries,
   bag: () => bagEntries(game.state.bag, DATA),
+  sheet: () => sheetEntries(game.state, DATA),
   map: (c, s, body) => {
     const p = player();
     drawMapWindow(
@@ -99,7 +105,7 @@ const actions = createActions({
 function entries() {
   return [
     ...HELP.map((text) => ({ time: null, text, color: COLORS.dim })),
-    ...logLines(game.log.all()).map((l) => ({ time: l.time, text: l.text })),
+    ...logLines(game.log.all()).map((l) => ({ time: clockOf(l.time), text: l.text })),
   ];
 }
 
@@ -137,10 +143,16 @@ function render() {
   }
 
   const where = regionLabel(world, DATA, p.x, p.y);
+  const s = game.state;
+  const h = game.hero;
+  const c = s.combat;
+  const fight = c
+    ? `｜戰鬥 第 ${c.round} 回合，移動剩 ${h.speed - c.moved} 格，${c.attacked ? '已攻擊' : '可攻擊'}，空白鍵結束回合`
+    : '';
   panels.status(
     ctx,
     screen,
-    `Fantasy Exploration v${VERSION}｜第 ${game.state.time} 回合｜位置 ${p.x}, ${p.y}｜${where}｜${gridLabel(screen)}`,
+    `Fantasy Exploration v${VERSION}｜第 ${dayOf(s.time) + 1} 天 ${clockOf(s.time)}｜生命 ${s.hp}/${h.hpMax}${fight}｜位置 ${p.x}, ${p.y}｜${where}｜${gridLabel(screen)}`,
   );
   maxLogScroll = panels.log(ctx, screen, entries(), logScroll);
   if (!windows.open) {
@@ -187,11 +199,14 @@ window.addEventListener('keydown', (e) => {
     if (zoom.press(e)) resize();
     return;
   }
-  if (e.code === 'KeyQ' || e.code === 'Space') {
+  if (e.code === 'KeyQ' || e.code === 'Space' || e.code === 'KeyR') {
     e.preventDefault();
-    // 空白鍵：走路中停下；選定了目標、畫出路線時出發
+    // 空白鍵：走路中停下；戰鬥中結束回合；選定了目標、畫出路線時出發
     if (e.code === 'KeyQ') actions.actOnTarget();
-    else if (actions.walking.length) actions.stop();
+    else if (e.code === 'KeyR') {
+      if (!e.repeat && !windows.open) actions.rest();
+    } else if (actions.walking.length) actions.stop();
+    else if (!windows.open && !e.repeat && game.state.combat) actions.endTurn();
     else if (!windows.open && !e.repeat) actions.startRoute();
     render();
     return;

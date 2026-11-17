@@ -18,11 +18,11 @@ describe('世界紀錄', () => {
     expect(g.log.get(0)).toMatchObject({ id: 0, verb: 'start', time: 0, cause: null });
   });
 
-  test('移動記一筆、時間往前一格；撞牆不記', () => {
+  test('移動記一筆、時間往前走一格的刻數（看身高）；撞牆不記', () => {
     const g = newGame(SEED);
     const rec = g.move('e') ?? g.move('w');
     expect(rec.verb).toBe('move');
-    expect(g.state.time).toBe(1);
+    expect(g.state.time).toBe(g.hero.stepTicks);
     expect(g.state.player).toEqual(rec.data.to);
     // 一直往北走，總會撞到東西或走到世界邊緣，之後的移動不記
     const size = g.log.size;

@@ -8,8 +8,18 @@ const biomeFiles = import.meta.glob('../../data/biome/*.json', { eager: true, im
 const materialFiles = import.meta.glob('../../data/material/*.json', { eager: true, import: 'default' });
 const worldshapeFiles = import.meta.glob('../../data/worldshape/*.json', { eager: true, import: 'default' });
 const speciesFiles = import.meta.glob('../../data/species/*.json', { eager: true, import: 'default' });
+const skillFiles = import.meta.glob('../../data/skill/*.json', { eager: true, import: 'default' });
+const weaponFiles = import.meta.glob('../../data/weapon/*.json', { eager: true, import: 'default' });
+const armorFiles = import.meta.glob('../../data/armor/*.json', { eager: true, import: 'default' });
+const raceFiles = import.meta.glob('../../data/race/*.json', { eager: true, import: 'default' });
+const classFiles = import.meta.glob('../../data/class/*.json', { eager: true, import: 'default' });
 
 export const DATA = buildData({
+  skill: skillFiles,
+  weapon: weaponFiles,
+  armor: armorFiles,
+  race: raceFiles,
+  class: classFiles,
   terrain: terrainFiles,
   object: objectFiles,
   biome: biomeFiles,

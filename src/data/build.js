@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { buildBlock, ENV_VARIANTS } from './blocks.js';
+import { buildHeroData } from './build-hero.js';
 import {
   BiomeSchema,
   BlockSchema,
@@ -40,8 +41,17 @@ const indexOf = (list) => new Map(list.map((t, i) => [t.id, i]));
 // - terrains：四層全部的條目（文字檢查等用）；landforms、surfaces、waters、covers 各層分開，編號是各層自己的
 // - palette：畫面上有顏色的條目（材質、水文、覆蓋）排成一列，shades.js 依這個建顏色表；
 //   paletteBase 是各層在 palette 裡的起點
-export function buildData({ terrain, object = {}, biome, material = {}, worldshape = {}, species: speciesFiles = {} }) {
+export function buildData({
+  terrain,
+  object = {},
+  biome,
+  material = {},
+  worldshape = {},
+  species: speciesFiles = {},
+  ...heroFiles
+}) {
   const errors = [];
+  const hero = buildHeroData(heroFiles, merge, errors);
   const worldShapes = merge(worldshape, WorldShapeSchema, '世界形狀', errors);
   const terrains = merge(terrain, TerrainSchema, '地形', errors);
   const objects = merge(object, ObjectSchema, '物件', errors);
@@ -86,6 +96,7 @@ export function buildData({ terrain, object = {}, biome, material = {}, worldsha
     worldShapes,
     species,
     speciesIndex: indexOf(species),
+    ...hero,
   };
 }
 

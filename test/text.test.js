@@ -33,6 +33,9 @@ test('畫面上的中文都在介面字型裡', () => {
     ...DATA.objects.map((o) => o.name),
     ...DATA.biomes.map((b) => b.name),
     ...Object.values(CLIMATE_NAMES),
+    ...[DATA.skills, DATA.weapons, DATA.armors].flat().map((x) => x.name),
+    ...[DATA.races, DATA.classes].flat().flatMap((x) => [x.name, ...x.abilities]),
+    ...DATA.weapons.flatMap((w) => w.traits),
     ...sourceFiles('src/').flatMap((f) => stringsIn(readFileSync(new URL(f, root), 'utf8'))),
   ];
   const missing = new Set();

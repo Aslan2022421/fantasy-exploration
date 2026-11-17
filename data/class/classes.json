@@ -1,0 +1,69 @@
+[
+  {
+    "id": "warrior",
+    "name": "戰士",
+    "hpPerLevel": 5,
+    "mainAttrs": ["str", "dex"],
+    "skillChoices": ["melee", "athletics", "perception", "animal-handling", "influence"],
+    "training": "blade",
+    "preset": {
+      "attrs": { "str": 14, "dex": 12, "int": 8, "per": 10, "wil": 8, "cha": 8 },
+      "skills": ["melee", "athletics"],
+      "gear": { "weapon": "longsword", "armor": "scale", "shield": "shield" }
+    },
+    "abilities": ["武器訓練：選定的武器類別攻擊 +1。", "守護者（5 級）：使用格擋時防禦值 +2。"]
+  },
+  {
+    "id": "ranger",
+    "name": "遊俠",
+    "hpPerLevel": 4,
+    "mainAttrs": ["dex", "per"],
+    "skillChoices": ["ranged", "survival", "tracking", "navigation", "perception", "animal-handling"],
+    "preset": {
+      "attrs": { "str": 10, "dex": 14, "int": 8, "per": 12, "wil": 8, "cha": 8 },
+      "skills": ["ranged", "survival"],
+      "gear": { "weapon": "longbow", "armor": "leather" }
+    },
+    "abilities": ["荒野行者：擔任尋路者時，隊伍的導航檢定 +1。"]
+  },
+  {
+    "id": "rogue",
+    "name": "盜賊",
+    "hpPerLevel": 3,
+    "mainAttrs": ["dex", "int"],
+    "skillChoices": ["stealth", "thievery", "perception", "insight", "influence", "craft"],
+    "sneak": 4,
+    "preset": {
+      "attrs": { "str": 8, "dex": 14, "int": 10, "per": 12, "wil": 8, "cha": 8 },
+      "skills": ["stealth", "perception"],
+      "gear": { "weapon": "shortsword", "armor": "leather" }
+    },
+    "abilities": ["背襲：敵人沒察覺時，命中額外傷害 +4。", "致命背襲（20 級）：背襲額外傷害 +6。"]
+  },
+  {
+    "id": "mage",
+    "name": "法師",
+    "hpPerLevel": 2,
+    "mainAttrs": ["int", "per"],
+    "skillChoices": ["arcana", "lore", "craft", "perception", "medicine"],
+    "preset": {
+      "attrs": { "str": 8, "dex": 10, "int": 14, "per": 12, "wil": 8, "cha": 8 },
+      "skills": ["arcana", "lore"],
+      "gear": { "weapon": "staff", "armor": "cloth" }
+    },
+    "abilities": ["奧術施法：法術這一版還沒做，只能拿法杖近戰。"]
+  },
+  {
+    "id": "priest",
+    "name": "牧師",
+    "hpPerLevel": 3,
+    "mainAttrs": ["wil", "cha"],
+    "skillChoices": ["religion", "medicine", "insight", "influence", "lore"],
+    "preset": {
+      "attrs": { "str": 10, "dex": 8, "int": 8, "per": 10, "wil": 14, "cha": 10 },
+      "skills": ["religion", "medicine"],
+      "gear": { "weapon": "staff", "armor": "leather" }
+    },
+    "abilities": ["神聖施法：祈禱這一版還沒做，只能拿法杖近戰。", "神聖防護（5 級）：自己的防禦值 +2。"]
+  }
+]

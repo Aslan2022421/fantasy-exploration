@@ -1,10 +1,11 @@
-// 大視窗（H 紀錄、B 背包、M 地圖、Esc 選單）：同一時間只開一個，按自己的鍵或 Esc 關掉；
+// 大視窗（H 紀錄、B 背包、C 角色、M 地圖、Esc 選單）：同一時間只開一個，按自己的鍵或 Esc 關掉；
 // 文字視窗用方向鍵、PageUp／PageDown、滾輪捲動。紀錄打開時捲到最新，其他從頭看。
 // 地圖自己畫（custom）；選單的數字鍵執行選項（actions）
 
 const WINDOWS = {
   KeyH: { name: 'history', title: '紀錄（H 或 Esc 關閉，滾輪或方向鍵捲動）', fromEnd: true },
   KeyB: { name: 'bag', title: '背包（B 或 Esc 關閉）' },
+  KeyC: { name: 'sheet', title: '角色（C 或 Esc 關閉）' },
   KeyM: { name: 'map', title: '世界地圖（M 或 Esc 關閉）', custom: true },
   Escape: { name: 'menu', title: '選單（Esc 關閉）', actions: { Digit1: 'export', Numpad1: 'export' } },
 };

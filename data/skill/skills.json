@@ -1,0 +1,19 @@
+[
+  { "id": "athletics", "name": "運動", "attrs": ["str", "dex"] },
+  { "id": "melee", "name": "武器戰鬥", "attrs": ["str", "dex"] },
+  { "id": "ranged", "name": "遠程武器", "attrs": ["dex"] },
+  { "id": "stealth", "name": "潛行", "attrs": ["dex"] },
+  { "id": "thievery", "name": "盜竊", "attrs": ["dex", "int"] },
+  { "id": "survival", "name": "生存", "attrs": ["per", "wil"] },
+  { "id": "tracking", "name": "追蹤", "attrs": ["per", "int"] },
+  { "id": "navigation", "name": "導航", "attrs": ["per", "int"] },
+  { "id": "perception", "name": "察覺", "attrs": ["per"] },
+  { "id": "lore", "name": "學識", "attrs": ["int"] },
+  { "id": "arcana", "name": "奧術", "attrs": ["int", "per"] },
+  { "id": "medicine", "name": "醫療", "attrs": ["per", "int"] },
+  { "id": "craft", "name": "工藝", "attrs": ["int", "dex"] },
+  { "id": "influence", "name": "交涉", "attrs": ["cha"] },
+  { "id": "insight", "name": "洞察", "attrs": ["per", "wil"] },
+  { "id": "animal-handling", "name": "動物應對", "attrs": ["per", "cha"] },
+  { "id": "religion", "name": "信仰", "attrs": ["int", "wil"] }
+]

@@ -1,6 +1,7 @@
-// 把紀錄寫成給玩家看的一行字。連續、同方向、同起因的移動併成一行
+// 把紀錄寫成給玩家看的一行字。連續、同方向、同起因的移動併成一行；戰鬥的在 describe-fight.js
 
 import { DATA } from '../data/load.js';
+import { describeFight } from './describe-fight.js';
 
 const UNITS = { mineral: '塊', wood: '段', plant: '株', animal: '份' };
 
@@ -35,10 +36,10 @@ export function describeRecord(rec) {
       return gatherText(d);
     case 'spot':
       return `遠遠看見${speciesName(d.species)}（一群 ${d.count} 隻）。`;
-    case 'refuse':
-      return `還不能對${speciesName(d.species)}動手，戰鬥還沒做。`;
-    default:
-      return rec.verb;
+    default: {
+      const text = describeFight(rec);
+      return text === undefined ? rec.verb : text;
+    }
   }
 }
 
@@ -58,7 +59,9 @@ export function logLines(records) {
       run.line.text = `${describeRecord(run.rec)} ${run.count} 步`;
       continue;
     }
-    const line = { time: rec.time, text: describeRecord(rec), verb: rec.verb };
+    const text = describeRecord(rec);
+    if (text === null) continue; // 不寫出來的紀錄（生物移動）
+    const line = { time: rec.time, text, verb: rec.verb };
     lines.push(line);
     run = rec.verb === 'move' ? { rec, count: 1, line } : null;
   }

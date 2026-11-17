@@ -21,5 +21,10 @@ export function loadData() {
     material: readKind('material'),
     worldshape: readKind('worldshape'),
     species: readKind('species'),
+    skill: readKind('skill'),
+    weapon: readKind('weapon'),
+    armor: readKind('armor'),
+    race: readKind('race'),
+    class: readKind('class'),
   });
 }

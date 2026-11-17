@@ -1,0 +1,9 @@
+[
+  { "id": "no-armor", "name": "無護甲", "kind": "armor", "reduction": 0, "penalties": {} },
+  { "id": "cloth", "name": "布甲", "kind": "armor", "reduction": 1, "penalties": {} },
+  { "id": "leather", "name": "皮甲", "kind": "armor", "reduction": 2, "penalties": {} },
+  { "id": "scale", "name": "鱗甲", "kind": "armor", "reduction": 3, "penalties": { "stealth": -1 } },
+  { "id": "chain", "name": "鎖子甲", "kind": "armor", "reduction": 4, "penalties": { "stealth": -2 } },
+  { "id": "plate", "name": "板甲", "kind": "armor", "reduction": 6, "penalties": { "stealth": -2, "athletics": -1 } },
+  { "id": "shield", "name": "盾牌", "kind": "shield", "defense": 1, "reduction": 0, "penalties": {} }
+]

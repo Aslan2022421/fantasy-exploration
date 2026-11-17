@@ -11,25 +11,48 @@ import { createLog, RecordSchema } from '../core/records.js';
 import { createStreams, streamSeed } from '../core/rng.js';
 import { DATA } from '../data/load.js';
 import { withChanges } from './changes.js';
+import { withCreatures } from './creatures.js';
+import { applyFight, createFight } from './fight.js';
 import { applyGather, planGather, sourceAt, touches } from './gather.js';
+import { heroStats, presetHero } from './hero.js';
 import { tryMove } from './move.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
-export const SAVE_FORMAT = 5; // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種
+// 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種；
+// 6：時間改成刻（1 刻＝0.25 秒）、狀態加上冒險者、生命、戰鬥、動過的生物、休息
+export const SAVE_FORMAT = 6;
 export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
+const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻
 const PLAYER = 'player';
 
 const Counts = z.record(z.string(), z.number());
 const StateSchema = z.object({
   player: z.object({ x: z.number(), y: z.number() }),
-  time: z.number(),
+  time: z.number(), // 刻
   bag: Counts, // 背包：材料 → 幾個
   stock: Counts, // 現存數量（算上限用）：採到的都算，之後消耗了才扣
   cells: z.record(z.string(), z.object({}).passthrough()), // 採過的格子（changes.js）
   seen: z.record(z.string(), z.number()), // 見過的物種 → 第一次見到是哪一筆紀錄
+  hero: z.object({}).passthrough().nullable(), // 冒險者的 sheet（hero.js）
+  hp: z.number(),
+  creatures: z.record(z.string(), z.object({}).passthrough()), // 動過的生物（creatures.js）
+  combat: z.object({}).passthrough().nullable(), // 戰鬥中（fight.js）
+  restDay: z.number(), // 哪一天休息過
 });
-const emptyState = () => ({ player: { x: 0, y: 0 }, time: 0, bag: {}, stock: {}, cells: {}, seen: {} });
+const emptyState = () => ({
+  player: { x: 0, y: 0 },
+  time: 0,
+  bag: {},
+  stock: {},
+  cells: {},
+  seen: {},
+  hero: null,
+  hp: 0,
+  creatures: {},
+  combat: null,
+  restDay: -1,
+});
 export const SaveSchema = z.object({
   format: z.literal(SAVE_FORMAT),
   world: z.literal(WORLD_VERSION),
@@ -44,15 +67,17 @@ export const SaveSchema = z.object({
 export function apply(state, rec) {
   switch (rec.verb) {
     case 'start':
-      return { ...state, player: { ...rec.data.at }, time: rec.time };
-    case 'move':
-      return { ...state, player: { ...rec.data.to }, time: rec.time + rec.data.duration };
+      return { ...state, player: { ...rec.data.at }, time: rec.time, hero: rec.data.hero, hp: rec.data.hp };
+    case 'move': {
+      const moved = { ...state, player: { ...rec.data.to }, time: rec.time + rec.data.duration };
+      return state.combat ? { ...moved, combat: { ...state.combat, moved: state.combat.moved + 1 } } : moved;
+    }
     case 'gather':
       return { ...applyGather(state, rec.data), time: rec.time + rec.data.duration };
     case 'spot':
       return { ...state, seen: { ...state.seen, [rec.data.species]: rec.id } };
     default:
-      return state;
+      return applyFight(state, rec) ?? state;
   }
 }
 
@@ -66,7 +91,11 @@ function build(seed) {
 function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   let state = initialState;
   let lastCheckpoint = checkpoint;
-  const world = withChanges(baseWorld, DATA, () => state.cells);
+  const world = withCreatures(
+    withChanges(baseWorld, DATA, () => state.cells),
+    DATA,
+    () => state.creatures,
+  );
 
   function record(entry) {
     const rec = log.append({ time: state.time, actor: PLAYER, ...entry });
@@ -77,6 +106,16 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     return rec;
   }
 
+  // 每一筆的骰子用「主種子＋這筆紀錄的編號」開，讀檔從檢查點接著做也一樣
+  const fight = createFight({
+    world,
+    data: DATA,
+    state: () => state,
+    record,
+    dice: (tag) => RNG.clone().setSeed(streamSeed(seed, `${tag}:${log.size}`)),
+    startAt: log.get(0).data.at,
+  });
+
   return {
     seed,
     world,
@@ -85,12 +124,20 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     get state() {
       return state;
     },
-    // 移動一步；擋住回傳 null，不記錄
+    get hero() {
+      return heroStats(DATA, state.hero);
+    },
+    fight,
+    // 移動一步；擋住（或戰鬥中這回合走完了）回傳 null，不記錄。
+    // 平常走一格花的時間看身高；戰鬥中移動不花時間，回合結束才算 1 回合
     move(dir, cause = null) {
       const from = state.player;
+      const h = heroStats(DATA, state.hero);
+      if (state.combat && state.combat.moved >= h.speed) return null;
       const to = tryMove(world, from, dir);
       if (to.x === from.x && to.y === from.y) return null;
-      const rec = record({ verb: 'move', data: { from, to, dir, duration: 1 }, cause });
+      const duration = state.combat ? 0 : h.stepTicks;
+      const rec = record({ verb: 'move', data: { from, to, dir, duration }, cause });
       // 走到離一群生物 SIGHT_RANGE 格內，第一次見到這個物種就記一筆（起因是這一步，不花時間）
       for (const { herd, near } of world.herdsNear(to.x, to.y, SIGHT_RANGE)) {
         const id = DATA.species[herd.species].id;
@@ -102,12 +149,18 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
           cause: rec.id,
         });
       }
+      fight.afterMove(rec.id);
       return rec;
     },
-    // 對生物動手：戰鬥還沒做，記一筆被擋回來（不改狀態）
-    refuse(at, species, cause = null) {
-      return record({ verb: 'refuse', target: at, data: { species }, cause });
+    // 做不到的事記一筆（不改狀態）：reason 是 range、attacked、moves、combat、today、gone
+    refuse(reason, target = null, cause = null) {
+      return record({ verb: 'refuse', target, data: { reason }, cause });
     },
+    // 攻擊一隻生物（不在戰鬥中就先開戰）；打不到回傳 { refused }
+    attack: (id, cause = null) => fight.attack(id, cause),
+    // 戰鬥中結束這一回合，生物接著動
+    endTurn: (cause = null) => fight.endTurn(cause),
+    rest: (cause = null) => fight.rest(cause),
     plan(to, steps) {
       return record({ verb: 'plan', target: to, data: { steps } });
     },
@@ -124,12 +177,13 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     gather(at, cause = null) {
       const src = sourceAt(world, DATA, at.x, at.y);
       const p = state.player;
-      if (!src || !touches(src, p)) return null;
+      if (state.combat || !src || !touches(src, p)) return null;
       const dice = RNG.clone().setSeed(streamSeed(seed, `gather:${log.size}`));
+      const data = planGather(world, DATA, state, src, dice);
       return record({
         verb: 'gather',
         target: { x: src.x, y: src.y },
-        data: planGather(world, DATA, state, src, dice),
+        data: { ...data, duration: data.duration * GATHER_TICKS },
         cause,
       });
     },
@@ -139,10 +193,14 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   };
 }
 
-export function newGame(seed) {
+// options：{ race, cls } 換預設角色（測試用，建角畫面在 v0.1.2）
+export function newGame(seed, options = {}) {
   const { rng, world } = build(seed);
   const log = createLog();
-  const rec = log.append({ time: 0, actor: PLAYER, verb: 'start', data: { at: startPosition(world) } });
+  const hero = presetHero(DATA, options, RNG.clone().setSeed(streamSeed(seed, 'hero')));
+  const hp = heroStats(DATA, hero).hpMax;
+  const at = startPosition(world);
+  const rec = log.append({ time: 0, actor: PLAYER, verb: 'start', data: { at, hero, hp } });
   return makeGame(seed, rng, world, log, apply(emptyState(), rec), null);
 }
 

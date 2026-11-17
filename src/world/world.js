@@ -96,7 +96,8 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
 
   const orNull = (list, v) => (v === LAYER_NONE ? null : list[v]);
 
-  // 這格上的生物：{ herd, member（那一隻的錨點）, species（data.species 的編號）, cells（那一隻佔的格子）} 或 null。
+  // 這格上的生物：{ id（群 id＃第幾隻）, herd, member（那一隻的錨點）, species（data.species 的編號）, cells（那一隻佔的格子）}
+  // 或 null。這是種子生出來的原樣；戰鬥後的位置、生命、倒下由 creatures.js 疊上去。
   // 每區第一次問時把整區的生物攤成格子對照表
   function creatureAt(x, y) {
     const i = locate(x, y);
@@ -104,11 +105,12 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     if (!last.creatures) {
       last.creatures = new Map();
       for (const herd of last.herds)
-        for (const member of herd.members) {
+        herd.members.forEach((member, m) => {
           const cells = creatureCells(data.species[herd.species], member);
+          const id = `${herd.id}#${m}`;
           for (const c of cells)
-            last.creatures.set(c.y * zoneSize + c.x, { herd, member, species: herd.species, cells });
-        }
+            last.creatures.set(c.y * zoneSize + c.x, { id, herd, member, species: herd.species, cells });
+        });
     }
     return last.creatures.get(y * zoneSize + x) ?? null;
   }
@@ -132,6 +134,18 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
           if (near) out.push({ herd, species: herd.species, near });
         }
     return out;
+  }
+
+  // 不看生物的走得過去（生物會移動、倒下，由 creatures.js 另外疊）
+  function groundPassable(x, y) {
+    const i = locate(x, y);
+    if (i < 0) return false;
+    const w = last.water[i];
+    if (w !== LAYER_NONE && !data.waters[w].passable) return false;
+    if (!data.surfaces[last.surface[i]].passable) return false;
+    const o = last.object[i];
+    if (!o) return true;
+    return data.objects[o - 1].passable && last.objectPart[i] !== PART_TRUNK;
   }
 
   function cell(x, y) {
@@ -246,18 +260,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const { k, j } = anchorOffset(last.objectAnchor[i]);
       return { x: x - k, y: y - j };
     },
-    // 水文、材質與物件都走得過去才算；樹幹那一格走不過去（樹冠其他格照物件的 passable）
+    // 水文、材質與物件都走得過去才算；樹幹那一格走不過去（樹冠其他格照物件的 passable）；生物那幾格擋路
     isPassable(x, y) {
-      const i = locate(x, y);
-      if (i < 0) return false;
-      const w = last.water[i];
-      if (w !== LAYER_NONE && !data.waters[w].passable) return false;
-      if (!data.surfaces[last.surface[i]].passable) return false;
-      if (creatureAt(x, y)) return false; // 生物那幾格擋路
-      const o = last.object[i];
-      if (!o) return true;
-      return data.objects[o - 1].passable && last.objectPart[i] !== PART_TRUNK;
+      return groundPassable(x, y) && !creatureAt(x, y);
     },
+    groundPassable,
   };
 }
 

@@ -27,6 +27,13 @@ export function withChanges(world, data, getCells) {
   function isPassable(x, y) {
     const ch = changeAt(x, y);
     if (!ch) return world.isPassable(x, y);
+    return groundPassable(x, y);
+  }
+
+  // 不看生物（creatures.js 另外疊）
+  function groundPassable(x, y) {
+    const ch = changeAt(x, y);
+    if (!ch) return world.groundPassable(x, y);
     const c = world.cell(x, y);
     if (!c || (c.water && !c.water.passable) || !data.surfaces[surfaceAt(x, y)].passable) return false;
     if (ch.o < 0) return true;
@@ -40,6 +47,7 @@ export function withChanges(world, data, getCells) {
     objectAt,
     objectPartAt,
     isPassable,
+    groundPassable,
     surfaceAt,
     // 地表換過的格子（礦坑挖空）顏色照新的材質，生態覆蓋也沒了
     groundAt: (x, y) => (changeAt(x, y)?.s != null ? changeAt(x, y).s : world.groundAt(x, y)),

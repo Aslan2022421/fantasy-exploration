@@ -53,26 +53,24 @@ describe('看見生物', () => {
     expect(Object.keys(g.state.seen).length).toBeGreaterThanOrEqual(1);
   });
 
-  test('生物那幾格擋路，走不過去；移動被擋住不記；查看寫出數值塊與本能', () => {
+  test('生物那幾格擋路，走不過去；移動被擋住不記；查看寫出戰鬥數值與本能', () => {
     const g = newGame(SEED);
     const herd = nearestHerd(g);
     const cr = g.world.creatureAt(herd.near.x, herd.near.y);
     for (const c of cr.cells) expect(g.world.isPassable(c.x, c.y)).toBe(false);
     const text = describePlace(g.world, cr.member.x, cr.member.y);
     const sp = DATA.species[cr.species];
-    expect(text.startsWith(`${sp.name}（一群 ${cr.herd.members.length} 隻，d`)).toBe(true);
+    expect(text.startsWith(`${sp.name}（一群 ${cr.herd.members.length} 隻，生命 `)).toBe(true);
     expect(text).toContain(`本能：${sp.instinct}`);
   });
 
-  test('戰鬥還沒做：對生物動手記一筆 refuse，不改狀態', () => {
+  test('做不到的事記一筆 refuse，不改狀態', () => {
     const g = newGame(SEED);
     const before = structuredClone(g.state);
-    const herd = nearestHerd(g);
-    const cr = g.world.creatureAt(herd.near.x, herd.near.y);
-    const rec = g.refuse(cr.member, DATA.species[cr.species].id);
+    const rec = g.refuse('range');
     expect(rec.verb).toBe('refuse');
     expect(g.state).toEqual(before);
-    expect(describeRecord(rec)).toContain('還不能對');
+    expect(describeRecord(rec)).toContain('搆不到');
   });
 
   test('視野的距離是 10 格', () => {

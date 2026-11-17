@@ -117,7 +117,7 @@ describe('在世界裡採', () => {
     for (const c of canopy) expect(g.world.objectAt(c.x, c.y)).toBe(-1);
     const wood = species.gather.yields[0].weights;
     expect(Object.keys(g.state.bag)).toEqual(Object.keys(wood));
-    expect(g.state.time).toBe(rec.time + 6);
+    expect(g.state.time).toBe(rec.time + 6 * 4); // 採集資料的時間單位是 4 刻
   });
 
   test('挖礦坑：貼著九格任一格都能挖，每層挖 per 次矮一層，最後一層挖完九格的地表都變成能走的碎石地', () => {

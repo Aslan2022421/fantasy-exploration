@@ -1,0 +1,61 @@
+[
+  {
+    "id": "dagger",
+    "name": "匕首",
+    "category": "blade",
+    "damage": -2,
+    "type": "pierce",
+    "finesse": true,
+    "traits": ["輕型", "易隱藏", "靈巧"]
+  },
+  {
+    "id": "shortsword",
+    "name": "短劍",
+    "category": "blade",
+    "damage": -1,
+    "type": "pierce",
+    "finesse": true,
+    "traits": ["靈巧", "易攜帶"]
+  },
+  { "id": "longsword", "name": "長劍", "category": "blade", "damage": 0, "type": "slash", "traits": ["通用武器"] },
+  { "id": "spear", "name": "長槍", "category": "polearm", "damage": 0, "type": "pierce", "traits": ["長柄"] },
+  {
+    "id": "battleaxe",
+    "name": "戰斧",
+    "category": "axe",
+    "damage": 1,
+    "type": "slash",
+    "armorBreak": 1,
+    "traits": ["破甲"]
+  },
+  {
+    "id": "greatsword",
+    "name": "巨劍",
+    "category": "blade",
+    "damage": 3,
+    "type": "slash",
+    "twoHanded": true,
+    "traits": ["重型", "雙手"]
+  },
+  {
+    "id": "longbow",
+    "name": "長弓",
+    "category": "bow",
+    "damage": 0,
+    "type": "pierce",
+    "range": 20,
+    "twoHanded": true,
+    "traits": ["遠程"]
+  },
+  {
+    "id": "heavy-crossbow",
+    "name": "重弩",
+    "category": "bow",
+    "damage": 2,
+    "type": "pierce",
+    "range": 20,
+    "twoHanded": true,
+    "traits": ["高穿透", "需要裝填"]
+  },
+  { "id": "staff", "name": "法杖", "category": "staff", "damage": -1, "type": "blunt", "traits": ["施法媒介"] }
+]

@@ -5,8 +5,8 @@ import { DATA } from '../data/load.js';
 import { foeStats, foeText } from './foes.js';
 import { CLIMATE_NAMES } from './labels.js';
 
-// 生物：「狼（一群 4 隻，生命 15/15，攻擊 +3，防禦 10，護甲 1，傷害 1d12−2）。本能：⋯⋯；招式：⋯⋯」。
-// 數值塊照當地的環境加答案（寒帶、山地、靠水）；第一句是懸停提示框用的
+// 生物：「狼（一群 4 隻，生命 15/15）。攻擊 +3，防禦 10，⋯⋯。本能：⋯⋯；招式：⋯⋯」。
+// 數值塊照當地的環境加答案（寒帶、山地、靠水）；第一句是懸停提示框用的，只放一眼看得懂的，其餘留給右鍵查看
 const ADAPTATION_NAMES = {
   climb: '善攀',
   swim: '會游',
@@ -22,8 +22,9 @@ export function creatureText({ herd, species, hp }) {
     .adaptations.map((a) => ADAPTATION_NAMES[a])
     .join('、');
   const stats = foeStats(sp, herd.env);
-  const head = `${sp.name}（一群 ${herd.members.length} 隻，${foeText(stats, hp ?? stats.hp)}）`;
-  return `${head}。本能：${sp.instinct}；招式：${sp.moves.join('；')}${adapt ? `；特質：${adapt}` : ''}`;
+  const head = `${sp.name}（一群 ${herd.members.length} 隻，生命 ${hp ?? stats.hp}/${stats.hp}）`;
+  const tail = `本能：${sp.instinct}；招式：${sp.moves.join('；')}${adapt ? `；特質：${adapt}` : ''}`;
+  return `${head}。${foeText(stats)}。${tail}`;
 }
 
 // 地面叫什麼：有水寫水文（結冰的淺水寫冰），不然寫材質

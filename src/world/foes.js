@@ -24,8 +24,8 @@ export function foeStats(sp, env = {}) {
 
 const signed = (n) => (n < 0 ? `-${-n}` : `+${n}`);
 
-// 懸停與查看用：「生命 15/15，攻擊 +3，防禦 10，護甲 1，傷害 1d12-2，每個動作 9 刻」
-export function foeText(stats, hp = stats.hp) {
+// 右鍵查看用：「攻擊 +3，防禦 10，護甲 1，傷害 1d12-2，每個動作 9 刻」
+export function foeText(stats) {
   const dmg = stats.damage ? signed(stats.damage) : '';
-  return `生命 ${hp}/${stats.hp}，攻擊 ${signed(stats.attack)}，防禦 ${stats.defense}，護甲 ${stats.armor}，傷害 1d12${dmg}，每個動作 ${stats.ticks} 刻`;
+  return `攻擊 ${signed(stats.attack)}，防禦 ${stats.defense}，護甲 ${stats.armor}，傷害 1d12${dmg}，每個動作 ${stats.ticks} 刻`;
 }

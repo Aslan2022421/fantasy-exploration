@@ -1,5 +1,5 @@
 // 物種的數值塊：把建怪問答的答案換算成傷害、生命、護甲這幾個數字。
-// 數字取自 Dungeon World 的「Making Monsters」（CC BY 3.0），戰鬥怎麼用這些數字等階段 5 再定。
+// 數字取自 Dungeon World 的「Making Monsters」（CC BY 3.0）。
 // 純函式，Node 裡可測
 
 const DICE = [4, 6, 8, 10, 12];

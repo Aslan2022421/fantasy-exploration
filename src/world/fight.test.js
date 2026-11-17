@@ -17,6 +17,17 @@ function nearestCreature(game) {
   return null;
 }
 
+// 一步一步走到 id 旁邊（生物會遊蕩，每一步都照牠現在的位置重找路）；被撲上來開戰就停
+function approach(game, id, steps = 120) {
+  for (let i = 0; i < steps && !game.state.combat; i++) {
+    const cur = game.world.creatureById(id);
+    if (!cur || distanceTo(cur.cells, game.state.player) <= 1) return cur;
+    const step = (findPathNextTo(game.world, game.state.player, cur) ?? [])[0];
+    if (!step || !game.move(stepDirection(game.state.player, step))) return null;
+  }
+  return game.world.creatureById(id);
+}
+
 // 一個動作一個動作打：貼著就攻擊，不然往目標走一格；直到戰鬥結束
 function fightUntilDone(game, firstId, actions = 400) {
   let id = firstId;
@@ -65,7 +76,7 @@ describe('戰鬥', () => {
   test('照時間輪流：冒險者攻擊花一個動作的刻數，之後每隻生物的下一個動作都排在現在以後；生物一次只走一格', () => {
     const g = newGame(SEED);
     const cr = nearestCreature(g);
-    for (const s of findPathNextTo(g.world, g.state.player, cr)) if (!g.move(stepDirection(g.state.player, s))) break;
+    approach(g, cr.id);
     const target = g.state.combat ? g.fight.liveFoes()[0] : cr.id;
     const t0 = g.state.time;
     const rec = g.attack(target);
@@ -89,10 +100,8 @@ describe('戰鬥', () => {
     let tested = false;
     for (const { herd } of herds) {
       const g = newGame(SEED);
-      const cr = g.world.creatureById(`${herd.id}#0`);
-      for (const s of findPathNextTo(g.world, g.state.player, cr) ?? [])
-        if (!g.move(stepDirection(g.state.player, s))) break;
-      if (g.state.combat || distanceTo(cr.cells, g.state.player) > 1) continue; // 半路被掠食生物撲上來、或走不到
+      const cr = approach(g, `${herd.id}#0`);
+      if (g.state.combat || !cr || distanceTo(cr.cells, g.state.player) > 1) continue; // 半路被掠食生物撲上來、或走不到
       g.attack(cr.id);
       const engage = g.log.all().find((r) => r.verb === 'engage');
       expect(engage.data.foes.map((f) => f.id)).toEqual([cr.id]);

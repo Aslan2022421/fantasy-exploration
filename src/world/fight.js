@@ -11,6 +11,7 @@ import { visibleFrom } from './fov.js';
 import { creatureCells } from './herds.js';
 import { heroStats } from './hero.js';
 import { d12, dayOf, resolveAttack, TICKS_PER_HOUR } from './rules.js';
+import { WANDER } from './wander.js';
 
 export { applyFight } from './fight-apply.js';
 
@@ -154,7 +155,8 @@ export function createFight(env) {
   function joinPredators(cause) {
     const p = st().player;
     let view = null;
-    for (const { herd } of world.herdsNear(p.x, p.y, ENGAGE_RANGE + 4)) {
+    // herdsNear 看的是落腳處，掠食生物最遠遊蕩到 WANDER.predator.radius 格外
+    for (const { herd } of world.herdsNear(p.x, p.y, ENGAGE_RANGE + 4 + WANDER.predator.radius)) {
       if (data.species[herd.species].diet !== 'predator') continue;
       view ??= visibleFrom(world, data, p, ENGAGE_RANGE);
       const ids = watchers(herd, view);

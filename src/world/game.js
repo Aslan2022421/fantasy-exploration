@@ -95,6 +95,7 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     withChanges(baseWorld, DATA, () => state.cells),
     DATA,
     () => shown ?? state.creatures,
+    () => ({ time: state.time, hero: state.player }), // 生物平常照時間遊蕩，不會走到冒險者身上
   );
 
   function record(entry) {

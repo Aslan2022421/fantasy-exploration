@@ -47,11 +47,28 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     if (!now) targetId = null;
   }
 
+  // 平常遊蕩的生物（照時間算位置，不寫紀錄）：動作前後比一比附近誰換了位置，丟掉那些格子的畫面快取
+  const NEAR = 48; // 畫面看得到的範圍（格）
+  function wandered(fn) {
+    const p = player();
+    const before = new Map(world.creaturesNear(p.x, p.y, NEAR).map((c) => [c.id, c.cells]));
+    const r = fn();
+    const q = player();
+    const cells = [];
+    for (const c of world.creaturesNear(q.x, q.y, NEAR)) {
+      const old = before.get(c.id);
+      if (old && old[0].x === c.cells[0].x && old[0].y === c.cells[0].y) continue;
+      cells.push(...(old ?? []), ...c.cells);
+    }
+    if (cells.length) worldView.invalidateCells(cells);
+    return r;
+  }
+
   // 做完之後，有生物移動就逐格播放（播放中不接受輸入）
   function played(fn) {
     const creatures = game.state.creatures;
     const fromId = game.log.size;
-    const r = fn();
+    const r = wandered(fn);
     playback.play(creatures, fromId);
     return r;
   }

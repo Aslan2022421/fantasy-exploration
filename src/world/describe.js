@@ -17,6 +17,10 @@ function gatherText(d) {
 
 const speciesName = (id) => DATA.species[DATA.speciesIndex.get(id)]?.name ?? id;
 
+const ATTR_NAMES = { str: '力量', dex: '敏捷', int: '智力', per: '感知', wil: '意志', cha: '魅力' };
+const itemName = (id) =>
+  DATA.weapons[DATA.weaponIndex.get(id)]?.name ?? DATA.armors[DATA.armorIndex.get(id)]?.name ?? id;
+
 const DIR_NAMES = { n: '北', ne: '東北', e: '東', se: '東南', s: '南', sw: '西南', w: '西', nw: '西北' };
 
 export function describeRecord(rec) {
@@ -36,6 +40,10 @@ export function describeRecord(rec) {
       return gatherText(d);
     case 'spot':
       return `遠遠看見${speciesName(d.species)}（一群 ${d.count} 隻）。`;
+    case 'equip':
+      return `換上了${itemName(d.item)}。`;
+    case 'raise':
+      return `${ATTR_NAMES[d.attr] ?? d.attr}加 1 點，現在 ${d.attrs?.[d.attr]}。`;
     default: {
       const text = describeFight(rec);
       return text === undefined ? rec.verb : text;

@@ -2,7 +2,7 @@ import { RNG } from 'rot-js';
 import { describe, expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { foeStats } from './foes.js';
-import { heroStats, presetHero } from './hero.js';
+import { buildSheet, equip, heroStats, presetHero, raise, skillOptions } from './hero.js';
 import { attrMod, clockOf, dayOf, resolveAttack, TICKS_PER_DAY } from './rules.js';
 
 // 照順序回傳指定點數的假骰子
@@ -35,23 +35,68 @@ describe('判定規則', () => {
 });
 
 describe('冒險者與生物的數字', () => {
-  test('預設的人類戰士：攻擊 +4、格擋 11、傷害 +2、鱗甲減免 3、每個動作 12／9／6 刻', () => {
-    const sheet = presetHero(DATA, {}, RNG.clone().setSeed(1));
+  // 矮人戰士：力量 14＋2＝16（+3）、敏捷 6（−2）；傭兵背景給武器戰鬥、運動；長劍、鱗甲、盾牌
+  const dwarfWarrior = {
+    race: 'dwarf',
+    cls: 'warrior',
+    rolls: { height: 5, physique: 8 }, // 矮人身高 1～9 矮小、體格 6～10 結實
+    bonus: { str: 2 },
+    background: 'mercenary',
+    skills: ['perception', 'influence'],
+    weapon: 'longsword',
+    armor: 'scale',
+    shield: true,
+  };
+
+  test('建角：屬性看種族、職業的 2 點加在主要屬性；背景與職業的技能；身高體格照種族表', () => {
+    const sheet = buildSheet(DATA, dwarfWarrior);
+    expect(sheet.attrs).toEqual({ str: 16, dex: 6, int: 10, per: 8, wil: 13, cha: 9 });
+    expect(sheet.skills).toEqual({ melee: 1, athletics: 1, perception: 1, influence: 1 });
+    expect(sheet).toMatchObject({ height: 0, physique: 2, background: 'mercenary', points: 0, items: [] });
     const h = heroStats(DATA, sheet);
-    expect(sheet).toMatchObject({ race: 'human', cls: 'warrior', level: 1 });
-    expect(sheet.skills).toMatchObject({ melee: 1, athletics: 1, perception: 1 }); // 人類多一項
-    expect(h).toMatchObject({ attack: 4, damage: 2, reduction: 3, parry: 11, dodge: 10 });
-    expect(h.defense(false)).toBe(11);
-    expect(h.defense(true)).toBe(10); // 遠程只能閃避
-    expect(h.ticks).toBe([12, 9, 6][sheet.height]);
-    expect([14, 18, 22, 26]).toContain(h.hpMax);
+    // 攻擊＝力量 +3＋武器戰鬥 1＋武器訓練 1；格擋＝7＋3＋1＋盾 1；閃避＝7−2＋運動 1−0＋盾 1
+    expect(h).toMatchObject({ attack: 5, damage: 3, reduction: 3, parry: 12, dodge: 7, ticks: 12, hpMax: 22 });
+    expect(h.defense(false)).toBe(12);
+    expect(h.defense(true)).toBe(7); // 遠程只能閃避
   });
 
-  test('盜賊用靈巧武器取敏捷，有背襲；遊俠拿長弓是遠程', () => {
-    const rogue = heroStats(DATA, presetHero(DATA, { cls: 'rogue' }, RNG.clone().setSeed(1)));
-    expect(rogue).toMatchObject({ attack: 2, damage: 1, sneak: 4, ranged: false });
-    const ranger = heroStats(DATA, presetHero(DATA, { cls: 'ranger' }, RNG.clone().setSeed(1)));
-    expect(ranger).toMatchObject({ ranged: true, range: 20, attack: 3, damage: 0 });
+  test('人類多才多選一項技能；背景給過的技能不能再選', () => {
+    const { need, options } = skillOptions(DATA, 'warrior', 'mercenary', 'human');
+    expect(need).toBe(3);
+    expect(options).not.toContain('melee');
+    expect(options).not.toContain('athletics');
+    expect(skillOptions(DATA, 'warrior', 'mercenary', 'dwarf').need).toBe(2);
+  });
+
+  test('遊俠長弓與短劍都給：長弓拿在手上、短劍在背包；換上短劍花一個動作、長弓回背包', () => {
+    const sheet = presetHero(DATA, { cls: 'ranger' }, RNG.clone().setSeed(1));
+    expect(sheet.gear.weapon).toBe('longbow');
+    expect(sheet.items).toEqual(['shortsword']);
+    expect(heroStats(DATA, sheet)).toMatchObject({ ranged: true, range: 20 });
+    const swapped = equip(DATA, sheet, 'shortsword');
+    expect(swapped.gear.weapon).toBe('shortsword');
+    expect(swapped.items).toEqual(['longbow']);
+  });
+
+  test('雙手武器佔兩手：換上時盾牌收進背包；拿著雙手武器不能換上盾牌', () => {
+    const sheet = { ...buildSheet(DATA, dwarfWarrior), items: ['longbow'] };
+    const bow = equip(DATA, sheet, 'longbow');
+    expect(bow.gear).toMatchObject({ weapon: 'longbow', shield: null });
+    expect(bow.items).toEqual(['longsword', 'shield']);
+    expect(equip(DATA, bow, 'shield')).toEqual({ refused: 'twohand' });
+  });
+
+  test('升級的屬性點：有點數才能加，最多 20', () => {
+    const sheet = { ...buildSheet(DATA, dwarfWarrior), points: 1 };
+    expect(raise(sheet, 'dex')).toMatchObject({ attrs: { dex: 7 }, points: 0 });
+    expect(raise({ ...sheet, points: 0 }, 'dex')).toEqual({ refused: 'points' });
+    expect(raise({ ...sheet, attrs: { ...sheet.attrs, str: 20 } }, 'str')).toEqual({ refused: 'max' });
+  });
+
+  test('盜賊用靈巧武器取敏捷，有背襲', () => {
+    const rogue = heroStats(DATA, presetHero(DATA, { cls: 'rogue', race: 'elf' }, RNG.clone().setSeed(1)));
+    // 精靈敏捷 14＋1＝15（+2）；短劍 −1
+    expect(rogue).toMatchObject({ damage: 1, sneak: 4, ranged: false });
   });
 
   test('狼換成規則草案的欄位：HP 15、Attack +3、防禦值 10、Damage -2、Armor 1；走一格看自己的速度，攻擊一律 9 刻', () => {

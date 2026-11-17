@@ -1,13 +1,18 @@
-// 大視窗（H 紀錄、B 背包、C 角色、M 地圖、Esc 選單）：同一時間只開一個，按自己的鍵或 Esc 關掉；
+// 大視窗（H 紀錄、B 裝備與背包、C 角色、M 地圖、Esc 選單）：同一時間只開一個，按自己的鍵或 Esc 關掉；
 // 文字視窗用方向鍵、PageUp／PageDown、滾輪捲動。紀錄打開時捲到最新，其他從頭看。
-// 地圖自己畫（custom）；選單的數字鍵執行選項（actions）
+// 自己畫的視窗（custom）：content[name](ctx, screen, body) 畫，content[name + 'Key'](code) 接鍵、
+// content[name + 'Click'](x, y, double) 接滑鼠；選單的數字鍵執行選項（actions）
 
 const WINDOWS = {
   KeyH: { name: 'history', title: '紀錄（H 或 Esc 關閉，滾輪或方向鍵捲動）', fromEnd: true },
-  KeyB: { name: 'bag', title: '背包（B 或 Esc 關閉）' },
-  KeyC: { name: 'sheet', title: '角色（C 或 Esc 關閉）' },
+  KeyB: { name: 'bag', title: '裝備與背包', custom: true },
+  KeyC: { name: 'sheet', title: '角色', custom: true },
   KeyM: { name: 'map', title: '世界地圖（M 或 Esc 關閉）', custom: true },
-  Escape: { name: 'menu', title: '選單（Esc 關閉）', actions: { Digit1: 'export', Numpad1: 'export' } },
+  Escape: {
+    name: 'menu',
+    title: '選單（Esc 關閉）',
+    actions: { Digit1: 'export', Numpad1: 'export', Digit2: 'restart', Numpad2: 'restart' },
+  },
 };
 const SCROLL_KEYS = { ArrowUp: -1, ArrowDown: 1, PageUp: -10, PageDown: 10 };
 
@@ -36,9 +41,14 @@ export function createWindows(panels, content) {
       }
       if (code === 'Escape' || WINDOWS[code] === open) open = null;
       else if (open.actions?.[code]) content[open.actions[code]]();
+      else if (open.custom && content[`${open.name}Key`]?.(code)) return true;
       else if (WINDOWS[code]) show(WINDOWS[code]);
       else if (SCROLL_KEYS[code]) this.scroll(SCROLL_KEYS[code]);
       return true;
+    },
+    // 滑鼠點在開著的視窗上（畫布像素）；double 是點兩下
+    click(x, y, double) {
+      if (open?.custom) content[`${open.name}Click`]?.(x, y, double);
     },
     close() {
       open = null;

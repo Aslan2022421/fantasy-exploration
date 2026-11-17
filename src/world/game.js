@@ -14,14 +14,15 @@ import { withChanges } from './changes.js';
 import { withCreatures } from './creatures.js';
 import { applyFight, createFight } from './fight.js';
 import { applyGather, planGather, sourceAt, touches } from './gather.js';
-import { heroStats, presetHero } from './hero.js';
+import { buildSheet, equip as equipSheet, heroStats, presetHero, raise as raiseSheet } from './hero.js';
 import { tryMove } from './move.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
 // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種；
 // 6：時間改成刻（1 刻＝0.25 秒）、狀態加上冒險者、生命、戰鬥、動過的生物、休息；
-// 7：戰鬥改成照時間一步一步輪流（每個動作的刻數看身高、體型）；8：戰鬥加上逃的、最後看到冒險者的位置
-export const SAVE_FORMAT = 8;
+// 7：戰鬥改成照時間一步一步輪流（每個動作的刻數看身高、體型）；8：戰鬥加上逃的、最後看到冒險者的位置；
+// 9：建角（冒險者加上背景、背包裡的裝備、屬性點）
+export const SAVE_FORMAT = 9;
 export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
 const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻
@@ -75,6 +76,14 @@ export function apply(state, rec) {
       return { ...applyGather(state, rec.data), time: rec.time + rec.data.duration };
     case 'spot':
       return { ...state, seen: { ...state.seen, [rec.data.species]: rec.id } };
+    case 'equip': // 換裝備：紀錄裡寫好換完的裝備欄與背包
+      return {
+        ...state,
+        hero: { ...state.hero, gear: rec.data.gear, items: rec.data.items },
+        time: rec.time + rec.data.duration,
+      };
+    case 'raise':
+      return { ...state, hero: { ...state.hero, attrs: rec.data.attrs, points: rec.data.points } };
     default:
       return applyFight(state, rec) ?? state;
   }
@@ -161,6 +170,25 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     // 攻擊一隻生物（不在戰鬥中就先開戰），生物接著動；打不到回傳 { refused }
     attack: (id, cause = null) => fight.attack(id, cause),
     rest: (cause = null) => fight.rest(cause),
+    // 換上背包裡的一件裝備，花一個動作的刻數（戰鬥中生物接著動）；不能換回傳 { refused }
+    equip(item, cause = null) {
+      const next = equipSheet(DATA, state.hero, item);
+      if (next.refused) return next;
+      const rec = record({
+        verb: 'equip',
+        target: null,
+        data: { item, gear: next.gear, items: next.items, duration: heroStats(DATA, state.hero).ticks },
+        cause,
+      });
+      fight.afterMove(rec.id);
+      return rec;
+    },
+    // 用掉一點升級的屬性點（不花時間）
+    raise(attr) {
+      const next = raiseSheet(state.hero, attr);
+      if (next.refused) return next;
+      return record({ verb: 'raise', data: { attr, attrs: next.attrs, points: next.points } });
+    },
     plan(to, steps) {
       return record({ verb: 'plan', target: to, data: { steps } });
     },
@@ -193,11 +221,13 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   };
 }
 
-// options：{ race, cls } 換預設角色（測試用，建角畫面在 v0.1.2）
+// options：{ choices }（建角畫面選好的，hero.js 的 buildSheet）；或 { race, cls } 用預設選擇（網址捷徑、測試）
 export function newGame(seed, options = {}) {
   const { rng, world } = build(seed);
   const log = createLog();
-  const hero = presetHero(DATA, options, RNG.clone().setSeed(streamSeed(seed, 'hero')));
+  const hero = options.choices
+    ? buildSheet(DATA, options.choices)
+    : presetHero(DATA, options, RNG.clone().setSeed(streamSeed(seed, 'hero')));
   const hp = heroStats(DATA, hero).hpMax;
   const at = startPosition(world);
   const rec = log.append({ time: 0, actor: PLAYER, verb: 'start', data: { at, hero, hp } });

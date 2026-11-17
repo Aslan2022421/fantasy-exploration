@@ -205,6 +205,17 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       stop();
       return fightAct(() => game.rest());
     },
+    // B 頁換上一件裝備（花一個動作；戰鬥中生物接著動）
+    equip(id) {
+      stop();
+      return fightAct(() => game.equip(id));
+    },
+    // C 頁點屬性後面的 +（用掉一點升級的屬性點，不花時間）
+    raise(attr) {
+      const r = game.raise(attr);
+      if (!r.refused) persist();
+      return r;
+    },
     go(cell) {
       examined = null;
       targetId = null;

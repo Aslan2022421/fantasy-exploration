@@ -33,6 +33,36 @@ function frame(ctx, rect, fill, border) {
   }
 }
 
+// 奇幻感的外框：雙線框（兩圈細線），標題嵌在上框線中間，兩端各一個 ☼
+function ornateFrame(ctx, font, rect, title, scale, pad) {
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  const gap = Math.max(2, Math.round(scale * 1.5));
+  ctx.strokeStyle = COLORS.line2;
+  ctx.lineWidth = Math.max(1, Math.floor(scale / 2));
+  for (const d of [0, gap]) ctx.strokeRect(rect.x + d + 0.5, rect.y + d + 0.5, rect.w - d * 2 - 1, rect.h - d * 2 - 1);
+  if (!title) return;
+  const label = `☼ ${title} ☼`;
+  const w = font.measure(label, scale);
+  const x = rect.x + Math.floor((rect.w - w) / 2);
+  const h = 12 * scale;
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(x - pad * 2, rect.y, w + pad * 4, gap + 2);
+  font.drawText(ctx, label, x, rect.y - Math.floor(h / 2) + gap, scale, COLORS.head);
+}
+
+// 分隔線：細線，正中間「• ♦ •」
+function ornateRule(ctx, font, x, y, w, scale, pad) {
+  const mark = '•  ♦  •';
+  const mw = font.measure(mark, scale);
+  const mx = x + Math.floor((w - mw) / 2);
+  const ly = y + Math.floor(6 * scale);
+  ctx.fillStyle = COLORS.line2;
+  ctx.fillRect(x, ly, mx - pad * 2 - x, Math.max(1, Math.floor(scale / 2)));
+  ctx.fillRect(mx + mw + pad * 2, ly, x + w - (mx + mw + pad * 2), Math.max(1, Math.floor(scale / 2)));
+  font.drawText(ctx, mark, mx, y, scale, COLORS.line2);
+}
+
 export function createPanels(font) {
   return {
     status(ctx, s, text) {
@@ -60,15 +90,37 @@ export function createPanels(font) {
       return maxScroll;
     },
 
-    // 大視窗的外框與標題（蓋在地圖上）；回傳內容區 { x, y, w, h }
+    // 大視窗的外框與標題（蓋在地圖上）：雙線框，標題嵌在上框線中間；回傳內容區 { x, y, w, h }
     windowBox(ctx, s, title) {
       const { map, pad, textScale, lineHeight } = s;
-      const box = { x: map.x + pad * 2, y: map.y + pad * 2, w: map.w - pad * 4, h: map.h - pad * 4 };
-      frame(ctx, box, COLORS.bg, COLORS.line2);
-      font.drawText(ctx, title, box.x + pad * 2, box.y + pad, textScale, COLORS.head);
-      const top = box.y + pad * 2 + lineHeight;
-      return { x: box.x + pad * 2, y: top, w: box.w - pad * 4, h: box.y + box.h - pad - top };
+      const box = { x: map.x + pad * 3, y: map.y + pad * 4, w: map.w - pad * 6, h: map.h - pad * 7 };
+      ornateFrame(ctx, font, box, title, textScale, pad);
+      const top = box.y + pad * 3 + Math.floor(lineHeight / 2);
+      return { x: box.x + pad * 4, y: top, w: box.w - pad * 8, h: box.y + box.h - pad * 2 - top };
     },
+
+    // 整張畫布的雙線外框（建角畫面）；回傳內容區
+    screenBox(ctx, s, title) {
+      const { pad, textScale, lineHeight } = s;
+      ctx.fillStyle = COLORS.dark;
+      ctx.fillRect(0, 0, s.width, s.height);
+      const box = { x: pad * 6, y: pad * 6, w: s.width - pad * 12, h: s.height - pad * 12 };
+      ornateFrame(ctx, font, box, title, textScale, pad);
+      const top = box.y + pad * 3 + Math.floor(lineHeight / 2);
+      return { x: box.x + pad * 6, y: top, w: box.w - pad * 12, h: box.y + box.h - pad * 3 - top };
+    },
+
+    // 分隔線（一行高）
+    rule(ctx, s, x, y, w) {
+      ornateRule(ctx, font, x, y, w, s.textScale, s.pad);
+    },
+
+    // 細線框（建角的欄、裝備格）
+    box(ctx, rect, fill = COLORS.bg, border = COLORS.line) {
+      frame(ctx, rect, fill, border);
+    },
+
+    measure: (text, s) => font.measure(text, s.textScale),
 
     // 大視窗（H 紀錄、B 背包、Esc 選單）：內容從上往下排；scroll 是往下捲了幾行。回傳最多能捲幾行
     window(ctx, s, title, entries, scroll) {

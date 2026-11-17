@@ -26,5 +26,6 @@ export function loadData() {
     armor: readKind('armor'),
     race: readKind('race'),
     class: readKind('class'),
+    background: readKind('background'),
   });
 }

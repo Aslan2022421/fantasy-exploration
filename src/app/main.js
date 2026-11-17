@@ -6,29 +6,27 @@ import tilesUrl from '../../assets/tiles/cp437.png';
 import { browserStore, memoryStore } from '../core/store.js';
 import { createTurnLoop } from '../core/turns.js';
 import { DATA } from '../data/load.js';
-import { bagEntries } from '../view/bag.js';
 import { COLORS } from '../view/colors.js';
 import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
 import { cssSize, gridLabel, layout } from '../view/screen.js';
-import { sheetEntries } from '../view/sheet.js';
 import { loadImage } from '../view/tiles.js';
-import { createWorldMap, drawMapWindow } from '../view/worldmap.js';
+import { createWorldMap } from '../view/worldmap.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
 import { describePlace, regionLabel } from '../world/place.js';
 import { clockOf, dayOf } from '../world/rules.js';
 import { createActions } from './actions.js';
+import { runCreation } from './creation.js';
+import { createGameWindows } from './game-windows.js';
 import { createKeyboard } from './input.js';
 import { showLoading } from './loading.js';
 import { bindMapMouse, drawMapLabels } from './mouse.js';
-import { downloadPlaylog } from './playlog.js';
-import { createWindows } from './windows.js';
 import { createZoom } from './zoom.js';
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 const SAVE_KEY = 'world';
 const SEED = 20261112;
 const HELP = [
@@ -36,7 +34,7 @@ const HELP = [
   '滑鼠指著地圖看是什麼；左鍵走過去；右鍵查看並選定目標，再點一下收起；空白鍵沿路線出發，走路中再按停下。',
   'Q 對目標動手：樹是伐木，矮叢、草本是採集，生物是攻擊；沒貼著會先走過去。撞上樹幹或生物會選定它。',
   '每個動作（走一格、攻擊一次）花的時間看身高，生物看體型；你每做一個動作，生物照時間跟著動。R 休息 1 小時（每天一次）。',
-  'C 角色，B 背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄）。＋／－ 放大縮小地圖。',
+  'C 角色，B 裝備與背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄、重新建角）。＋／－ 放大縮小地圖。',
 ];
 
 const params = new URLSearchParams(location.search);
@@ -51,7 +49,16 @@ const mapView = createMapView(image, ctx);
 const panels = createPanels(font);
 
 await showLoading(canvas, ctx, panels, '生成世界中');
-const game = loadGame(store.load(SAVE_KEY, null)) ?? newGame(SEED, heroOptions);
+const game = loadGame(store.load(SAVE_KEY, null)) ?? (await startNewGame());
+
+// 開新遊戲：先建角（網址有 ?class= 或 ?race= 時跳過，用預設選擇），選完才生成世界
+async function startNewGame() {
+  if (params.has('class') || params.has('race')) return newGame(SEED, heroOptions);
+  const choices = await runCreation({ canvas, ctx, panels, data: DATA });
+  await showLoading(canvas, ctx, panels, '生成世界中');
+  return newGame(SEED, { choices });
+}
+
 const turns = createTurnLoop();
 turns.start();
 
@@ -65,29 +72,18 @@ const world = game.world; // 疊上採過的格子的世界
 const worldView = createWorldView(mapView, world, DATA);
 const camera = () => worldView.focus(screen, player());
 const worldMap = createWorldMap(world, DATA);
-let exported = null; // 這次打開選單後匯出的檔名
-const windows = createWindows(panels, {
-  history: entries,
-  bag: () => bagEntries(game.state.bag, DATA),
-  sheet: () => sheetEntries(game.state, DATA),
-  map: (c, s, body) => {
-    const p = player();
-    drawMapWindow(
-      c,
-      s,
-      body,
-      worldMap,
-      panels,
-      p,
-      `你在${regionLabel(world, DATA, p.x, p.y)}｜整個世界 ${world.zonesX}×${world.zonesY} 區，方框是你所在的區`,
-    );
-  },
-  menu: () => [
-    { time: null, text: '1　匯出試玩紀錄（下載成 JSON 檔，交給 Claude 讀）' },
-    ...(exported ? [{ time: null, text: `已匯出：${exported}`, color: COLORS.good }] : []),
-  ],
-  export: () => {
-    exported = downloadPlaylog(game, VERSION);
+const windows = createGameWindows({
+  panels,
+  game,
+  data: DATA,
+  worldMap,
+  actions: () => actions,
+  entries,
+  version: VERSION,
+  // 清掉存檔重新載入：載入時沒有存檔就會進建角
+  restart() {
+    store.remove(SAVE_KEY);
+    location.reload();
   },
 });
 const actions = createActions({
@@ -193,7 +189,7 @@ window.addEventListener('keydown', (e) => {
     render();
     return;
   }
-  if (e.code === 'Escape' && !windows.open) exported = null;
+  if (e.code === 'Escape' && !windows.open) windows.resetMenu();
   if (windows.key(e.code)) {
     e.preventDefault();
     actions.stop();
@@ -236,6 +232,15 @@ window.addEventListener(
   },
   { passive: true },
 );
+
+// 大視窗開著時，滑鼠點的是視窗（B 頁選裝備、C 頁點 +）
+canvas.addEventListener('click', (e) => {
+  if (!windows.open || actions.busy) return;
+  const rect = canvas.getBoundingClientRect();
+  const k = canvas.width / rect.width;
+  windows.click((e.clientX - rect.left) * k, (e.clientY - rect.top) * k, e.detail >= 2);
+  render();
+});
 
 bindMapMouse(mapView.canvas, {
   cellAt: mapCellAt,

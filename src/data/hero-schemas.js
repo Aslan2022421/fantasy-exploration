@@ -35,24 +35,39 @@ export const ArmorSchema = z.object({
 export const RaceSchema = z.object({
   id: Id,
   name: z.string().min(1),
+  icon: z.string().length(1), // 介面上的代表字元
+  attrs: z.record(Attr, z.number().int().min(1).max(20)), // 初始屬性，六項總和 60（使用者定）
   height: z.tuple([Span.nullable(), Span.nullable(), Span.nullable()]),
   physique: z.tuple([Span.nullable(), Span.nullable(), Span.nullable(), Span.nullable()]),
   extraSkill: z.boolean().default(false), // 人類的多才
+  description: z.string().default(''),
   abilities: z.array(z.string()).default([]),
 });
 
 export const ClassSchema = z.object({
   id: Id,
   name: z.string().min(1),
+  icon: z.string().length(1),
   hpPerLevel: z.number().int().positive(),
-  mainAttrs: z.array(Attr),
+  mainAttrs: z.array(Attr).length(2), // 建角時職業的 2 點只能加在這兩項
   skillChoices: z.array(Id).min(2),
   training: Id.optional(), // 戰士的武器訓練：類別
   sneak: z.number().int().positive().optional(), // 盜賊的背襲：額外傷害
-  preset: z.object({
-    attrs: z.record(Attr, z.number().int().min(1).max(20)),
-    skills: z.array(Id),
-    gear: z.object({ weapon: Id, armor: Id, shield: Id.optional() }),
+  // 起始裝備（規則草案第十一章的職業裝備建議）：pick one 是武器擇一，all 是全部都給（第一把拿在手上、其餘放背包）；
+  // armors 擇一；shield 是可以選帶盾牌
+  kit: z.object({
+    weapons: z.array(Id).min(1),
+    pick: z.enum(['one', 'all']),
+    armors: z.array(Id).min(1),
+    shield: z.boolean(),
   }),
   abilities: z.array(z.string()).default([]),
+});
+
+export const BackgroundSchema = z.object({
+  id: Id,
+  name: z.string().min(1),
+  skills: z.array(Id).length(2), // 兩項初學技能
+  feature: z.string().min(1), // 背景特性
+  gear: z.array(z.string()), // 背景裝備或人脈（這一版只是描述，遊戲裡還沒有這些物品）
 });

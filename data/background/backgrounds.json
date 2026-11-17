@@ -1,0 +1,58 @@
+[
+  {
+    "id": "mercenary",
+    "name": "傭兵",
+    "skills": ["melee", "athletics"],
+    "feature": "熟悉軍隊、傭兵及戰場生活",
+    "gear": ["軍用徽記", "武器保養工具"]
+  },
+  {
+    "id": "hunter",
+    "name": "獵人",
+    "skills": ["survival", "tracking"],
+    "feature": "熟悉野生動物及狩獵方式",
+    "gear": ["狩獵工具", "陷阱材料"]
+  },
+  {
+    "id": "scholar",
+    "name": "學者",
+    "skills": ["lore", "arcana"],
+    "feature": "能接觸學術研究及古代資料",
+    "gear": ["筆記", "書籍", "書寫工具"]
+  },
+  {
+    "id": "artisan",
+    "name": "工匠",
+    "skills": ["craft", "lore"],
+    "feature": "熟悉材料、工具及製作流程",
+    "gear": ["專業工具"]
+  },
+  {
+    "id": "acolyte",
+    "name": "信徒",
+    "skills": ["religion", "medicine"],
+    "feature": "熟悉宗教儀式與神殿組織",
+    "gear": ["聖徽", "祈禱用品"]
+  },
+  {
+    "id": "merchant",
+    "name": "商人",
+    "skills": ["influence", "insight"],
+    "feature": "熟悉交易、價格及商業人脈",
+    "gear": ["帳本", "秤具", "交易憑證"]
+  },
+  {
+    "id": "wanderer",
+    "name": "流浪者",
+    "skills": ["navigation", "survival"],
+    "feature": "熟悉旅行、野營與地方習俗",
+    "gear": ["旅行工具", "地圖"]
+  },
+  {
+    "id": "criminal",
+    "name": "罪犯",
+    "skills": ["stealth", "thievery"],
+    "feature": "熟悉黑市、地下組織及犯罪活動",
+    "gear": ["盜賊工具", "黑市聯絡方式"]
+  }
+]

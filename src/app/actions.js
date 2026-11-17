@@ -4,7 +4,7 @@
 // - 撞上能採的來源（樹幹）或生物不動手，只選定成目標
 // - Q：沒貼著目標先走到旁邊再動手（遠程武器在射程內直接射）；沒選目標時採腳下那處（矮叢、草本）；
 //   採完還能採就留著當目標
-// - 戰鬥中走路受這一回合剩下的格數限制；生物開始撲上來時自動走路停下
+// - 戰鬥中走路受這一回合剩下的格數限制；攻擊完自動結束這一回合；生物開始撲上來時自動走路停下
 
 import { DATA } from '../data/load.js';
 import { distanceTo } from '../world/chase.js';
@@ -126,11 +126,22 @@ export function createActions({ game, turns, worldView, describe, persist, redra
   const inRange = (cr) => distanceTo(cr.cells, player()) <= game.hero.range;
   const outOfMoves = () => game.state.combat && game.state.combat.moved >= game.hero.speed;
 
-  // 攻擊一隻生物；牠還活著就繼續當目標
+  // 攻擊一隻生物；這一下擲完就結束這一回合，生物接著動。牠還活著就繼續當目標
   function attackAt(cr, cause = null) {
     targetId = cr.id;
-    fightAct(() => game.attack(cr.id, cause), { x: cr.x, y: cr.y }, cause);
+    const r = fightAct(() => game.attack(cr.id, cause), { x: cr.x, y: cr.y }, cause);
+    if (r?.verb === 'attack' && game.state.combat) endTurnNow();
     followTarget();
+  }
+
+  // 結束回合不花排程上的時間（回合的時間在紀錄裡算），所以不等排程輪到，攻擊完可以馬上接著做
+  function endTurnNow() {
+    const before = game.log.size;
+    if (!game.endTurn()) return null;
+    refresh(before);
+    if (targetId) followTarget();
+    persist();
+    return { verb: 'endturn' };
   }
 
   function look(cell) {
@@ -167,10 +178,10 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       const src = rec ? null : (game.sourceAt(to) ?? creatureSrc(to));
       if (src && !same(examined, src)) look(to);
     },
-    // 空白鍵在戰鬥中：結束這一回合，生物接著動
+    // 空白鍵在戰鬥中：不攻擊、直接結束這一回合（例如只移動），生物接著動
     endTurn() {
       stop();
-      return fightAct(() => (game.endTurn() ? { verb: 'endturn', data: { duration: 0 } } : null));
+      return endTurnNow();
     },
     rest() {
       stop();

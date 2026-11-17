@@ -34,3 +34,42 @@ test('選定礦坑後的路線：貼著佔的任一格就是到了，不標步�
   actions.look(anchor);
   expect(actions.shownPath()).toEqual({ steps: [], reachable: true });
 }, 30000);
+
+test('戰鬥中按 Q 攻擊完自動結束這一回合，不用再按空白鍵（排程還沒輪回來也一樣）', () => {
+  const game = newGame(20261112);
+  const p = game.state.player;
+  let near = null;
+  for (let r = 20; r <= 200 && !near; r += 20)
+    near = game.world.herdsNear(p.x, p.y, r).sort((a, b) => a.near.d - b.near.d)[0] ?? null;
+  const cr = game.world.creatureAt(near.near.x, near.near.y);
+  for (const step of findPathNextTo(game.world, game.state.player, cr)) {
+    if (!game.move(stepDirection(game.state.player, step))) break;
+  }
+  // 交回排程之後要等下一拍才又輪到冒險者
+  const turns = {
+    playersTurn: true,
+    endTurn() {
+      this.playersTurn = false;
+    },
+  };
+  const actions = createActions({
+    game,
+    turns,
+    worldView: { invalidateCells() {} },
+    describe: () => '',
+    persist() {},
+    redraw() {},
+  });
+  const target = game.world.creatureById(cr.id);
+  actions.look({ x: target.member.x, y: target.member.y });
+  actions.actOnTarget();
+  const verbs = game.log.all().map((r) => r.verb);
+  const at = verbs.lastIndexOf('attack');
+  expect(at).toBeGreaterThan(0);
+  // 冒險者那一下之後，生物接著動，或戰鬥已經結束／進到下一回合
+  const after = game.log
+    .all()
+    .slice(verbs.indexOf('attack') + 1)
+    .map((r) => r.verb);
+  expect(after.some((v) => ['round', 'victory', 'escape', 'down'].includes(v))).toBe(true);
+}, 30000);

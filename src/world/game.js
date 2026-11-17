@@ -8,7 +8,7 @@
 import { RNG } from 'rot-js';
 import { z } from 'zod';
 import { createLog, RecordSchema } from '../core/records.js';
-import { createStreams, streamSeed } from '../core/rng.js';
+import { createStreams, diceSeed, streamSeed } from '../core/rng.js';
 import { DATA } from '../data/load.js';
 import { withChanges } from './changes.js';
 import { withCreatures } from './creatures.js';
@@ -112,7 +112,7 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     data: DATA,
     state: () => state,
     record,
-    dice: (tag) => RNG.clone().setSeed(streamSeed(seed, `${tag}:${log.size}`)),
+    dice: (tag) => RNG.clone().setSeed(diceSeed(seed, `${tag}:${log.size}`)),
     startAt: log.get(0).data.at,
   });
 
@@ -178,7 +178,7 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
       const src = sourceAt(world, DATA, at.x, at.y);
       const p = state.player;
       if (state.combat || !src || !touches(src, p)) return null;
-      const dice = RNG.clone().setSeed(streamSeed(seed, `gather:${log.size}`));
+      const dice = RNG.clone().setSeed(diceSeed(seed, `gather:${log.size}`));
       const data = planGather(world, DATA, state, src, dice);
       return record({
         verb: 'gather',

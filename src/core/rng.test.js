@@ -1,6 +1,6 @@
 import { RNG } from 'rot-js';
 import { expect, test } from 'vitest';
-import { createStreams, STREAMS } from './rng.js';
+import { createStreams, diceSeed, STREAMS } from './rng.js';
 
 test('同一個主種子，每條亂數的結果都一樣', () => {
   const a = createStreams(42);
@@ -29,6 +29,22 @@ test('檢查點：存下狀態再還原，接下來的數字一樣', () => {
   const t = createStreams(7);
   t.restore(snap);
   expect(t.get('gather').getUniform()).toBe(next);
+});
+
+test('每一筆紀錄的骰子：相鄰編號開出來的第一顆 D12 不會連著一樣（跟上一筆同點約 1/12）', () => {
+  let same = 0;
+  let prev = 0;
+  const count = Array(13).fill(0);
+  for (let n = 0; n < 3000; n++) {
+    const r = RNG.clone()
+      .setSeed(diceSeed(20261112, `strike:${n}`))
+      .getUniformInt(1, 12);
+    count[r]++;
+    if (r === prev) same++;
+    prev = r;
+  }
+  expect(same / 3000).toBeLessThan(0.12);
+  for (let v = 1; v <= 12; v++) expect(count[v]).toBeGreaterThan(180); // 平均 250
 });
 
 test('不動全域亂數', () => {

@@ -12,6 +12,18 @@ export function streamSeed(seed, name) {
   return h;
 }
 
+// 每一筆紀錄的骰子（採集、戰鬥）用的種子：名字只差最後一個數字（gather:41、gather:42），
+// streamSeed 算出來的種子差得不夠開，ROT.js 開出來的第一顆骰會連著好幾次一樣，所以再打散一次（murmur3 的收尾）
+export function diceSeed(seed, name) {
+  let h = streamSeed(seed, name);
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0 || 1;
+}
+
 export function createStreams(seed) {
   const streams = {};
   for (const name of STREAMS) streams[name] = RNG.clone().setSeed(streamSeed(seed, name));

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest';
+import { DATA } from '../data/load.js';
 import { distanceTo } from './chase.js';
 import { describeRecord } from './describe.js';
 import { loadGame, newGame } from './game.js';
@@ -77,6 +78,37 @@ describe('戰鬥', () => {
         Math.max(Math.abs(r.data.to.x - r.data.from.x), Math.abs(r.data.to.y - r.data.from.y)),
       ).toBeLessThanOrEqual(1);
   });
+
+  test('草食的那一群：只有被打的那隻還手，看得到的同伴逃開、越逃越遠', () => {
+    const start = newGame(SEED).state.player;
+    const herds = newGame(SEED)
+      .world.herdsNear(start.x, start.y, 300)
+      .filter((h) => DATA.species[h.herd.species].diet === 'herbivore' && h.herd.members.length > 2)
+      .sort((a, b) => a.near.d - b.near.d)
+      .slice(0, 8);
+    let tested = false;
+    for (const { herd } of herds) {
+      const g = newGame(SEED);
+      const cr = g.world.creatureById(`${herd.id}#0`);
+      for (const s of findPathNextTo(g.world, g.state.player, cr) ?? [])
+        if (!g.move(stepDirection(g.state.player, s))) break;
+      if (g.state.combat || distanceTo(cr.cells, g.state.player) > 1) continue; // 半路被掠食生物撲上來、或走不到
+      g.attack(cr.id);
+      const engage = g.log.all().find((r) => r.verb === 'engage');
+      expect(engage.data.foes.map((f) => f.id)).toEqual([cr.id]);
+      for (const f of engage.data.flee) expect(f.id.startsWith(herd.id)).toBe(true);
+      if (!engage.data.flee.length || !g.state.combat?.flee.length) continue;
+      const id = g.state.combat.flee[0];
+      const before = distanceTo(g.world.creatureById(id).cells, g.state.player);
+      g.attack(cr.id);
+      const now = g.world.creatureById(id);
+      if (!g.state.combat?.flee.includes(id)) continue;
+      expect(distanceTo(now.cells, g.state.player)).toBeGreaterThan(before);
+      tested = true;
+      break;
+    }
+    expect(tested).toBe(true);
+  }, 60000);
 
   test('休息每天一次，戰鬥中不行', () => {
     const g = newGame(SEED);

@@ -1,55 +1,22 @@
-// 戰鬥（規則草案第七章轉成遊戲版，見 design/PLAN.md「戰鬥」）：開戰、一步一步照時間輪流、結束、倒下、休息。
-// 每個動作花幾刻：冒險者走一格、攻擊一次都看身高；生物走一格看自己的速度、攻擊一律 9 刻。冒險者每做完一個動作，時間往前走，
-// 下一個動作時間比現在早的生物就一個一個動（同時到時冒險者先），所以存檔時一定停在冒險者要動的時候。
-// 每一步都先算好結果再寫成紀錄；applyFight 只照紀錄改狀態，重放時不再擲骰。
-// 休息「每天一次」的天照時鐘算（rules.js 的 dayOf，開局是早上 8 點）。
+// 戰鬥（規則草案第七章轉成遊戲版，見 design/PLAN.md「戰鬥」）：開戰、一步一步照時間輪流、逃開與跟丟、結束、倒下、休息。
+// 每個動作花幾刻：冒險者走一格、攻擊一次都看身高；生物走一格看自己的速度、攻擊一律 9 刻。冒險者每做完一個動作，
+// 時間往前走，下一個動作時間比現在早的生物就一個一個動（同時到時冒險者先），所以存檔時一定停在冒險者要動的時候。
+// 視線：看得到這場戰鬥的才有反應。草食的那一群只有被打的那隻還手，其他看得到的逃開；掠食的看得到的都上來打。
+// 打的生物看得到冒險者就往他走，看不到就往最後看到他的地方走，走到了還看不到就跟丟、離開戰鬥。
+// 每一步都先算好結果再寫成紀錄（狀態怎麼改在 fight-apply.js）。休息「每天一次」的天照時鐘算（rules.js 的 dayOf）
 
-import { chaseSteps, distanceTo, touching } from './chase.js';
+import { chaseSteps, distanceTo, fleeStep, touching } from './chase.js';
 import { foeStats } from './foes.js';
 import { visibleFrom } from './fov.js';
 import { creatureCells } from './herds.js';
 import { heroStats } from './hero.js';
 import { d12, dayOf, resolveAttack, TICKS_PER_HOUR } from './rules.js';
 
-export const ENGAGE_RANGE = 10; // 掠食生物在幾格內、看得到就撲上來
-export const ESCAPE_RANGE = 20; // 輪到冒險者時離所有敵人都超過幾格算脫離
-const PLAYER = 'player';
+export { applyFight } from './fight-apply.js';
 
-// 一筆紀錄對狀態的影響（戰鬥相關的動詞）；不是這些動詞回傳 null
-export function applyFight(state, rec) {
-  const d = rec.data;
-  const setCreature = (id, patch) => ({ ...state.creatures, [id]: { ...state.creatures[id], ...patch } });
-  // 生物做完一個動作：牠的下一個動作往後排
-  const later = (id) => ({ ...state.combat, next: { ...state.combat.next, [id]: state.combat.next[id] + d.ticks } });
-  switch (rec.verb) {
-    case 'engage': {
-      const creatures = { ...state.creatures };
-      for (const f of d.foes) creatures[f.id] = creatures[f.id] ?? { x: f.x, y: f.y, hp: f.hp };
-      const next = Object.fromEntries(d.foes.map((f) => [f.id, rec.time]));
-      return { ...state, creatures, combat: { foes: d.foes.map((f) => f.id), next, ambush: d.ambush } };
-    }
-    case 'attack':
-      if (rec.actor === PLAYER)
-        return {
-          ...state,
-          time: state.time + d.duration,
-          creatures: setCreature(rec.target, { hp: d.hp, ...(d.hp <= 0 ? { dead: true } : {}) }),
-          combat: state.combat && { ...state.combat, ambush: false },
-        };
-      return { ...state, hp: d.hp, combat: later(rec.actor) };
-    case 'cmove':
-      return { ...state, creatures: setCreature(rec.actor, { x: d.to.x, y: d.to.y }), combat: later(rec.actor) };
-    case 'victory':
-    case 'escape':
-      return { ...state, combat: null };
-    case 'down':
-      return { ...state, combat: null, player: { ...d.at }, hp: d.hp };
-    case 'rest':
-      return { ...state, hp: d.hp, restDay: d.day, time: state.time + d.duration };
-    default:
-      return null;
-  }
-}
+export const ENGAGE_RANGE = 10; // 看得到這場戰鬥的距離：掠食生物撲上來、同群有反應
+export const ESCAPE_RANGE = 20; // 生物看得到冒險者的距離；打的都離超過這麼遠算脫離，逃的超過就停下
+const PLAYER = 'player';
 
 // env：{ world, data, state()（現在的狀態）, record(entry), dice(tag)（這一筆的骰子）, startAt（起點）}
 export function createFight(env) {
@@ -64,43 +31,86 @@ export function createFight(env) {
     return { ...info, stats, hp: info.hp ?? stats.hp };
   }
   const liveFoes = () => (st().combat?.foes ?? []).filter((id) => world.creatureById(id));
+  const inCombat = (id) => !!st().combat && (st().combat.foes.includes(id) || st().combat.flee.includes(id));
+  const seenIn = (set, cells) => cells.some((c) => set.has(`${c.x},${c.y}`));
+  const entry = (id) => {
+    const f = foe(id);
+    return { id, x: f.member.x, y: f.member.y, hp: f.hp, species: data.species[f.species].id };
+  };
 
-  // 開戰：這些生物加入，下一個動作排在現在（同時到時冒險者先，所以冒險者先動一次）
-  function engage(ids, ambush, cause) {
-    const foes = ids.map((id) => {
-      const f = foe(id);
-      return { id, x: f.member.x, y: f.member.y, hp: f.hp, species: data.species[f.species].id };
-    });
-    return env.record({ verb: 'engage', data: { foes, ambush }, cause });
+  // 一群裡現在看得到冒險者、還沒在戰鬥中的（10 格內）
+  function watchers(herd, view) {
+    const p = st().player;
+    return world
+      .liveMembers(herd)
+      .filter((id) => !inCombat(id) && distanceTo(foe(id).cells, p) <= ENGAGE_RANGE && seenIn(view, foe(id).cells));
   }
 
-  // 冒險者做完一個動作之後：下一個動作時間比現在早的生物照先後一個一個動，直到都排到現在以後；
-  // 然後看冒險者有沒有甩開所有敵人
+  // target 被冒險者打到：草食的只有牠還手、看得到的同伴逃開；掠食的看得到的都加入
+  function provoke(target, ambush, cause) {
+    const f = foe(target);
+    const view = visibleFrom(world, data, st().player, ENGAGE_RANGE);
+    const others = watchers(f.herd, view).filter((id) => id !== target);
+    const herbivore = data.species[f.species].diet === 'herbivore';
+    const fighters = herbivore ? [target] : [target, ...others];
+    const fleeing = herbivore ? others : [];
+    return env.record({
+      verb: 'engage',
+      data: { foes: fighters.map(entry), flee: fleeing.map(entry), ambush, join: !!st().combat },
+      cause,
+    });
+  }
+
+  // 冒險者做完一個動作之後：時間到了的生物一個一個動；再看有沒有掠食生物看到冒險者加入；最後看結束沒
   function advance(cause) {
+    let view = null;
+    const sees = () => {
+      view ??= visibleFrom(world, data, st().player, ESCAPE_RANGE);
+      return view;
+    };
     for (let guard = 0; guard < 200 && st().combat; guard++) {
-      const { next, foes } = st().combat;
-      const due = foes.filter((id) => next[id] < st().time && world.creatureById(id));
+      const { next, foes, flee } = st().combat;
+      const due = [...foes, ...flee].filter((id) => next[id] < st().time && world.creatureById(id));
       if (!due.length) break;
       const id = due.reduce((a, b) => (next[b] < next[a] ? b : a)); // 同時的照加入順序
-      creatureAction(id, cause);
+      if (flee.includes(id)) fleeAction(id, sees(), cause);
+      else fightAction(id, sees(), cause);
     }
-    const c = st().combat;
-    if (!c) return;
+    if (!st().combat) return;
+    joinPredators(cause);
     const p = st().player;
-    if (!liveFoes().some((id) => distanceTo(foe(id).cells, p) <= ESCAPE_RANGE))
+    const live = liveFoes();
+    if (!live.length || !live.some((id) => distanceTo(foe(id).cells, p) <= ESCAPE_RANGE))
       env.record({ verb: 'escape', data: {}, cause });
   }
 
-  // 生物的一個動作：貼著就咬，不然往冒險者走一格
-  function creatureAction(id, cause) {
+  // 打的生物：看得到冒險者就追他、貼著就咬；看不到就往最後看到他的地方走，到了還看不到就跟丟
+  function fightAction(id, view, cause) {
     const f = foe(id);
     const p = st().player;
-    if (touching(f.cells, p)) return creatureAttack(f, cause);
+    const sees = seenIn(view, f.cells);
+    if (sees && touching(f.cells, p)) return creatureAttack(f, cause);
+    const target = sees ? p : st().combat.seen[id];
+    if (!sees && touching(f.cells, target)) return leave(f, 'lost', cause);
     const sp = data.species[f.species];
-    const to = chaseSteps(world, sp, id, f.member, p)[0] ?? f.member; // 走不到就原地等
+    const to = chaseSteps(world, sp, id, f.member, target, p)[0];
+    if (!to && !sees) return leave(f, 'lost', cause);
+    step(f, to ?? f.member, sees ? { ...p } : null, cause);
+  }
+
+  // 逃的生物：離冒險者超過 ESCAPE_RANGE 或看不到他就停下，不然往遠處走一步
+  function fleeAction(id, view, cause) {
+    const f = foe(id);
+    const p = st().player;
+    if (distanceTo(f.cells, p) > ESCAPE_RANGE || !seenIn(view, f.cells)) return leave(f, 'fled', cause);
+    step(f, fleeStep(world, data.species[f.species], id, f.member, p) ?? f.member, null, cause);
+  }
+
+  function step(f, to, seenAt, cause) {
+    const sp = data.species[f.species];
     env.record({
       verb: 'cmove',
-      actor: id,
+      actor: f.id,
       // path：走過的格子（畫面逐格播放用）；cells：起點與終點佔的格子（丟畫面快取用）
       data: {
         from: f.member,
@@ -108,10 +118,15 @@ export function createFight(env) {
         path: [to],
         species: sp.id,
         ticks: f.stats.moveTicks,
+        seenAt,
         cells: [...f.cells, ...creatureCells(sp, to)],
       },
       cause,
     });
+  }
+
+  function leave(f, reason, cause) {
+    env.record({ verb: 'leave', actor: f.id, data: { reason, species: data.species[f.species].id }, cause });
   }
 
   function creatureAttack(f, cause) {
@@ -124,37 +139,46 @@ export function createFight(env) {
     });
     const hp = Math.max(0, st().hp - res.damage);
     const species = data.species[f.species].id;
+    const p = { ...st().player };
     const rec = env.record({
       verb: 'attack',
       actor: f.id,
       target: PLAYER,
-      data: { ...res, hp, species, ticks: f.stats.attackTicks },
+      data: { ...res, hp, species, ticks: f.stats.attackTicks, seenAt: p },
       cause,
     });
-    if (hp <= 0) env.record({ verb: 'down', data: { at: env.startAt, from: st().player, hp: h.hpMax }, cause: rec.id });
+    if (hp <= 0) env.record({ verb: 'down', data: { at: env.startAt, from: p, hp: h.hpMax }, cause: rec.id });
+  }
+
+  // 附近看得到冒險者的掠食生物撲上來（不在戰鬥中時開戰，在戰鬥中時加入）
+  function joinPredators(cause) {
+    const p = st().player;
+    let view = null;
+    for (const { herd } of world.herdsNear(p.x, p.y, ENGAGE_RANGE + 4)) {
+      if (data.species[herd.species].diet !== 'predator') continue;
+      view ??= visibleFrom(world, data, p, ENGAGE_RANGE);
+      const ids = watchers(herd, view);
+      if (!ids.length) continue;
+      env.record({
+        verb: 'engage',
+        data: { foes: ids.map(entry), flee: [], ambush: false, join: !!st().combat },
+        cause,
+      });
+    }
   }
 
   return {
     hero,
     foe,
     liveFoes,
-    // 冒險者走了一步之後：戰鬥中讓生物跟上；不在戰鬥中就看 10 格內有沒有看得到冒險者的掠食生物，整群撲上來
+    // 冒險者走了一步之後：戰鬥中讓生物跟上；不在戰鬥中就看有沒有掠食生物看到他
     afterMove(cause) {
       if (st().combat) return advance(cause);
-      const p = st().player;
-      let seen = null;
-      for (const { herd } of world.herdsNear(p.x, p.y, ENGAGE_RANGE + 4)) {
-        if (data.species[herd.species].diet !== 'predator') continue;
-        const ids = world.liveMembers(herd);
-        const close = ids.filter((id) => distanceTo(foe(id).cells, p) <= ENGAGE_RANGE);
-        if (!close.length) continue;
-        seen ??= visibleFrom(world, data, p, ENGAGE_RANGE);
-        if (close.some((id) => foe(id).cells.some((c) => seen.has(`${c.x},${c.y}`)))) return engage(ids, false, cause);
-      }
+      joinPredators(cause);
       return null;
     },
-    // 冒險者攻擊一隻生物（花一個動作的刻數）。不在戰鬥中就先開戰（伏擊：這一下對方防禦值 −2、盜賊背襲）。
-    // 打不到（太遠、看不到）回傳 { refused }
+    // 冒險者攻擊一隻生物（花一個動作的刻數）。牠還沒在打（不在戰鬥中，或在逃）就先惹上牠；
+    // 不在戰鬥中時是伏擊：這一下對方防禦值 −2、盜賊背襲。打不到（太遠、看不到）回傳 { refused }
     attack(id, cause) {
       const f = foe(id);
       if (!f) return { refused: 'gone' };
@@ -163,9 +187,9 @@ export function createFight(env) {
       const dist = distanceTo(f.cells, p);
       if (h.ranged) {
         const seen = visibleFrom(world, data, p, h.range);
-        if (dist > h.range || !f.cells.some((c) => seen.has(`${c.x},${c.y}`))) return { refused: 'range' };
+        if (dist > h.range || !seenIn(seen, f.cells)) return { refused: 'range' };
       } else if (dist > 1) return { refused: 'range' };
-      if (!st().combat) engage(world.liveMembers(f.herd), true, cause);
+      if (!st().combat?.foes.includes(id)) provoke(id, !st().combat, cause);
       const first = st().combat.ambush;
       const res = resolveAttack(env.dice('strike'), {
         attack: h.attack,

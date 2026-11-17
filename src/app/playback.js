@@ -14,7 +14,8 @@ export function framesFrom(records, before) {
   const frames = [];
   for (const rec of records) {
     const d = rec.data ?? {};
-    if (rec.verb === 'engage') for (const f of d.foes) if (!cur[f.id]) set(f.id, { x: f.x, y: f.y, hp: f.hp });
+    if (rec.verb === 'engage')
+      for (const f of [...d.foes, ...(d.flee ?? [])]) if (!cur[f.id]) set(f.id, { x: f.x, y: f.y, hp: f.hp });
     if (rec.verb === 'cmove') {
       for (const p of d.path ?? [d.to]) {
         set(rec.actor, { x: p.x, y: p.y });

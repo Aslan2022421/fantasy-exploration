@@ -32,7 +32,11 @@ function attackText(rec) {
 function engageText(d) {
   const names = d.foes.map((f) => nameOf(f.species));
   const who = [...new Set(names)].join('、');
-  return d.ambush ? `你趁${who}沒察覺先出手！（一群 ${names.length} 隻）` : `${who}（${names.length} 隻）撲了上來！`;
+  const fled = d.flee?.length ? `其他 ${d.flee.length} 隻${nameOf(d.flee[0].species)}四散逃開。` : '';
+  if (d.ambush) return `你趁${who}沒察覺先出手！${fled}`;
+  if (d.join && d.foes.length === 1 && !d.flee?.length) return `${who}被惹火了，轉頭攻擊你！`;
+  if (d.join) return `又有${who}（${names.length} 隻）加入了！${fled}`;
+  return `${who}（${names.length} 隻）撲了上來！${fled}`;
 }
 
 // 不是戰鬥的動詞回傳 undefined；生物移動不寫（回傳 null）
@@ -45,6 +49,8 @@ export function describeFight(rec) {
       return attackText(rec);
     case 'cmove':
       return null;
+    case 'leave':
+      return d.reason === 'fled' ? `${nameOf(d.species)}逃遠了。` : `${nameOf(d.species)}跟丟了你。`;
     case 'victory':
       return '戰鬥結束，敵人都倒下了。';
     case 'escape':

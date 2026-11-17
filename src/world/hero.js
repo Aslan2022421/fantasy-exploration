@@ -5,8 +5,8 @@ import { attrMod, d12 } from './rules.js';
 
 export const HEIGHTS = ['矮小', '中等', '高大'];
 export const PHYSIQUES = ['瘦小', '普通', '結實', '魁梧'];
-const SPEED = [4, 6, 8]; // 每回合幾格（6、9、12 公尺，1 格＝1.5 公尺）
-const STEP_TICKS = [6, 4, 3]; // 平常走一格幾刻（24 刻÷每回合格數）
+// 每個動作（走一格、攻擊一次）花幾刻，看身高（使用者定）；戰鬥內外都一樣
+export const ACTION_TICKS = [12, 9, 6];
 const START_HP = [14, 18, 22, 26];
 const EXTRA_SKILLS = ['perception', 'athletics', 'survival']; // 人類多才：照順序挑第一個還沒有的
 
@@ -69,8 +69,6 @@ export function heroStats(data, sheet) {
     defense: (vsRanged) => (vsRanged ? dodge : Math.max(dodge, parry)),
     sneak: c.sneak ?? 0,
     hpMax: START_HP[sheet.physique] + c.hpPerLevel * (sheet.level - 1),
-    speed: SPEED[sheet.height],
-    stepTicks: STEP_TICKS[sheet.height],
-    initiative: m.dex,
+    ticks: ACTION_TICKS[sheet.height],
   };
 }

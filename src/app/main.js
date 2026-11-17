@@ -35,7 +35,7 @@ const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '滑鼠指著地圖看是什麼；左鍵走過去；右鍵查看並選定目標，再點一下收起；空白鍵沿路線出發，走路中再按停下。',
   'Q 對目標動手：樹是伐木，矮叢、草本是採集，生物是攻擊；沒貼著會先走過去。撞上樹幹或生物會選定它。',
-  '戰鬥中每回合可以先走到速度上限，再攻擊一次；攻擊完自動換下一回合，只移動不攻擊時按空白鍵結束回合。R 休息 1 小時（每天一次）。',
+  '每個動作（走一格、攻擊一次）花的時間看身高，生物看體型；你每做一個動作，生物照時間跟著動。R 休息 1 小時（每天一次）。',
   'C 角色，B 背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄）。＋／－ 放大縮小地圖。',
 ];
 
@@ -149,8 +149,7 @@ function render() {
   const where = regionLabel(world, DATA, p.x, p.y);
   const s = game.state;
   const h = game.hero;
-  const c = s.combat;
-  const fight = c ? `｜戰鬥 第 ${c.round} 回合，移動剩 ${h.speed - c.moved} 格，Q 攻擊，空白鍵不攻擊結束回合` : '';
+  const fight = s.combat ? '｜戰鬥中' : '';
   panels.status(
     ctx,
     screen,
@@ -208,12 +207,11 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyQ' || e.code === 'Space' || e.code === 'KeyR') {
     e.preventDefault();
-    // 空白鍵：走路中停下；戰鬥中結束回合；選定了目標、畫出路線時出發
+    // 空白鍵：走路中停下；選定了目標、畫出路線時出發
     if (e.code === 'KeyQ') actions.actOnTarget();
     else if (e.code === 'KeyR') {
       if (!e.repeat && !windows.open) actions.rest();
     } else if (actions.walking.length) actions.stop();
-    else if (!windows.open && !e.repeat && game.state.combat) actions.endTurn();
     else if (!windows.open && !e.repeat) actions.startRoute();
     render();
     return;

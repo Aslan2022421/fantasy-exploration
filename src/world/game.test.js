@@ -22,7 +22,7 @@ describe('世界紀錄', () => {
     const g = newGame(SEED);
     const rec = g.move('e') ?? g.move('w');
     expect(rec.verb).toBe('move');
-    expect(g.state.time).toBe(g.hero.stepTicks);
+    expect(g.state.time).toBe(g.hero.ticks);
     expect(g.state.player).toEqual(rec.data.to);
     // 一直往北走，總會撞到東西或走到世界邊緣，之後的移動不記
     const size = g.log.size;

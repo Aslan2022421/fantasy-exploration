@@ -8,8 +8,6 @@ const signed = (n) => (n < 0 ? `-${-n}` : `+${n}`);
 
 const REFUSE = {
   range: '搆不到。近戰要貼著對方，遠程要看得到、在射程內。',
-  attacked: '這一回合已經攻擊過了，按空白鍵結束回合。',
-  moves: '這一回合的移動用完了，按空白鍵結束回合。',
   combat: '戰鬥中不能休息。',
   today: '今天已經休息過了。',
   gone: '對方已經不在了。',
@@ -34,11 +32,7 @@ function attackText(rec) {
 function engageText(d) {
   const names = d.foes.map((f) => nameOf(f.species));
   const who = [...new Set(names)].join('、');
-  const order = d.order
-    .map((id) => `${id === 'player' ? '你' : nameOf(d.foes.find((f) => f.id === id)?.species)} ${d.init[id]}`)
-    .join('、');
-  const head = d.ambush ? `你趁${who}沒察覺先出手！` : `${who}（${names.length} 隻）撲了上來！`;
-  return `${head}先攻：${order}。`;
+  return d.ambush ? `你趁${who}沒察覺先出手！（一群 ${names.length} 隻）` : `${who}（${names.length} 隻）撲了上來！`;
 }
 
 // 不是戰鬥的動詞回傳 undefined；生物移動不寫（回傳 null）
@@ -51,8 +45,6 @@ export function describeFight(rec) {
       return attackText(rec);
     case 'cmove':
       return null;
-    case 'round':
-      return `── 第 ${d.round} 回合 ──`;
     case 'victory':
       return '戰鬥結束，敵人都倒下了。';
     case 'escape':

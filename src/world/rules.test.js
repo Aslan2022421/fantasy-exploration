@@ -35,7 +35,7 @@ describe('判定規則', () => {
 });
 
 describe('冒險者與生物的數字', () => {
-  test('預設的人類戰士：攻擊 +4、格擋 11、傷害 +2、鱗甲減免 3、每回合 4～8 格', () => {
+  test('預設的人類戰士：攻擊 +4、格擋 11、傷害 +2、鱗甲減免 3、每個動作 12／9／6 刻', () => {
     const sheet = presetHero(DATA, {}, RNG.clone().setSeed(1));
     const h = heroStats(DATA, sheet);
     expect(sheet).toMatchObject({ race: 'human', cls: 'warrior', level: 1 });
@@ -43,7 +43,7 @@ describe('冒險者與生物的數字', () => {
     expect(h).toMatchObject({ attack: 4, damage: 2, reduction: 3, parry: 11, dodge: 10 });
     expect(h.defense(false)).toBe(11);
     expect(h.defense(true)).toBe(10); // 遠程只能閃避
-    expect([4, 6, 8]).toContain(h.speed);
+    expect(h.ticks).toBe([12, 9, 6][sheet.height]);
     expect([14, 18, 22, 26]).toContain(h.hpMax);
   });
 
@@ -54,8 +54,10 @@ describe('冒險者與生物的數字', () => {
     expect(ranger).toMatchObject({ ranged: true, range: 20, attack: 3, damage: 0 });
   });
 
-  test('狼換成規則草案的欄位：HP 15、Attack +3、防禦值 10、Damage -2、Armor 1', () => {
+  test('狼換成規則草案的欄位：HP 15、Attack +3、防禦值 10、Damage -2、Armor 1；跟人差不多大，每個動作 9 刻', () => {
     const wolf = DATA.species[DATA.speciesIndex.get('wolf')];
-    expect(foeStats(wolf)).toEqual({ hp: 15, attack: 3, defense: 10, damage: -2, armor: 1, speed: 6 });
+    expect(foeStats(wolf)).toEqual({ hp: 15, attack: 3, defense: 10, damage: -2, armor: 1, ticks: 9 });
+    const elephant = DATA.species[DATA.speciesIndex.get('elephant')];
+    expect(foeStats(elephant).ticks).toBe(6);
   });
 });

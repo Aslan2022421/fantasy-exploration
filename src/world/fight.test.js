@@ -16,18 +16,21 @@ function nearestCreature(game) {
   return null;
 }
 
-// 走到 id 旁邊並攻擊；戰鬥中每回合能走就走、能打就打，然後結束回合，直到戰鬥結束
-function fightUntilDone(game, id, rounds = 80) {
-  for (let i = 0; i < rounds; i++) {
-    const target = game.world.creatureById(id) ?? game.fight.liveFoes().map((f) => game.world.creatureById(f))[0];
+// 一個動作一個動作打：貼著就攻擊，不然往目標走一格；直到戰鬥結束
+function fightUntilDone(game, firstId, actions = 400) {
+  let id = firstId;
+  let started = false;
+  for (let i = 0; i < actions; i++) {
+    const target = game.world.creatureById(id) ?? game.world.creatureById(game.fight.liveFoes()[0] ?? '');
     if (!target) break;
-    const steps = findPathNextTo(game.world, game.state.player, target) ?? [];
-    for (const s of steps) if (!game.move(stepDirection(game.state.player, s))) break;
-    if (distanceTo(target.cells, game.state.player) <= 1) game.attack(target.id);
-    if (!game.state.combat) break;
-    game.endTurn();
-    if (!game.state.combat) break;
     id = target.id;
+    if (distanceTo(target.cells, game.state.player) <= 1) game.attack(id);
+    else {
+      const step = (findPathNextTo(game.world, game.state.player, target) ?? [])[0];
+      if (!step || !game.move(stepDirection(game.state.player, step))) break;
+    }
+    if (game.state.combat) started = true;
+    else if (started) break;
   }
 }
 
@@ -48,7 +51,7 @@ describe('戰鬥', () => {
     expect(describeRecord(hit)).toMatch(/擲 \d+[+-]\d+＝\d+ 對防禦 \d+/);
   });
 
-  test('倒下的生物從地圖上消失、走得過去；存檔再讀檔、從頭重放結果一樣', () => {
+  test('倒下的生物從地圖上消失；存檔再讀檔、從頭重放結果一樣', () => {
     const g = newGame(SEED);
     fightUntilDone(g, nearestCreature(g).id);
     const dead = Object.entries(g.state.creatures).filter(([, c]) => c.dead);
@@ -58,23 +61,21 @@ describe('戰鬥', () => {
     expect(loadGame(saved, { fromCheckpoint: false })?.state).toEqual(g.state);
   });
 
-  test('戰鬥中每回合只能攻擊一次、移動到速度上限；結束回合後重算', () => {
+  test('照時間輪流：冒險者攻擊花一個動作的刻數，之後每隻生物的下一個動作都排在現在以後；生物一次只走一格', () => {
     const g = newGame(SEED);
     const cr = nearestCreature(g);
-    const steps = findPathNextTo(g.world, g.state.player, cr);
-    for (const s of steps) if (!g.move(stepDirection(g.state.player, s))) break;
-    if (!g.state.combat) g.attack(cr.id);
-    expect(g.state.combat).not.toBeNull();
-    const target = g.fight.liveFoes()[0];
-    const close = distanceTo(g.world.creatureById(target).cells, g.state.player) <= 1;
-    if (close) {
-      if (!g.state.combat.attacked) g.attack(target);
-      expect(g.attack(target)).toEqual({ refused: 'attacked' });
-    }
-    if (!g.state.combat) return;
-    const round = g.state.combat.round;
-    g.endTurn();
-    if (g.state.combat) expect(g.state.combat).toMatchObject({ round: round + 1, moved: 0, attacked: false });
+    for (const s of findPathNextTo(g.world, g.state.player, cr)) if (!g.move(stepDirection(g.state.player, s))) break;
+    const target = g.state.combat ? g.fight.liveFoes()[0] : cr.id;
+    const t0 = g.state.time;
+    const rec = g.attack(target);
+    if (rec.refused) return; // 生物撲上來時沒貼著
+    expect(g.state.time).toBe(t0 + g.hero.ticks);
+    if (g.state.combat)
+      for (const id of g.fight.liveFoes()) expect(g.state.combat.next[id]).toBeGreaterThanOrEqual(g.state.time);
+    for (const r of g.log.all().filter((x) => x.verb === 'cmove'))
+      expect(
+        Math.max(Math.abs(r.data.to.x - r.data.from.x), Math.abs(r.data.to.y - r.data.from.y)),
+      ).toBeLessThanOrEqual(1);
   });
 
   test('休息每天一次，戰鬥中不行', () => {

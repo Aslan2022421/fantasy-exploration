@@ -19,8 +19,9 @@ import { tryMove } from './move.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
 // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種；
-// 6：時間改成刻（1 刻＝0.25 秒）、狀態加上冒險者、生命、戰鬥、動過的生物、休息
-export const SAVE_FORMAT = 6;
+// 6：時間改成刻（1 刻＝0.25 秒）、狀態加上冒險者、生命、戰鬥、動過的生物、休息；
+// 7：戰鬥改成照時間一步一步輪流（每個動作的刻數看身高、體型）
+export const SAVE_FORMAT = 7;
 export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
 const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻
@@ -68,10 +69,8 @@ export function apply(state, rec) {
   switch (rec.verb) {
     case 'start':
       return { ...state, player: { ...rec.data.at }, time: rec.time, hero: rec.data.hero, hp: rec.data.hp };
-    case 'move': {
-      const moved = { ...state, player: { ...rec.data.to }, time: rec.time + rec.data.duration };
-      return state.combat ? { ...moved, combat: { ...state.combat, moved: state.combat.moved + 1 } } : moved;
-    }
+    case 'move':
+      return { ...state, player: { ...rec.data.to }, time: rec.time + rec.data.duration };
     case 'gather':
       return { ...applyGather(state, rec.data), time: rec.time + rec.data.duration };
     case 'spot':
@@ -133,15 +132,12 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
       shown = creatures;
     },
     fight,
-    // 移動一步；擋住（或戰鬥中這回合走完了）回傳 null，不記錄。
-    // 平常走一格花的時間看身高；戰鬥中移動不花時間，回合結束才算 1 回合
+    // 移動一步；擋住回傳 null，不記錄。走一格花的刻數看身高，戰鬥內外一樣；戰鬥中走完生物接著動
     move(dir, cause = null) {
       const from = state.player;
-      const h = heroStats(DATA, state.hero);
-      if (state.combat && state.combat.moved >= h.speed) return null;
       const to = tryMove(world, from, dir);
       if (to.x === from.x && to.y === from.y) return null;
-      const duration = state.combat ? 0 : h.stepTicks;
+      const duration = heroStats(DATA, state.hero).ticks;
       const rec = record({ verb: 'move', data: { from, to, dir, duration }, cause });
       // 走到離一群生物 SIGHT_RANGE 格內，第一次見到這個物種就記一筆（起因是這一步，不花時間）
       for (const { herd, near } of world.herdsNear(to.x, to.y, SIGHT_RANGE)) {
@@ -157,14 +153,12 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
       fight.afterMove(rec.id);
       return rec;
     },
-    // 做不到的事記一筆（不改狀態）：reason 是 range、attacked、moves、combat、today、gone
+    // 做不到的事記一筆（不改狀態）：reason 是 range、combat、today、gone
     refuse(reason, target = null, cause = null) {
       return record({ verb: 'refuse', target, data: { reason }, cause });
     },
-    // 攻擊一隻生物（不在戰鬥中就先開戰）；打不到回傳 { refused }
+    // 攻擊一隻生物（不在戰鬥中就先開戰），生物接著動；打不到回傳 { refused }
     attack: (id, cause = null) => fight.attack(id, cause),
-    // 戰鬥中結束這一回合，生物接著動
-    endTurn: (cause = null) => fight.endTurn(cause),
     rest: (cause = null) => fight.rest(cause),
     plan(to, steps) {
       return record({ verb: 'plan', target: to, data: { steps } });

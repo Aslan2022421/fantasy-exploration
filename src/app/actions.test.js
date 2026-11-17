@@ -35,7 +35,7 @@ test('選定礦坑後的路線：貼著佔的任一格就是到了，不標步�
   expect(actions.shownPath()).toEqual({ steps: [], reachable: true });
 }, 30000);
 
-test('戰鬥中按 Q 攻擊完自動結束這一回合，不用再按空白鍵（排程還沒輪回來也一樣）', () => {
+test('按 Q 攻擊一下，生物照時間接著動，不用再按別的鍵', () => {
   const game = newGame(20261112);
   const p = game.state.player;
   let near = null;
@@ -66,10 +66,8 @@ test('戰鬥中按 Q 攻擊完自動結束這一回合，不用再按空白鍵�
   const verbs = game.log.all().map((r) => r.verb);
   const at = verbs.lastIndexOf('attack');
   expect(at).toBeGreaterThan(0);
-  // 冒險者那一下之後，生物接著動，或戰鬥已經結束／進到下一回合
-  const after = game.log
-    .all()
-    .slice(verbs.indexOf('attack') + 1)
-    .map((r) => r.verb);
-  expect(after.some((v) => ['round', 'victory', 'escape', 'down'].includes(v))).toBe(true);
+  // 冒險者那一下之後，生物接著動（走一格或出手），或戰鬥已經結束
+  const first = game.log.all().findIndex((r) => r.verb === 'attack' && r.actor === 'player');
+  const after = game.log.all().slice(first + 1);
+  expect(after.some((r) => r.actor !== 'player' || ['victory', 'escape', 'down'].includes(r.verb))).toBe(true);
 }, 30000);

@@ -25,7 +25,7 @@ export function sheetEntries(state, data) {
   ].join('、');
   const lines = [
     `${race.name}${cls.name}，${s.level} 級`,
-    `身高 ${HEIGHTS[s.height]}（擲 ${s.rolls.height}）：每回合移動 ${h.speed} 格`,
+    `身高 ${HEIGHTS[s.height]}（擲 ${s.rolls.height}）：每個動作（走一格、攻擊一次）花 ${h.ticks} 刻`,
     `體格 ${PHYSIQUES[s.physique]}（擲 ${s.rolls.physique}）：生命 ${state.hp}/${h.hpMax}`,
     `屬性：${Object.entries(ATTR_NAMES)
       .map(([k, n]) => `${n} ${s.attrs[k]}（${signed(h.mods[k])}）`)

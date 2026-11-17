@@ -3,9 +3,8 @@
 // 順序照規則草案第三章；屬性看種族、職業的 2 點加在主要屬性（使用者定）
 
 import { buildSheet, CLASS_POINTS, classOf, defaultChoices, heroStats, raceOf, skillOptions } from '../world/hero.js';
-import { REROLLS, STEP_ROWS, stepRandom } from './creation-steps.js';
+import { STEP_ROWS, stepRandom } from './creation-steps.js';
 
-export { REROLLS };
 export const STEPS = [
   { id: 'race', name: '種族' },
   { id: 'body', name: '身高體格' },
@@ -21,7 +20,6 @@ export function createCreation(data, rng) {
   const c = {
     race: null,
     rolls: null,
-    rerolls: REROLLS,
     cls: null,
     bonus: {},
     background: null,

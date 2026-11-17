@@ -5,7 +5,6 @@
 import { ATTR_NAMES } from '../view/names.js';
 import { CLASS_POINTS, classOf, rollBody } from '../world/hero.js';
 
-export const REROLLS = 3;
 const pickOne = (rng, list) => list[Math.floor(rng.getUniform() * list.length)];
 
 const race = ({ data, c, rng, next }) =>
@@ -18,23 +17,20 @@ const race = ({ data, c, rng, next }) =>
       if (c.race !== r.id) {
         c.race = r.id;
         c.rolls = rollBody(rng);
-        c.rerolls = REROLLS;
         c.skills = []; // 人類多一項技能，換種族要重選
       }
       next();
     },
   }));
 
+// 重擲不限次數（使用者定）
 const body = ({ c, rng, next }) => [
   { key: 'ok', label: '就這樣', act: next },
   {
     key: 'reroll',
-    label: `重擲（還能 ${c.rerolls} 次）`,
-    off: c.rerolls <= 0,
+    label: '重擲',
     act() {
-      if (c.rerolls <= 0) return;
       c.rolls = rollBody(rng);
-      c.rerolls--;
     },
   },
 ];

@@ -37,11 +37,15 @@ test('一步一步選完：種族 → 身高體格 → 職業 → 加點 → 背
   expect(sheet.skills).toEqual({ survival: 1, tracking: 1, melee: 1, athletics: 1 });
 });
 
-test('身高體格最多重擲 3 次；路徑只能點回走過的步驟；改了背景，跟它重複的技能要重選', () => {
+test('身高體格可以一直重擲；路徑只能點回走過的步驟；改了背景，跟它重複的技能要重選', () => {
   const m = createCreation(DATA, RNG.clone().setSeed(3));
   pick(m, 'human');
-  for (let i = 0; i < 5; i++) pick(m, 'reroll');
-  expect(m.state.rerolls).toBe(0);
+  const seen = new Set();
+  for (let i = 0; i < 12; i++) {
+    pick(m, 'reroll');
+    seen.add(`${m.state.rolls.height},${m.state.rolls.physique}`);
+  }
+  expect(seen.size).toBeGreaterThan(3); // 超過 3 次也照樣重擲
   m.goto(6);
   expect(STEPS[m.step].id).toBe('body'); // 後面還沒選，跳不過去
   pick(m, 'ok');

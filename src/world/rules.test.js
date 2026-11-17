@@ -54,10 +54,18 @@ describe('冒險者與生物的數字', () => {
     expect(ranger).toMatchObject({ ranged: true, range: 20, attack: 3, damage: 0 });
   });
 
-  test('狼換成規則草案的欄位：HP 15、Attack +3、防禦值 10、Damage -2、Armor 1；跟人差不多大，每個動作 9 刻', () => {
+  test('狼換成規則草案的欄位：HP 15、Attack +3、防禦值 10、Damage -2、Armor 1；走一格看自己的速度，攻擊一律 9 刻', () => {
     const wolf = DATA.species[DATA.speciesIndex.get('wolf')];
-    expect(foeStats(wolf)).toEqual({ hp: 15, attack: 3, defense: 10, damage: -2, armor: 1, ticks: 9 });
+    expect(foeStats(wolf)).toEqual({
+      hp: 15,
+      attack: 3,
+      defense: 10,
+      damage: -2,
+      armor: 1,
+      moveTicks: 6,
+      attackTicks: 9,
+    });
     const elephant = DATA.species[DATA.speciesIndex.get('elephant')];
-    expect(foeStats(elephant).ticks).toBe(6);
+    expect(foeStats(elephant)).toMatchObject({ moveTicks: 9, attackTicks: 9 });
   });
 });

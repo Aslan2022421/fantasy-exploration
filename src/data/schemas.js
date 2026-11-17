@@ -159,6 +159,7 @@ export const SpeciesSchema = z
     diet: z.enum(['herbivore', 'predator']),
     height: z.number().int().min(2).max(3),
     footprint: z.enum(FOOTPRINTS), // 寬×高幾格，一隻只畫一個字、放大蓋滿
+    moveTicks: z.union([z.literal(6), z.literal(9), z.literal(12)]), // 走一格幾刻：快 6、普通 9、慢 12（只管走路）
     count: Range,
     answers: AnswersSchema,
     instinct: z.string().min(1),

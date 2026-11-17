@@ -1,5 +1,5 @@
 // 戰鬥（規則草案第七章轉成遊戲版，見 design/PLAN.md「戰鬥」）：開戰、一步一步照時間輪流、結束、倒下、休息。
-// 每個動作（走一格、攻擊一次）花幾刻：冒險者看身高、生物看體型。冒險者每做完一個動作，時間往前走，
+// 每個動作花幾刻：冒險者走一格、攻擊一次都看身高；生物走一格看自己的速度、攻擊一律 9 刻。冒險者每做完一個動作，時間往前走，
 // 下一個動作時間比現在早的生物就一個一個動（同時到時冒險者先），所以存檔時一定停在冒險者要動的時候。
 // 每一步都先算好結果再寫成紀錄；applyFight 只照紀錄改狀態，重放時不再擲骰。
 // 休息「每天一次」的天照時鐘算（rules.js 的 dayOf，開局是早上 8 點）。
@@ -107,7 +107,7 @@ export function createFight(env) {
         to,
         path: [to],
         species: sp.id,
-        ticks: f.stats.ticks,
+        ticks: f.stats.moveTicks,
         cells: [...f.cells, ...creatureCells(sp, to)],
       },
       cause,
@@ -128,7 +128,7 @@ export function createFight(env) {
       verb: 'attack',
       actor: f.id,
       target: PLAYER,
-      data: { ...res, hp, species, ticks: f.stats.ticks },
+      data: { ...res, hp, species, ticks: f.stats.attackTicks },
       cause,
     });
     if (hp <= 0) env.record({ verb: 'down', data: { at: env.startAt, from: st().player, hp: h.hpMax }, cause: rec.id });

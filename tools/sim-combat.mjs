@@ -1,6 +1,6 @@
 // 戰鬥量測：1 級的預設角色對每種生物單挑，以及對一整群（物種隻數範圍的中間值）的勝率、出手次數、剩下的生命。
 // 簡化：生物一開始就全部貼著冒險者，不算走位；冒險者每次打最弱的那一隻。
-// 照時間輪流：每個動作花幾刻（冒險者看身高、生物看體型），同時到時冒險者先。
+// 照時間輪流：冒險者每個動作的刻數看身高；生物貼著打，攻擊一律 9 刻（速度只管走路，這裡用不到）；同時到時冒險者先。
 // 用法：node tools/sim-combat.mjs [職業，預設 warrior] [每種幾場，預設 400] [身高 0 矮小／1 中等／2 高大，預設 1]
 
 import { RNG } from 'rot-js';
@@ -47,7 +47,7 @@ function fight(stats, count) {
         armor: hero.reduction,
       });
       hp -= r.damage;
-      soonest.next += stats.ticks;
+      soonest.next += stats.attackTicks; // 貼著打，不走路
       if (hp <= 0) return { win: false, swings };
     }
   }
@@ -76,7 +76,7 @@ function measure(stats, count) {
 console.log(
   `${sheet.race} ${cls}（每個動作 ${hero.ticks} 刻）：生命 ${hero.hpMax}，攻擊 +${hero.attack}，傷害 1d12+${hero.damage}，防禦 ${hero.defense(false)}，減免 ${hero.reduction}；每種 ${RUNS} 場`,
 );
-console.log('物種　　　　生命 攻擊 防禦 護甲 傷害 刻｜單挑：勝率 出手 剩血｜一群幾隻：勝率 出手 剩血');
+console.log('物種　　　　生命 攻擊 防禦 護甲 傷害 走｜單挑：勝率 出手 剩血｜一群幾隻：勝率 出手 剩血');
 for (const sp of data.species) {
   const s = foeStats(sp);
   const n = Math.ceil((sp.count[0] + sp.count[1]) / 2);
@@ -85,6 +85,6 @@ for (const sp of data.species) {
   const name = sp.name.padEnd(5, '　');
   const col = (v, w = 4) => String(v).padStart(w);
   console.log(
-    `${name} ${col(s.hp)} ${col(s.attack)} ${col(s.defense)} ${col(s.armor)} ${col(s.damage)} ${col(s.ticks, 3)}｜${col(one.rate)}% ${col(one.swings)} ${col(one.left)}｜${n} 隻：${col(pack.rate, 3)}% ${col(pack.swings)} ${col(pack.left)}`,
+    `${name} ${col(s.hp)} ${col(s.attack)} ${col(s.defense)} ${col(s.armor)} ${col(s.damage)} ${col(s.moveTicks, 3)}｜${col(one.rate)}% ${col(one.swings)} ${col(one.left)}｜${n} 隻：${col(pack.rate, 3)}% ${col(pack.swings)} ${col(pack.left)}`,
   );
 }

@@ -111,6 +111,25 @@ export const ObjectSchema = z.object({
   canopy: z.enum(['round', 'cross', 'pair']).default('round'),
   tile: z.string().nullable(),
   gather: GatherSchema.optional(), // 能採的才有
+  join: z.boolean().optional(), // 牆：畫的時候照上下左右相鄰的牆接成雙線框（╔═╗），資料裡的字只是預設
+});
+
+// 據點（階段 6）：怪物的窩。layout 是中心圖樣（src/world/nest-layouts.js）；ground 是周圍換色的樣子；
+// popMax 是隱藏人口的上限；chest 是寶箱的表：擲 1D12＋標籤修正，落在哪一列（upTo 是這列到幾為止），
+// 從 options 裡用骰子挑一個（材料給 count 範圍裡的數量，裝備給一件）
+const ChestOption = z.union([
+  z.object({ material: Id, count: z.tuple([z.number().int().min(1), z.number().int().min(1)]) }),
+  z.object({ wood: z.literal(true), count: z.tuple([z.number().int().min(1), z.number().int().min(1)]) }), // 附近的木材
+  z.object({ item: Id }),
+]);
+export const NestSchema = z.object({
+  id: Id,
+  name: z.string().min(1),
+  species: Id,
+  layout: z.enum(['fort', 'graveyard', 'swamp']),
+  ground: z.enum(['gravel', 'bare', 'reeds']),
+  popMax: z.number().int().min(1),
+  chest: z.array(z.object({ upTo: z.number().int(), options: z.array(ChestOption).min(1) })).min(1),
 });
 
 // 物種：照 Dungeon World 的建怪問答（組織、體型、防禦、著稱、攻擊、描述）答出來，數值塊由 blocks.js 換算。

@@ -70,7 +70,16 @@ export function describePlace(world, x, y) {
   const family = c.object?.family ? `（${c.object.family}）` : '';
   if (c.object) what = `${c.object.name}${family}${state}，${grows ? '長在' : '在'}${ground}上${landform}`;
   else what = `${c.cover ? `${c.cover.name}，` : ''}${ground}${landform}`;
-  return `${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
+  return `${nestText(world, c.nest)}${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
+}
+
+// 據點的圖樣或範圍裡：「廢棄的堡壘。哥布林的據點，壯大。」（懸停框只取第一句，只寫名字）；標籤就是徵兆，人口不寫
+function nestText(world, at) {
+  if (!at) return '';
+  const def = DATA.nests[at.nest.kind];
+  const sp = DATA.species[DATA.speciesIndex.get(def.species)];
+  const empty = world.nestState(at.nest.id).pop <= 0;
+  return `${def.name}。${sp.name}的據點，${empty ? '已經沒有怪物了' : world.nestTag(at.nest).name}。`;
 }
 
 // 狀態列：「區 1,1 溫帶森林」（世界層那一區的生態，不是腳下那一格的）

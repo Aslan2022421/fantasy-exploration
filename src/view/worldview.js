@@ -30,6 +30,8 @@ const GLOW = 1.3;
 const PICKED = 0.5;
 const ACCENT = 0.7; // 礦坑圖樣裡的點綴字（accent）比主體暗多少
 const MINE_BG = 0.12; // 礦坑佔的格子，底色往大類顏色靠幾成
+// 雙線框：上 1、右 2、下 4、左 8 有牆時用哪個字（只有一邊有牆時畫成直線或橫線）
+const BOX = ['■', '║', '═', '╚', '║', '║', '╔', '╠', '═', '╝', '═', '╩', '╗', '╣', '╦', '╬'];
 
 export function createWorldView(mapView, world, data) {
   const { objects, surfaces } = data;
@@ -82,6 +84,19 @@ export function createWorldView(mapView, world, data) {
     return { glyph, fg, bg, level, rise: FACE[glyph] ? FACE_RISE : 0 };
   }
 
+  // 據點的石牆（資料 join）：照上下左右相鄰的牆（斷牆、崩牆也算接得上）接成雙線框
+  const joins = objects.map((o) => !!o.join);
+  const wallish = objects.map((o) => !!o.join || o.id.endsWith('-wall'));
+  const isWall = (x, y) => {
+    const o = world.objectAt(x, y);
+    return o >= 0 && wallish[o];
+  };
+  function wallGlyph(x, y) {
+    const k =
+      (isWall(x, y - 1) ? 1 : 0) | (isWall(x + 1, y) ? 2 : 0) | (isWall(x, y + 1) ? 4 : 0) | (isWall(x - 1, y) ? 8 : 0);
+    return BOX[k];
+  }
+
   // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色；山上的樹顏色往腳下材質靠
   function objectLook(x, y, o) {
     if (objects[o].layers) return mineLook(x, y, o);
@@ -91,7 +106,7 @@ export function createWorldView(mapView, world, data) {
     const base = table[o][level];
     const isTrunk = part === PART_TRUNK;
     return {
-      glyph: objects[o].glyph,
+      glyph: joins[o] ? wallGlyph(x, y) : objects[o].glyph,
       fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part] * feedback(x, y, o)),
       trunkGlyph: objects[o].glyph, // 整根用樹種那一類的字（針葉樹 ↑、闊葉樹 ♣、硬木闊葉樹 ♠、棕櫚類 Y）
       trunkFg: mixColor(dimColor(base, 0.8), WOOD, 0.6),

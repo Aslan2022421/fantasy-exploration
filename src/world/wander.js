@@ -21,30 +21,35 @@ function spot(seed, home, k, radius) {
   return { x: Math.round(Math.cos(a) * r), y: Math.round(Math.sin(a) * r) };
 }
 
-// 這一群在 time 時相對落腳處偏了多少：{ now 現在, prev 這一段出發前 }
-export function herdOffset(seed, herd, sp, time) {
+// 這一群在 time 時相對落腳處偏了多少：{ now 現在, prev 這一段出發前 }。radius 有給就照它（據點那群照據點的範圍）
+export function herdOffset(seed, herd, sp, time, radius = null) {
   const cfg = WANDER[sp.diet] ?? WANDER.herbivore;
+  const r = radius ?? cfg.radius;
   const home = herd.members[0];
   const [lo, hi] = cfg.period;
   const period = lo + Math.floor(hash01(seed, home.x, home.y, 6990) * (hi - lo + 1));
   const phase = Math.floor(hash01(seed, home.x, home.y, 6991) * period);
   const t = Math.max(0, time) + phase;
   const k = Math.floor(t / period);
-  const from = spot(seed, home, k - 1, cfg.radius);
-  const to = spot(seed, home, k, cfg.radius);
+  const from = spot(seed, home, k - 1, r);
+  const to = spot(seed, home, k, r);
   const steps = lineSteps(from, to);
   const n = Math.min(steps.length, Math.floor((t - k * period) / sp.moveTicks));
   return { now: n ? steps[n - 1] : from, prev: from };
 }
 
-// 第 m 隻在 time 時的錨點；hero 是冒險者站的格子（生物不會走到他身上）
-export function wanderAt(world, sp, herd, m, time, hero) {
+// 第 m 隻在 time 時的錨點；hero 是冒險者站的格子（生物不會走到他身上）。
+// opts：{ radius 遊蕩半徑（據點那群）, avoid(x, y) 不去的格子（動物避開據點的範圍）}
+export function wanderAt(world, sp, herd, m, time, hero, opts = {}) {
   const base = herd.members[m];
-  const { now, prev } = herdOffset(world.seed, herd, sp, time);
+  const { now, prev } = herdOffset(world.seed, herd, sp, time, opts.radius);
   const fits = (a) =>
     creatureCells(sp, a).every(
       (c) =>
-        world.groundPassable(c.x, c.y) && world.waterAt(c.x, c.y) < 0 && !(hero && c.x === hero.x && c.y === hero.y),
+        world.groundPassable(c.x, c.y) &&
+        world.waterAt(c.x, c.y) < 0 &&
+        !(hero && c.x === hero.x && c.y === hero.y) &&
+        !opts.avoid?.(c.x, c.y),
     );
   for (const off of [now, prev]) {
     const a = { x: base.x + off.x, y: base.y + off.y };

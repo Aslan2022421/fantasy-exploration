@@ -9,14 +9,14 @@ import { HERD } from './herds.js';
 const SEED = 20261112;
 const sp = (id) => DATA.species[DATA.speciesIndex.get(id)];
 
-// 起點附近的混食怪物群，旁邊（落腳處 12 格內）有別種生物的
+// 起點附近的混食怪物群（據點那群），旁邊（落腳處 40 格內）有別種生物的
 function monsterPairs(world, at, r = 400) {
   const herds = world.herdsNear(at.x, at.y, r);
   const out = [];
   for (const m of herds) {
     if (DATA.species[m.herd.species].diet !== 'omnivore') continue;
     const home = m.herd.members[0];
-    for (const o of world.herdsNear(home.x, home.y, 12)) {
+    for (const o of world.herdsNear(home.x, home.y, 40)) {
       if (o.herd.species === m.herd.species) continue;
       out.push({ monster: m.herd, other: o.herd });
     }
@@ -48,7 +48,7 @@ describe('怪物（混食）', () => {
   test('三種怪物都在資料裡，都是混食；巨魔會再生', () => {
     for (const id of ['goblin', 'skeleton', 'troll']) expect(sp(id).diet).toBe('omnivore');
     expect(sp('troll').traits).toEqual([{ id: 'regenerate', amount: 3, every: 24 }]);
-    expect(HERD.omnivores).toEqual([0, 1]);
+    expect(HERD.omnivores).toBeUndefined(); // 怪物只從據點出來
   });
 
   test('巨魔受傷後每 24 刻回 3 生命，回到滿為止；沒受過傷、倒下的不回', () => {
@@ -62,16 +62,12 @@ describe('怪物（混食）', () => {
     expect(regenHp(sp('wolf'), 15, 5, 0, 1000)).toBe(5);
   });
 
-  test('世界裡有混食的怪物群', () => {
+  test('世界裡有混食的怪物群，都是據點的那群', () => {
     const g = newGame(SEED);
     const p = g.state.player;
-    const ids = new Set(
-      g.world
-        .herdsNear(p.x, p.y, 600)
-        .filter((h) => DATA.species[h.herd.species].diet === 'omnivore')
-        .map((h) => DATA.species[h.herd.species].id),
-    );
-    expect(ids.size).toBeGreaterThan(0);
+    const monsters = g.world.herdsNear(p.x, p.y, 600).filter((h) => DATA.species[h.herd.species].diet === 'omnivore');
+    expect(monsters.length).toBeGreaterThan(0);
+    for (const h of monsters) expect(h.herd.nest).toBeTruthy();
   }, 60000);
 
   test('冒險者看得到時，怪物撲向別種生物、寫進紀錄；存讀檔結果一樣', () => {
@@ -79,13 +75,24 @@ describe('怪物（混食）', () => {
     const pairs = monsterPairs(g0.world, g0.state.player);
     expect(pairs.length).toBeGreaterThan(0);
     let tested = false;
+    // 動物會避開據點，怪物碰上動物要等兩邊都遊蕩到彼此附近：挑兩群落腳處最近的先試
+    const gap = ({ monster, other }) =>
+      Math.max(
+        Math.abs(monster.members[0].x - other.members[0].x),
+        Math.abs(monster.members[0].y - other.members[0].y),
+      );
+    pairs.sort((a, b) => gap(a) - gap(b));
     for (const { monster, other } of pairs.slice(0, 12)) {
-      const at = spotNear(g0, monster.members[0], 9);
+      const mid = {
+        x: (monster.members[0].x + other.members[0].x) >> 1,
+        y: (monster.members[0].y + other.members[0].y) >> 1,
+      };
+      const at = spotNear(g0, mid, 6) ?? spotNear(g0, mid, 9);
       if (!at) continue;
       const g = gameAt(at);
       if (!g) continue;
-      // 冒險者往遠離怪物的方向來回走，讓時間往前、怪物去找比冒險者近的目標
-      for (let i = 0; i < 40; i++) {
+      // 冒險者在兩群中間來回走，讓時間往前、兩邊遊蕩到彼此附近
+      for (let i = 0; i < 160; i++) {
         const dir = i % 2 ? 'n' : 's';
         if (!g.move(dir)) g.move(i % 2 ? 'e' : 'w');
         if (g.log.all().some((r) => r.verb === 'attack' && r.data?.victim)) break;

@@ -60,16 +60,22 @@ export function applyFight(state, rec) {
         },
       };
     }
-    case 'attack':
+    case 'attack': {
+      // 據點那群的一隻倒下：據點的隱藏人口跟著扣（紀錄裡寫好扣完的數字）
+      const nests = d.nest
+        ? { ...state.nests, [d.nest.id]: { ...state.nests[d.nest.id], pop: d.nest.pop } }
+        : state.nests;
       if (rec.actor === PLAYER)
         return {
           ...state,
           time: state.time + d.duration,
           creatures: hurt(rec.target),
+          nests,
           combat: c && { ...c, ambush: false, hero: true },
         };
       if (rec.target === PLAYER) return { ...state, hp: d.hp, combat: later(rec.actor) };
-      return { ...state, creatures: hurt(rec.target), combat: later(rec.actor) }; // 生物打生物
+      return { ...state, creatures: hurt(rec.target), nests, combat: later(rec.actor) }; // 生物打生物
+    }
     case 'cmove':
       return { ...state, creatures: setCreature(rec.actor, { x: d.to.x, y: d.to.y }), combat: later(rec.actor) };
     case 'leave': {

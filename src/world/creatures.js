@@ -14,13 +14,29 @@ export function herdOf(world, id) {
   return world.herdsOf(zx, zy).find((h) => h.id === herdId) ?? null;
 }
 
-// getCreatures()：狀態裡打過的生物；getClock()：{ time, hero }（現在的時間、冒險者站的格子）
-export function withCreatures(world, data, getCreatures, getClock) {
+// getCreatures()：狀態裡打過的生物；getClock()：{ time, hero }（現在的時間、冒險者站的格子）；
+// getNests()：狀態裡的據點（world 是疊過據點的世界，nest-overlay.js）。
+// 據點那一群（herd.nest）：出來幾隻看據點狀態的 size（沒有就照人口截），編號超過的當作不在；
+// 遊蕩半徑照據點現在的範圍＋4。動物遊蕩時不走進據點的圖樣與範圍
+export function withCreatures(world, data, getCreatures, getClock, getNests = () => null) {
   let builtFrom = null;
   let moved = new Map(); // 格子編號 → 打過、還活著的那一隻（照狀態擺）
   let clock = { time: -1, hx: 0, hy: 0 }; // 遊蕩的位置是照這個時間與冒險者位置算的
-  const wandering = new Map(); // 區編號 → { cs, cells: 格子編號 → 那一隻 }（這一區的群現在遊蕩到哪）
+  const wandering = new Map(); // 區編號 → { cs, ns, cells: 格子編號 → 那一隻 }（這一區的群現在遊蕩到哪）
   const idx = (x, y) => y * world.width + x;
+
+  // 這一群現在出來幾隻（據點那群看狀態，其他是全部）
+  function herdSize(herd) {
+    if (!herd.nest || !world.nestState) return herd.members.length;
+    const s = world.nestState(herd.nest);
+    return Math.min(herd.members.length, s.size ?? s.pop);
+  }
+  function wanderOpts(herd, sp) {
+    if (herd.nest && world.nestRange) return { radius: world.nestRange(world.nestById(herd.nest)) + 4 };
+    if (sp.diet !== 'omnivore' && world.inNestArea) return { avoid: world.inNestArea };
+    return {};
+  }
+  const memberOf = (id) => Number(id.split('#')[1]);
 
   // hp 是現在的生命：會再生的照上次受傷到現在的時間補回來（ch 是狀態裡那一隻，沒打過是 undefined）
   const info = (id, herd, member, ch) => {
@@ -29,15 +45,18 @@ export function withCreatures(world, data, getCreatures, getClock) {
     return { id, herd, member, species: herd.species, cells: creatureCells(sp, member), hp };
   };
 
+  let builtNests = null;
   function overlay() {
     const cs = getCreatures();
-    if (cs !== builtFrom) {
+    const ns = getNests();
+    if (cs !== builtFrom || ns !== builtNests) {
       builtFrom = cs;
+      builtNests = ns;
       moved = new Map();
       for (const [id, ch] of Object.entries(cs)) {
         if (ch.dead) continue;
         const herd = herdOf(world, id);
-        if (!herd) continue;
+        if (!herd || memberOf(id) >= herdSize(herd)) continue;
         const it = info(id, herd, { x: ch.x, y: ch.y }, ch);
         for (const c of it.cells) moved.set(idx(c.x, c.y), it);
       }
@@ -57,15 +76,18 @@ export function withCreatures(world, data, getCreatures, getClock) {
   // 一區的群現在遊蕩到哪（打過的生物變了也重算）
   function zoneMap(zx, zy, cs) {
     const zk = zy * world.zonesX + zx;
+    const ns = getNests();
     let map = wandering.get(zk);
-    if (map && map.cs === cs) return map.cells;
-    map = { cs, cells: new Map() };
+    if (map && map.cs === cs && map.ns === ns) return map.cells;
+    map = { cs, ns, cells: new Map() };
     for (const herd of world.herdsOf(zx, zy)) {
       const sp = data.species[herd.species];
+      const size = herdSize(herd);
+      const opts = wanderOpts(herd, sp);
       herd.members.forEach((_, m) => {
         const id = `${herd.id}#${m}`;
-        if (cs[id]) return;
-        const it = info(id, herd, wanderAt(world, sp, herd, m, clock.time, clock.hero));
+        if (cs[id] || m >= size) return;
+        const it = info(id, herd, wanderAt(world, sp, herd, m, clock.time, clock.hero, opts));
         for (const c of it.cells) map.cells.set(idx(c.x, c.y), it);
       });
     }
@@ -96,21 +118,23 @@ export function withCreatures(world, data, getCreatures, getClock) {
     const ch = overlay()[id];
     if (ch?.dead) return null;
     const herd = herdOf(world, id);
-    if (!herd) return null;
+    const m = memberOf(id);
+    if (!herd || m >= herdSize(herd)) return null;
     if (ch) return info(id, herd, { x: ch.x, y: ch.y }, ch);
     const { time, hero } = getClock();
-    const m = Number(id.split('#')[1]);
-    return info(id, herd, wanderAt(world, data.species[herd.species], herd, m, time, hero));
+    const sp = data.species[herd.species];
+    return info(id, herd, wanderAt(world, sp, herd, m, time, hero, wanderOpts(herd, sp)));
   }
 
   return {
     ...world,
     creatureAt,
     creatureById,
-    // 一群裡還活著的每一隻
+    // 一群裡還活著的每一隻（據點那群只算出來的那幾隻）
     liveMembers(herd) {
       const cs = overlay();
-      return herd.members.map((_, m) => `${herd.id}#${m}`).filter((id) => !cs[id]?.dead);
+      const size = herdSize(herd);
+      return herd.members.map((_, m) => `${herd.id}#${m}`).filter((id, m) => m < size && !cs[id]?.dead);
     },
     // (x, y) 附近 r 格內的區裡所有活著的生物：[{ id, cells }]（畫面比對誰動了用）
     creaturesNear(x, y, r) {

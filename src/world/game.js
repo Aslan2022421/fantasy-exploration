@@ -16,13 +16,17 @@ import { applyFight, createFight } from './fight.js';
 import { applyGather, planGather, sourceAt, touches } from './gather.js';
 import { buildSheet, equip as equipSheet, heroStats, presetHero, raise as raiseSheet } from './hero.js';
 import { tryMove } from './move.js';
+import { applyNest } from './nest-apply.js';
+import { withNests } from './nest-overlay.js';
+import { createNestWatch } from './nest-watch.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
 // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種；
 // 6：時間改成刻（1 刻＝0.25 秒）、狀態加上冒險者、生命、戰鬥、動過的生物、休息；
 // 7：戰鬥改成照時間一步一步輪流（每個動作的刻數看身高、體型）；8：戰鬥加上逃的、最後看到冒險者的位置；
-// 9：建角（冒險者加上背景、背包裡的裝備、屬性點）；10：混食的怪物打其他生物（戰鬥記各自在打誰、生物受傷的時間）
-export const SAVE_FORMAT = 10;
+// 9：建角（冒險者加上背景、背包裡的裝備、屬性點）；10：混食的怪物打其他生物（戰鬥記各自在打誰、生物受傷的時間）；
+// 11：據點（隱藏人口、擲對抗、清光與重生、寶箱）
+export const SAVE_FORMAT = 11;
 export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
 const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻
@@ -41,6 +45,7 @@ const StateSchema = z.object({
   creatures: z.record(z.string(), z.object({}).passthrough()), // 動過的生物（creatures.js）
   combat: z.object({}).passthrough().nullable(), // 戰鬥中（fight.js）
   restDay: z.number(), // 哪一天休息過
+  nests: z.record(z.string(), z.object({}).passthrough()), // 動過的據點（nest-overlay.js）
 });
 const emptyState = () => ({
   player: { x: 0, y: 0 },
@@ -54,6 +59,7 @@ const emptyState = () => ({
   creatures: {},
   combat: null,
   restDay: -1,
+  nests: {},
 });
 export const SaveSchema = z.object({
   format: z.literal(SAVE_FORMAT),
@@ -85,7 +91,7 @@ export function apply(state, rec) {
     case 'raise':
       return { ...state, hero: { ...state.hero, attrs: rec.data.attrs, points: rec.data.points } };
     default:
-      return applyFight(state, rec) ?? state;
+      return applyFight(state, rec) ?? applyNest(state, rec) ?? state;
   }
 }
 
@@ -101,10 +107,15 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   let lastCheckpoint = checkpoint;
   let shown = null; // 畫面逐格播放時暫時顯示的生物樣子（null＝照狀態）
   const world = withCreatures(
-    withChanges(baseWorld, DATA, () => state.cells),
+    withNests(
+      withChanges(baseWorld, DATA, () => state.cells),
+      DATA,
+      () => state.nests,
+    ),
     DATA,
     () => shown ?? state.creatures,
     () => ({ time: state.time, hero: state.player }), // 生物平常照時間遊蕩，不會走到冒險者身上
+    () => state.nests,
   );
 
   function record(entry) {
@@ -125,6 +136,18 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     dice: (tag) => RNG.clone().setSeed(diceSeed(seed, `${tag}:${log.size}`)),
     startAt: log.get(0).data.at,
   });
+  const nests = createNestWatch({
+    world,
+    data: DATA,
+    state: () => state,
+    record,
+    dice: (tag) => RNG.clone().setSeed(diceSeed(seed, `${tag}:${log.size}`)),
+  });
+  // 花時間的動作做完之後：據點看一次（清光、重生、看到時擲對抗）
+  const after = (rec) => {
+    if (rec && !rec.refused) nests.afterAction(rec.id);
+    return rec;
+  };
 
   return {
     seed,
@@ -161,15 +184,15 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
         });
       }
       fight.afterMove(rec.id);
-      return rec;
+      return after(rec);
     },
     // 做不到的事記一筆（不改狀態）：reason 是 range、combat、today、gone
     refuse(reason, target = null, cause = null) {
       return record({ verb: 'refuse', target, data: { reason }, cause });
     },
     // 攻擊一隻生物（不在戰鬥中就先開戰），生物接著動；打不到回傳 { refused }
-    attack: (id, cause = null) => fight.attack(id, cause),
-    rest: (cause = null) => fight.rest(cause),
+    attack: (id, cause = null) => after(fight.attack(id, cause)),
+    rest: (cause = null) => after(fight.rest(cause)),
     // 換上背包裡的一件裝備，花一個動作的刻數（戰鬥中生物接著動）；不能換回傳 { refused }
     equip(item, cause = null) {
       const next = equipSheet(DATA, state.hero, item);
@@ -181,7 +204,7 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
         cause,
       });
       fight.afterMove(rec.id);
-      return rec;
+      return after(rec);
     },
     // 用掉一點升級的屬性點（不花時間）
     raise(attr) {
@@ -198,23 +221,28 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     blocked(cause) {
       return record({ verb: 'blocked', data: {}, cause });
     },
-    // 這格能不能採：回傳那處來源（樹冠會換成樹幹那格）或 null
-    sourceAt: (at) => sourceAt(world, DATA, at.x, at.y),
-    // 採 at 那處來源一次：要站在旁邊（或上面）。不能採回傳 null，不記錄。
+    // 這格能不能採：回傳那處來源（樹冠會換成樹幹那格；據點還沒開的寶箱也算，Q 是打開）或 null
+    sourceAt: (at) => nests.chestAt(at.x, at.y) ?? sourceAt(world, DATA, at.x, at.y),
+    // 採 at 那處來源一次（寶箱是打開）：要站在旁邊（或上面）、不在戰鬥中。不能採回傳 null，不記錄。
     // 每次採集的骰子用「主種子＋這筆紀錄的編號」開，讀檔從檢查點接著做也一樣
     gather(at, cause = null) {
+      const chest = nests.chestAt(at.x, at.y);
+      if (chest) return state.combat || !touches(chest, state.player) ? null : after(nests.open(chest, cause));
       const src = sourceAt(world, DATA, at.x, at.y);
       const p = state.player;
       if (state.combat || !src || !touches(src, p)) return null;
       const dice = RNG.clone().setSeed(diceSeed(seed, `gather:${log.size}`));
       const data = planGather(world, DATA, state, src, dice);
-      return record({
-        verb: 'gather',
-        target: { x: src.x, y: src.y },
-        data: { ...data, duration: data.duration * GATHER_TICKS },
-        cause,
-      });
+      return after(
+        record({
+          verb: 'gather',
+          target: { x: src.x, y: src.y },
+          data: { ...data, duration: data.duration * GATHER_TICKS },
+          cause,
+        }),
+      );
     },
+    nests,
     serialize() {
       return { format: SAVE_FORMAT, world: WORLD_VERSION, seed, records: log.all(), checkpoint: lastCheckpoint };
     },

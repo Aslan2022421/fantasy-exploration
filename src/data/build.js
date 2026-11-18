@@ -9,6 +9,7 @@ import {
   BiomeSchema,
   BlockSchema,
   MaterialSchema,
+  NestSchema,
   ObjectSchema,
   SpeciesSchema,
   TerrainSchema,
@@ -48,6 +49,7 @@ export function buildData({
   material = {},
   worldshape = {},
   species: speciesFiles = {},
+  nest: nestFiles = {},
   ...heroFiles
 }) {
   const errors = [];
@@ -74,6 +76,8 @@ export function buildData({
   }
   const species = merge(speciesFiles, SpeciesSchema, '物種', errors);
   checkSpecies(species, indexOf(biomes), errors);
+  const nests = merge(nestFiles, NestSchema, '據點', errors);
+  checkNests(nests, indexOf(species), materialIndex, hero, errors);
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
   const palette = [...surfaces, ...waters, ...covers].map((t) => ({ ...t, shade: true }));
   return {
@@ -96,8 +100,27 @@ export function buildData({
     worldShapes,
     species,
     speciesIndex: indexOf(species),
+    nests,
+    nestIndex: indexOf(nests),
     ...hero,
   };
+}
+
+// 據點：住的物種、寶箱表裡的材料與裝備都要找得到；表的 upTo 由小到大
+function checkNests(nests, speciesIndex, materialIndex, hero, errors) {
+  for (const n of nests) {
+    if (!speciesIndex.has(n.species)) errors.push(`據點 ${n.id} 的物種找不到：${n.species}`);
+    let last = Number.NEGATIVE_INFINITY;
+    for (const row of n.chest) {
+      if (row.upTo <= last) errors.push(`據點 ${n.id} 的寶箱表 upTo 要由小到大`);
+      last = row.upTo;
+      for (const o of row.options) {
+        if (o.material && !materialIndex.has(o.material)) errors.push(`據點 ${n.id} 的寶箱材料找不到：${o.material}`);
+        if (o.item && !hero.weaponIndex.has(o.item) && !hero.armorIndex.has(o.item))
+          errors.push(`據點 ${n.id} 的寶箱裝備找不到：${o.item}`);
+      }
+    }
+  }
 }
 
 // 物種：棲地條件裡的生態要找得到；數值塊在每種環境變體下都要過 Zod，單獨找得到的錯就在這裡報

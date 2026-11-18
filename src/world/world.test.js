@@ -66,8 +66,10 @@ describe('區與區的交界', () => {
   });
 
   test('多格物件跨區也接得上：換一個區的大小去生，重疊的地方地形、物件、樹冠分側完全一樣', () => {
-    const big = gen.genZone(0, 0, 2 * Z); // 0～191
-    const small = gen.genZone(1, 0, Z); // 96～191
+    // 據點綁在區上（整塊圖樣蓋在自己那一區裡），區的大小一換位置就不同，這裡不放據點
+    const plain = createTerrainGen(SEED, { ...DATA, nests: [] });
+    const big = plain.genZone(0, 0, 2 * Z); // 0～191
+    const small = plain.genZone(1, 0, Z); // 96～191
     let objects = 0;
     for (let y = 0; y < Z; y++) {
       for (let x = 0; x < Z; x++) {

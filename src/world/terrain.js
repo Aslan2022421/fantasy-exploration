@@ -6,12 +6,13 @@
 
 import { CLIMATE, createClimate } from './climate.js';
 import { createContinent } from './continent.js';
-import { MAX_SIZE } from './footprint.js';
+import { createCoverPicker } from './cover.js';
+import { MAX_SIZE, PART_MID } from './footprint.js';
 import { GEO } from './geography.js';
 import { createHerdPlacer } from './herds.js';
 import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
-import { hash01 } from './noise.js';
+import { createNestPlanner, createNestStamp } from './nests.js';
 import { createObjectPlacer } from './objects.js';
 import { isPeak } from './peak.js';
 import { applyGeography } from './riverbed.js';
@@ -91,8 +92,16 @@ export function createTerrainGen(seed, data, size = null) {
   }
   const placer = createObjectPlacer(seed, data, { ROCK, DIRT, ICE, SHALLOW, DEEP, NONE }, GEN.treelineRange);
   const planHerds = createHerdPlacer(seed, data, { NONE });
+  const planNest = createNestPlanner(seed, data, { NONE, SWAMP, ICE });
+  const stampNest = createNestStamp(data, { GRAVEL, DIRT, REEDS, NONE });
   let herdTargets = null; // (zx, zy) → { herbivores, predators }，建世界時由 world.js 接上；沒接就不放生物
   const covers = data.biomes.map((b) => b.cover.map((c) => [cv(c.cover), c.density]));
+  const pickCover = createCoverPicker(
+    seed,
+    covers,
+    { NONE, DIRT, SAND, SHALLOW, SWAMP, REEDS, MIXED },
+    { reeds: GEN.reeds, mixed: GEN.mixed },
+  );
 
   const biomeAt = (temp, wet) => biomeGrid[bandOf(temp) * 3 + bandOf(wet)];
 
@@ -200,6 +209,9 @@ export function createTerrainGen(seed, data, size = null) {
           }
         : null,
     };
+    // 據點（nests.js）：整塊中心圖樣在這一區裡，直接蓋進物件層與地面
+    const nest = planNest(z, zx, zy, geo?.start);
+    const zc = { sAll, wAll, bAll, G }; // 生態覆蓋看的格子（cover.js）
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const c = (y + E) * G + (x + E);
@@ -215,12 +227,22 @@ export function createTerrainGen(seed, data, size = null) {
         peak[i] = landform[i] === MOUNTAIN && isPeak(g.h, c, G, GEN.peakRadius) ? 1 : 0;
         water[i] = wAll[c];
         surface[i] = sAll[c];
-        cover[i] = coverAt(c, X, Y);
-        const placed = placer.objectAt(z, c, X, Y); // 物件層（objects.js）
-        if (placed) {
-          object[i] = placed.object + 1;
-          objectPart[i] = placed.part;
-          objectAnchor[i] = placed.anchor;
+        cover[i] = pickCover(zc, c, X, Y);
+        const n = stampNest(nest, X, Y, wAll[c] !== NONE);
+        if (n?.s != null) {
+          surface[i] = n.s;
+          cover[i] = n.k;
+        }
+        if (n?.o >= 0) {
+          object[i] = n.o + 1;
+          objectPart[i] = PART_MID;
+        } else if (!n) {
+          const placed = placer.objectAt(z, c, X, Y); // 物件層（objects.js）
+          if (placed) {
+            object[i] = placed.object + 1;
+            objectPart[i] = placed.part;
+            objectAnchor[i] = placed.anchor;
+          }
         }
         if (g.water[c] === WATER_NONE) {
           const grad = gradient(hAt(c));
@@ -229,37 +251,24 @@ export function createTerrainGen(seed, data, size = null) {
       }
     }
 
-    // 生態覆蓋：只長在泥土與沙地上。緊鄰淺水或沼澤的泥土長蘆葦；生態交界是混合植被；其餘照生態的 cover
-    function coverAt(c, X, Y) {
-      const s = sAll[c];
-      if (wAll[c] !== NONE || (s !== DIRT && s !== SAND)) return NONE;
-      const a = hash01(seed, X, Y, 101);
-      const b = hash01(seed, X, Y, 102);
-      let wet = false;
-      let edge = false;
-      for (const d of [1, -1, G, -G]) {
-        if (wAll[c + d] === SHALLOW || wAll[c + d] === SWAMP) wet = true;
-        if (bAll[c + d] !== bAll[c]) edge = true;
-      }
-      if (wet && s === DIRT && b < GEN.reeds) return REEDS;
-      const list = covers[bAll[c]];
-      if (edge && list.length && b < GEN.mixed) return MIXED;
-      let sum = 0;
-      for (const [k, density] of list) {
-        sum += density;
-        if (a < sum) return k;
-      }
-      return NONE;
-    }
-
-    // 物種成群（herds.js）：物件層生完才放，避開樹與礦坑
-    const herds = planHerds({ ...z, zx, zy, object, swamp: SWAMP, start: geo?.start, target: herdTargets?.(zx, zy) });
+    // 物種成群（herds.js）：物件層生完才放，避開樹與礦坑；據點的那群怪物也在這裡放，動物的群離據點遠一點
+    const herds = planHerds({
+      ...z,
+      zx,
+      zy,
+      object,
+      swamp: SWAMP,
+      start: geo?.start,
+      target: herdTargets?.(zx, zy),
+      nest,
+    });
 
     return {
       zx,
       zy,
       size,
       herds,
+      nest,
       height,
       landform,
       peak,

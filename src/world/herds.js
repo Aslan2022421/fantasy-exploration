@@ -10,12 +10,12 @@
 import { RNG } from 'rot-js';
 import { streamSeed } from '../core/rng.js';
 import { LAND } from './landform.js';
+import { gapToNest, NEST } from './nests.js';
 import { hash01 } from './noise.js';
 
 export const HERD = {
   herbivores: [2, 4], // 一區草食幾群
-  predators: [0, 2], // 一區掠食幾群
-  omnivores: [0, 1], // 一區混食（怪物）幾群；暫時跟動物一樣成群放，據點做好後改從據點出來
+  predators: [0, 2], // 一區掠食幾群（混食的怪物只從據點出來，nests.js）
   step: 4, // 候選的落腳處每幾格取一個
   gap: 16, // 兩群的落腳處至少隔幾格
   startClear: 14, // 離起點幾格內不放
@@ -46,11 +46,7 @@ export const creatureCells = (sp, { x, y }) =>
 // 一區的目標群數（記進世界層每區的 numbers）：只看種子與區座標
 export function herdTargets(seed, zx, zy) {
   const pick = ([lo, hi], salt) => lo + Math.floor(hash01(seed, zx, zy, salt) * (hi - lo + 1));
-  return {
-    herbivores: pick(HERD.herbivores, 4101),
-    predators: pick(HERD.predators, 4102),
-    omnivores: pick(HERD.omnivores, 4103),
-  };
+  return { herbivores: pick(HERD.herbivores, 4101), predators: pick(HERD.predators, 4102) };
 }
 
 // 這個環境下，這個物種的棲地權重（0 是不能住）。
@@ -141,11 +137,12 @@ export function createHerdPlacer(seed, data, { NONE }) {
     const sy = ctx.start?.y ?? -1e9;
     const herds = [];
 
+    // 怪物（混食）只從據點出來（nests.js）；動物的群離據點的圖樣外緣至少 NEST.avoid 格
+    const nest = ctx.nest;
+    const nearNest = (X, Y) => nest && gapToNest(nest, X, Y) < NEST.avoid;
     const slots = [
       ...Array.from({ length: target.herbivores }, () => 'herbivore'),
       ...Array.from({ length: target.predators }, () => 'predator'),
-      // 混食排在最後：前面草食、掠食的群編號與亂數不變
-      ...Array.from({ length: target.omnivores ?? 0 }, () => 'omnivore'),
     ];
     for (let s = 0; s < slots.length; s++) {
       const diet = slots[s];
@@ -159,6 +156,7 @@ export function createHerdPlacer(seed, data, { NONE }) {
         const X = x0 + spot.x;
         const Y = y0 + spot.y;
         if (Math.max(Math.abs(X - sx), Math.abs(Y - sy)) < HERD.startClear) return false;
+        if (nearNest(X, Y)) return false;
         return !herds.some((h) => Math.max(Math.abs(h.members[0].x - X), Math.abs(h.members[0].y - Y)) < HERD.gap);
       });
       // 每個物種各自找排名最前面、棲地符合又放得下的落腳處；這一區住得下的物種照權重抽一種
@@ -203,6 +201,7 @@ export function createHerdPlacer(seed, data, { NONE }) {
             const px = spot.x + dx;
             const py = spot.y + dy;
             if (px < 0 || py < 0 || px >= size || py >= size || !fits(k, px, py)) continue;
+            if (nearNest(x0 + px, y0 + py)) continue;
             occupy(k, px, py);
             members.push({ x: x0 + px, y: y0 + py });
             break;
@@ -217,6 +216,41 @@ export function createHerdPlacer(seed, data, { NONE }) {
         });
       }
     }
+    if (nest) {
+      const herd = nestHerd(nest);
+      if (herd) herds.push(herd);
+    }
     return herds;
+
+    // 據點外面那一群：散在圖樣外緣外 2～5 格，隻數照物種的範圍（乾燥取下半、潮濕取上半）。
+    // 實際出來幾隻還要看隱藏人口（creatures.js 照狀態裡的 size 截）
+    function nestHerd(n) {
+      const def = data.nests[n.kind];
+      const k = data.speciesIndex.get(def.species);
+      const sp = species[k];
+      const rng = RNG.clone().setSeed(streamSeed(seed, `nest:${n.id}`));
+      const [lo, hi] = sp.count;
+      const mid = Math.ceil((lo + hi) / 2);
+      const range = n.dry ? [lo, mid] : n.wet ? [mid, hi] : [lo, hi];
+      const want = rng.getUniformInt(range[0], range[1]);
+      const ring = [];
+      for (let y = n.y0 - 5; y < n.y0 + n.h + 5; y++)
+        for (let x = n.x0 - 5; x < n.x0 + n.w + 5; x++) {
+          const d = gapToNest(n, x, y);
+          if (d >= 2) ring.push({ x, y, rank: hash01(seed, x, y, 4300) });
+        }
+      ring.sort((a, b) => a.rank - b.rank);
+      const members = [];
+      for (const p of ring) {
+        if (members.length >= want) break;
+        const px = p.x - x0;
+        const py = p.y - y0;
+        if (px < 0 || py < 0 || px >= size || py >= size || !fits(k, px, py)) continue;
+        occupy(k, px, py);
+        members.push({ x: p.x, y: p.y });
+      }
+      if (!members.length) return null;
+      return { id: `${n.id}:n`, species: k, members, nest: n.id, env: n.env };
+    }
   };
 }

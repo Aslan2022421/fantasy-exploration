@@ -1,0 +1,168 @@
+[
+  {
+    "id": "ruin-wall",
+    "name": "石牆",
+    "glyph": "═",
+    "color": "#a39d92",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "broken-wall",
+    "name": "斷牆",
+    "glyph": "▓",
+    "color": "#8a857b",
+    "passable": false,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "crumbled-wall",
+    "name": "崩一半的牆",
+    "glyph": "▒",
+    "color": "#8a857b",
+    "passable": false,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "rubble",
+    "name": "碎片",
+    "glyph": "≥",
+    "color": "#8a857b",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "rubble-low",
+    "name": "碎片",
+    "glyph": "≤",
+    "color": "#8a857b",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "fallen-pillar",
+    "name": "倒下的石柱",
+    "glyph": "#",
+    "color": "#9a958a",
+    "passable": false,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "well",
+    "name": "井",
+    "glyph": "O",
+    "color": "#8c9aa6",
+    "passable": false,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "ruin-table",
+    "name": "桌子",
+    "glyph": "π",
+    "color": "#8a6a48",
+    "passable": false,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "ruin-throne",
+    "name": "寶座",
+    "glyph": "╥",
+    "color": "#8a6a48",
+    "passable": false,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "ruin-bed",
+    "name": "破床",
+    "glyph": "≡",
+    "color": "#7a6450",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "tombstone",
+    "name": "墓碑",
+    "glyph": "┼",
+    "color": "#b4afa2",
+    "passable": true,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "dead-tree",
+    "name": "枯樹",
+    "glyph": "Γ",
+    "color": "#8f7a5c",
+    "passable": false,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "bones",
+    "name": "骨堆",
+    "glyph": "%",
+    "color": "#d8d0bc",
+    "passable": false,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "nest-chest",
+    "name": "寶箱",
+    "glyph": "Æ",
+    "color": "#d0a850",
+    "passable": false,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "nest-chest-open",
+    "name": "空的寶箱",
+    "glyph": "Æ",
+    "color": "#6e5c3a",
+    "passable": false,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  }
+]

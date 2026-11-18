@@ -8,6 +8,7 @@
 
 import { DATA } from '../data/load.js';
 import { distanceTo } from '../world/chase.js';
+import { nestArea } from '../world/nests.js';
 import { findPath, findPathNextTo, stepDirection } from '../world/path.js';
 import { createPlayback } from './playback.js';
 
@@ -30,12 +31,20 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     invalidate: (ids) => worldView.invalidateCells(ids.flatMap((id) => world.creatureById(id)?.cells ?? [])),
   });
 
-  // 新寫進的紀錄裡動到的生物格子（移動、倒下，紀錄的 cells 是格子陣列）：丟掉畫面快取
+  // 新寫進的紀錄裡動到的生物格子（移動、倒下，紀錄的 cells 是格子陣列）：丟掉畫面快取。
+  // 據點的人口變了（擲對抗、重生、外面那群倒下一隻），範圍跟著變：整塊據點（data.area）都丟掉
+  const areaCells = (a) => {
+    const out = [];
+    for (let y = a.y0; y <= a.y1; y++) for (let x = a.x0; x <= a.x1; x++) out.push({ x, y });
+    return out;
+  };
   function refresh(fromId) {
     const cells = [];
     for (let i = fromId; i < game.log.size; i++) {
-      const c = game.log.get(i).data?.cells;
-      if (Array.isArray(c)) cells.push(...c);
+      const d = game.log.get(i).data;
+      if (Array.isArray(d?.cells)) cells.push(...d.cells);
+      if (d?.area) cells.push(...areaCells(d.area));
+      else if (d?.nest?.id && world.nestById(d.nest.id)) cells.push(...areaCells(nestArea(world.nestById(d.nest.id))));
     }
     if (cells.length) worldView.invalidateCells(cells);
   }

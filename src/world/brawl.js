@@ -13,7 +13,7 @@ export const PLAYER = 'player';
 
 // ctx：fight.js 給的 { world, data, st, foe, entry, seenIn, inCombat, record, dice, step, leave, range }
 export function createBrawl(ctx) {
-  const { world, data, st, foe, entry, seenIn, inCombat, record, dice, step, leave, range } = ctx;
+  const { world, data, st, foe, entry, seenIn, inCombat, record, dice, step, leave, range, nestLoss } = ctx;
   const spOf = (f) => data.species[f.species];
   const enemies = (a, b) => spOf(a).id !== spOf(b).id;
 
@@ -74,6 +74,7 @@ export function createBrawl(ctx) {
         aim: t.id,
         at: t.member,
         cells: t.cells,
+        ...nestLoss(t, hp),
       },
       cause,
     });

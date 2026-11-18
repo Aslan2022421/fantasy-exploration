@@ -2,6 +2,7 @@
 
 import { DATA } from '../data/load.js';
 import { describeFight } from './describe-fight.js';
+import { describeNest } from './describe-nest.js';
 
 const UNITS = { mineral: '塊', wood: '段', plant: '株', animal: '份' };
 
@@ -45,7 +46,9 @@ export function describeRecord(rec) {
     case 'raise':
       return `${ATTR_NAMES[d.attr] ?? d.attr}加 1 點，現在 ${d.attrs?.[d.attr]}。`;
     default: {
-      const text = describeFight(rec);
+      // 回傳 null 是不寫出來（生物移動），undefined 是不認得的動詞
+      let text = describeFight(rec);
+      if (text === undefined) text = describeNest(rec);
       return text === undefined ? rec.verb : text;
     }
   }

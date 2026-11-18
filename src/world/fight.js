@@ -42,7 +42,13 @@ export function createFight(env) {
     const f = foe(id);
     return { id, x: f.member.x, y: f.member.y, hp: f.hp, species: data.species[f.species].id, ...extra };
   };
+  // 據點那群的一隻被打倒（hp 0）：{ nest: { id, pop 扣完的人口 } } 寫進紀錄，不然空的
+  const nestLoss = (f, hp) => {
+    if (hp > 0 || !f.herd.nest || !world.nestState) return {};
+    return { nest: { id: f.herd.nest, pop: Math.max(0, world.nestState(f.herd.nest).pop - 1) } };
+  };
   const brawl = createBrawl({
+    nestLoss,
     world,
     data,
     st,
@@ -243,7 +249,15 @@ export function createFight(env) {
       });
       const hp = Math.max(0, f.hp - res.damage);
       const species = data.species[f.species].id;
-      const detail = { ...res, hp, species, sneak: first && h.sneak > 0 && res.hit, cells: f.cells, duration: h.ticks };
+      const detail = {
+        ...res,
+        hp,
+        species,
+        sneak: first && h.sneak > 0 && res.hit,
+        cells: f.cells,
+        duration: h.ticks,
+        ...nestLoss(f, hp),
+      };
       const rec = env.record({ verb: 'attack', target: id, data: detail, cause });
       if (!liveFoes().length) env.record({ verb: 'victory', data: {}, cause: rec.id });
       else advance(rec.id);

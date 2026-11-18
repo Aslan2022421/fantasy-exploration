@@ -38,7 +38,14 @@
 - 檔案：`src/data/blocks.js`、`data/species/*.json` 的 `answers`
 - 來源：Dungeon World，(c) Sage Kobold Productions（作者 Sage LaTorra、Adam Koebel），<https://github.com/Sagelt/Dungeon-World>，其中 Making Monsters 的問答順序與各答案對應的傷害骰、生命、護甲數字
 - 授權：CC BY 3.0 Unported，<https://creativecommons.org/licenses/by/3.0/>
-- 修改：只取問答的結構與數字，改成資料檔的選項與換算函式；本能與招式的句子是自己寫的，不照搬原文。Dungeon World 的儲存庫另含 SRD 5.1 的內容，這裡沒有取用
+- 修改：只取問答的結構與數字，改成資料檔的選項與換算函式；動物的本能與招式是自己寫的，不照搬原文。Dungeon World 的儲存庫另含 SRD 5.1 的內容，這裡沒有取用
+
+## 怪物的本能與招式
+
+- 檔案：`data/species/monsters.json` 的 `instinct`、`moves`（哥布林、骷髏、巨魔），以及各自的問卷答案（照原書的數值塊反推）
+- 來源：Dungeon World 的 Cavern Dwellers（Goblin）、Legions of the Undead（Skeleton）、Denizens of the Swamp（Troll），(c) Sage Kobold Productions，<https://github.com/Sagelt/Dungeon-World>（`text/monster_settings/`）；中譯取自地城世界 HTML SRD 中文化（免費開源 TRPG 中文化團隊，Hazmole 等譯）
+- 授權：CC BY 3.0 Unported，<https://creativecommons.org/licenses/by/3.0/>
+- 修改：本能照中譯；招式只取一部分，哥布林的「撤退後帶更多同伴回來」是自己譯的；骷髏的「重擊」、巨魔的「掄棍棒砸」等攻擊方式是自己寫的
 
 ## 程式套件
 

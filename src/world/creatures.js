@@ -3,6 +3,7 @@
 // 這裡把兩者疊上去，讓走路、尋路、查看、畫面看到同一個樣子。
 // 生物 id 是「群 id＃第幾隻」，群 id 是「區 x,區 y:第幾群」
 
+import { foeStats, regenHp } from './foes.js';
 import { creatureCells } from './herds.js';
 import { wanderAt } from './wander.js';
 
@@ -21,14 +22,12 @@ export function withCreatures(world, data, getCreatures, getClock) {
   const wandering = new Map(); // 區編號 → { cs, cells: 格子編號 → 那一隻 }（這一區的群現在遊蕩到哪）
   const idx = (x, y) => y * world.width + x;
 
-  const info = (id, herd, member, hp) => ({
-    id,
-    herd,
-    member,
-    species: herd.species,
-    cells: creatureCells(data.species[herd.species], member),
-    hp,
-  });
+  // hp 是現在的生命：會再生的照上次受傷到現在的時間補回來（ch 是狀態裡那一隻，沒打過是 undefined）
+  const info = (id, herd, member, ch) => {
+    const sp = data.species[herd.species];
+    const hp = ch ? regenHp(sp, foeStats(sp, herd.env).hp, ch.hp, ch.hurtAt, getClock().time) : null;
+    return { id, herd, member, species: herd.species, cells: creatureCells(sp, member), hp };
+  };
 
   function overlay() {
     const cs = getCreatures();
@@ -39,7 +38,7 @@ export function withCreatures(world, data, getCreatures, getClock) {
         if (ch.dead) continue;
         const herd = herdOf(world, id);
         if (!herd) continue;
-        const it = info(id, herd, { x: ch.x, y: ch.y }, ch.hp);
+        const it = info(id, herd, { x: ch.x, y: ch.y }, ch);
         for (const c of it.cells) moved.set(idx(c.x, c.y), it);
       }
     }
@@ -66,7 +65,7 @@ export function withCreatures(world, data, getCreatures, getClock) {
       herd.members.forEach((_, m) => {
         const id = `${herd.id}#${m}`;
         if (cs[id]) return;
-        const it = info(id, herd, wanderAt(world, sp, herd, m, clock.time, clock.hero), null);
+        const it = info(id, herd, wanderAt(world, sp, herd, m, clock.time, clock.hero));
         for (const c of it.cells) map.cells.set(idx(c.x, c.y), it);
       });
     }
@@ -80,7 +79,8 @@ export function withCreatures(world, data, getCreatures, getClock) {
     if (!world.inside(x, y)) return null;
     const k = idx(x, y);
     const o = moved.get(k);
-    if (o) return o;
+    if (o) return creatureById(o.id); // 重拿一次：會再生的生命跟著時間變
+
     freshClock();
     const zx = Math.floor(x / world.zoneSize);
     const zy = Math.floor(y / world.zoneSize);
@@ -97,10 +97,10 @@ export function withCreatures(world, data, getCreatures, getClock) {
     if (ch?.dead) return null;
     const herd = herdOf(world, id);
     if (!herd) return null;
-    if (ch) return info(id, herd, { x: ch.x, y: ch.y }, ch.hp);
+    if (ch) return info(id, herd, { x: ch.x, y: ch.y }, ch);
     const { time, hero } = getClock();
     const m = Number(id.split('#')[1]);
-    return info(id, herd, wanderAt(world, data.species[herd.species], herd, m, time, hero), null);
+    return info(id, herd, wanderAt(world, data.species[herd.species], herd, m, time, hero));
   }
 
   return {

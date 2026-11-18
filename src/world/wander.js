@@ -10,6 +10,7 @@ import { lineSteps } from './path.js';
 export const WANDER = {
   herbivore: { period: [240, 720], radius: 6 }, // 草食：1～3 分鐘換一次吃草的位置
   predator: { period: [120, 360], radius: 12 }, // 掠食：巡得勤、範圍大
+  omnivore: { period: [120, 360], radius: 12 }, // 混食（怪物）：照掠食的節奏
 };
 
 // 第 k 段要去的位置（相對落腳處）

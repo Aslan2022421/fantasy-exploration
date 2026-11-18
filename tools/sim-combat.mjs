@@ -4,7 +4,7 @@
 // 用法：node tools/sim-combat.mjs [職業，預設 warrior] [每種幾場，預設 400] [身高 0 矮小／1 中等／2 高大，預設 1]
 
 import { RNG } from 'rot-js';
-import { foeStats } from '../src/world/foes.js';
+import { foeStats, regenHp } from '../src/world/foes.js';
 import { heroStats, presetHero } from '../src/world/hero.js';
 import { resolveAttack } from '../src/world/rules.js';
 import { loadData } from './data.mjs';
@@ -19,24 +19,27 @@ const rng = RNG.clone().setSeed(20261117);
 const sheet = { ...presetHero(data, { cls }, rng), physique: 1, height };
 const hero = heroStats(data, sheet);
 
-function fight(stats, count) {
+// sp：物種（會再生的照 foes.js 的 regenHp 補血）
+function fight(stats, count, sp) {
   let hp = hero.hpMax;
   let heroNext = 0;
   let swings = 0;
-  const foes = Array.from({ length: count }, () => ({ hp: stats.hp, next: 0 }));
+  const foes = Array.from({ length: count }, () => ({ hp: stats.hp, next: 0, hurtAt: null }));
+  const hpNow = (f, now) => regenHp(sp, stats.hp, f.hp, f.hurtAt, now);
   for (let guard = 0; guard < 5000; guard++) {
     const live = foes.filter((f) => f.hp > 0);
     if (!live.length) return { win: true, swings, hpLeft: hp };
     const soonest = live.reduce((a, b) => (b.next < a.next ? b : a));
     if (heroNext <= soonest.next) {
-      const target = live.sort((a, b) => a.hp - b.hp)[0];
+      const target = live.sort((a, b) => hpNow(a, heroNext) - hpNow(b, heroNext))[0];
       const r = resolveAttack(rng, {
         attack: hero.attack,
         defense: stats.defense,
         damage: hero.damage,
         armor: stats.armor,
       });
-      target.hp -= r.damage;
+      target.hp = hpNow(target, heroNext) - r.damage;
+      target.hurtAt = heroNext;
       heroNext += hero.ticks;
       swings++;
     } else {
@@ -54,12 +57,12 @@ function fight(stats, count) {
   return { win: false, swings };
 }
 
-function measure(stats, count) {
+function measure(stats, count, sp) {
   let wins = 0;
   let swings = 0;
   let left = 0;
   for (let i = 0; i < RUNS; i++) {
-    const r = fight(stats, count);
+    const r = fight(stats, count, sp);
     if (r.win) {
       wins++;
       left += r.hpLeft;
@@ -80,8 +83,8 @@ console.log('物種　　　　生命 攻擊 防禦 護甲 傷害 走｜單挑�
 for (const sp of data.species) {
   const s = foeStats(sp);
   const n = Math.ceil((sp.count[0] + sp.count[1]) / 2);
-  const one = measure(s, 1);
-  const pack = measure(s, n);
+  const one = measure(s, 1, sp);
+  const pack = measure(s, n, sp);
   const name = sp.name.padEnd(5, '　');
   const col = (v, w = 4) => String(v).padStart(w);
   console.log(

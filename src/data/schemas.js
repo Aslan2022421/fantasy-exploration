@@ -149,6 +149,17 @@ export const AnswersSchema = z.object({
   adaptations: z.array(z.enum(ADAPTATIONS)).default([]),
 });
 
+// 食性：草食被打會逃、掠食看到冒險者就撲上來、混食會攻擊跟自己不同種族的生物（冒險者也算）
+export const DIETS = ['herbivore', 'predator', 'omnivore'];
+// 特性：再生照 amount／every 刻回生命；其他只寫在查看說明裡（遊戲還沒有疲勞、恐懼、中毒）
+export const TRAITS = ['regenerate', 'no-fatigue', 'fearless', 'poison-immune'];
+const TraitSchema = z.discriminatedUnion('id', [
+  z.object({ id: z.literal('regenerate'), amount: z.number().int().positive(), every: z.number().int().positive() }),
+  z.object({ id: z.literal('no-fatigue') }),
+  z.object({ id: z.literal('fearless') }),
+  z.object({ id: z.literal('poison-immune') }),
+]);
+
 export const SpeciesSchema = z
   .object({
     id: Id,
@@ -156,7 +167,8 @@ export const SpeciesSchema = z
     glyph: Glyph,
     color: Color,
     tile: z.string().nullable(),
-    diet: z.enum(['herbivore', 'predator']),
+    diet: z.enum(DIETS),
+    traits: z.array(TraitSchema).default([]),
     height: z.number().int().min(2).max(3),
     footprint: z.enum(FOOTPRINTS), // 寬×高幾格，一隻只畫一個字、放大蓋滿
     moveTicks: z.union([z.literal(6), z.literal(9), z.literal(12)]), // 走一格幾刻：快 6、普通 9、慢 12（只管走路）
@@ -172,6 +184,7 @@ export const SpeciesSchema = z
           maxTier: z.number().int().optional(),
           mountain: z.boolean().optional(),
           nearWater: z.number().int().min(1).max(3).optional(),
+          swamp: z.number().int().min(1).max(3).optional(), // 幾格內有沼澤（沼澤是水文，不是生態）
           weight: z.number().positive(),
         }),
       )

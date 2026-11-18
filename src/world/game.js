@@ -21,8 +21,8 @@ import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種；
 // 6：時間改成刻（1 刻＝0.25 秒）、狀態加上冒險者、生命、戰鬥、動過的生物、休息；
 // 7：戰鬥改成照時間一步一步輪流（每個動作的刻數看身高、體型）；8：戰鬥加上逃的、最後看到冒險者的位置；
-// 9：建角（冒險者加上背景、背包裡的裝備、屬性點）
-export const SAVE_FORMAT = 9;
+// 9：建角（冒險者加上背景、背包裡的裝備、屬性點）；10：混食的怪物打其他生物（戰鬥記各自在打誰、生物受傷的時間）
+export const SAVE_FORMAT = 10;
 export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
 const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻

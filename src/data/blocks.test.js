@@ -99,11 +99,15 @@ const EXPECTED = {
   goat: [6, 0, 6, 0, 0],
   'giant-eagle': [10, 1, 16, 0, 1],
   'saber-toothed-tiger': [10, 5, 16, 1, 0],
+  // 怪物（階段 6）：答案照 Dungeon World 原書的數值塊反推（使用者同意當雛形）
+  goblin: [6, 0, 3, 1, 0],
+  skeleton: [6, 0, 7, 1, 0],
+  troll: [10, 3, 20, 1, 0],
 };
 
 describe('實際的物種資料', () => {
-  test('27 種，每種的換算結果照答案表', () => {
-    expect(DATA.species).toHaveLength(27);
+  test('27 種動物加 3 種怪物，每種的換算結果照答案表', () => {
+    expect(DATA.species).toHaveLength(30);
     for (const s of DATA.species) {
       const b = buildBlock(s.answers);
       expect(BlockSchema.safeParse(b).success, s.id).toBe(true);

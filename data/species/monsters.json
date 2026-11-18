@@ -1,0 +1,111 @@
+[
+  {
+    "id": "goblin",
+    "name": "哥布林",
+    "glyph": "g",
+    "color": "#8bb45a",
+    "tile": null,
+    "diet": "omnivore",
+    "height": 2,
+    "footprint": "1x1",
+    "moveTicks": 9,
+    "count": [3, 12],
+    "answers": {
+      "organization": "horde",
+      "size": "small",
+      "armor": "hide",
+      "known": [],
+      "attack": {
+        "form": "拿矛刺",
+        "marks": ["reach"]
+      },
+      "describe": ["intelligent", "organized"],
+      "adaptations": []
+    },
+    "instinct": "繁衍增殖",
+    "moves": ["衝鋒！", "呼叫更多哥布林", "撤退後帶更多同伴回來"],
+    "habitat": [
+      {
+        "biomes": ["grassland"],
+        "mountain": false,
+        "weight": 3
+      },
+      {
+        "biomes": ["savanna"],
+        "mountain": false,
+        "weight": 2
+      }
+    ],
+    "source": "Goblin Warrior"
+  },
+  {
+    "id": "skeleton",
+    "name": "骷髏",
+    "glyph": "s",
+    "color": "#e4dcc4",
+    "tile": null,
+    "diet": "omnivore",
+    "height": 2,
+    "footprint": "1x1",
+    "moveTicks": 9,
+    "count": [2, 8],
+    "answers": {
+      "organization": "horde",
+      "size": "human",
+      "armor": "hide",
+      "known": [],
+      "attack": {
+        "form": "重擊",
+        "marks": []
+      },
+      "describe": ["vital"],
+      "adaptations": []
+    },
+    "traits": [{ "id": "no-fatigue" }, { "id": "fearless" }, { "id": "poison-immune" }],
+    "instinct": "做出仍然活著的行為表象",
+    "moves": ["扼殺生命的溫暖", "從散亂骸骨堆中再起重建"],
+    "habitat": [
+      {
+        "biomes": ["desert"],
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Skeleton"
+  },
+  {
+    "id": "troll",
+    "name": "巨魔",
+    "glyph": "T",
+    "color": "#5f7f4a",
+    "tile": null,
+    "diet": "omnivore",
+    "height": 3,
+    "footprint": "2x1",
+    "moveTicks": 9,
+    "count": [1, 2],
+    "answers": {
+      "organization": "solitary",
+      "size": "large",
+      "armor": "hide",
+      "known": ["strength", "endurance"],
+      "attack": {
+        "form": "掄棍棒砸",
+        "marks": []
+      },
+      "describe": [],
+      "adaptations": []
+    },
+    "traits": [{ "id": "regenerate", "amount": 3, "every": 24 }],
+    "instinct": "猛砸",
+    "moves": ["復原一次攻擊造成的影響", "把某人或某物扔出去"],
+    "habitat": [
+      {
+        "swamp": 3,
+        "mountain": false,
+        "weight": 3
+      }
+    ],
+    "source": "Troll"
+  }
+]

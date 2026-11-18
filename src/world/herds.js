@@ -1,4 +1,4 @@
-// 物種成群出現：每區有幾群草食、幾群掠食，各群的落腳處與成員位置。
+// 物種成群出現：每區有幾群草食、掠食、混食，各群的落腳處與成員位置。
 // 只看「種子＋區座標」與這一區自己的格子，不看生成順序與玩家位置，讀檔重生結果一樣；生物的位置不進存檔。
 // - 每區草食、掠食各幾群由 herdTargets 擲（建世界時記進每區的 numbers）；沒有草食的區不放掠食
 // - 一群：候選落腳處每 HERD.step 格取一個，照雜湊排名，離別群與起點要夠遠；每個物種各自找排名最前面、
@@ -15,6 +15,7 @@ import { hash01 } from './noise.js';
 export const HERD = {
   herbivores: [2, 4], // 一區草食幾群
   predators: [0, 2], // 一區掠食幾群
+  omnivores: [0, 1], // 一區混食（怪物）幾群；暫時跟動物一樣成群放，據點做好後改從據點出來
   step: 4, // 候選的落腳處每幾格取一個
   gap: 16, // 兩群的落腳處至少隔幾格
   startClear: 14, // 離起點幾格內不放
@@ -45,10 +46,15 @@ export const creatureCells = (sp, { x, y }) =>
 // 一區的目標群數（記進世界層每區的 numbers）：只看種子與區座標
 export function herdTargets(seed, zx, zy) {
   const pick = ([lo, hi], salt) => lo + Math.floor(hash01(seed, zx, zy, salt) * (hi - lo + 1));
-  return { herbivores: pick(HERD.herbivores, 4101), predators: pick(HERD.predators, 4102) };
+  return {
+    herbivores: pick(HERD.herbivores, 4101),
+    predators: pick(HERD.predators, 4102),
+    omnivores: pick(HERD.omnivores, 4103),
+  };
 }
 
-// 這個環境下，這個物種的棲地權重（0 是不能住）。cell：{ biome 生態 id, tier, mountain, water 離水幾格（沒有水很大）}
+// 這個環境下，這個物種的棲地權重（0 是不能住）。
+// cell：{ biome 生態 id, tier, mountain, water 離水幾格, swamp 離沼澤幾格（都是沒有時很大）}
 export function habitatWeight(sp, cell) {
   let w = 0;
   for (const r of sp.habitat) {
@@ -57,6 +63,7 @@ export function habitatWeight(sp, cell) {
     if (r.maxTier != null && cell.tier > r.maxTier) continue;
     if (r.mountain != null && r.mountain !== cell.mountain) continue;
     if (r.nearWater != null && cell.water > r.nearWater) continue;
+    if (r.swamp != null && (cell.swamp ?? 9) > r.swamp) continue;
     w += r.weight;
   }
   return w;
@@ -77,14 +84,15 @@ export function createHerdPlacer(seed, data, { NONE }) {
     const y0 = zy * size;
     const g = (x, y) => (y + E) * G + (x + E); // 區內座標 → G×G 的編號
 
-    // 離水幾格（最多看 3 格，沒有水回傳 9）；只算湖與河，不算沼澤
-    const waterDist = (x, y) => {
+    // 離水幾格（最多看 3 格，沒有回傳 9）：湖與河一種、沼澤另一種
+    const isLake = (w) => w !== NONE && w !== ctx.swamp;
+    const isSwamp = (w) => w === ctx.swamp;
+    const distTo = (x, y, test) => {
       for (let r = 1; r <= 3; r++)
         for (let dy = -r; dy <= r; dy++)
           for (let dx = -r; dx <= r; dx++) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-            const w = ctx.wAll[g(x + dx, y + dy)];
-            if (w !== NONE && w !== ctx.swamp) return r;
+            if (test(ctx.wAll[g(x + dx, y + dy)])) return r;
           }
       return 9;
     };
@@ -94,7 +102,8 @@ export function createHerdPlacer(seed, data, { NONE }) {
         biome: biomeIds[ctx.biome[c]],
         tier: ctx.tier[c],
         mountain: ctx.h[c] > LAND.mountain,
-        water: waterDist(x, y),
+        water: distTo(x, y, isLake),
+        swamp: distTo(x, y, isSwamp),
         cold: ctx.tBand[c] === 0,
         dry: ctx.wBand[c] === 0,
         wet: ctx.wBand[c] === 2,
@@ -135,10 +144,12 @@ export function createHerdPlacer(seed, data, { NONE }) {
     const slots = [
       ...Array.from({ length: target.herbivores }, () => 'herbivore'),
       ...Array.from({ length: target.predators }, () => 'predator'),
+      // 混食排在最後：前面草食、掠食的群編號與亂數不變
+      ...Array.from({ length: target.omnivores ?? 0 }, () => 'omnivore'),
     ];
     for (let s = 0; s < slots.length; s++) {
       const diet = slots[s];
-      if (diet === 'predator' && !herds.some((h) => species[h.species].diet === 'herbivore')) break; // 沒有草食就不放掠食
+      if (diet === 'predator' && !herds.some((h) => species[h.species].diet === 'herbivore')) continue; // 沒有草食就不放掠食
       const rng = RNG.clone().setSeed(streamSeed(seed, `herd:${zx},${zy}:${s}`));
       const ranked = spots
         .map(([x, y]) => ({ x, y, rank: hash01(seed, x0 + x, y0 + y, 4200 + s) }))

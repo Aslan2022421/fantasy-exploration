@@ -22,15 +22,27 @@ function attackText(rec) {
   const d = rec.data;
   const player = rec.actor === 'player';
   const foe = nameOf(d.species);
-  const head = player ? `你攻擊${foe}` : `${foe}${sp(d.species)?.answers.attack.form ?? '攻擊'}你`;
+  const form = sp(d.species)?.answers.attack.form ?? '攻擊';
+  // 生物打生物（混食的怪物）：被打的那隻叫 victim
+  const victim = d.victim ? nameOf(d.victim) : null;
+  const head = player ? `你攻擊${foe}` : victim ? `${foe}${form}${victim}` : `${foe}${form}你`;
   if (!d.hit) return `${head}：${rollText(d)}，沒打中。`;
   const crit = d.crit ? '致命攻擊！' : '';
   const sneak = d.sneak ? '（背襲）' : '';
-  const left = player ? (d.hp <= 0 ? `${foe}倒下了。` : `${foe}剩 ${d.hp} 生命。`) : `你剩 ${d.hp} 生命。`;
+  const hurt = victim ?? (player ? foe : null);
+  const left = hurt ? (d.hp <= 0 ? `${hurt}倒下了。` : `${hurt}剩 ${d.hp} 生命。`) : `你剩 ${d.hp} 生命。`;
   return `${head}：${rollText(d)}，命中。${crit}傷害 ${d.damage}${sneak}，${left}`;
 }
 
 function engageText(d) {
+  if (d.brawl) {
+    // 怪物撲向別的生物（spot），或被怪物打的那一群還手、逃開（answer）
+    const n = d.foes.length;
+    const who = `${nameOf(d.foes[0].species)}${n > 1 ? `（${n} 隻）` : ''}`;
+    const aim = [...new Set(d.foes.map((f) => nameOf(f.aimSpecies)))].join('、');
+    const fled = d.flee?.length ? `其他 ${d.flee.length} 隻${nameOf(d.flee[0].species)}四散逃開。` : '';
+    return d.answer ? `${who}轉身反擊${aim}！${fled}` : `${who}撲向${aim}！`;
+  }
   const names = d.foes.map((f) => nameOf(f.species));
   const who = [...new Set(names)].join('、');
   const fled = d.flee?.length ? `其他 ${d.flee.length} 隻${nameOf(d.flee[0].species)}四散逃開。` : '';
@@ -51,11 +63,13 @@ export function describeFight(rec) {
     case 'cmove':
       return null;
     case 'leave':
+      // unseen、done：生物打生物時看不到了、或對手倒下了，不寫
+      if (d.reason === 'unseen' || d.reason === 'done') return null;
       return d.reason === 'fled' ? `${nameOf(d.species)}逃遠了。` : `${nameOf(d.species)}跟丟了你。`;
     case 'victory':
       return '戰鬥結束，敵人都倒下了。';
     case 'escape':
-      return '你甩開了敵人，脫離戰鬥。';
+      return d.quiet ? null : '你甩開了敵人，脫離戰鬥。';
     case 'down':
       return '你倒下了……醒來時回到了起點。';
     case 'rest':

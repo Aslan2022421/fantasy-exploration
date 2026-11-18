@@ -22,6 +22,15 @@ export function foeStats(sp, env = {}) {
   };
 }
 
+// 再生：受傷後每 every 刻回 amount 生命，回到滿為止；hp 是上次受傷後剩的、hurtAt 是那一刻。
+// 用時間算，不另外寫紀錄（遊戲還沒有火焰傷害，「受火那段停止」先不判定）
+export function regenHp(sp, max, hp, hurtAt, time) {
+  const regen = sp.traits?.find((t) => t.id === 'regenerate');
+  if (hp == null || !regen || hurtAt == null || hp <= 0) return hp;
+  const ticks = Math.max(0, time - hurtAt);
+  return Math.min(max, hp + Math.floor(ticks / regen.every) * regen.amount);
+}
+
 const signed = (n) => (n < 0 ? `-${-n}` : `+${n}`);
 
 // 右鍵查看用：「攻擊 +3，防禦 10，護甲 1，傷害 1d12-2，走一格 6 刻」

@@ -10,7 +10,7 @@ import { anchorOffset } from './objects.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 25; // 25：生物佔格擋路（物種成群）
+export const WORLD_VERSION = 26; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -52,7 +52,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       const moisture = w / k;
       // 湖海的區沒有陸上生物；其餘照種子與區座標擲，生區時 herds.js 依這個放
       const sea = h / k < LAND.water;
-      const targets = sea ? { herbivores: 0, predators: 0 } : herdTargets(seed, zx, zy);
+      const targets = sea ? { herbivores: 0, predators: 0, omnivores: 0 } : herdTargets(seed, zx, zy);
       regions.push({
         zx,
         zy,
@@ -61,7 +61,8 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
         height: h / k,
         climate: { temperature: TEMP_BANDS[bandOf(temperature)], moisture: WET_BANDS[bandOf(moisture)] },
         biome: data.biomes[gen.biomeAt(temperature, moisture)].id,
-        numbers: { herbivores: targets.herbivores, predators: targets.predators }, // 草食、掠食各幾群（目標）
+        // 草食、掠食、混食各幾群（目標）
+        numbers: { herbivores: targets.herbivores, predators: targets.predators, omnivores: targets.omnivores },
       });
     }
   }

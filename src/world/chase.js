@@ -19,6 +19,10 @@ const MAX_NODES = 8000; // 大約半徑 45 格的空地；找不到就原地等
 export const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 export const touching = (cells, p) => cells.some((c) => cheb(c, p) <= 1);
 export const distanceTo = (cells, p) => Math.min(...cells.map((c) => cheb(c, p)));
+// 兩隻（各自佔的格子）之間最近差幾格；貼著是 1
+export const gapBetween = (a, b) => Math.min(...b.map((c) => distanceTo(a, c)));
+// b 佔的格子裡離 a 最近的那一格（追一隻佔好幾格的生物時，往這格走）
+export const nearestCell = (a, b) => b.reduce((best, c) => (distanceTo(a, c) < distanceTo(a, best) ? c : best));
 
 // 錨點放在 anchor 時，這隻（id 是 self）整隻放不放得下；hero 是冒險者站的格子
 function fitsAt(world, sp, self, anchor, hero) {
@@ -52,14 +56,14 @@ export function chaseSteps(world, sp, self, from, target, hero = target) {
   return [];
 }
 
-// 逃：相鄰八格裡離冒險者最遠、又比現在遠的那一格；沒有就回傳 null（被逼到角落）
-export function fleeStep(world, sp, self, from, hero) {
+// 逃：相鄰八格裡離威脅（冒險者或打牠的生物）最遠、又比現在遠的那一格；沒有就回傳 null（被逼到角落）
+export function fleeStep(world, sp, self, from, threat, hero = threat) {
   let best = null;
-  let bestD = distanceTo(creatureCells(sp, from), hero);
+  let bestD = distanceTo(creatureCells(sp, from), threat);
   for (const [dx, dy] of STEPS) {
     const n = { x: from.x + dx, y: from.y + dy };
     if (!canStep(world, from, n) || !fitsAt(world, sp, self, n, hero)) continue;
-    const d = distanceTo(creatureCells(sp, n), hero);
+    const d = distanceTo(creatureCells(sp, n), threat);
     if (d > bestD) {
       best = n;
       bestD = d;

@@ -23,8 +23,9 @@ export function framesFrom(records, before) {
       }
       continue;
     }
-    if (rec.verb === 'attack' && rec.actor === 'player')
-      set(rec.target, { hp: d.hp, ...(d.hp <= 0 ? { dead: true } : {}) });
+    // 被打的是生物（冒險者打的，或怪物打的；怪物打的那隻可能還在遊蕩、沒進狀態，連位置一起記）
+    if (rec.verb === 'attack' && rec.target !== 'player')
+      set(rec.target, { ...(cur[rec.target] || !d.at ? {} : d.at), hp: d.hp, ...(d.hp <= 0 ? { dead: true } : {}) });
     const pause = rec.verb === 'attack' ? HIT_MS : 0;
     frames.push({ creatures: cur, upTo: rec.id + 1, ms: pause });
   }

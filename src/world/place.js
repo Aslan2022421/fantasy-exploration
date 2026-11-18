@@ -16,14 +16,30 @@ const ADAPTATION_NAMES = {
   constrict: '纏繞',
 };
 
+const DIET_NAMES = { herbivore: '草食', predator: '掠食', omnivore: '混食' };
+const traitText = (t) =>
+  ({
+    regenerate: `再生（受傷後每 ${t.every} 刻回 ${t.amount} 生命，受火焰傷害那 ${t.every} 刻停止）`,
+    'no-fatigue': '不會疲勞',
+    fearless: '不會恐懼',
+    'poison-immune': '不受一般毒素影響',
+  })[t.id];
+
 export function creatureText({ herd, species, hp }) {
   const sp = DATA.species[species];
   const adapt = buildBlock(sp.answers, herd.env)
     .adaptations.map((a) => ADAPTATION_NAMES[a])
     .join('、');
+  const traits = (sp.traits ?? []).map(traitText).join('、');
   const stats = foeStats(sp, herd.env);
   const head = `${sp.name}（一群 ${herd.members.length} 隻，生命 ${hp ?? stats.hp}/${stats.hp}）`;
-  const tail = `本能：${sp.instinct}；招式：${sp.moves.join('；')}${adapt ? `；特質：${adapt}` : ''}`;
+  const tail = [
+    `食性：${DIET_NAMES[sp.diet]}`,
+    `本能：${sp.instinct}`,
+    `招式：${sp.moves.join('；')}`,
+    ...(adapt ? [`特質：${adapt}`] : []),
+    ...(traits ? [`特性：${traits}`] : []),
+  ].join('；');
   return `${head}。${foeText(stats)}。${tail}`;
 }
 

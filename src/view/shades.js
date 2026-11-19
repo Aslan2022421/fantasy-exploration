@@ -28,16 +28,6 @@ export function dimColor(hex, f) {
   return out;
 }
 
-// 陸地的底色（舊版的地圖配色）：不分材質，照高度層從暗到亮的青綠色階，底色越亮越高；地形差異靠字的顏色。
-// 第 1～4 層照舊版的 map-h1～h4；山地再往上每圈往 LAND_TOP 靠一點（取到 0.1 一級，顏色種類不會太多）
-export const LAND_RAMP = ['#081b1d', '#0b2426', '#0f2d30', '#143639', '#1a4044'];
-const LAND_TOP = '#3a6466';
-export function landBg(tier) {
-  if (tier < LAND_RAMP.length) return LAND_RAMP[Math.max(0, tier)];
-  const f = Math.min(1, Math.round(((tier - LAND_RAMP.length + 1) / 10) * 10) / 10);
-  return mixColor(LAND_RAMP[LAND_RAMP.length - 1], LAND_TOP, f);
-}
-
 // 兩個顏色混合：f 是 b 佔幾成
 export function mixColor(a, b, f) {
   return Color.toHex(Color.interpolate(Color.fromString(a), Color.fromString(b), f));

@@ -15,7 +15,7 @@
     "id": "shallow-water",
     "name": "淺水",
     "glyph": "~",
-    "color": "#5f93b0",
+    "color": "#5f93a8",
     "passable": true,
     "style": "shallow",
     "glyphs": ["-", "~"],

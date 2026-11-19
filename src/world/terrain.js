@@ -213,7 +213,8 @@ export function createTerrainGen(seed, data, size = null) {
         surface[i] = sAll[c];
         cover[i] = pickCover(zc, c, X, Y);
         const n = settle ? stampSettle(settle, X, Y) : stampNest(nest, X, Y, wAll[c] !== NONE);
-        if (n) [tier[i], slope[i]] = [(settle ?? nest).tier, 0]; // 聚落、據點的圖樣整平成同一層、沒有坡
+        // 聚落、據點的圖樣整平：同一層、沒有坡、地貌是平原（明暗在下面照平地算）
+        if (n) [tier[i], slope[i], landform[i]] = [(settle ?? nest).tier, 0, PLAIN];
         if (n?.s != null) {
           surface[i] = n.s;
           cover[i] = n.k;
@@ -231,7 +232,7 @@ export function createTerrainGen(seed, data, size = null) {
           }
         }
         if (g.water[c] === WATER_NONE) {
-          const grad = gradient(hAt(c));
+          const grad = n ? { dx: 0, dy: 0 } : gradient(hAt(c)); // 整平的圖樣不照原本的坡向分亮暗
           shade[i] = lightLevel(tier[i], shadeLevel(grad.dx, grad.dy), landform[i] === MOUNTAIN);
         } else shade[i] = waterLevel(h);
       }

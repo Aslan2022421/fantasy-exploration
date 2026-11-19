@@ -8,7 +8,7 @@
 import { LAND } from './landform.js';
 import { gapToNest } from './nests.js';
 import { hash01 } from './noise.js';
-import { buildSettlement, GROUND, INDOOR, INDOOR_OBJECTS, KEEP, ROAD, WELL } from './settle-layouts.js';
+import { buildSettlement, GROUND, INDOOR, INDOOR_OBJECTS, KEEP, OUTROAD, ROAD, WELL } from './settle-layouts.js';
 
 export const SETTLE = {
   village: 0.15, // 陸地區放村莊的機率
@@ -208,7 +208,7 @@ export function createSettleStamp(data, ids) {
     if (!code || code === KEEP) return null;
     const ground = data.settlements[s.kind].id === 'village' ? YARD : SQUARE;
     if (code === GROUND) return { s: ground, k: NONE, o: -1 };
-    if (code === ROAD) return { s: RD, k: NONE, o: -1 };
+    if (code === ROAD || code === OUTROAD) return { s: RD, k: NONE, o: -1 }; // 出入口外面那段也是路
     if (code === INDOOR) return { s: FLOOR, k: NONE, o: -1 };
     const under = INDOOR_OBJECTS.has(code) ? FLOOR : code === WELL ? RD : ground;
     return { s: under, k: NONE, o: data.objectIndex.get(code) };

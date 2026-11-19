@@ -79,6 +79,21 @@ test('圖樣：從廣場走得到每一格能走的地方、每個出入口與�
   }
 }, 60000);
 
+test('圖樣蓋上地形：牆內整平成同一層的平原，出入口外那段是路', () => {
+  const s = home;
+  for (let j = 0; j < s.h; j++)
+    for (let i = 0; i < s.w; i++) {
+      const code = s.layout.grid[j][i];
+      const x = s.x0 + i;
+      const y = s.y0 + j;
+      if (code === 'keep') continue;
+      expect(world.tierAt(x, y)).toBe(s.tier);
+      expect(DATA.landforms[world.landformAt(x, y)].id).toBe('plain');
+      if (code === 'outroad') expect(DATA.surfaces[world.base.surfaceAt(x, y)].id).toBe('road');
+    }
+  expect(s.layout.grid.flat()).toContain('outroad');
+});
+
 test('聚落是安全區：範圍裡沒有生物群的落腳處，冒險者在裡面', () => {
   const p = game.state.player;
   expect(world.inSettleArea(p.x, p.y)).toBe(true);

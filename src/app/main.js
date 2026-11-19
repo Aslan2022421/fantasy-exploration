@@ -179,9 +179,10 @@ const keyboard = createKeyboard((dx, dy) => {
 });
 
 window.addEventListener('keydown', (e) => {
-  // 生物的回合還在播放：先不接受任何鍵（一兩秒內播完）
+  // 生物的回合還在播放：其他鍵先不接受（一兩秒內播完）；空白鍵、Esc 可以先把自動走停下，生物照樣把這一輪動完
   if (actions.busy) {
     e.preventDefault();
+    if ((e.code === 'Space' || e.code === 'Escape') && actions.walking.length) actions.stop();
     return;
   }
   // Esc：自動走路中先停下；沒開視窗時打開選單

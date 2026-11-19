@@ -29,7 +29,8 @@ export function drawMarks(mapView, world, objects, look, placeOf, { route, targe
       mapView.drawShifted(0, 0, p.px, p.py, glyph, fg, null, w, h);
     };
 
-    const cr = o < 0 ? world.creatureAt?.(c.x, c.y) : null;
+    // 跟地圖同一條規則（stackview.js）：沒有物件或物件走得過去時，上面的生物、村民優先
+    const cr = o < 0 || objects[o].passable ? (world.creatureAt?.(c.x, c.y) ?? world.npcAt?.(c.x, c.y)) : null;
     if (cr) {
       // 生物：佔地整塊塗底色，放大的字從地面往上疊，下層往底色壓淡（跟地圖上一樣）
       const a = cr.member;

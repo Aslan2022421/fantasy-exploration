@@ -68,7 +68,7 @@ export function createGameWindows({
       const p = game.state.player;
       const where = `你在${regionLabel(world, data, p.x, p.y)}`;
       if (mapWhole) {
-        const label = `${where}｜整個世界 ${world.zonesX}×${world.zonesY} 區，方框是你所在的區｜Tab 看附近`;
+        const label = `${where}｜整個世界 ${world.zonesX}×${world.zonesY} 區，紅點是你，圓圈是城鎮｜Tab 看附近`;
         drawMapWindow(c, s, body, worldMap, panels, p, label);
         return;
       }
@@ -81,6 +81,11 @@ export function createGameWindows({
       return true;
     },
     menu: () => [
+      {
+        time: null,
+        text: `這個世界的種子：${game.seed}（網址加 ?seed=${game.seed} 可以再開一次同一個世界）`,
+        color: COLORS.dim,
+      },
       { time: null, text: '1　匯出試玩紀錄（下載成 JSON 檔，交給 Claude 讀）' },
       ...(exported ? [{ time: null, text: `已匯出：${exported}`, color: COLORS.good }] : []),
       { time: null, text: '2　重新建角（開新遊戲）' },

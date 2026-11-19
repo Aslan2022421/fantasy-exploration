@@ -1,10 +1,10 @@
 // 世界形狀量測：多個種子各建一個完整的 96×96 區世界，量陸地、山地、河、建世界的時間，
-// 並把世界地圖（跟遊戲 M 鍵同一套顏色）存成 PNG。調 src/world/continent.js 的 SHAPE 時用。
+// 並把每個地理粗格的海、陸地、山地、幹流存成 PNG。調 src/world/continent.js 的 SHAPE 時用。
 // 用法：node tools/world-shapes.mjs <輸出資料夾> [種子數，預設 6]
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
-import { coarseImage } from '../src/view/worldmap.js';
+import { GEO } from '../src/world/geography.js';
 import { LAND } from '../src/world/landform.js';
 import { createWorld } from '../src/world/world.js';
 import { loadData } from './data.mjs';
@@ -54,6 +54,24 @@ function png(w, h, rgba) {
 }
 
 const pct = (a, b) => `${((100 * a) / Math.max(1, b)).toFixed(1)}%`;
+
+// 一個粗格一點：海灰青、陸地米色、山地灰、幹流藍（遊戲的總覽配色）
+function coarseImage(geo) {
+  const img = new Uint8ClampedArray(geo.W * geo.H * 4);
+  for (let i = 0; i < geo.W * geo.H; i++) {
+    const h = geo.elev[i];
+    const c =
+      h < LAND.water
+        ? [168, 186, 179]
+        : geo.flow[i] >= GEO.deepFlow
+          ? [95, 127, 138]
+          : h > LAND.mountain
+            ? [140, 130, 110]
+            : [235, 223, 193];
+    img.set([...c, 255], i * 4);
+  }
+  return img;
+}
 for (let s = 0; s < SEEDS; s++) {
   const seed = s === 0 ? 20261112 : 1000 + s * 7919;
   const t0 = performance.now();
@@ -66,7 +84,7 @@ for (let s = 0; s < SEEDS; s++) {
     if (h >= LAND.water) land++;
     if (h > LAND.mountain) mountain++;
   }
-  const img = coarseImage(w, data);
+  const img = coarseImage(geo);
   // 起點畫成白色十字
   const sx = Math.floor(geo.start.x / 8);
   const sy = Math.floor(geo.start.y / 8);

@@ -26,11 +26,11 @@ import { createGameWindows } from './game-windows.js';
 import { createKeyboard } from './input.js';
 import { showLoading } from './loading.js';
 import { bindMapMouse, drawMapLabels } from './mouse.js';
+import { newSeed } from './seed.js';
 import { createZoom } from './zoom.js';
 
 const VERSION = '0.1.3';
 const SAVE_KEY = 'world';
-const SEED = 20261112;
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '滑鼠指著地圖看是什麼；左鍵走過去；右鍵查看並選定目標，再點一下收起；空白鍵沿路線出發，走路中再按停下。',
@@ -55,10 +55,10 @@ const game = loadGame(store.load(SAVE_KEY, null)) ?? (await startNewGame());
 
 // 開新遊戲：先建角（網址有 ?class= 或 ?race= 時跳過，用預設選擇），選完才生成世界
 async function startNewGame() {
-  if (params.has('class') || params.has('race')) return newGame(SEED, heroOptions);
+  if (params.has('class') || params.has('race')) return newGame(newSeed(), heroOptions);
   const choices = await runCreation({ canvas, ctx, panels, data: DATA });
   await showLoading(canvas, ctx, panels, '生成世界中');
-  return newGame(SEED, { choices });
+  return newGame(newSeed(), { choices });
 }
 
 const turns = createTurnLoop();

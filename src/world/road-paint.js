@@ -1,14 +1,42 @@
 // 把道路畫進一區（terrain.js 生一區時用）：
-// - 照路網的線段（roads.js）：大道寬 3 格、小路寬 1 格；地面換成路、生態覆蓋拿掉、樹拿掉（礦坑不動）
+// - 照路網的線段（roads.js）：中心線每一步邊靠邊、段長平順（line4）；大道往四邊各加一格、寬 3 格，小路寬 1 格；
+//   地面換成路、生態覆蓋拿掉、樹拿掉（礦坑不動）
 // - 路經過有水的格子（河）蓋成木橋，橫著過河 ═、直著過河 ║；只有路過河才有橋
 // - 聚落、據點的圖樣不畫（牆不會被路切開）；這一區有聚落時，把伸到聚落附近、斷在那裡的路頭接到最近的出入口
 // 只看這一區自己的格子與全世界共用的路網，任何順序生出來都一樣
 
-import { segDist } from './gridtools.js';
 import { MAIN } from './roads.js';
 
-const WIDTH = { [MAIN]: 1.25, 1: 0.55 }; // 離線段幾格內算路
 const LINK = 80; // 路頭接到出入口，最多走幾格
+const NEAR4 = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+// 兩格之間的四方向直線：每一步只走橫或直，照「到下一個橫格、下一個直格的進度」誰先到就走誰，
+// 橫直的段長平均分配（不會 2,1,2,1 那樣忽長忽短）；回傳經過的每一格（含兩端）
+export function line4(xa, ya, xb, yb) {
+  const dx = Math.abs(xb - xa);
+  const dy = Math.abs(yb - ya);
+  const sx = xb > xa ? 1 : -1;
+  const sy = yb > ya ? 1 : -1;
+  const out = [[xa, ya]];
+  let x = xa;
+  let y = ya;
+  for (let ix = 0, iy = 0; ix < dx || iy < dy; ) {
+    if (iy >= dy || (ix < dx && (0.5 + ix) / dx < (0.5 + iy) / dy)) {
+      x += sx;
+      ix++;
+    } else {
+      y += sy;
+      iy++;
+    }
+    out.push([x, y]);
+  }
+  return out;
+}
 
 // z：{ size, x0, y0, surface, cover, object, objectPart, water, tier, site（1 是聚落、據點的圖樣）}
 // ids：{ ROAD 路的材質, NONE, EW, NS 兩種橋的物件編號, PART_MID }；keep(o)：這個物件不拿掉（礦坑）
@@ -17,17 +45,19 @@ export function paintRoads(roads, z, ids, keep, settle) {
   const { size, x0, y0 } = z;
   const segs = roads?.byZone.get(z.zoneKey) ?? [];
   const mark = new Int8Array(size * size); // 0 不是路；1 橫向的路；2 直向的路
+  const put = (X, Y, dir) => {
+    const x = X - x0;
+    const y = Y - y0;
+    if (x >= 0 && y >= 0 && x < size && y < size) mark[y * size + x] ||= dir;
+  };
   for (const k of segs) {
     const s = roads.segments[k];
-    const r = WIDTH[s.kind] ?? WIDTH[1];
     const dir = Math.abs(s.bx - s.ax) >= Math.abs(s.by - s.ay) ? 1 : 2;
-    const xa = Math.max(0, Math.floor(Math.min(s.ax, s.bx) - r - 1) - x0);
-    const xb = Math.min(size - 1, Math.ceil(Math.max(s.ax, s.bx) + r + 1) - x0);
-    const ya = Math.max(0, Math.floor(Math.min(s.ay, s.by) - r - 1) - y0);
-    const yb = Math.min(size - 1, Math.ceil(Math.max(s.ay, s.by) + r + 1) - y0);
-    for (let y = ya; y <= yb; y++)
-      for (let x = xa; x <= xb; x++)
-        if (segDist(x0 + x + 0.5, y0 + y + 0.5, s.ax, s.ay, s.bx, s.by) <= r) mark[y * size + x] ||= dir;
+    // 中心線：每一步都跟上一格邊靠邊（不會只靠角碰角），橫直交錯照斜率平均分配，段長平順
+    for (const [X, Y] of line4(Math.floor(s.ax), Math.floor(s.ay), Math.floor(s.bx), Math.floor(s.by))) {
+      put(X, Y, dir);
+      if (s.kind === MAIN) for (const [dx, dy] of NEAR4) put(X + dx, Y + dy, dir); // 大道往四邊各多一格，3 格寬
+    }
   }
   const lay = (i, dir) => {
     if (z.site[i]) return false;

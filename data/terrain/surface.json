@@ -71,7 +71,7 @@
     "name": "路",
     "glyph": "·",
     "color": "#9a9474",
-    "bg": "#283229",
+    "bg": "#1d2119",
     "passable": true,
     "style": "road",
     "glyphs": ["·"],

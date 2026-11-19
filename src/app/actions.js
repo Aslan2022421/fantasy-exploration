@@ -282,6 +282,8 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       if (walking.length) return { steps: walking, reachable: true };
       if (!examined) return null;
       const cr = creatureSrc(examined) ?? npcSrc(examined);
+      // 拿遠程武器、目標在射程內又看得到：站著就能射，不畫路線與步數（線會擋住視線），只標出目標
+      if (cr && !cr.id.startsWith('npc:') && game.hero.ranged && game.fight.foe(cr.id) && inRange(cr)) return null;
       if (cr) {
         const steps = findPathNextTo(world, player(), cr);
         return { steps: steps ?? [], reachable: steps !== null };

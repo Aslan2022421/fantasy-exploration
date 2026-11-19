@@ -87,7 +87,8 @@
     "glyph": "Θ",
     "color": "#b5976a",
     "passable": true,
-    "height": 1,
+    "height": 2,
+    "stackPx": 4,
     "trunk": false,
     "sizes": [1],
     "tile": null
@@ -98,7 +99,8 @@
     "glyph": "╤",
     "color": "#b5976a",
     "passable": false,
-    "height": 1,
+    "height": 2,
+    "stackPx": 4,
     "trunk": false,
     "sizes": [1],
     "tile": null
@@ -109,7 +111,8 @@
     "glyph": "π",
     "color": "#b5976a",
     "passable": false,
-    "height": 1,
+    "height": 2,
+    "stackPx": 4,
     "trunk": false,
     "sizes": [1],
     "tile": null
@@ -120,7 +123,8 @@
     "glyph": "╥",
     "color": "#b5976a",
     "passable": true,
-    "height": 1,
+    "height": 2,
+    "stackPx": 4,
     "trunk": false,
     "sizes": [1],
     "tile": null
@@ -131,7 +135,8 @@
     "glyph": "É",
     "color": "#c8c0d8",
     "passable": false,
-    "height": 1,
+    "height": 2,
+    "stackPx": 4,
     "trunk": false,
     "sizes": [1],
     "tile": null
@@ -142,7 +147,8 @@
     "glyph": "■",
     "color": "#cdb060",
     "passable": false,
-    "height": 1,
+    "height": 2,
+    "stackPx": 4,
     "trunk": false,
     "sizes": [1],
     "tile": null
@@ -153,7 +159,8 @@
     "glyph": "÷",
     "color": "#b5976a",
     "passable": false,
-    "height": 1,
+    "height": 2,
+    "stackPx": 4,
     "trunk": false,
     "sizes": [1],
     "tile": null

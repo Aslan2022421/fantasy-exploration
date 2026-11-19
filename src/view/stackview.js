@@ -38,7 +38,9 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   function collect(x, y, buckets) {
     const g = look.ground(x, y);
     const o = world.objectAt(x, y);
-    const cr = o < 0 ? (world.creatureAt?.(x, y) ?? world.npcAt?.(x, y)) : null;
+    // 村民可以站在床、椅子這類走得過去的家具上，畫村民不畫家具
+    const cr =
+      o < 0 ? (world.creatureAt?.(x, y) ?? world.npcAt?.(x, y)) : objects[o].passable ? world.npcAt?.(x, y) : null;
     const h0 = groundHeight(world.tierAt(x, y));
     const glyph = o >= 0 || cr ? ' ' : g.glyph;
     const put = (h, item) => {
@@ -92,6 +94,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
         bg: null,
         ground: h0,
         lift: l.dh,
+        px: objects[o].stackPx, // 每層錯開幾像素（家具較密；沒寫照預設）
       };
       if (l.dh === 0) put(flat.h, { ...item, tilt: flat.tilt });
       else put(h0 + l.dh, { ...item, leaf: l.part === 'leaf' });

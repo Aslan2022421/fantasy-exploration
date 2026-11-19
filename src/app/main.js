@@ -6,14 +6,13 @@ import tilesUrl from '../../assets/tiles/cp437.png';
 import { browserStore, memoryStore } from '../core/store.js';
 import { createTurnLoop } from '../core/turns.js';
 import { DATA } from '../data/load.js';
+import { createAsciiMap } from '../view/asciimap.js';
 import { COLORS } from '../view/colors.js';
 import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
-import { createRegionMap } from '../view/regionmap.js';
 import { cssSize, gridLabel, layout } from '../view/screen.js';
-import { loadImage } from '../view/tiles.js';
-import { createWorldMap } from '../view/worldmap.js';
+import { createTileset, loadImage } from '../view/tiles.js';
 import { createWorldView } from '../view/worldview.js';
 import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
@@ -73,13 +72,11 @@ const player = () => game.state.player;
 const world = game.world; // 疊上採過的格子的世界
 const worldView = createWorldView(mapView, world, DATA);
 const camera = () => worldView.focus(screen, player());
-const worldMap = createWorldMap(world, DATA);
 const windows = createGameWindows({
   panels,
   game,
   data: DATA,
-  worldMap,
-  regionMap: createRegionMap(world, DATA),
+  asciiMap: createAsciiMap(world, DATA, createTileset(image)),
   // 主畫面看得到的範圍（附近地圖畫白框）
   camera: () => ({ ...camera(), w: screen.map.w / screen.tile, h: screen.map.h / screen.tile }),
   actions: () => actions,

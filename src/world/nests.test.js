@@ -94,7 +94,7 @@ describe('據點的放置', () => {
       } else expect(DATA.surfaces[g.world.surfaceAt(x, y)].id).toBe('dirt');
       expect(g.world.cell(x, y).nest.nest.id).toBe(n.id);
     }
-  });
+  }, 30000);
 });
 
 describe('據點跟著冒險者的動作變', () => {

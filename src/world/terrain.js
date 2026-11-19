@@ -197,7 +197,8 @@ export function createTerrainGen(seed, data, size = null) {
     // 聚落（settlements.js）與據點（nests.js）：一區最多一樣，整塊圖樣在這一區裡，直接蓋進物件層與地面
     const kind = settlePlan?.(zx, zy);
     const isStart = startZone?.zx === zx && startZone?.zy === zy;
-    const settle = kind ? planSettle(z, zx, zy, kind, isStart) : null;
+    const fallback = kind === 'town' ? 'village' : null; // 城鎮放不下（要一大片平地）就改放村莊
+    const settle = kind ? (planSettle(z, zx, zy, kind, isStart) ?? planSettle(z, zx, zy, fallback, isStart)) : null;
     const nest = settle ? null : planNest(z, zx, zy, geo?.start);
     const zc = { sAll, wAll, bAll, G }; // 生態覆蓋看的格子（cover.js）
     for (let y = 0; y < size; y++) {

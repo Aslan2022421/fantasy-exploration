@@ -3,9 +3,7 @@
 
 import { COLORS } from '../view/colors.js';
 import { drawGear, gearItems } from '../view/gear-view.js';
-import { REGION } from '../view/regionmap.js';
 import { drawSheet } from '../view/sheet.js';
-import { drawMapWindow } from '../view/worldmap.js';
 import { regionLabel } from '../world/place.js';
 import { downloadPlaylog } from './playlog.js';
 import { createWindows } from './windows.js';
@@ -14,19 +12,8 @@ const inside = (r, x, y) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r
 
 // actions() 回傳 actions.js 的物件（視窗先建、actions 後建，所以用函式取）；entries() 是紀錄視窗的內容；
 // restart() 清掉存檔重新開始
-// regionMap：附近地圖（regionmap.js）；camera()：主畫面左上角的世界格與看得到幾×幾格
-export function createGameWindows({
-  panels,
-  game,
-  data,
-  worldMap,
-  regionMap,
-  camera,
-  actions,
-  entries,
-  version,
-  restart,
-}) {
+// asciiMap：世界地圖（asciimap.js）；camera()：主畫面左上角的世界格與看得到幾×幾格
+export function createGameWindows({ panels, game, data, asciiMap, camera, actions, entries, version, restart }) {
   let mapWhole = false; // M 現在看的是整個世界（Tab 切換）
   let exported = null; // 這次打開選單後匯出的檔名
   let restartArmed = false; // 選單裡按過一次「重新建角」，再按一次才清掉存檔
@@ -63,17 +50,17 @@ export function createGameWindows({
       const hit = sheetHits.plus.find((p) => inside(p.rect, x, y));
       if (hit) actions().raise(hit.attr);
     },
-    // M：先看附近（舊版的小地圖畫法），Tab 切到整個世界
+    // M：先看附近，Tab 切到整個世界；兩頁都是奇幻 ASCII 的畫法
     map: (c, s, body) => {
       const p = game.state.player;
       const where = `你在${regionLabel(world, data, p.x, p.y)}`;
       if (mapWhole) {
-        const label = `${where}｜整個世界 ${world.zonesX}×${world.zonesY} 區，紅點是你，圓圈是城鎮｜Tab 看附近`;
-        drawMapWindow(c, s, body, worldMap, panels, p, label);
+        const label = `${where}｜整個世界 ${world.zonesX}×${world.zonesY} 區，一個字一區｜Tab 看附近`;
+        asciiMap.drawWorld(c, s, body, panels, p, label);
         return;
       }
-      const label = `${where}｜附近 ${REGION.zones}×${REGION.zones} 區，白框是畫面看得到的範圍｜Tab 看整個世界`;
-      regionMap.draw(c, s, body, panels, p, camera(), game.log.size, label);
+      const label = `${where}｜附近 3×3 區，一個字 3×3 格，白框是畫面看得到的範圍｜Tab 看整個世界`;
+      asciiMap.drawRegion(c, s, body, panels, p, camera(), game.log.size, label);
     },
     mapKey(code) {
       if (code !== 'Tab') return false;

@@ -166,6 +166,9 @@ export function createSettlePlanner(seed, data, ids) {
       const layout = buildSettlement(def, seed, x0, y0, popTagIndex(pop0, def), canOpen(s.x, s.y));
       if (!layout) continue;
       const name = `${def.names[Math.floor(hash01(seed, x0, y0, 9303) * def.names.length)]}${def.suffix}`;
+      // 牆內整平到工作範圍裡最低的那一層（舊版：工作範圍整平成同一個高度），外牆才不會在層界錯開
+      let tier = 99;
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) tier = Math.min(tier, z.tier[g(s.x + i, s.y + j)]);
       return {
         id: `${zx},${zy}`,
         kind: k,
@@ -177,6 +180,7 @@ export function createSettlePlanner(seed, data, ids) {
         h: H,
         name,
         layout,
+        tier,
         pop0,
         plaza: { x: x0 + layout.plaza.i, y: y0 + layout.plaza.j },
       };

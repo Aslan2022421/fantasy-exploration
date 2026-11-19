@@ -38,9 +38,8 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   function collect(x, y, buckets) {
     const g = look.ground(x, y);
     const o = world.objectAt(x, y);
-    // 村民可以站在床、椅子這類走得過去的家具上，畫村民不畫家具
-    const cr =
-      o < 0 ? (world.creatureAt?.(x, y) ?? world.npcAt?.(x, y)) : objects[o].passable ? world.npcAt?.(x, y) : null;
+    // 生物、村民可以站在走得過去的物件上（墓碑、土堆、床、椅子、矮叢），這時畫生物不畫物件
+    const cr = o < 0 || objects[o].passable ? (world.creatureAt?.(x, y) ?? world.npcAt?.(x, y)) : null;
     const h0 = groundHeight(world.tierAt(x, y));
     const glyph = o >= 0 || cr ? ' ' : g.glyph;
     const put = (h, item) => {
@@ -121,12 +120,15 @@ export function createStackView(mapView, world, objects, look, { now = () => per
     for (let y = y0 - 1; y < y0 + CHUNK + below + PEAK_SPAN; y++) {
       for (let x = x0 - below; x <= x0 + CHUNK + PEAK_SPAN; x++) if (world.inside(x, y)) collect(x, y, buckets);
     }
+    // 同一層裡先塗有底色的（地面），再畫只有字的（物件）：底色四邊多塗的那一點，才不會把隔壁格貼地的框線、橋切成一段一段
     for (const list of buckets) {
       if (!list) continue;
-      for (const it of list) {
-        const { ox, oy } = offsetOf(it, k);
-        layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg, it.w, it.h2);
-      }
+      for (const pass of [true, false])
+        for (const it of list) {
+          if (!!it.bg !== pass) continue;
+          const { ox, oy } = offsetOf(it, k);
+          layer.drawShifted(it.x - x0, it.y - y0, ox, oy, it.glyph, it.fg, it.bg, it.w, it.h2);
+        }
     }
     return layer;
   }

@@ -158,6 +158,10 @@ export function createNestPlanner(seed, data, ids) {
       const x0 = X0 + pick.x;
       const y0 = Y0 + pick.y;
       const grid = buildLayout(pick.kind.def.layout, seed, x0, y0);
+      // 整塊整平到圖樣裡最低的那一層（放得下的條件是高低最多差一層），牆與圍欄才不會在層界錯開
+      let tier = 99;
+      for (let j = 0; j < pick.H; j++)
+        for (let i = 0; i < pick.W; i++) tier = Math.min(tier, z.tier[g(pick.x + i, pick.y + j)]);
       const chest = chestIn(grid);
       const nest = {
         id: `${zx},${zy}`,
@@ -169,6 +173,7 @@ export function createNestPlanner(seed, data, ids) {
         w: pick.W,
         h: pick.H,
         grid,
+        tier,
         chest: { x: x0 + chest.i, y: y0 + chest.j },
         env: { cold: z.tBand[g(s.x, s.y)] === 0, mountain: false, water: false },
         dry: z.wBand[g(s.x, s.y)] === 0,

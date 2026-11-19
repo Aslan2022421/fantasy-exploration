@@ -213,6 +213,7 @@ export function createTerrainGen(seed, data, size = null) {
         surface[i] = sAll[c];
         cover[i] = pickCover(zc, c, X, Y);
         const n = settle ? stampSettle(settle, X, Y) : stampNest(nest, X, Y, wAll[c] !== NONE);
+        if (n) [tier[i], slope[i]] = [(settle ?? nest).tier, 0]; // 聚落、據點的圖樣整平成同一層、沒有坡
         if (n?.s != null) {
           surface[i] = n.s;
           cover[i] = n.k;

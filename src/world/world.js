@@ -76,7 +76,8 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     ? { zx: Math.floor(start0.x / zoneSize), zy: Math.floor(start0.y / zoneSize) }
     : { zx: zonesX >> 1, zy: zonesY >> 1 };
   const isLand = (zx, zy) => regions[zy * zonesX + zx].height >= LAND.water;
-  gen.setSettlePlan(settlementPlan(seed, zonesX, zonesY, isLand, startZone), startZone);
+  const settlePlan = settlementPlan(seed, zonesX, zonesY, isLand, startZone);
+  gen.setSettlePlan(settlePlan, startZone);
 
   const zones = new Map(); // "zx,zy" → 生好的區
   let last = null; // 查格子是最常做的事：先看是不是跟上一次同一區
@@ -213,6 +214,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     ...nestIndex,
     ...settleIndex,
     startVillage: home ?? null, // 起點的村莊（冒險者從這裡出發）
+    settlementKind: settlePlan, // (zx, zy) → 排好要放的聚落 'village' | 'town' | null（不用生出那一區；極少數放不下的區實際沒有）
     herdsOf: (zx, zy) => (zx < 0 || zy < 0 || zx >= zonesX || zy >= zonesY ? [] : zone(zx, zy).herds),
     generatedZones: () => zones.size,
     inside,

@@ -11,7 +11,7 @@ import { Color } from 'rot-js';
 export const REGION = { zones: 3 };
 
 // 舊專案 css 的 --m-*（old-v37.1），生態對過來：沒有的照最接近的
-const BIOME = {
+export const OLD_BIOME = {
   tundra: '#8fa9b0',
   taiga: '#3d6f62',
   'moss-forest': '#3d6f62',
@@ -49,7 +49,7 @@ const rgb = (hex) => Color.fromString(hex);
 const shade = (hex, h) => rgb(hex).map((v) => Math.min(255, Math.round(v * (0.75 + Math.min(4, h) * 0.08))));
 
 export function createRegionMap(world, data) {
-  const biomeColor = data.biomes.map((b) => BIOME[b.id] ?? b.mapColor ?? M.plain);
+  const biomeColor = data.biomes.map((b) => OLD_BIOME[b.id] ?? b.mapColor ?? M.plain);
   const waterKind = data.waters.map((w) => (w.style === 'swamp' ? M.swamp : w.style === 'deep' ? M.deep : M.lake));
   const isMountain = data.landforms.map((l) => l.style === 'mountain');
   const isIce = data.surfaces.map((s) => s.id === 'snow' || s.style === 'ice');

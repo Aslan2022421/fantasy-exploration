@@ -136,6 +136,25 @@ export function createPanels(font) {
       return maxScroll;
     },
 
+    // 小視窗（跟村民說話）：地圖中間偏下，寬度是地圖的一半，高度照內容
+    dialog(ctx, s, title, lines) {
+      const { map, pad, textScale, lineHeight } = s;
+      const w = Math.floor(map.w / 2);
+      const body = visualLines(
+        font,
+        lines.map((text) => ({ time: null, text })),
+        w - pad * 8,
+        textScale,
+      );
+      const h = body.length * lineHeight + pad * 7 + lineHeight;
+      const box = { x: map.x + Math.floor((map.w - w) / 2), y: map.y + Math.floor(map.h * 0.55), w, h };
+      ornateFrame(ctx, font, box, title, textScale, pad);
+      const top = box.y + pad * 3 + Math.floor(lineHeight / 2);
+      body.forEach((line, i) => {
+        drawLine(ctx, font, line, box.x + pad * 4, top + i * lineHeight, textScale);
+      });
+    },
+
     // 一行字（左上角在 x, y）
     text(ctx, s, text, x, y, color = COLORS.text) {
       font.drawText(ctx, text, x, y, s.textScale, color);

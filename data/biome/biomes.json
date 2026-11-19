@@ -5,6 +5,7 @@
     "temperature": "cold",
     "moisture": "dry",
     "mapColor": "#a3ab95",
+    "resource": "毛皮",
     "flora": [
       {
         "object": "shrub",
@@ -28,6 +29,7 @@
     "temperature": "cold",
     "moisture": "normal",
     "mapColor": "#4f6f58",
+    "resource": "木材",
     "flora": [
       {
         "object": "spruce",
@@ -59,6 +61,7 @@
     "temperature": "cold",
     "moisture": "wet",
     "mapColor": "#5f7d6a",
+    "resource": "木材",
     "flora": [
       {
         "object": "larch",
@@ -94,6 +97,7 @@
     "temperature": "mild",
     "moisture": "dry",
     "mapColor": "#94a862",
+    "resource": "穀物",
     "flora": [
       {
         "object": "oak",
@@ -129,6 +133,7 @@
     "temperature": "mild",
     "moisture": "normal",
     "mapColor": "#5a8048",
+    "resource": "木材",
     "flora": [
       {
         "object": "maple",
@@ -164,6 +169,7 @@
     "temperature": "mild",
     "moisture": "wet",
     "mapColor": "#40704a",
+    "resource": "木材",
     "flora": [
       {
         "object": "maple",
@@ -191,6 +197,7 @@
     "temperature": "hot",
     "moisture": "dry",
     "mapColor": "#c4ab6c",
+    "resource": "石材",
     "flora": [
       {
         "object": "date-palm",
@@ -218,6 +225,7 @@
     "temperature": "hot",
     "moisture": "normal",
     "mapColor": "#a7a35c",
+    "resource": "獸皮",
     "flora": [
       {
         "object": "acacia",
@@ -253,6 +261,7 @@
     "temperature": "hot",
     "moisture": "wet",
     "mapColor": "#3b6c3c",
+    "resource": "藥草",
     "flora": [
       {
         "object": "banyan",

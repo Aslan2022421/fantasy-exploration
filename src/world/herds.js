@@ -138,8 +138,10 @@ export function createHerdPlacer(seed, data, { NONE }) {
     const herds = [];
 
     // 怪物（混食）只從據點出來（nests.js）；動物的群離據點的圖樣外緣至少 NEST.avoid 格
+    // 聚落（村莊、城鎮）也一樣避開
     const nest = ctx.nest;
-    const nearNest = (X, Y) => nest && gapToNest(nest, X, Y) < NEST.avoid;
+    const nearNest = (X, Y) =>
+      (nest && gapToNest(nest, X, Y) < NEST.avoid) || (ctx.settle && gapToNest(ctx.settle, X, Y) < NEST.avoid);
     const slots = [
       ...Array.from({ length: target.herbivores }, () => 'herbivore'),
       ...Array.from({ length: target.predators }, () => 'predator'),

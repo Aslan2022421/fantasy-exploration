@@ -1,21 +1,21 @@
 // 冒險者的動作：走一步、點地圖自動走、選定目標（查看）、Q 對目標動手（挖礦、伐木、採集、攻擊生物）、
 // 戰鬥中結束回合、休息。花時間的動作要輪到冒險者才做，做完把回合交回排程；每個動作都寫進紀錄
 // - 右鍵選定一格當目標並查看；能採的來源換成那處（樹冠換成樹幹那格），同一格再選一次就收起
-// - 撞上能採的來源（樹幹）或生物不動手，只選定成目標
+// - 撞上能採的來源（樹幹）或生物不動手，只選定成目標；撞上村民是說話
 // - Q：沒貼著目標先走到旁邊再動手（遠程武器在射程內直接射）；沒選目標時採腳下那處（矮叢、草本）；
 //   採完還能採就留著當目標
 // - 戰鬥中每走一格、每攻擊一次，生物照時間跟著動（逐格播放）；生物開始撲上來時自動走路停下
 
 import { DATA } from '../data/load.js';
 import { distanceTo } from '../world/chase.js';
-import { nestArea } from '../world/nests.js';
 import { findPath, findPathNextTo, stepDirection } from '../world/path.js';
+import { changedCells } from './changed-cells.js';
 import { createPlayback } from './playback.js';
 
 const STEP_MS = 70; // 自動走每一步間隔
 
-// persist()：存檔並把訊息欄捲回最新；redraw()：重畫；describe(cell)：查看的文字
-export function createActions({ game, turns, worldView, describe, persist, redraw }) {
+// persist()：存檔並把訊息欄捲回最新；redraw()：重畫；describe(cell)：查看的文字；talk(npc)：打開對話框
+export function createActions({ game, turns, worldView, describe, persist, redraw, talk = () => {} }) {
   const world = game.world;
   const player = () => game.state.player;
   const same = (a, b) => a && b && a.x === b.x && a.y === b.y;
@@ -31,40 +31,30 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     invalidate: (ids) => worldView.invalidateCells(ids.flatMap((id) => world.creatureById(id)?.cells ?? [])),
   });
 
-  // 新寫進的紀錄裡動到的生物格子（移動、倒下，紀錄的 cells 是格子陣列）：丟掉畫面快取。
-  // 據點的人口變了（擲對抗、重生、外面那群倒下一隻），範圍跟著變：整塊據點（data.area）都丟掉
-  const areaCells = (a) => {
-    const out = [];
-    for (let y = a.y0; y <= a.y1; y++) for (let x = a.x0; x <= a.x1; x++) out.push({ x, y });
-    return out;
-  };
+  // 新寫進的紀錄動到的格子（changed-cells.js）：丟掉畫面快取
   function refresh(fromId) {
-    const cells = [];
-    for (let i = fromId; i < game.log.size; i++) {
-      const d = game.log.get(i).data;
-      if (Array.isArray(d?.cells)) cells.push(...d.cells);
-      if (d?.area) cells.push(...areaCells(d.area));
-      else if (d?.nest?.id && world.nestById(d.nest.id)) cells.push(...areaCells(nestArea(world.nestById(d.nest.id))));
-    }
+    const cells = changedCells(game, fromId);
     if (cells.length) worldView.invalidateCells(cells);
   }
 
-  // 選定的生物還活著就把目標格子換到牠現在的位置，不然收起
+  // 選定的生物還活著（村民還在）就把目標格子換到牠現在的位置，不然收起
+  const byId = (id) => (id?.startsWith('npc:') ? world.npcById(id) : world.creatureById(id));
   function followTarget() {
-    const now = targetId && world.creatureById(targetId);
+    const now = targetId && byId(targetId);
     examined = now ? { x: now.member.x, y: now.member.y } : null;
     if (!now) targetId = null;
   }
 
-  // 平常遊蕩的生物（照時間算位置，不寫紀錄）：動作前後比一比附近誰換了位置，丟掉那些格子的畫面快取
+  // 平常遊蕩的生物與走動的村民（照時間算位置，不寫紀錄）：動作前後比一比附近誰換了位置，丟掉那些格子的畫面快取
   const NEAR = 48; // 畫面看得到的範圍（格）
+  const movers = (p) => [...world.creaturesNear(p.x, p.y, NEAR), ...(world.npcsNear?.(p.x, p.y, NEAR) ?? [])];
   function wandered(fn) {
     const p = player();
-    const before = new Map(world.creaturesNear(p.x, p.y, NEAR).map((c) => [c.id, c.cells]));
+    const before = new Map(movers(p).map((c) => [c.id, c.cells]));
     const r = fn();
     const q = player();
     const cells = [];
-    for (const c of world.creaturesNear(q.x, q.y, NEAR)) {
+    for (const c of movers(q)) {
       const old = before.get(c.id);
       if (old && old[0].x === c.cells[0].x && old[0].y === c.cells[0].y) continue;
       cells.push(...(old ?? []), ...c.cells);
@@ -166,6 +156,21 @@ export function createActions({ game, turns, worldView, describe, persist, redra
 
   const inRange = (cr) => distanceTo(cr.cells, player()) <= game.hero.range;
 
+  // 這格上的村民：{ id, x, y, cells } 或 null
+  function npcSrc(cell) {
+    const v = cell && world.npcAt?.(cell.x, cell.y);
+    return v ? { id: v.id, x: v.member.x, y: v.member.y, cells: v.cells } : null;
+  }
+  // 跟村民說話（要貼著）：記一筆、打開對話框，村民留著當目標
+  function talkTo(v, cause = null) {
+    const rec = game.talk(v.id, cause);
+    if (!rec) return;
+    persist();
+    targetId = v.id;
+    followTarget();
+    talk(world.npcById(v.id));
+  }
+
   // 攻擊一隻生物（花一個動作的刻數，生物接著動）；牠還活著就繼續當目標
   function attackAt(cr, cause = null) {
     targetId = cr.id;
@@ -175,7 +180,7 @@ export function createActions({ game, turns, worldView, describe, persist, redra
 
   function look(cell) {
     const src = game.sourceAt(cell);
-    const cr = src ? null : creatureSrc(cell);
+    const cr = src ? null : (creatureSrc(cell) ?? npcSrc(cell));
     const at = src || cr ? { x: (src ?? cr).x, y: (src ?? cr).y } : cell;
     if (same(examined, at)) {
       examined = null;
@@ -207,7 +212,11 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       stop();
       const to = { x: player().x + dx, y: player().y + dy };
       const rec = act(() => game.move(stepDirection(player(), to)));
-      const src = rec ? null : (game.sourceAt(to) ?? creatureSrc(to));
+      if (rec) return;
+      // 撞上村民就說話；撞上能採的來源或生物只選定
+      const v = npcSrc(to);
+      if (v) return talkTo(v);
+      const src = game.sourceAt(to) ?? creatureSrc(to);
       if (src && !same(examined, src)) look(to);
     },
     rest() {
@@ -242,6 +251,15 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     },
     actOnTarget() {
       if (targetId) followTarget();
+      // 村民：貼著就說話，不然先走到旁邊
+      const v = npcSrc(examined);
+      if (v) {
+        const steps = findPathNextTo(world, player(), v);
+        if (steps === null) return;
+        if (steps.length) walk(steps, v, (cause) => talkTo(npcSrc(examined) ?? v, cause));
+        else talkTo(v);
+        return;
+      }
       const cr = creatureSrc(examined);
       if (cr) {
         // 遠程武器看得到、在射程內就直接射；不然先走到旁邊
@@ -263,7 +281,7 @@ export function createActions({ game, turns, worldView, describe, persist, redra
     shownPath() {
       if (walking.length) return { steps: walking, reachable: true };
       if (!examined) return null;
-      const cr = creatureSrc(examined);
+      const cr = creatureSrc(examined) ?? npcSrc(examined);
       if (cr) {
         const steps = findPathNextTo(world, player(), cr);
         return { steps: steps ?? [], reachable: steps !== null };

@@ -16,13 +16,15 @@ export function createBrawl(ctx) {
   const { world, data, st, foe, entry, seenIn, inCombat, record, dice, step, leave, range, nestLoss } = ctx;
   const spOf = (f) => data.species[f.species];
   const enemies = (a, b) => spOf(a).id !== spOf(b).id;
+  // 冒險者在聚落裡（安全區）：怪物不把他當目標
+  const heroSafe = () => !!world.inSettleArea?.(st().player.x, st().player.y);
 
   // 戰鬥中的混食怪物現在要打誰：冒險者（看得到時）、戰鬥裡不同種族的生物、牠原本的目標，挑最近的；同樣近時冒險者優先
   function pickAim(f, view) {
     const c = st().combat;
     let best = null;
     let bestD = Number.POSITIVE_INFINITY;
-    if (seenIn(view, f.cells)) {
+    if (seenIn(view, f.cells) && !heroSafe()) {
       best = PLAYER;
       bestD = distanceTo(f.cells, st().player);
     }
@@ -121,7 +123,7 @@ export function createBrawl(ctx) {
       let aim = null;
       let best = Number.POSITIVE_INFINITY;
       const toHero = distanceTo(f.cells, p);
-      if (toHero <= range) {
+      if (toHero <= range && !heroSafe()) {
         aim = PLAYER;
         best = toHero;
       }

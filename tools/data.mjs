@@ -22,6 +22,7 @@ export function loadData() {
     worldshape: readKind('worldshape'),
     species: readKind('species'),
     nest: readKind('nest'),
+    settlement: readKind('settlement'),
     skill: readKind('skill'),
     weapon: readKind('weapon'),
     armor: readKind('armor'),

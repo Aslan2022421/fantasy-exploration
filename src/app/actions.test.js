@@ -42,8 +42,12 @@ test('按 Q 攻擊一下，生物照時間接著動，不用再按別的鍵', ()
   for (let r = 20; r <= 200 && !near; r += 20)
     near = game.world.herdsNear(p.x, p.y, r).sort((a, b) => a.near.d - b.near.d)[0] ?? null;
   const cr = game.world.creatureAt(near.near.x, near.near.y);
-  for (const step of findPathNextTo(game.world, game.state.player, cr)) {
-    if (!game.move(stepDirection(game.state.player, step))) break;
+  // 起點在村莊裡，生物在 24 格外，走過去的時候牠會遊蕩：走到了再看一次，還沒貼著就再走
+  for (let k = 0; k < 6; k++) {
+    const now = game.world.creatureById(cr.id);
+    const steps = now && findPathNextTo(game.world, game.state.player, now);
+    if (!steps?.length) break;
+    for (const step of steps) if (!game.move(stepDirection(game.state.player, step))) break;
   }
   // 交回排程之後要等下一拍才又輪到冒險者
   const turns = {

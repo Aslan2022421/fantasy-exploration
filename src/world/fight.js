@@ -203,7 +203,7 @@ export function createFight(env) {
         brawl.spot(herd, wide, nearby, cause);
         continue;
       }
-      if (diet !== 'predator') continue;
+      if (diet !== 'predator' || world.inSettleArea?.(p.x, p.y)) continue; // 在聚落裡（安全區）不撲上來
       view ??= visibleFrom(world, data, p, ENGAGE_RANGE);
       const ids = watchers(herd, view);
       if (!ids.length) continue;

@@ -23,13 +23,14 @@ export const TerrainSchema = z.discriminatedUnion('layer', [
     style: z.enum(['relief', 'mountain']),
     glyphs: z.array(Glyph).min(1),
   }),
-  // 地表材質：relief 起伏點、sand 波紋與沙丘、rock 裸岩 ■、gravel 碎石 °、ice 冰面 ═
+  // 地表材質：relief 起伏點、sand 波紋與沙丘、rock 裸岩 ■、gravel 碎石 °、ice 冰面 ═；
+  // 聚落裡的 road 路 ·、floor 室內的木地板（空白）
   z.object({
     ...layerBase,
     layer: z.literal('surface'),
     color: Color,
     passable: z.boolean(),
-    style: z.enum(['relief', 'sand', 'rock', 'gravel', 'ice']),
+    style: z.enum(['relief', 'sand', 'rock', 'gravel', 'ice', 'road', 'floor']),
     glyphs: z.array(Glyph).min(1),
   }),
   // 水文：deep 深水、shallow 淺水、swamp 沼澤（墨綠色的水文字元）
@@ -111,7 +112,29 @@ export const ObjectSchema = z.object({
   canopy: z.enum(['round', 'cross', 'pair']).default('round'),
   tile: z.string().nullable(),
   gather: GatherSchema.optional(), // 能採的才有
-  join: z.boolean().optional(), // 牆：畫的時候照上下左右相鄰的牆接成雙線框（╔═╗），資料裡的字只是預設
+  // 牆：畫的時候照上下左右相鄰的牆接成框，true 是雙線（╔═╗）、single 是單線（┌─┐）；資料裡的字只是預設
+  join: z.union([z.boolean(), z.literal('single')]).optional(),
+});
+
+// 聚落（階段 7）：村莊、城鎮。w×h 是整塊圖樣（含外牆）；wall 是外牆的物件；gates 出入口幾個；
+// houses 是民房幾間、residents 是住幾人（兩者都照人口標籤五段，從大舉遷出到急速發展）；
+// pop 是隱藏人口的範圍；rangeBase 是範圍的基本半徑；econStart 是開局的經濟值（0～100）；
+// halls 是另外蓋一座的公共建築（從中挑一種）；名字從 names 挑一個再加 suffix
+export const SettlementSchema = z.object({
+  id: Id,
+  name: z.string().min(1),
+  w: z.number().int().min(15),
+  h: z.number().int().min(11),
+  wall: Id,
+  gates: z.tuple([z.number().int().min(2).max(4), z.number().int().min(2).max(4)]),
+  houses: z.array(z.number().int().min(1)).length(5),
+  residents: z.array(z.tuple([z.number().int().min(1), z.number().int().min(1)])).length(5),
+  pop: z.tuple([z.number().int().min(1), z.number().int().min(1)]),
+  rangeBase: z.number().int().min(1),
+  econStart: z.number().int().min(0).max(100),
+  suffix: z.string().min(1),
+  halls: z.array(Id).optional(),
+  names: z.array(z.string().min(1)).min(1),
 });
 
 // 據點（階段 6）：怪物的窩。layout 是中心圖樣（src/world/nest-layouts.js）；ground 是周圍換色的樣子；
@@ -258,6 +281,7 @@ export const BiomeSchema = z.object({
   temperature: BAND,
   moisture: WETNESS,
   mapColor: Color.optional(), // 世界地圖（M）上的顏色；沒有就畫灰色
+  resource: z.string().min(1).optional(), // 聚落的資源標籤：周圍最多這種生態時寫什麼（例如木材）
   flora: z.array(z.object({ object: Id, density: Share })), // 依序撒的物件與密度
   cover: z.array(z.object({ cover: Id, density: Share })), // 泥土與沙地上長的生態覆蓋，各佔幾成
 });

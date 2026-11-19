@@ -53,11 +53,19 @@ export function createWindows(panels, content) {
     close() {
       open = null;
     },
+    // 跟村民說話的小視窗（沒有自己的鍵，Esc 關掉）：talk = { title, lines }
+    talk(talk) {
+      open = { name: 'talk', title: `${talk.title}（Esc 關閉）`, small: true, lines: talk.lines };
+    },
     scroll(delta) {
       scroll = Math.max(0, Math.min(maxScroll, scroll + delta));
     },
     draw(ctx, screen) {
       if (!open) return;
+      if (open.small) {
+        panels.dialog(ctx, screen, open.title, open.lines);
+        return;
+      }
       if (open.custom) {
         content[open.name](ctx, screen, panels.windowBox(ctx, screen, open.title));
         return;

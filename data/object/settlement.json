@@ -1,0 +1,103 @@
+[
+  {
+    "id": "palisade",
+    "name": "木牆",
+    "glyph": "─",
+    "color": "#9a7a52",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": "single"
+  },
+  {
+    "id": "town-wall",
+    "name": "石牆",
+    "glyph": "═",
+    "color": "#b0aaa0",
+    "passable": false,
+    "height": 5,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "house",
+    "name": "民房",
+    "glyph": "⌂",
+    "color": "#a0805a",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "temple",
+    "name": "神殿",
+    "glyph": "∩",
+    "color": "#c8c0a8",
+    "passable": false,
+    "height": 5,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "market",
+    "name": "市場",
+    "glyph": "♦",
+    "color": "#c09a5a",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "door",
+    "name": "門",
+    "glyph": "+",
+    "color": "#b08a5a",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "bed",
+    "name": "床",
+    "glyph": "≡",
+    "color": "#b8a58a",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "table",
+    "name": "桌子",
+    "glyph": "π",
+    "color": "#9a7650",
+    "passable": false,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "town-well",
+    "name": "井",
+    "glyph": "O",
+    "color": "#9aaab8",
+    "passable": false,
+    "height": 2,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  }
+]

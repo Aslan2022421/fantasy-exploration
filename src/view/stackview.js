@@ -38,7 +38,7 @@ export function createStackView(mapView, world, objects, look, { now = () => per
   function collect(x, y, buckets) {
     const g = look.ground(x, y);
     const o = world.objectAt(x, y);
-    const cr = o < 0 ? world.creatureAt?.(x, y) : null;
+    const cr = o < 0 ? (world.creatureAt?.(x, y) ?? world.npcAt?.(x, y)) : null;
     const h0 = groundHeight(world.tierAt(x, y));
     const glyph = o >= 0 || cr ? ' ' : g.glyph;
     const put = (h, item) => {

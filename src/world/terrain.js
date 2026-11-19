@@ -10,44 +10,16 @@ import { createCoverPicker } from './cover.js';
 import { MAX_SIZE, PART_MID } from './footprint.js';
 import { GEO } from './geography.js';
 import { createHerdPlacer } from './herds.js';
-import { gradient, LEVELS, lightLevel, shadeLevel } from './hillshade.js';
+import { gradient, lightLevel, shadeLevel } from './hillshade.js';
 import { createLandform, LAND, WATER_DEEP, WATER_NONE, WATER_SHALLOW } from './landform.js';
 import { createNestPlanner, createNestStamp } from './nests.js';
 import { createObjectPlacer } from './objects.js';
 import { isPeak } from './peak.js';
 import { applyGeography } from './riverbed.js';
+import { createSettlePlanner, createSettleStamp } from './settlements.js';
+import { bandOf, GEN, SLOPE_SCALE, TEMP_BANDS, WET_BANDS, waterLevel } from './terrain-params.js';
 
-// 生成的參數（調比例時改這裡；大地形與水的參數在 landform.js 的 LAND）
-export const GEN = {
-  treelineRange: 0.2, // 山地高出山地門檻這麼多就沒有樹（中間線性變少），也是雪線
-  band: 0.1, // 溫度、濕度超過 ±這個值才算寒冷／炎熱、乾燥／潮濕
-  waterShadeStep: 0.05, // 水每深這麼多暗一級
-  // 坡度門檻（SLOPE_SCALE 倍；陸地約一半在 39 以下）
-  hillSlope: 55, // 以上是丘陵
-  gravelSlope: 95, // 山地以外坡度到這裡露出碎石（量過：非山地陸地約 6% 在這以上）
-  rockSlope: 110, // 到這裡露出裸岩（約 2%）
-  mountainRock: 45, // 山上坡度到這裡是岩石（以下是碎石）
-  peakRadius: 3, // 山地格比周圍這麼多格內都高，才算山峰（不能超過 genZone 的外圍 E）
-  swampSlope: 39, // 沼澤要比這個平
-  swampWet: 0.18, // 濕度高於這個、又在最低的陸地層才積水成沼澤
-  reeds: 0.12, // 緊鄰淺水或沼澤的泥土長蘆葦的機率
-  mixed: 0.15, // 生態交界長混合植被的機率
-};
-
-export const SLOPE_SCALE = 4000; // 坡度存成整數時放大的倍數
-
-export const TEMP_BANDS = ['cold', 'mild', 'hot'];
-export const WET_BANDS = ['dry', 'normal', 'wet'];
-
-export function bandOf(v) {
-  return v < -GEN.band ? 0 : v > GEN.band ? 2 : 1;
-}
-
-// 水面的亮度級數：越深越暗（淺灘第 6 級，往下每 waterShadeStep 暗一級，最暗第 1 級）
-export function waterLevel(h) {
-  const depth = LAND.water - h;
-  return Math.max(1, Math.min(LEVELS - 2, LEVELS - 2 - Math.floor(depth / GEN.waterShadeStep)));
-}
+export { bandOf, GEN, SLOPE_SCALE, TEMP_BANDS, WET_BANDS, waterLevel };
 
 const NONE = 255; // 水文、覆蓋沒有東西時存這個
 
@@ -94,7 +66,11 @@ export function createTerrainGen(seed, data, size = null) {
   const planHerds = createHerdPlacer(seed, data, { NONE });
   const planNest = createNestPlanner(seed, data, { NONE, SWAMP, ICE });
   const stampNest = createNestStamp(data, { GRAVEL, DIRT, REEDS, NONE });
+  const planSettle = createSettlePlanner(seed, data, { NONE, SWAMP, ICE });
+  const stampSettle = createSettleStamp(data, { DIRT, ROAD: sf('road'), FLOOR: sf('floor'), NONE });
   let herdTargets = null; // (zx, zy) → { herbivores, predators }，建世界時由 world.js 接上；沒接就不放生物
+  let settlePlan = null; // (zx, zy) → 'village' | 'town' | null，建世界時由 world.js 接上；沒接就沒有聚落
+  let startZone = null; // 起點那一區 { zx, zy }（村莊在整區裡找位置）
   const covers = data.biomes.map((b) => b.cover.map((c) => [cv(c.cover), c.density]));
   const pickCover = createCoverPicker(
     seed,
@@ -209,8 +185,11 @@ export function createTerrainGen(seed, data, size = null) {
           }
         : null,
     };
-    // 據點（nests.js）：整塊中心圖樣在這一區裡，直接蓋進物件層與地面
-    const nest = planNest(z, zx, zy, geo?.start);
+    // 聚落（settlements.js）與據點（nests.js）：一區最多一樣，整塊圖樣在這一區裡，直接蓋進物件層與地面
+    const kind = settlePlan?.(zx, zy);
+    const isStart = startZone?.zx === zx && startZone?.zy === zy;
+    const settle = kind ? planSettle(z, zx, zy, kind, isStart) : null;
+    const nest = settle ? null : planNest(z, zx, zy, geo?.start);
     const zc = { sAll, wAll, bAll, G }; // 生態覆蓋看的格子（cover.js）
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
@@ -228,7 +207,7 @@ export function createTerrainGen(seed, data, size = null) {
         water[i] = wAll[c];
         surface[i] = sAll[c];
         cover[i] = pickCover(zc, c, X, Y);
-        const n = stampNest(nest, X, Y, wAll[c] !== NONE);
+        const n = settle ? stampSettle(settle, X, Y) : stampNest(nest, X, Y, wAll[c] !== NONE);
         if (n?.s != null) {
           surface[i] = n.s;
           cover[i] = n.k;
@@ -261,6 +240,7 @@ export function createTerrainGen(seed, data, size = null) {
       start: geo?.start,
       target: herdTargets?.(zx, zy),
       nest,
+      settle,
     });
 
     return {
@@ -269,6 +249,7 @@ export function createTerrainGen(seed, data, size = null) {
       size,
       herds,
       nest,
+      settle,
       height,
       landform,
       peak,
@@ -293,8 +274,22 @@ export function createTerrainGen(seed, data, size = null) {
   const setHerdTargets = (fn) => {
     herdTargets = fn;
   };
+  const setSettlePlan = (fn, start) => {
+    settlePlan = fn;
+    startZone = start;
+  };
 
-  return { genZone, heightAt: land.heightAt, landform: land, climateAt, biomeAt, setGeography, setHerdTargets, shape };
+  return {
+    genZone,
+    heightAt: land.heightAt,
+    landform: land,
+    climateAt,
+    biomeAt,
+    setGeography,
+    setHerdTargets,
+    setSettlePlan,
+    shape,
+  };
 }
 
 export { NONE as LAYER_NONE };

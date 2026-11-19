@@ -64,5 +64,27 @@
     "style": "ice",
     "glyphs": ["═", " "],
     "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "road",
+    "name": "路",
+    "glyph": "·",
+    "color": "#a08664",
+    "passable": true,
+    "style": "road",
+    "glyphs": ["·"],
+    "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "floor",
+    "name": "木地板",
+    "glyph": " ",
+    "color": "#7a5c3c",
+    "passable": true,
+    "style": "floor",
+    "glyphs": [" "],
+    "tile": null
   }
 ]

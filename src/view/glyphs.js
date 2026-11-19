@@ -49,6 +49,10 @@ export function surfaceGlyph(style, slope, a) {
       return a < QUIET.gravel ? '°' : reliefGlyph(slope);
     case 'ice':
       return a < 0.4 ? '═' : ' ';
+    case 'road':
+      return '·';
+    case 'floor':
+      return ' ';
     default:
       return reliefGlyph(slope);
   }

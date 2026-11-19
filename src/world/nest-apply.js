@@ -5,8 +5,13 @@ export function applyNest(state, rec) {
   const d = rec.data;
   const nest = (patch) => ({ ...state.nests, [d.nest]: { ...state.nests[d.nest], ...patch } });
   switch (rec.verb) {
-    case 'nestroll':
-      return { ...state, nests: nest({ pop: d.pop, size: d.size, rolledAt: rec.time }) };
+    case 'nestroll': {
+      // 對手是聚落時，聚落的人口照紀錄寫好的數字
+      const settles = d.settle
+        ? { ...state.settles, [d.settle]: { ...state.settles[d.settle], pop: d.settlePop } }
+        : state.settles;
+      return { ...state, settles, nests: nest({ pop: d.pop, size: d.size, rolledAt: rec.time }) };
+    }
     case 'nestclear':
       return { ...state, nests: nest({ clearedAt: rec.time }) };
     case 'nestspawn': {

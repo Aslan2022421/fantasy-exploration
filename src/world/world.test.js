@@ -243,7 +243,9 @@ describe('世界的形狀', () => {
     let trunks = 0;
     let canopy = 0;
     for (let i = 0; i < z.object.length; i++) {
-      if (!z.object[i] || DATA.objects[z.object[i] - 1].layers) continue;
+      // 只看植物（能採、不是礦坑）；聚落、據點的牆與家具另有規則
+      const def = z.object[i] ? DATA.objects[z.object[i] - 1] : null;
+      if (!def || def.layers || !def.gather) continue;
       const x = Z + (i % Z);
       const y = Z + Math.floor(i / Z);
       if (z.objectPart[i] === PART_TRUNK) {

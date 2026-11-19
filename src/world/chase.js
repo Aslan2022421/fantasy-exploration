@@ -24,11 +24,11 @@ export const gapBetween = (a, b) => Math.min(...b.map((c) => distanceTo(a, c)));
 // b 佔的格子裡離 a 最近的那一格（追一隻佔好幾格的生物時，往這格走）
 export const nearestCell = (a, b) => b.reduce((best, c) => (distanceTo(a, c) < distanceTo(a, best) ? c : best));
 
-// 錨點放在 anchor 時，這隻（id 是 self）整隻放不放得下；hero 是冒險者站的格子
+// 錨點放在 anchor 時，這隻（id 是 self）整隻放不放得下；hero 是冒險者站的格子。聚落的圖樣與範圍進不去（安全區）
 function fitsAt(world, sp, self, anchor, hero) {
   return creatureCells(sp, anchor).every((c) => {
     if (c.x === hero.x && c.y === hero.y) return false;
-    if (!world.groundPassable(c.x, c.y)) return false;
+    if (!world.groundPassable(c.x, c.y) || world.inSettleArea?.(c.x, c.y)) return false;
     const other = world.creatureAt(c.x, c.y);
     return !other || other.id === self;
   });

@@ -8,10 +8,13 @@ import { creatureCells, herdTargets } from './herds.js';
 import { LAND } from './landform.js';
 import { createNestIndex } from './nests.js';
 import { anchorOffset } from './objects.js';
+import { createSettleIndex, settlementPlan } from './settlements.js';
 import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
 
+export { startPosition } from './start.js';
+
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 27; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點
+export const WORLD_VERSION = 28; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -67,6 +70,13 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     }
   }
   gen.setHerdTargets((zx, zy) => regions[zy * zonesX + zx].numbers);
+  // 聚落（settlements.js）：哪幾區放村莊、城鎮先照種子定好；起點那一區一定是村莊
+  const start0 = geography.start;
+  const startZone = start0
+    ? { zx: Math.floor(start0.x / zoneSize), zy: Math.floor(start0.y / zoneSize) }
+    : { zx: zonesX >> 1, zy: zonesY >> 1 };
+  const isLand = (zx, zy) => regions[zy * zonesX + zx].height >= LAND.water;
+  gen.setSettlePlan(settlementPlan(seed, zonesX, zonesY, isLand, startZone), startZone);
 
   const zones = new Map(); // "zx,zy" → 生好的區
   let last = null; // 查格子是最常做的事：先看是不是跟上一次同一區
@@ -118,6 +128,16 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
 
   // 據點（nests.js）：nestOf(zx, zy)、nestsNear(x, y, r)、nestById(id)
   const nestIndex = createNestIndex(zone, zonesX, zonesY, zoneSize);
+  const settleIndex = createSettleIndex(zone, zonesX, zonesY, zoneSize);
+
+  // 起點改到起點村莊的廣場（井的南邊一格）。起點那一區的生物群照起點放，起點換了就整個重生一次
+  const home = settleIndex.settleOf(startZone.zx, startZone.zy);
+  if (home) {
+    geography.start = { ...home.plaza };
+    zones.clear();
+    last = null;
+    settleIndex.clearSettles();
+  }
 
   // 離 (x, y) 不到 r 格（切比雪夫）的生物群：[{ herd, species, near: 最近那隻的錨點 }]
   function herdsNear(x, y, r) {
@@ -190,6 +210,8 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     creatureAt,
     herdsNear,
     ...nestIndex,
+    ...settleIndex,
+    startVillage: home ?? null, // 起點的村莊（冒險者從這裡出發）
     herdsOf: (zx, zy) => (zx < 0 || zy < 0 || zx >= zonesX || zy >= zonesY ? [] : zone(zx, zy).herds),
     generatedZones: () => zones.size,
     inside,
@@ -271,20 +293,4 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     },
     groundPassable,
   };
-}
-
-// 起點：最大那塊陸地上離世界中央最近的地方（geography.js 算好的粗格），往外一圈一圈找第一個能走的格子
-export function startPosition(world) {
-  const s = world.geography?.start;
-  const cx = Math.floor(s?.x ?? world.width / 2);
-  const cy = Math.floor(s?.y ?? world.height / 2);
-  for (let r = 0; r < Math.max(world.width, world.height); r++) {
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        if (world.isPassable(cx + dx, cy + dy)) return { x: cx + dx, y: cy + dy };
-      }
-    }
-  }
-  return { x: cx, y: cy };
 }

@@ -18,6 +18,7 @@ import { logLines } from '../world/describe.js';
 import { loadGame, newGame } from '../world/game.js';
 import { describePlace, regionLabel } from '../world/place.js';
 import { clockOf, dayOf } from '../world/rules.js';
+import { talkLines } from '../world/talk.js';
 import { createActions } from './actions.js';
 import { runCreation } from './creation.js';
 import { createGameWindows } from './game-windows.js';
@@ -26,13 +27,13 @@ import { showLoading } from './loading.js';
 import { bindMapMouse, drawMapLabels } from './mouse.js';
 import { createZoom } from './zoom.js';
 
-const VERSION = '0.1.2';
+const VERSION = '0.1.3';
 const SAVE_KEY = 'world';
 const SEED = 20261112;
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',
   '滑鼠指著地圖看是什麼；左鍵走過去；右鍵查看並選定目標，再點一下收起；空白鍵沿路線出發，走路中再按停下。',
-  'Q 對目標動手：樹是伐木，矮叢、草本是採集，生物是攻擊；沒貼著會先走過去。撞上樹幹或生物會選定它。',
+  'Q 對目標動手：樹是伐木，矮叢、草本是採集，生物是攻擊，村民是說話；沒貼著會先走過去。撞上樹幹或生物會選定它，撞上村民是說話。',
   '每個動作（走一格、攻擊一次）花的時間看身高，生物看體型；你每做一個動作，生物照時間跟著動。R 休息 1 小時（每天一次）。',
   'C 角色，B 裝備與背包，M 世界地圖，H 看完整紀錄，Esc 選單（匯出試玩紀錄、重新建角）。＋／－ 放大縮小地圖。',
 ];
@@ -96,6 +97,7 @@ const actions = createActions({
     store.save(SAVE_KEY, game.serialize());
   },
   redraw: () => render(),
+  talk: (npc) => npc && windows.talk(talkLines(world, DATA, npc)),
 });
 
 function entries() {

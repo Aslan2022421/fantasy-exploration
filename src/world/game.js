@@ -10,23 +10,22 @@ import { z } from 'zod';
 import { createLog, RecordSchema } from '../core/records.js';
 import { createStreams, diceSeed, streamSeed } from '../core/rng.js';
 import { DATA } from '../data/load.js';
-import { withChanges } from './changes.js';
-import { withCreatures } from './creatures.js';
 import { applyFight, createFight } from './fight.js';
 import { applyGather, planGather, sourceAt, touches } from './gather.js';
 import { buildSheet, equip as equipSheet, heroStats, presetHero, raise as raiseSheet } from './hero.js';
 import { tryMove } from './move.js';
 import { applyNest } from './nest-apply.js';
-import { withNests } from './nest-overlay.js';
 import { createNestWatch } from './nest-watch.js';
+import { overlayWorld } from './overlays.js';
+import { createSettleWatch } from './settle-watch.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
 // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種；
 // 6：時間改成刻（1 刻＝0.25 秒）、狀態加上冒險者、生命、戰鬥、動過的生物、休息；
 // 7：戰鬥改成照時間一步一步輪流（每個動作的刻數看身高、體型）；8：戰鬥加上逃的、最後看到冒險者的位置；
 // 9：建角（冒險者加上背景、背包裡的裝備、屬性點）；10：混食的怪物打其他生物（戰鬥記各自在打誰、生物受傷的時間）；
-// 11：據點（隱藏人口、擲對抗、清光與重生、寶箱）
-export const SAVE_FORMAT = 11;
+// 11：據點（隱藏人口、擲對抗、清光與重生、寶箱）；12：聚落（隱藏人口）
+export const SAVE_FORMAT = 12;
 export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
 const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻
@@ -46,6 +45,7 @@ const StateSchema = z.object({
   combat: z.object({}).passthrough().nullable(), // 戰鬥中（fight.js）
   restDay: z.number(), // 哪一天休息過
   nests: z.record(z.string(), z.object({}).passthrough()), // 動過的據點（nest-overlay.js）
+  settles: z.record(z.string(), z.object({}).passthrough()), // 動過的聚落（settle-overlay.js）
 });
 const emptyState = () => ({
   player: { x: 0, y: 0 },
@@ -60,6 +60,7 @@ const emptyState = () => ({
   combat: null,
   restDay: -1,
   nests: {},
+  settles: {},
 });
 export const SaveSchema = z.object({
   format: z.literal(SAVE_FORMAT),
@@ -106,17 +107,7 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   let state = initialState;
   let lastCheckpoint = checkpoint;
   let shown = null; // 畫面逐格播放時暫時顯示的生物樣子（null＝照狀態）
-  const world = withCreatures(
-    withNests(
-      withChanges(baseWorld, DATA, () => state.cells),
-      DATA,
-      () => state.nests,
-    ),
-    DATA,
-    () => shown ?? state.creatures,
-    () => ({ time: state.time, hero: state.player }), // 生物平常照時間遊蕩，不會走到冒險者身上
-    () => state.nests,
-  );
+  const world = overlayWorld(baseWorld, DATA, { state: () => state, creatures: () => shown ?? state.creatures });
 
   function record(entry) {
     const rec = log.append({ time: state.time, actor: PLAYER, ...entry });
@@ -143,6 +134,7 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     record,
     dice: (tag) => RNG.clone().setSeed(diceSeed(seed, `${tag}:${log.size}`)),
   });
+  const settles = createSettleWatch({ world, state: () => state, record });
   // 花時間的動作做完之後：據點看一次（清光、重生、看到時擲對抗）
   const after = (rec) => {
     if (rec && !rec.refused) nests.afterAction(rec.id);
@@ -233,15 +225,18 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
       if (state.combat || !src || !touches(src, p)) return null;
       const dice = RNG.clone().setSeed(diceSeed(seed, `gather:${log.size}`));
       const data = planGather(world, DATA, state, src, dice);
-      return after(
-        record({
-          verb: 'gather',
-          target: { x: src.x, y: src.y },
-          data: { ...data, duration: data.duration * GATHER_TICKS },
-          cause,
-        }),
-      );
+      const before = data.done ? settles.econBefore(src) : [];
+      const rec = record({
+        verb: 'gather',
+        target: { x: src.x, y: src.y },
+        data: { ...data, duration: data.duration * GATHER_TICKS },
+        cause,
+      });
+      settles.econAfter(before, rec.id);
+      return after(rec);
     },
+    // 跟村民說話（不花時間、不改狀態）：要貼著；回傳紀錄或 null
+    talk: (id, cause = null) => settles.talk(id, cause),
     nests,
     serialize() {
       return { format: SAVE_FORMAT, world: WORLD_VERSION, seed, records: log.all(), checkpoint: lastCheckpoint };

@@ -42,6 +42,13 @@ export const RaceSchema = z.object({
   extraSkill: z.boolean().default(false), // 人類的多才
   description: z.string().default(''),
   abilities: z.array(z.string()).default([]),
+  // 聚落裡的村民（階段 7）：地圖上的顏色；名字從兩組字各挑一個接起來
+  villager: z
+    .object({
+      color: z.string().regex(/^#[0-9a-f]{6}$/),
+      names: z.tuple([z.array(z.string().min(1)).min(1), z.array(z.string().min(1)).min(1)]),
+    })
+    .optional(),
 });
 
 export const ClassSchema = z.object({

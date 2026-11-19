@@ -11,6 +11,7 @@ import {
   MaterialSchema,
   NestSchema,
   ObjectSchema,
+  SettlementSchema,
   SpeciesSchema,
   TerrainSchema,
   WorldShapeSchema,
@@ -50,6 +51,7 @@ export function buildData({
   worldshape = {},
   species: speciesFiles = {},
   nest: nestFiles = {},
+  settlement: settlementFiles = {},
   ...heroFiles
 }) {
   const errors = [];
@@ -78,6 +80,10 @@ export function buildData({
   checkSpecies(species, indexOf(biomes), errors);
   const nests = merge(nestFiles, NestSchema, '據點', errors);
   checkNests(nests, indexOf(species), materialIndex, hero, errors);
+  const settlements = merge(settlementFiles, SettlementSchema, '聚落', errors);
+  for (const s of settlements)
+    for (const o of [s.wall, ...(s.halls ?? [])])
+      if (!objectIndex.has(o)) errors.push(`聚落 ${s.id} 的物件找不到：${o}`);
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
   const palette = [...surfaces, ...waters, ...covers].map((t) => ({ ...t, shade: true }));
   return {
@@ -102,6 +108,8 @@ export function buildData({
     speciesIndex: indexOf(species),
     nests,
     nestIndex: indexOf(nests),
+    settlements,
+    settlementIndex: indexOf(settlements),
     ...hero,
   };
 }

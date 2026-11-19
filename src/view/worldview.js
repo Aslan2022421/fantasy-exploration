@@ -32,6 +32,7 @@ const ACCENT = 0.7; // 礦坑圖樣裡的點綴字（accent）比主體暗多少
 const MINE_BG = 0.12; // 礦坑佔的格子，底色往大類顏色靠幾成
 // 雙線框：上 1、右 2、下 4、左 8 有牆時用哪個字（只有一邊有牆時畫成直線或橫線）
 const BOX = ['■', '║', '═', '╚', '║', '║', '╔', '╠', '═', '╝', '═', '╩', '╗', '╣', '╦', '╬'];
+const BOX1 = ['■', '│', '─', '└', '│', '│', '┌', '├', '─', '┘', '─', '┴', '┐', '┤', '┬', '┼']; // 單線
 
 export function createWorldView(mapView, world, data) {
   const { objects, surfaces } = data;
@@ -41,6 +42,9 @@ export function createWorldView(mapView, world, data) {
     buildObjectShades(objects.map((o) => ({ ...o, color: mixColor(o.color, s.color, MOUNTAIN_TINT) }))),
   );
   const creatureFg = buildObjectShades(data.species); // [物種][明暗級數]
+  const villagerRaces = data.races.filter((r) => r.villager);
+  const villagerShades = buildObjectShades(villagerRaces.map((r) => ({ color: r.villager.color })));
+  const villagerFg = new Map(villagerRaces.map((r, i) => [r.id, villagerShades[i]])); // 種族 → [明暗級數]
   const isGround = objects.map((o) => o.gather?.action === 'pick');
   // 物件本身的亮暗回饋（乘在字色上）
   function feedback(x, y, o) {
@@ -84,17 +88,23 @@ export function createWorldView(mapView, world, data) {
     return { glyph, fg, bg, level, rise: FACE[glyph] ? FACE_RISE : 0 };
   }
 
-  // 據點的石牆（資料 join）：照上下左右相鄰的牆（斷牆、崩牆也算接得上）接成雙線框
+  // 牆（資料 join）：照上下左右相鄰的牆接成框。雙線（據點的石牆、城鎮的石牆，斷牆、崩牆也算接得上）；
+  // 單線（村莊的木牆）只接同樣是單線的牆
   const joins = objects.map((o) => !!o.join);
-  const wallish = objects.map((o) => !!o.join || o.id.endsWith('-wall'));
-  const isWall = (x, y) => {
+  const wallish = objects.map((o) => o.join === true || o.id.endsWith('-wall'));
+  const single = objects.map((o) => o.join === 'single');
+  const isWall = (x, y, kind) => {
     const o = world.objectAt(x, y);
-    return o >= 0 && wallish[o];
+    return o >= 0 && kind[o];
   };
-  function wallGlyph(x, y) {
+  function wallGlyph(x, y, o) {
+    const kind = single[o] ? single : wallish;
     const k =
-      (isWall(x, y - 1) ? 1 : 0) | (isWall(x + 1, y) ? 2 : 0) | (isWall(x, y + 1) ? 4 : 0) | (isWall(x - 1, y) ? 8 : 0);
-    return BOX[k];
+      (isWall(x, y - 1, kind) ? 1 : 0) |
+      (isWall(x + 1, y, kind) ? 2 : 0) |
+      (isWall(x, y + 1, kind) ? 4 : 0) |
+      (isWall(x - 1, y, kind) ? 8 : 0);
+    return (single[o] ? BOX1 : BOX)[k];
   }
 
   // 物件那格：樹葉或矮叢的字與顏色、樹幹的字與顏色；山上的樹顏色往腳下材質靠
@@ -106,7 +116,7 @@ export function createWorldView(mapView, world, data) {
     const base = table[o][level];
     const isTrunk = part === PART_TRUNK;
     return {
-      glyph: joins[o] ? wallGlyph(x, y) : objects[o].glyph,
+      glyph: joins[o] ? wallGlyph(x, y, o) : objects[o].glyph,
       fg: dimColor(base, PART_FACTOR[isTrunk ? PART_MID : part] * feedback(x, y, o)),
       trunkGlyph: objects[o].glyph, // 整根用樹種那一類的字（針葉樹 ↑、闊葉樹 ♣、硬木闊葉樹 ♠、棕櫚類 Y）
       trunkFg: mixColor(dimColor(base, 0.8), WOOD, 0.6),
@@ -118,6 +128,11 @@ export function createWorldView(mapView, world, data) {
   // 生物（一隻）：物種的字與顏色，放大成佔地的寬 w、高 h 格，疊 height 層（物種資料自己寫的 2～3 層）；
   // 亮暗照錨點那格的地形
   function creatureLook(cr) {
+    // 村民（villagers.js）：☺，顏色照種族，疊 2 層
+    if (cr.npc) {
+      const color = villagerFg.get(cr.villager.race) ?? villagerFg.get('human');
+      return { glyph: '☺', fg: color[world.shadeAt(cr.member.x, cr.member.y)], height: 2, w: 1, h: 1 };
+    }
     const sp = data.species[cr.species];
     const { w, h } = footprintSize(sp.footprint);
     const level = world.shadeAt(cr.member.x, cr.member.y);

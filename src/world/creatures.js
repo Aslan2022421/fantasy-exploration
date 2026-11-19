@@ -31,10 +31,14 @@ export function withCreatures(world, data, getCreatures, getClock, getNests = ()
     const s = world.nestState(herd.nest);
     return Math.min(herd.members.length, s.size ?? s.pop);
   }
+  // 聚落的圖樣與範圍誰都不進去（安全區）；動物另外避開據點
+  const inSettle = (x, y) => !!world.inSettleArea?.(x, y);
+  const animalAvoid = (x, y) => inSettle(x, y) || !!world.inNestArea?.(x, y);
   function wanderOpts(herd, sp) {
-    if (herd.nest && world.nestRange) return { radius: world.nestRange(world.nestById(herd.nest)) + 4 };
-    if (sp.diet !== 'omnivore' && world.inNestArea) return { avoid: world.inNestArea };
-    return {};
+    if (herd.nest && world.nestRange)
+      return { radius: world.nestRange(world.nestById(herd.nest)) + 4, avoid: inSettle };
+    if (sp.diet !== 'omnivore') return { avoid: animalAvoid };
+    return { avoid: inSettle };
   }
   const memberOf = (id) => Number(id.split('#')[1]);
 

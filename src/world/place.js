@@ -62,6 +62,7 @@ export function describePlace(world, x, y) {
   const lake = c.water && c.water.style !== 'swamp';
   const landform = lake ? '' : `，${c.landform.name}`;
   if (c.creature) return `${creatureText(c.creature)}。${ground}${landform}。${b.name}（${climate}），高度 ${c.height}`;
+  if (c.npc) return `${npcText(c.npc)}。可以說話（Q 或撞上去）。${settleText(world, c.settle)}`;
   let what;
   const state = c.picked ? '（採過了）' : c.worked ? '（挖過了）' : '';
   // 植物（含樹樁）「長在」地上，礦坑「在」地上
@@ -70,7 +71,24 @@ export function describePlace(world, x, y) {
   const family = c.object?.family ? `（${c.object.family}）` : '';
   if (c.object) what = `${c.object.name}${family}${state}，${grows ? '長在' : '在'}${ground}上${landform}`;
   else what = `${c.cover ? `${c.cover.name}，` : ''}${ground}${landform}`;
-  return `${nestText(world, c.nest)}${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
+  return `${settleText(world, c.settle)}${nestText(world, c.nest)}${what}${blocked}。${b.name}（${climate}），高度 ${c.height}`;
+}
+
+// 村民：「艾德（人類，松鴉村的村民）」
+function npcText(npc) {
+  const race = DATA.races[DATA.raceIndex.get(npc.villager.race)]?.name ?? '';
+  return `${npc.villager.name}（${race}，${npc.settle.name}的村民）`;
+}
+
+// 聚落的圖樣或範圍裡：「松鴉村。村莊，人口穩定，經濟貧窮，資源：木材。村民抱怨附近的樹越來越少。」
+// 懸停框只取第一句（名字）；人口、經濟都只寫標籤
+function settleText(world, at) {
+  if (!at) return '';
+  const s = at.settle;
+  const def = DATA.settlements[s.kind];
+  const econ = world.settleEcon(s);
+  const sign = econ.sign ? `${econ.sign}。` : '';
+  return `${s.name}。${def.name}，人口${world.settleTag(s).name}，經濟${world.econName(econ.tag)}，資源：${world.settleResource(s)}。${sign}`;
 }
 
 // 據點的圖樣或範圍裡：「廢棄的堡壘。哥布林的據點，壯大。」（懸停框只取第一句，只寫名字）；標籤就是徵兆，人口不寫

@@ -2,7 +2,8 @@
 // - 外面那群全倒了：記一筆清光（人口在每隻倒下時已經扣過，標籤跟著換）
 // - 清光後過了 NEST.respawn 刻、人口還沒用完：重生新的一群（舊的倒下紀錄清掉）
 // - 看得到據點（圖樣任一格）、離上次擲隔了 NEST.rollEvery 刻：擲一次 D12 對抗（暫定：看到時才結算，加入劇情戰役時要再改）
-//   據點 1D12＋標籤修正 對 世界系統 1D12＋NEST.worldMod，平手算世界系統贏；贏輸增減人口上限的 NEST.share，自然 12 加倍
+//   據點 1D12＋標籤修正 對 世界系統 1D12＋NEST.worldMod，平手算世界系統贏；贏輸增減人口上限的 NEST.share，自然 12 加倍。
+//   據點 SETTLE.rival 格內有聚落時，對手換成那座聚落（1D12＋人口標籤修正）；據點贏而且自然 12，聚落人口減上限的 SETTLE.loss
 // 寶箱：第一次打開才擲 1D12＋標籤修正，對據點資料的寶箱表
 // 結果都先算好再寫成紀錄（狀態怎麼改在 nest-apply.js），骰子用「主種子＋紀錄編號」開
 
@@ -10,6 +11,7 @@ import { PART_TRUNK } from './footprint.js';
 import { visibleFrom } from './fov.js';
 import { NEST, nestArea, tagOf } from './nests.js';
 import { d12 } from './rules.js';
+import { gapBetweenRects, POP_TAGS, popTagIndex, SETTLE } from './settlements.js';
 
 export const OPEN_TICKS = 18; // 打開寶箱花幾刻
 const WATCH = 48; // 冒險者幾格內的據點才看清光與重生
@@ -43,16 +45,35 @@ export function createNestWatch(env) {
     });
   }
 
+  // 據點 SETTLE.rival 格內最近的聚落（有的話對手換成它）
+  function rivalOf(n) {
+    const near = world.settlesNear?.(center(n).x, center(n).y, SETTLE.rival + Math.max(n.w, n.h)) ?? [];
+    let best = null;
+    for (const s of near) {
+      const d = gapBetweenRects(n, s);
+      if (d < SETTLE.rival && (!best || d < best.d)) best = { s, d };
+    }
+    return best?.s ?? null;
+  }
+
   function roll(n, s, cause) {
     const def = defOf(n);
     const dice = env.dice('nest');
     const tag = tagOf(s.pop, def.popMax);
     const a = d12(dice);
     const b = d12(dice);
-    const win = a + tag.mod > b + NEST.worldMod;
+    // 對手：附近有聚落時是聚落（1D12＋人口標籤修正），不然是世界系統；平手算對手贏
+    const town = rivalOf(n);
+    const sdef = town && data.settlements[town.kind];
+    const oppMod = town ? world.settleTag(town).mod : NEST.worldMod;
+    const win = a + tag.mod > b + oppMod;
     const crit = (win ? a : b) === 12;
     const step = Math.max(1, Math.round(def.popMax * NEST.share)) * (crit ? 2 : 1);
     const pop = Math.max(0, Math.min(def.popMax, s.pop + (win ? step : -step)));
+    // 據點贏而且自然 12：聚落的人口減上限的 SETTLE.loss
+    const before = town ? world.settleState(town.id).pop : null;
+    const settlePop =
+      town && win && a === 12 ? Math.max(0, before - Math.max(1, Math.round(sdef.pop[1] * SETTLE.loss))) : before;
     const herd = herdOf(n);
     env.record({
       verb: 'nestroll',
@@ -63,8 +84,17 @@ export function createNestWatch(env) {
         roll: a,
         mod: tag.mod,
         opp: b,
-        oppMod: NEST.worldMod,
+        oppMod,
         win,
+        ...(town
+          ? {
+              settle: town.id,
+              settleName: town.name,
+              settlePop,
+              settleTag: POP_TAGS[popTagIndex(settlePop, sdef)].name,
+              settleTagBefore: POP_TAGS[popTagIndex(before, sdef)].name,
+            }
+          : {}),
         before: s.pop,
         pop,
         // 外面那群第一次被看到時，出來幾隻就定下來（之後人口變了也不會憑空消失）

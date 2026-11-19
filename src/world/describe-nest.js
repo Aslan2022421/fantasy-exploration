@@ -1,4 +1,4 @@
-// 據點的紀錄寫成給玩家看的一行字：擲骰與總值都寫出來
+// 據點與聚落的紀錄寫成給玩家看的一行字：擲骰與總值都寫出來
 
 import { DATA } from '../data/load.js';
 
@@ -27,9 +27,14 @@ export function describeNest(rec) {
   const d = rec.data ?? {};
   switch (rec.verb) {
     case 'nestroll': {
-      const roll = `據點擲 ${d.roll}${signed(d.mod)}＝${d.roll + d.mod} 對 ${d.opp}${signed(d.oppMod)}＝${d.opp + d.oppMod}`;
+      const opp = d.settleName ? `${d.settleName} ` : '';
+      const roll = `據點擲 ${d.roll}${signed(d.mod)}＝${d.roll + d.mod} 對 ${opp}${d.opp}${signed(d.oppMod)}＝${d.opp + d.oppMod}`;
       const how = d.pop === d.before ? '看起來沒什麼變化' : d.win ? '範圍擴大了' : '範圍縮小了';
-      return `${nestName(d.kind)}${how}（${roll}），${d.tag}。`;
+      const town =
+        d.settleName && d.settleTag !== d.settleTagBefore
+          ? `${d.settleName}的人口：${d.settleTagBefore} → ${d.settleTag}。`
+          : '';
+      return `${nestName(d.kind)}${how}（${roll}），${d.tag}。${town}`;
     }
     case 'nestclear':
       return `${nestName(d.kind)}外面那群${speciesName(d.kind)}被清光了。`;
@@ -37,6 +42,11 @@ export function describeNest(rec) {
       return `${nestName(d.kind)}又出來一群${speciesName(d.kind)}（${d.size} 隻）。`;
     case 'open':
       return `打開${nestName(d.kind)}的寶箱：擲 ${d.roll}${signed(d.mod)}＝${d.total}，得到${gotText(d)}。`;
+    // 聚落（階段 7）
+    case 'talk':
+      return `跟${d.settleName}的${d.name}說話。`;
+    case 'settletag':
+      return `${d.name}的日子難過了起來（經濟：${d.from} → ${d.to}）。`;
     default:
       return undefined;
   }

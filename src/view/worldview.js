@@ -6,7 +6,7 @@ import { layersNow } from '../world/gather.js';
 import { footprintSize } from '../world/herds.js';
 import { lookAt } from './glyphs.js';
 import { mountainRing, mountainRingFactor, SLOPE_STACK } from './perspective.js';
-import { averageColor, buildObjectShades, buildShadeTable, dimColor, mixColor } from './shades.js';
+import { averageColor, buildObjectShades, buildShadeTable, dimColor, landBg, mixColor } from './shades.js';
 import { createStackView } from './stackview.js';
 
 const PART_FACTOR = { [PART_MID]: 1, [PART_LIT]: 1.25, [PART_DARK]: 0.65 }; // 樹冠右上亮、左下暗
@@ -54,7 +54,12 @@ export function createWorldView(mapView, world, data) {
   const isMountain = data.landforms.map((l) => l.style === 'mountain');
   const isStone = surfaces.map((s) => s.style === 'rock' || s.style === 'gravel');
 
-  const rawBg = (x, y) => shades.bg[world.groundAt(x, y)][world.shadeAt(x, y)];
+  // 底色：水與有固定底色的地面（聚落的空地、路、室內）照顏色表；其餘陸地照高度層的青綠色階（舊版）
+  const fixedBg = data.palette.map((p) => p.layer === 'water' || !!p.bg);
+  const rawBg = (x, y) => {
+    const g = world.groundAt(x, y);
+    return fixedBg[g] ? shades.bg[g][world.shadeAt(x, y)] : landBg(world.tierAt(x, y));
+  };
   // 山地一圈一圈往上變亮，放在字色上；取到 0.05 一級，染色表才不會多出太多種顏色
   const ringInk = (x, y) => Math.round(mountainRingFactor(world.heightAt(x, y)) * 20) / 20;
 

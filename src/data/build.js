@@ -82,8 +82,7 @@ export function buildData({
   checkNests(nests, indexOf(species), materialIndex, hero, errors);
   const settlements = merge(settlementFiles, SettlementSchema, '聚落', errors);
   for (const s of settlements)
-    for (const o of [s.wall, ...(s.halls ?? [])])
-      if (!objectIndex.has(o)) errors.push(`聚落 ${s.id} 的物件找不到：${o}`);
+    for (const o of [s.wall, `${s.id}-tower`]) if (!objectIndex.has(o)) errors.push(`聚落 ${s.id} 的物件找不到：${o}`);
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
   const palette = [...surfaces, ...waters, ...covers].map((t) => ({ ...t, shade: true }));
   return {

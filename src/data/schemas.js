@@ -99,7 +99,7 @@ export const ObjectSchema = z.object({
   color: Color,
   passable: z.boolean(),
   // 疊幾層：樹的樹幹往上疊、最頂層是樹冠；1 層是平的，不疊
-  height: z.number().int().min(0).max(5),
+  height: z.number().int().min(0).max(6),
   // 每層往上錯開幾螢幕像素（沒寫照物件的預設，perspective.js 的 UP.objPx）；室內的家具疊得密一點
   stackPx: z.number().int().min(1).max(8).optional(),
   bridge: z.boolean().optional(), // 橋：底下是走不過去的水也能走
@@ -124,7 +124,7 @@ export const ObjectSchema = z.object({
 // 聚落（階段 7）：村莊、城鎮。w×h 是整塊圖樣（含外牆）；wall 是外牆的物件；gates 出入口幾個；
 // houses 是民房幾間、residents 是住幾人（兩者都照人口標籤五段，從大舉遷出到急速發展）；
 // pop 是隱藏人口的範圍；rangeBase 是範圍的基本半徑；econStart 是開局的經濟值（0～100）；
-// halls 是另外蓋一座的公共建築（從中挑一種）；名字從 names 挑一個再加 suffix
+// 公共建築照種類寫在 src/world/settle-layouts.js；名字從 names 挑一個再加 suffix
 export const SettlementSchema = z.object({
   id: Id,
   name: z.string().min(1),
@@ -138,7 +138,6 @@ export const SettlementSchema = z.object({
   rangeBase: z.number().int().min(1),
   econStart: z.number().int().min(0).max(100),
   suffix: z.string().min(1),
-  halls: z.array(Id).optional(),
   names: z.array(z.string().min(1)).min(1),
 });
 

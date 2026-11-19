@@ -8,7 +8,7 @@
 import { LAND } from './landform.js';
 import { gapToNest } from './nests.js';
 import { hash01 } from './noise.js';
-import { buildSettlement, GROUND, INDOOR, INDOOR_OBJECTS, KEEP, OUTROAD, ROAD, WELL } from './settle-layouts.js';
+import { buildSettlement, FIELD, GROUND, INDOOR, INDOOR_OBJECTS, KEEP, OUTROAD, ROAD, WELL } from './settle-layouts.js';
 
 export const SETTLE = {
   village: 0.15, // 陸地區放村莊的機率
@@ -89,12 +89,15 @@ export function createSettlePlanner(seed, data, ids) {
     const W = def.w;
     const H = def.h;
 
+    // 只看圓形牆圈得到的範圍（四角牆外保留原本的地形，不用平）
+    const inShape = (i, j) => ((i - (W - 1) / 2) / (W / 2 - 1)) ** 2 + ((j - (H - 1) / 2) / (H / 2 - 1)) ** 2 <= 1;
     const fits = (x, y) => {
       if (x < 0 || y < 0 || x + W > z.size || y + H > z.size) return false;
       let lo = 99;
       let hi = -1;
       for (let j = 0; j < H; j++)
         for (let i = 0; i < W; i++) {
+          if (!inShape(i, j)) continue;
           const c = g(x + i, y + j);
           if (z.wAll[c] !== NONE || z.sAll[c] === ICE || z.h[c] > LAND.mountain) return false;
           lo = Math.min(lo, z.tier[c]);
@@ -168,7 +171,8 @@ export function createSettlePlanner(seed, data, ids) {
       const name = `${def.names[Math.floor(hash01(seed, x0, y0, 9303) * def.names.length)]}${def.suffix}`;
       // 牆內整平到工作範圍裡最低的那一層（舊版：工作範圍整平成同一個高度），外牆才不會在層界錯開
       let tier = 99;
-      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) tier = Math.min(tier, z.tier[g(s.x + i, s.y + j)]);
+      for (let j = 0; j < H; j++)
+        for (let i = 0; i < W; i++) if (inShape(i, j)) tier = Math.min(tier, z.tier[g(s.x + i, s.y + j)]);
       return {
         id: `${zx},${zy}`,
         kind: k,
@@ -199,10 +203,10 @@ export function settleCode(s, X, Y) {
 }
 
 // 生成一區時把聚落蓋進那一格（terrain.js）：回傳 null（不在聚落裡或在牆外）或 { s 材質, k 覆蓋, o 物件編號（-1 沒有）}。
-// ids：{ YARD 村莊的空地, SQUARE 城鎮的空地, ROAD, FLOOR 室內地板, NONE } 地形編號。
-// 牆下是聚落的空地；門與家具在室內地板上；井在路上
+// ids：{ YARD 村莊的空地, SQUARE 城鎮的空地, ROAD, FLOOR 室內地板, DIRT 田裡的泥土, NONE } 地形編號。
+// 牆、瞭望塔、樹下是聚落的空地；門與家具在室內地板上；井與攤位在路上；作物在田裡的泥土上
 export function createSettleStamp(data, ids) {
-  const { YARD, SQUARE, ROAD: RD, FLOOR, NONE } = ids;
+  const { YARD, SQUARE, ROAD: RD, FLOOR, DIRT, NONE } = ids;
   return function stamp(s, X, Y) {
     const code = settleCode(s, X, Y);
     if (!code || code === KEEP) return null;
@@ -210,7 +214,14 @@ export function createSettleStamp(data, ids) {
     if (code === GROUND) return { s: ground, k: NONE, o: -1 };
     if (code === ROAD || code === OUTROAD) return { s: RD, k: NONE, o: -1 }; // 出入口外面那段也是路
     if (code === INDOOR) return { s: FLOOR, k: NONE, o: -1 };
-    const under = INDOOR_OBJECTS.has(code) ? FLOOR : code === WELL ? RD : ground;
+    if (code === FIELD) return { s: DIRT, k: NONE, o: -1 };
+    const under = INDOOR_OBJECTS.has(code)
+      ? FLOOR
+      : code === WELL || code === 'stall'
+        ? RD
+        : code === 'crops'
+          ? DIRT
+          : ground;
     return { s: under, k: NONE, o: data.objectIndex.get(code) };
   };
 }

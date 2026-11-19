@@ -175,5 +175,86 @@
     "trunk": false,
     "sizes": [1],
     "tile": null
+  },
+  {
+    "id": "village-tower",
+    "name": "瞭望塔",
+    "glyph": "■",
+    "color": "#a98458",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "town-tower",
+    "name": "瞭望塔",
+    "glyph": "■",
+    "color": "#b6c4c0",
+    "passable": false,
+    "height": 6,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "hall",
+    "name": "鎮公所",
+    "glyph": "═",
+    "color": "#c8a878",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "barracks",
+    "name": "兵營",
+    "glyph": "═",
+    "color": "#9a9a8a",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "inn",
+    "name": "旅店",
+    "glyph": "═",
+    "color": "#b88a5a",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "tavern",
+    "name": "酒館",
+    "glyph": "═",
+    "color": "#a87848",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "crops",
+    "name": "作物",
+    "glyph": "√",
+    "color": "#b8b05a",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
   }
 ]

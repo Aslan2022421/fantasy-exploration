@@ -7,7 +7,7 @@
 import { CLIMATE, createClimate } from './climate.js';
 import { createContinent } from './continent.js';
 import { createCoverPicker } from './cover.js';
-import { MAX_SIZE, PART_MID } from './footprint.js';
+import { MAX_SIZE, PART_MID, PART_TRUNK } from './footprint.js';
 import { GEO } from './geography.js';
 import { createHerdPlacer } from './herds.js';
 import { gradient, lightLevel, shadeLevel } from './hillshade.js';
@@ -75,7 +75,7 @@ export function createTerrainGen(seed, data, size = null) {
   let roads = null; // 道路網（roads.js），建世界時由 world.js 接上；沒接就沒有路
   const stampNest = createNestStamp(data, { FLAG, DIRT, ROAD, CAVE, REEDS, SWAMP, NONE });
   const planSettle = createSettlePlanner(seed, data, { NONE, SWAMP, ICE });
-  const stampSettle = createSettleStamp(data, { YARD, SQUARE, ROAD, FLOOR, NONE });
+  const stampSettle = createSettleStamp(data, { YARD, SQUARE, ROAD, FLOOR, DIRT, NONE });
   let herdTargets = null; // (zx, zy) → { herbivores, predators }，建世界時由 world.js 接上；沒接就不放生物
   let settlePlan = null; // (zx, zy) → 'village' | 'town' | null，建世界時由 world.js 接上；沒接就沒有聚落
   let startZone = null; // 起點那一區 { zx, zy }（村莊在整區裡找位置）
@@ -226,7 +226,7 @@ export function createTerrainGen(seed, data, size = null) {
         }
         if (n?.o >= 0) {
           object[i] = n.o + 1;
-          objectPart[i] = PART_MID;
+          objectPart[i] = data.objects[n.o].trunk ? PART_TRUNK : PART_MID; // 聚落裡種的樹是一整棵（樹幹那格）
         } else if (!n) {
           const placed = placer.objectAt(z, c, X, Y); // 物件層（objects.js）
           if (placed) {

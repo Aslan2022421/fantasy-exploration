@@ -8,7 +8,7 @@
 import { LAND } from './landform.js';
 import { gapToNest } from './nests.js';
 import { hash01 } from './noise.js';
-import { BED, buildSettlement, DOOR, GROUND, INDOOR, ROAD, TABLE, WELL } from './settle-layouts.js';
+import { buildSettlement, GROUND, INDOOR, INDOOR_OBJECTS, KEEP, ROAD, WELL } from './settle-layouts.js';
 
 export const SETTLE = {
   village: 0.15, // 陸地區放村莊的機率
@@ -194,18 +194,20 @@ export function settleCode(s, X, Y) {
   return s.layout.grid[j][i];
 }
 
-// 生成一區時把聚落蓋進那一格（terrain.js）：回傳 null（不在聚落裡）或 { s 材質, k 覆蓋, o 物件編號（-1 沒有）}。
-// ids：{ DIRT, ROAD, FLOOR, NONE } 地形編號。牆下是泥土；門、床、桌子在室內的木地板上；井在路上
+// 生成一區時把聚落蓋進那一格（terrain.js）：回傳 null（不在聚落裡或在牆外）或 { s 材質, k 覆蓋, o 物件編號（-1 沒有）}。
+// ids：{ YARD 村莊的空地, SQUARE 城鎮的空地, ROAD, FLOOR 室內地板, NONE } 地形編號。
+// 牆下是聚落的空地；門與家具在室內地板上；井在路上
 export function createSettleStamp(data, ids) {
-  const { DIRT, ROAD: RD, FLOOR, NONE } = ids;
-  const under = { [DOOR]: FLOOR, [BED]: FLOOR, [TABLE]: FLOOR, [WELL]: RD };
+  const { YARD, SQUARE, ROAD: RD, FLOOR, NONE } = ids;
   return function stamp(s, X, Y) {
     const code = settleCode(s, X, Y);
-    if (!code) return null;
-    if (code === GROUND) return { s: DIRT, k: NONE, o: -1 };
+    if (!code || code === KEEP) return null;
+    const ground = data.settlements[s.kind].id === 'village' ? YARD : SQUARE;
+    if (code === GROUND) return { s: ground, k: NONE, o: -1 };
     if (code === ROAD) return { s: RD, k: NONE, o: -1 };
     if (code === INDOOR) return { s: FLOOR, k: NONE, o: -1 };
-    return { s: under[code] ?? DIRT, k: NONE, o: data.objectIndex.get(code) };
+    const under = INDOOR_OBJECTS.has(code) ? FLOOR : code === WELL ? RD : ground;
+    return { s: under, k: NONE, o: data.objectIndex.get(code) };
   };
 }
 

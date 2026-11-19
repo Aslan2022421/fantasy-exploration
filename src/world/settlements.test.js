@@ -72,7 +72,10 @@ test('圖樣：從廣場走得到每一格能走的地方、每個出入口與�
     expect(L.gates.length).toBeGreaterThanOrEqual(3);
     expect(L.homes.length).toBeGreaterThan(0);
     expect(L.homes.length).toBeLessThanOrEqual(defOf(s).houses[popTagIndex(s.pop0, defOf(s))]);
-    for (const h of L.homes) expect(L.grid[h.bed.j][h.bed.i]).toBe('bed');
+    for (const h of L.homes) for (const b of h.beds) expect(L.grid[b.j][b.i]).toBe('bed');
+    // 床位夠住滿開局人口標籤最多的人數
+    const beds = L.homes.reduce((n, h) => n + h.beds.length, 0);
+    expect(beds).toBeGreaterThanOrEqual(defOf(s).residents[popTagIndex(s.pop0, defOf(s))][1]);
   }
 }, 60000);
 

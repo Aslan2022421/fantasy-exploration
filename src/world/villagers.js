@@ -1,6 +1,7 @@
 // 村民（階段 7，先只有對話）：人數照聚落現在的人口標籤；種族人類 70%、矮人 15%、精靈 15%；名字照種族從字表組。
-// 每人有一間家（民房輪流分），位置由「種子＋這個人＋現在的時間」算出來，不寫紀錄、不進存檔：
-// 每隔一段時間換一個去處，偶數段回家站在床邊、奇數段到室外的路或空地，照走一格 9 刻沿著圖樣裡的最短路走過去。
+// 每人有一張床（照民房的順序分），位置由「種子＋這個人＋現在的時間」算出來，不寫紀錄、不進存檔：
+// 每隔一段時間換一個去處，偶數段回家（小屋站在門內旁邊、大房子站在自己的床上）、奇數段到室外的路或空地，
+// 照走一格 9 刻沿著圖樣裡的最短路走過去。
 // 村民擋路；冒險者站的格子村民不會走上去
 
 import { hash01 } from './noise.js';
@@ -22,6 +23,8 @@ export function residentsOf(world, data, s) {
   const tag = popTagIndex(world.settleState?.(s.id).pop ?? s.pop0, def);
   const [lo, hi] = def.residents[tag];
   const n = lo + Math.floor(hash01(world.seed, s.x0, s.y0, 9400 + tag) * (hi - lo + 1));
+  // 床位：照民房的順序一張一張分（大房子住 2～3 人）；床不夠時從頭再分
+  const beds = homes.flatMap((h, home) => h.beds.map((_, bed) => ({ home, bed })));
   const out = [];
   for (let i = 0; i < n; i++) {
     const r = hash01(world.seed, s.x0 + i, s.y0, 9410);
@@ -29,7 +32,7 @@ export function residentsOf(world, data, s) {
     const parts = data.races[data.raceIndex.get(race)]?.villager?.names ?? [['無'], ['名']];
     const a = parts[0][Math.floor(hash01(world.seed, s.x0 + i, s.y0, 9411) * parts[0].length)];
     const b = parts[1][Math.floor(hash01(world.seed, s.x0 + i, s.y0, 9412) * parts[1].length)];
-    out.push({ id: `${s.id}#${i}`, i, name: `${a}${b}`, race, home: i % homes.length });
+    out.push({ id: `${s.id}#${i}`, i, name: `${a}${b}`, race, ...beds[i % beds.length] });
   }
   return out;
 }
@@ -73,8 +76,9 @@ function outdoors(layout) {
 
 // 第 k 段要去哪（圖樣裡的座標）
 function spotOf(seed, s, v, k) {
+  // 在家：小屋站在門內旁邊那一格，大房子站在自己的床上（舊版）
   const home = s.layout.homes[v.home];
-  if (k % 2 === 0) return home.inside.find((c) => !(c.i === home.bed.i && c.j === home.bed.j)) ?? home.bed;
+  if (k % 2 === 0) return home.spot ?? home.beds[v.bed];
   const list = outdoors(s.layout);
   return list[Math.floor(hash01(seed, s.x0 + v.i, s.y0 + k, 9420) * list.length)];
 }

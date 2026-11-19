@@ -52,6 +52,8 @@ export function surfaceGlyph(style, slope, a) {
     case 'road':
       return '·';
     case 'floor':
+      return '+';
+    case 'yard':
       return ' ';
     default:
       return reliefGlyph(slope);

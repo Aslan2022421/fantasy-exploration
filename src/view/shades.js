@@ -60,7 +60,9 @@ export function buildShadeTable(terrains) {
     for (let level = 0; level < LEVELS; level++) {
       const k = t.shade ? levelFactor(level) : 1;
       f.push(scale(base, k));
-      b.push(t.layer === 'water' ? scale(base, BG_DIM * k) : scale(base, LAND_BG * landBand(level)));
+      // 資料寫了固定底色（聚落的空地、路、室內）就用它，只照高低分三段微調
+      if (t.bg) b.push(scale(Color.fromString(t.bg), landBand(level)));
+      else b.push(t.layer === 'water' ? scale(base, BG_DIM * k) : scale(base, LAND_BG * landBand(level)));
     }
     fg.push(f);
     bg.push(b);

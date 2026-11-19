@@ -24,13 +24,14 @@ export const TerrainSchema = z.discriminatedUnion('layer', [
     glyphs: z.array(Glyph).min(1),
   }),
   // 地表材質：relief 起伏點、sand 波紋與沙丘、rock 裸岩 ■、gravel 碎石 °、ice 冰面 ═；
-  // 聚落裡的 road 路 ·、floor 室內的木地板（空白）
+  // 聚落裡的 road 路 ·、floor 室內地板 +、yard 聚落裡的空地（空白）；bg 是固定的底色（聚落用，不照明暗換算）
   z.object({
     ...layerBase,
     layer: z.literal('surface'),
     color: Color,
+    bg: Color.optional(),
     passable: z.boolean(),
-    style: z.enum(['relief', 'sand', 'rock', 'gravel', 'ice', 'road', 'floor']),
+    style: z.enum(['relief', 'sand', 'rock', 'gravel', 'ice', 'road', 'floor', 'yard']),
     glyphs: z.array(Glyph).min(1),
   }),
   // 水文：deep 深水、shallow 淺水、swamp 沼澤（墨綠色的水文字元）

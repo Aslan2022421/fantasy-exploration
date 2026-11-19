@@ -56,7 +56,9 @@ export function describePlace(world, x, y) {
   const b = c.biome;
   const climate = `${CLIMATE_NAMES[b.temperature]}、${CLIMATE_NAMES[b.moisture]}`;
   const passable =
-    (!c.water || c.water.passable) && c.surface.passable && (!c.object || (c.object.passable && !c.trunk));
+    (!c.water || c.water.passable || !!c.object?.bridge) &&
+    c.surface.passable &&
+    (!c.object || (c.object.passable && !c.trunk));
   const blocked = passable ? '' : '，過不去';
   const ground = groundName(c);
   const lake = c.water && c.water.style !== 'swamp';

@@ -93,6 +93,7 @@ export function makePainter(segments, W, C, seed) {
 // 落到第 0 層的就是低地的河，高度照湖海壓到水線以下。淺灘把深水改成淺水
 export function applyGeography(g, gx0, gy0, G, geo, macroAt) {
   const { mask, level } = geo.paint(gx0, gy0, G, G);
+  g.river = mask; // 河道標記（架橋用，bridges.js）
   const before = g.tier.slice();
   for (let c = 0; c < mask.length; c++) {
     const m = mask[c];

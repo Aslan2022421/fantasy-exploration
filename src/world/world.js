@@ -14,7 +14,7 @@ import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './t
 export { startPosition } from './start.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 29; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法
+export const WORLD_VERSION = 30; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法；30：橋、據點重做
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -165,9 +165,10 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     const i = locate(x, y);
     if (i < 0) return false;
     const w = last.water[i];
-    if (w !== LAYER_NONE && !data.waters[w].passable) return false;
-    if (!data.surfaces[last.surface[i]].passable) return false;
     const o = last.object[i];
+    // 橋上走得過去，底下是深水也一樣
+    if (w !== LAYER_NONE && !data.waters[w].passable && !(o && data.objects[o - 1].bridge)) return false;
+    if (!data.surfaces[last.surface[i]].passable) return false;
     if (!o) return true;
     return data.objects[o - 1].passable && last.objectPart[i] !== PART_TRUNK;
   }

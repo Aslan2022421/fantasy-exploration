@@ -10,8 +10,9 @@
 // 只看種子＋錨點的雜湊與呼叫的人給的「哪幾邊能開出入口」，不看生成順序
 
 import { hash01 } from './noise.js';
-import { BED, BLOCKING, GROUND, INDOOR, ROAD, WELL, walkable } from './settle-codes.js';
-import { connected, enclose, gateOut, keepUsedRoads } from './settle-walls.js';
+import { BED, GROUND, INDOOR, ROAD, WELL, walkable } from './settle-codes.js';
+import { furnishRoom } from './settle-furnish.js';
+import { enclose, gateOut, keepUsedRoads } from './settle-walls.js';
 
 export * from './settle-codes.js';
 export { reachable } from './settle-walls.js';
@@ -143,32 +144,14 @@ export function buildSettlement(def, seed, x0, y0, tag, canOpen) {
     return { cells, ...furnish(cells, inners, b, beds, salt) };
   };
 
-  // 擺家具：門內那一格空著，站人的格子貼著它，擋路的家具不把室內切開（照雜湊試幾種擺法）
+  // 擺家具：照用途擺（settle-furnish.js）
   const furnish = (cells, inners, b, beds, salt) => {
-    const key = (c) => `${c.i},${c.j}`;
-    const isInner = (c) => inners.some((d) => d.i === c.i && d.j === c.j);
     const items = [...b.items, ...Array(beds).fill(BED)];
-    for (let t = 0; t < 40; t++) {
-      const free = cells
-        .filter((c) => !isInner(c))
-        .map((c) => ({ c, k: hash01(seed, x0 + c.i, y0 + c.j, salt + t) }))
-        .sort((a, c) => a.k - c.k)
-        .map((o) => o.c);
-      let spot = null;
-      if (b.spot) {
-        const i = free.findIndex((c) => inners.some((d) => Math.abs(c.i - d.i) + Math.abs(c.j - d.j) === 1));
-        if (i < 0) break;
-        spot = free.splice(i, 1)[0];
-      }
-      if (free.length < items.length) break;
-      const placed = items.map((code, i) => ({ ...free[i], code }));
-      const blocked = new Set(placed.filter((p) => BLOCKING.has(p.code)).map(key));
-      const open = cells.filter((c) => !blocked.has(key(c)));
-      if (!connected(open)) continue;
-      for (const p of placed) set(p.i, p.j, p.code);
-      return { spot, beds: placed.filter((p) => p.code === BED).map(({ i, j }) => ({ i, j })) };
-    }
-    return { spot: null, beds: [] };
+    const tie = (c, k) => hash01(seed, x0 + c.i, y0 + c.j, salt + k);
+    const r = furnishRoom(cells, inners, items, !!b.spot, tie);
+    if (!r) return { spot: null, beds: [] };
+    for (const p of r.placed) set(p.i, p.j, p.code);
+    return { spot: r.spot, beds: r.placed.filter((p) => p.code === BED).map(({ i, j }) => ({ i, j })) };
   };
 
   // 城鎮的公共建築（神殿或市場），蓋在最靠近廣場的位置

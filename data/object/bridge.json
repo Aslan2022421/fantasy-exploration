@@ -1,0 +1,26 @@
+[
+  {
+    "id": "bridge-ew",
+    "name": "木橋",
+    "glyph": "═",
+    "color": "#9a7650",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "bridge": true
+  },
+  {
+    "id": "bridge-ns",
+    "name": "木橋",
+    "glyph": "║",
+    "color": "#9a7650",
+    "passable": true,
+    "height": 1,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "bridge": true
+  }
+]

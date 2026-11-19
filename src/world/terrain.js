@@ -4,6 +4,7 @@
 // - 地表材質看氣候（climate.js）、坡度與是否在山上；生態覆蓋照生態的 cover，水邊長蘆葦，交界是混合植被
 // 生成順序是地貌 → 水文 → 材質 → 生態。只看「種子＋座標」與世界的地理，任何順序生出來都一樣
 
+import { placeBridges } from './bridges.js';
 import { CLIMATE, createClimate } from './climate.js';
 import { createContinent } from './continent.js';
 import { createCoverPicker } from './cover.js';
@@ -65,9 +66,12 @@ export function createTerrainGen(seed, data, size = null) {
   const placer = createObjectPlacer(seed, data, { ROCK, DIRT, ICE, SHALLOW, DEEP, NONE }, GEN.treelineRange);
   const planHerds = createHerdPlacer(seed, data, { NONE });
   const planNest = createNestPlanner(seed, data, { NONE, SWAMP, ICE });
-  const stampNest = createNestStamp(data, { GRAVEL, DIRT, REEDS, NONE });
+  const [YARD, SQUARE, ROAD, FLOOR, FLAG, CAVE] = ['yard', 'square', 'road', 'floor', 'flagstone', 'cave-floor'].map(
+    sf,
+  );
+  const bridgeIds = { ew: data.objectIndex.get('bridge-ew'), ns: data.objectIndex.get('bridge-ns') };
+  const stampNest = createNestStamp(data, { FLAG, DIRT, ROAD, CAVE, REEDS, SWAMP, NONE });
   const planSettle = createSettlePlanner(seed, data, { NONE, SWAMP, ICE });
-  const [YARD, SQUARE, ROAD, FLOOR] = ['yard', 'square', 'road', 'floor'].map(sf);
   const stampSettle = createSettleStamp(data, { YARD, SQUARE, ROAD, FLOOR, NONE });
   let herdTargets = null; // (zx, zy) → { herbivores, predators }，建世界時由 world.js 接上；沒接就不放生物
   let settlePlan = null; // (zx, zy) → 'village' | 'town' | null，建世界時由 world.js 接上；沒接就沒有聚落
@@ -212,6 +216,7 @@ export function createTerrainGen(seed, data, size = null) {
         if (n?.s != null) {
           surface[i] = n.s;
           cover[i] = n.k;
+          if (n.w != null) water[i] = n.w; // 沼澤的積水
         }
         if (n?.o >= 0) {
           object[i] = n.o + 1;
@@ -230,6 +235,8 @@ export function createTerrainGen(seed, data, size = null) {
         } else shade[i] = waterLevel(h);
       }
     }
+
+    placeBridges(object, g, G, E, size, x0, y0, bridgeIds); // 橋：河上每隔一段一座（bridges.js）
 
     // 物種成群（herds.js）：物件層生完才放，避開樹與礦坑；據點的那群怪物也在這裡放，動物的群離據點遠一點
     const herds = planHerds({
@@ -272,25 +279,11 @@ export function createTerrainGen(seed, data, size = null) {
     setMoisture(x.moistureAt);
   }
 
-  const setHerdTargets = (fn) => {
-    herdTargets = fn;
-  };
-  const setSettlePlan = (fn, start) => {
-    settlePlan = fn;
-    startZone = start;
-  };
-
-  return {
-    genZone,
-    heightAt: land.heightAt,
-    landform: land,
-    climateAt,
-    biomeAt,
-    setGeography,
-    setHerdTargets,
-    setSettlePlan,
-    shape,
-  };
+  // 建世界時由 world.js 接上：每區的生物群數、哪幾區放聚落與起點那一區
+  const setHerdTargets = (fn) => (herdTargets = fn);
+  const setSettlePlan = (fn, start) => ([settlePlan, startZone] = [fn, start]);
+  const env = { heightAt: land.heightAt, landform: land, climateAt, biomeAt, shape };
+  return { genZone, setGeography, setHerdTargets, setSettlePlan, ...env };
 }
 
 export { NONE as LAYER_NONE };

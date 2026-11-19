@@ -8,6 +8,8 @@ import { gapToNest, NEST, rangeOf, tagOf } from './nests.js';
 import { hash01 } from './noise.js';
 
 const SPILL = NEST.rangeBase + NEST.rangeSpan; // 範圍最多伸出圖樣這麼多格
+const DARK = 0.6; // dark 的據點範圍裡，顏色壓暗成幾成
+const DARK_INSIDE = 0.7; // 陰暗的沼澤圖樣裡
 
 export function withNests(world, data, getNests) {
   const GRAVEL = data.surfaceIndex.get('gravel');
@@ -53,11 +55,12 @@ export function withNests(world, data, getNests) {
     return null;
   }
 
-  // 範圍裡（圖樣外、沒有水）的格子換成什麼：{ s 材質, k 覆蓋（-1 沒有）} 或 null
+  // 範圍裡（圖樣外、沒有水）的格子換成什麼：{ s 材質, k 覆蓋（-1 沒有）} 或 null（dark 的據點保留原本的地形）
   function ringLook(x, y) {
     const at = nestAt(x, y);
     if (!at || at.inside || world.waterAt(x, y) >= 0) return null;
     const ground = defOf(at.nest).ground;
+    if (ground === 'dark') return null;
     if (ground === 'gravel') return { s: GRAVEL, k: -1 };
     if (ground === 'bare') return { s: DIRT, k: -1 };
     return { s: DIRT, k: hash01(world.seed, x, y, 9101) < 0.3 ? REEDS : -1 };
@@ -82,6 +85,13 @@ export function withNests(world, data, getNests) {
     nestTag: (n) => tagOf(nestState(n.id).pop, defOf(n).popMax),
     // (x, y) 在不在某個據點的圖樣或範圍裡（動物遊蕩時避開）
     inNestArea: (x, y) => !!nestAt(x, y),
+    // 這格的顏色壓暗成幾成（1 是不壓）：dark 的據點範圍裡壓暗；陰暗的沼澤連圖樣裡也壓暗
+    tintAt(x, y) {
+      const at = nestAt(x, y);
+      if (!at || defOf(at.nest).ground !== 'dark') return 1;
+      if (!at.inside) return DARK;
+      return defOf(at.nest).layout === 'swamp' ? DARK_INSIDE : 1;
+    },
     surfaceAt,
     objectAt,
     groundAt: (x, y) => ringLook(x, y)?.s ?? world.groundAt(x, y),

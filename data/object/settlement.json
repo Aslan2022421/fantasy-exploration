@@ -62,10 +62,10 @@
   {
     "id": "door",
     "name": "木門",
-    "glyph": "║",
-    "color": "#d4bd7a",
+    "glyph": "+",
+    "color": "#b08050",
     "passable": true,
-    "height": 1,
+    "height": 2,
     "trunk": false,
     "sizes": [1],
     "tile": null
@@ -73,10 +73,10 @@
   {
     "id": "stone-door",
     "name": "石門",
-    "glyph": "┼",
-    "color": "#d4bd7a",
+    "glyph": "+",
+    "color": "#b6c4c0",
     "passable": true,
-    "height": 1,
+    "height": 2,
     "trunk": false,
     "sizes": [1],
     "tile": null

@@ -102,6 +102,8 @@ export const ObjectSchema = z.object({
   height: z.number().int().min(0).max(5),
   // 每層往上錯開幾螢幕像素（沒寫照物件的預設，perspective.js 的 UP.objPx）；室內的家具疊得密一點
   stackPx: z.number().int().min(1).max(8).optional(),
+  bridge: z.boolean().optional(), // 橋：底下是走不過去的水也能走
+
   // 礦坑：每處疊幾層（表現有多大），從錨點的雜湊在範圍裡挑；越挖越矮，這時 gather.uses 是每層挖幾次
   layers: z.tuple([z.number().int().min(1).max(5), z.number().int().min(1).max(5)]).optional(),
   // 礦坑佔的每一格畫什麼：一列一個字串，從錨點（左上）往右下；空白是不畫字。accent 裡的字畫暗一點
@@ -153,7 +155,7 @@ export const NestSchema = z.object({
   name: z.string().min(1),
   species: Id,
   layout: z.enum(['fort', 'graveyard', 'swamp']),
-  ground: z.enum(['gravel', 'bare', 'reeds']),
+  ground: z.enum(['gravel', 'bare', 'reeds', 'dark']), // dark：保留原本的地形，只把顏色壓暗
   popMax: z.number().int().min(1),
   chest: z.array(z.object({ upTo: z.number().int(), options: z.array(ChestOption).min(1) })).min(1),
 });

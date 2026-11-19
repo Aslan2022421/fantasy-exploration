@@ -8,7 +8,18 @@
 
 import { habitatWeight } from './herds.js';
 import { LAND } from './landform.js';
-import { buildLayout, chestIn, FLOOR, KEEP, REEDS as LAYOUT_REEDS, LAYOUT_SIZE } from './nest-layouts.js';
+import {
+  buildLayout,
+  CAVE,
+  CHEST,
+  chestIn,
+  FLOOR,
+  KEEP,
+  REEDS as LAYOUT_REEDS,
+  LAYOUT_SIZE,
+  PATH,
+  POOL,
+} from './nest-layouts.js';
 import { hash01 } from './noise.js';
 
 export const NEST = {
@@ -179,22 +190,28 @@ export function nestCode(nest, X, Y) {
   return nest.grid[j][i] ?? KEEP;
 }
 
-// 生成一區時把據點蓋進那一格（terrain.js）。ids：{ GRAVEL, DIRT, REEDS, NONE } 地形編號。
+// 生成一區時把據點蓋進那一格（terrain.js）。ids：{ FLAG 石板地, DIRT, ROAD, CAVE 洞窟地面, REEDS, SWAMP 沼澤水, NONE } 地形編號。
 // 回傳 null（不是據點或保留原本的地形，照常放物件）；有水的格子回傳 {}（水留著、不放物件）；
-// 不然 { s 材質, k 覆蓋, o 物件編號（-1 沒有）}：地面整平（堡壘是碎石、其餘泥土），覆蓋拿掉或長蘆葦，物件照圖樣
+// 不然 { s 材質, k 覆蓋, o 物件編號（-1 沒有）, w 水文（有積水才有）}：地面整平（堡壘是石板地、其餘泥土），
+// 覆蓋拿掉或長蘆葦，物件照圖樣
 export function createNestStamp(data, ids) {
-  const { GRAVEL, DIRT, REEDS, NONE } = ids;
+  const { FLAG, DIRT, ROAD, CAVE: CAVE_FLOOR, REEDS, SWAMP, NONE } = ids;
   return function stamp(nest, X, Y, wet) {
     const code = nestCode(nest, X, Y);
     if (!code || code === KEEP) return null;
-    if (wet) return {};
-    const fort = data.nests[nest.kind].layout === 'fort';
-    const plain = code === FLOOR || code === LAYOUT_REEDS;
-    return {
-      s: fort ? GRAVEL : DIRT,
-      k: code === LAYOUT_REEDS ? REEDS : NONE,
-      o: plain ? -1 : data.objectIndex.get(code),
-    };
+    // 原本有水（只會是沼澤的積水，湖河放不下據點）：空地照舊積水；岩丘、洞窟、樹這類東西把水排掉再蓋
+    const plain = code === FLOOR || code === LAYOUT_REEDS || code === PATH || code === POOL;
+    if (wet && plain) return {};
+    const drain = wet ? { w: NONE } : {};
+    const ground = data.nests[nest.kind].layout === 'fort' ? FLAG : DIRT;
+    if (code === CAVE) return { s: CAVE_FLOOR, k: NONE, o: -1, ...drain };
+    if (code === FLOOR) return { s: ground, k: NONE, o: -1 };
+    if (code === LAYOUT_REEDS) return { s: DIRT, k: REEDS, o: -1 };
+    if (code === PATH) return { s: ROAD, k: NONE, o: -1 };
+    if (code === POOL) return { s: DIRT, k: NONE, o: -1, w: SWAMP };
+    // 墓室與洞窟裡的寶箱、石門放在洞窟般的暗地面上
+    const under = code === CHEST || code === 'stone-door' ? CAVE_FLOOR : ground;
+    return { s: under, k: NONE, o: data.objectIndex.get(code), ...drain };
   };
 }
 

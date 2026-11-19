@@ -85,6 +85,9 @@ export function createWorldView(mapView, world, data) {
     // 礦坑佔的格子：地形的底色往大類的顏色靠一點，九格看得出是一整處，亮暗還是跟著腳下的地形
     const o = world.objectAt(x, y);
     const bg = o >= 0 && objects[o].layers ? mixColor(softBg(x, y), objects[o].color, MINE_BG) : softBg(x, y);
+    // 陰暗的據點（堡壘的範圍、沼澤）壓暗
+    const t = world.tintAt?.(x, y) ?? 1;
+    if (t !== 1) return { glyph, fg: dimColor(fg, t), bg: dimColor(bg, t), level, rise: FACE[glyph] ? FACE_RISE : 0 };
     return { glyph, fg, bg, level, rise: FACE[glyph] ? FACE_RISE : 0 };
   }
 

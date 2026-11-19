@@ -112,5 +112,29 @@
     "style": "yard",
     "glyphs": [" "],
     "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "flagstone",
+    "name": "石板地",
+    "glyph": " ",
+    "color": "#8a8a80",
+    "bg": "#1f201c",
+    "passable": true,
+    "style": "yard",
+    "glyphs": [" "],
+    "tile": null
+  },
+  {
+    "layer": "surface",
+    "id": "cave-floor",
+    "name": "洞窟地面",
+    "glyph": " ",
+    "color": "#6a6458",
+    "bg": "#100f0c",
+    "passable": true,
+    "style": "yard",
+    "glyphs": [" "],
+    "tile": null
   }
 ]

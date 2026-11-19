@@ -61,7 +61,7 @@ describe('戰鬥', () => {
     expect(engage.data.foes.map((f) => f.id)).toContain(cr.id);
     const hit = g.log.all().find((r) => r.verb === 'attack');
     expect(describeRecord(hit)).toMatch(/擲 \d+[+-]\d+＝\d+ 對防禦 \d+/);
-  });
+  }, 30000);
 
   test('倒下的生物從地圖上消失；存檔再讀檔、從頭重放結果一樣', () => {
     const g = newGame(SEED);

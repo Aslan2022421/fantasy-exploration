@@ -4,17 +4,70 @@
     "name": "廢棄的堡壘",
     "species": "goblin",
     "layout": "fort",
-    "ground": "gravel",
+    "ground": "dark",
     "popMax": 90,
     "chest": [
-      { "upTo": 3, "options": [{ "material": "stone", "count": [1, 4] }] },
+      {
+        "upTo": 3,
+        "options": [
+          {
+            "material": "stone",
+            "count": [1, 4]
+          }
+        ]
+      },
       {
         "upTo": 6,
-        "options": [{ "material": "copper-ore", "count": [1, 3] }, { "material": "tin-ore", "count": [1, 3] }]
+        "options": [
+          {
+            "material": "copper-ore",
+            "count": [1, 3]
+          },
+          {
+            "material": "tin-ore",
+            "count": [1, 3]
+          }
+        ]
       },
-      { "upTo": 9, "options": [{ "item": "dagger" }, { "item": "shortsword" }, { "item": "spear" }] },
-      { "upTo": 11, "options": [{ "item": "longsword" }, { "item": "battleaxe" }, { "item": "shield" }] },
-      { "upTo": 99, "options": [{ "item": "greatsword" }, { "item": "heavy-crossbow" }] }
+      {
+        "upTo": 9,
+        "options": [
+          {
+            "item": "dagger"
+          },
+          {
+            "item": "shortsword"
+          },
+          {
+            "item": "spear"
+          }
+        ]
+      },
+      {
+        "upTo": 11,
+        "options": [
+          {
+            "item": "longsword"
+          },
+          {
+            "item": "battleaxe"
+          },
+          {
+            "item": "shield"
+          }
+        ]
+      },
+      {
+        "upTo": 99,
+        "options": [
+          {
+            "item": "greatsword"
+          },
+          {
+            "item": "heavy-crossbow"
+          }
+        ]
+      }
     ]
   },
   {
@@ -25,11 +78,54 @@
     "ground": "bare",
     "popMax": 60,
     "chest": [
-      { "upTo": 3, "options": [{ "material": "stone", "count": [1, 4] }] },
-      { "upTo": 6, "options": [{ "material": "silver-ore", "count": [1, 2] }] },
-      { "upTo": 9, "options": [{ "item": "leather" }, { "item": "cloth" }] },
-      { "upTo": 11, "options": [{ "item": "scale" }, { "item": "chain" }] },
-      { "upTo": 99, "options": [{ "item": "plate" }] }
+      {
+        "upTo": 3,
+        "options": [
+          {
+            "material": "stone",
+            "count": [1, 4]
+          }
+        ]
+      },
+      {
+        "upTo": 6,
+        "options": [
+          {
+            "material": "silver-ore",
+            "count": [1, 2]
+          }
+        ]
+      },
+      {
+        "upTo": 9,
+        "options": [
+          {
+            "item": "leather"
+          },
+          {
+            "item": "cloth"
+          }
+        ]
+      },
+      {
+        "upTo": 11,
+        "options": [
+          {
+            "item": "scale"
+          },
+          {
+            "item": "chain"
+          }
+        ]
+      },
+      {
+        "upTo": 99,
+        "options": [
+          {
+            "item": "plate"
+          }
+        ]
+      }
     ]
   },
   {
@@ -37,17 +133,60 @@
     "name": "陰暗的沼澤",
     "species": "troll",
     "layout": "swamp",
-    "ground": "reeds",
+    "ground": "dark",
     "popMax": 8,
     "chest": [
-      { "upTo": 3, "options": [{ "wood": true, "count": [1, 4] }] },
+      {
+        "upTo": 3,
+        "options": [
+          {
+            "wood": true,
+            "count": [1, 4]
+          }
+        ]
+      },
       {
         "upTo": 6,
-        "options": [{ "material": "flax", "count": [1, 4] }, { "material": "yarrow", "count": [1, 4] }]
+        "options": [
+          {
+            "material": "flax",
+            "count": [1, 4]
+          },
+          {
+            "material": "yarrow",
+            "count": [1, 4]
+          }
+        ]
       },
-      { "upTo": 9, "options": [{ "material": "iron-ore", "count": [1, 3] }] },
-      { "upTo": 11, "options": [{ "item": "battleaxe" }, { "item": "spear" }] },
-      { "upTo": 99, "options": [{ "material": "gold-ore", "count": [1, 2] }] }
+      {
+        "upTo": 9,
+        "options": [
+          {
+            "material": "iron-ore",
+            "count": [1, 3]
+          }
+        ]
+      },
+      {
+        "upTo": 11,
+        "options": [
+          {
+            "item": "battleaxe"
+          },
+          {
+            "item": "spear"
+          }
+        ]
+      },
+      {
+        "upTo": 99,
+        "options": [
+          {
+            "material": "gold-ore",
+            "count": [1, 2]
+          }
+        ]
+      }
     ]
   }
 ]

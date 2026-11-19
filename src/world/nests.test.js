@@ -36,7 +36,7 @@ describe('據點的圖樣', () => {
     const rows = fortRows();
     expect(rows).toHaveLength(25);
     for (const r of rows) expect([...r]).toHaveLength(39);
-    expect(LAYOUT_SIZE).toEqual({ fort: { w: 39, h: 25 }, graveyard: { w: 29, h: 19 }, swamp: { w: 29, h: 19 } });
+    expect(LAYOUT_SIZE).toEqual({ fort: { w: 39, h: 25 }, graveyard: { w: 29, h: 19 }, swamp: { w: 39, h: 25 } });
     for (const n of nests.slice(0, 6)) {
       expect(n.grid).toHaveLength(n.h);
       expect(n.grid.flat().filter((c) => c === CHEST)).toHaveLength(1);
@@ -81,15 +81,17 @@ describe('據點的放置', () => {
     }
   });
 
-  test('範圍裡的格子換色：堡壘碎石、墓地光禿的泥土、沼澤泥土；查看寫據點名稱與標籤', () => {
+  test('範圍裡的格子換色：墓地光禿的泥土；堡壘、沼澤保留原本的地形、只壓暗；查看寫據點名稱與標籤', () => {
     const g = newGame(SEED);
     for (const n of nests.slice(0, 6)) {
       const r = g.world.nestRange(n);
       const x = n.x0 - 1;
       const y = n.y0 + (n.h >> 1);
       if (r < 1 || g.world.waterAt(x, y) >= 0) continue;
-      const want = { gravel: 'gravel', bare: 'dirt', reeds: 'dirt' }[defOf(n).ground];
-      expect(DATA.surfaces[g.world.surfaceAt(x, y)].id).toBe(want);
+      if (defOf(n).ground === 'dark') {
+        expect(g.world.surfaceAt(x, y)).toBe(g.world.base.surfaceAt(x, y));
+        expect(g.world.tintAt(x, y)).toBeLessThan(1);
+      } else expect(DATA.surfaces[g.world.surfaceAt(x, y)].id).toBe('dirt');
       expect(g.world.cell(x, y).nest.nest.id).toBe(n.id);
     }
   });

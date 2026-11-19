@@ -4,7 +4,6 @@
 // - 地表材質看氣候（climate.js）、坡度與是否在山上；生態覆蓋照生態的 cover，水邊長蘆葦，交界是混合植被
 // 生成順序是地貌 → 水文 → 材質 → 生態。只看「種子＋座標」與世界的地理，任何順序生出來都一樣
 
-import { placeBridges } from './bridges.js';
 import { CLIMATE, createClimate } from './climate.js';
 import { createContinent } from './continent.js';
 import { createCoverPicker } from './cover.js';
@@ -17,6 +16,7 @@ import { createNestPlanner, createNestStamp } from './nests.js';
 import { createObjectPlacer } from './objects.js';
 import { isPeak } from './peak.js';
 import { applyGeography } from './riverbed.js';
+import { paintRoads } from './road-paint.js';
 import { createSettlePlanner, createSettleStamp } from './settlements.js';
 import { bandOf, GEN, SLOPE_SCALE, TEMP_BANDS, WET_BANDS, waterLevel } from './terrain-params.js';
 
@@ -69,7 +69,10 @@ export function createTerrainGen(seed, data, size = null) {
   const [YARD, SQUARE, ROAD, FLOOR, FLAG, CAVE] = ['yard', 'square', 'road', 'floor', 'flagstone', 'cave-floor'].map(
     sf,
   );
-  const bridgeIds = { ew: data.objectIndex.get('bridge-ew'), ns: data.objectIndex.get('bridge-ns') };
+  const [EW, NS] = ['bridge-ew', 'bridge-ns'].map((id) => data.objectIndex.get(id));
+  const roadIds = { ROAD, NONE, EW, NS, PART_MID };
+  const isMine = data.objects.map((o) => !!o.layers);
+  let roads = null; // 道路網（roads.js），建世界時由 world.js 接上；沒接就沒有路
   const stampNest = createNestStamp(data, { FLAG, DIRT, ROAD, CAVE, REEDS, SWAMP, NONE });
   const planSettle = createSettlePlanner(seed, data, { NONE, SWAMP, ICE });
   const stampSettle = createSettleStamp(data, { YARD, SQUARE, ROAD, FLOOR, NONE });
@@ -134,6 +137,7 @@ export function createTerrainGen(seed, data, size = null) {
     const slope = new Uint8Array(n); // 坡度（每格高度差×SLOPE_SCALE，0～255）
     const tier = new Uint8Array(n); // 高度層：水 0、陸地 1～4，山地最高 MAX_TIER
     const biome = new Uint8Array(n);
+    const site = new Uint8Array(n); // 1 是聚落、據點的圖樣（路不畫進去）
     const PAD = Math.max(2, MAX_SIZE - 1);
     const E = PAD + 1;
     const G = size + E * 2;
@@ -214,7 +218,7 @@ export function createTerrainGen(seed, data, size = null) {
         cover[i] = pickCover(zc, c, X, Y);
         const n = settle ? stampSettle(settle, X, Y) : stampNest(nest, X, Y, wAll[c] !== NONE);
         // 聚落、據點的圖樣整平：同一層、沒有坡、地貌是平原（明暗在下面照平地算）
-        if (n) [tier[i], slope[i], landform[i]] = [(settle ?? nest).tier, 0, PLAIN];
+        if (n) [tier[i], slope[i], landform[i], site[i]] = [(settle ?? nest).tier, 0, PLAIN, 1];
         if (n?.s != null) {
           surface[i] = n.s;
           cover[i] = n.k;
@@ -238,7 +242,9 @@ export function createTerrainGen(seed, data, size = null) {
       }
     }
 
-    placeBridges(object, g, G, E, size, x0, y0, bridgeIds); // 橋：河上每隔一段一座（bridges.js）
+    // 道路（road-paint.js）：照路網畫路，過河架橋，聚落附近接到出入口
+    const zr = { size, x0, y0, zoneKey: `${zx},${zy}`, surface, cover, object, objectPart, water, tier, site };
+    paintRoads(roads, zr, roadIds, (o) => isMine[o], settle);
 
     // 物種成群（herds.js）：物件層生完才放，避開樹與礦坑；據點的那群怪物也在這裡放，動物的群離據點遠一點
     const herds = planHerds({
@@ -284,8 +290,9 @@ export function createTerrainGen(seed, data, size = null) {
   // 建世界時由 world.js 接上：每區的生物群數、哪幾區放聚落與起點那一區
   const setHerdTargets = (fn) => (herdTargets = fn);
   const setSettlePlan = (fn, start) => ([settlePlan, startZone] = [fn, start]);
+  const setRoads = (r) => (roads = r);
   const env = { heightAt: land.heightAt, landform: land, climateAt, biomeAt, shape };
-  return { genZone, setGeography, setHerdTargets, setSettlePlan, ...env };
+  return { genZone, setGeography, setHerdTargets, setSettlePlan, setRoads, ...env };
 }
 
 export { NONE as LAYER_NONE };

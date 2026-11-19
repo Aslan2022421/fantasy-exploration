@@ -4,23 +4,24 @@
 
 import { PART_TRUNK } from './footprint.js';
 import { buildGeography } from './geography.js';
-import { creatureCells, herdTargets } from './herds.js';
+import { creatureCells } from './herds.js';
 import { LAND } from './landform.js';
 import { createNestIndex } from './nests.js';
 import { anchorOffset } from './objects.js';
+import { buildRegions } from './regions.js';
+import { buildRoads } from './roads.js';
 import { createSettleIndex, settlementPlan } from './settlements.js';
-import { bandOf, createTerrainGen, LAYER_NONE, TEMP_BANDS, WET_BANDS } from './terrain.js';
+import { createTerrainGen, LAYER_NONE } from './terrain.js';
 
 export { startPosition } from './start.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 32; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法；30：橋、據點重做；31：聚落與據點整平；32：整平處是平原、出入口外的路
+export const WORLD_VERSION = 33; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法；30：橋、據點重做；31：聚落與據點整平；32：整平處是平原、出入口外的路；33：道路
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
 export const ZONES_Y = 96;
 export const ZONE_SIZE = 96; // 一區的邊長（格）
-const SAMPLES = 8; // 世界層每區取 8×8 個點平均
 const MAX_ZONES = 64; // 生過的區最多留幾區（一區十幾萬位元組，走遍 96×96 區會吃掉上 GB）
 
 export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zoneSize = ZONE_SIZE } = {}) {
@@ -31,44 +32,8 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
   const geography = buildGeography(gen.heightAt, seed, width, height);
   gen.setGeography(geography);
 
-  // 世界層：每區的平均溫度、濕度、高度，以及由此得出的氣候與生態標籤。
-  // numbers 是「每區幾個數字」的位置，各數字等用到的階段再加
-  const regions = [];
-  for (let zy = 0; zy < zonesY; zy++) {
-    for (let zx = 0; zx < zonesX; zx++) {
-      let t = 0;
-      let w = 0;
-      let h = 0;
-      const step = zoneSize / SAMPLES;
-      for (let sy = 0; sy < SAMPLES; sy++) {
-        for (let sx = 0; sx < SAMPLES; sx++) {
-          const x = zx * zoneSize + (sx + 0.5) * step;
-          const y = zy * zoneSize + (sy + 0.5) * step;
-          const hh = gen.heightAt(x, y);
-          const c = gen.climateAt(x, y, hh);
-          t += c.t;
-          w += c.w;
-          h += hh;
-        }
-      }
-      const k = SAMPLES * SAMPLES;
-      const temperature = t / k;
-      const moisture = w / k;
-      // 湖海的區沒有陸上生物；其餘照種子與區座標擲，生區時 herds.js 依這個放
-      const sea = h / k < LAND.water;
-      const targets = sea ? { herbivores: 0, predators: 0 } : herdTargets(seed, zx, zy);
-      regions.push({
-        zx,
-        zy,
-        temperature,
-        moisture,
-        height: h / k,
-        climate: { temperature: TEMP_BANDS[bandOf(temperature)], moisture: WET_BANDS[bandOf(moisture)] },
-        biome: data.biomes[gen.biomeAt(temperature, moisture)].id,
-        numbers: { herbivores: targets.herbivores, predators: targets.predators }, // 草食、掠食各幾群（目標）
-      });
-    }
-  }
+  // 世界層：每區的氣候與生態標籤、生物群數（regions.js）
+  const regions = buildRegions(gen, seed, data, zonesX, zonesY, zoneSize);
   gen.setHerdTargets((zx, zy) => regions[zy * zonesX + zx].numbers);
   // 聚落（settlements.js）：哪幾區放村莊、城鎮先照種子定好；起點那一區一定是村莊
   const start0 = geography.start;
@@ -132,13 +97,14 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
   const settleIndex = createSettleIndex(zone, zonesX, zonesY, zoneSize);
 
   // 起點改到起點村莊的廣場（井的南邊一格）。起點那一區的生物群照起點放，起點換了就整個重生一次
+  // 道路網（roads.js）要知道起點村莊在哪，算好後已經生過的區（起點那一區）丟掉重生
   const home = settleIndex.settleOf(startZone.zx, startZone.zy);
-  if (home) {
-    geography.start = { ...home.plaza };
-    zones.clear();
-    last = null;
-    settleIndex.clearSettles();
-  }
+  if (home) geography.start = { ...home.plaza };
+  const roads = buildRoads(geography, settlePlan, zonesX, zonesY, zoneSize, home);
+  gen.setRoads(roads);
+  zones.clear();
+  last = null;
+  settleIndex.clearSettles();
 
   // 離 (x, y) 不到 r 格（切比雪夫）的生物群：[{ herd, species, near: 最近那隻的錨點 }]
   function herdsNear(x, y, r) {
@@ -214,6 +180,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     ...nestIndex,
     ...settleIndex,
     startVillage: home ?? null, // 起點的村莊（冒險者從這裡出發）
+    roads, // 道路網（roads.js）：{ segments, byZone }，總覽畫路用
     settlementKind: settlePlan, // (zx, zy) → 排好要放的聚落 'village' | 'town' | null（不用生出那一區；極少數放不下的區實際沒有）
     herdsOf: (zx, zy) => (zx < 0 || zy < 0 || zx >= zonesX || zy >= zonesY ? [] : zone(zx, zy).herds),
     generatedZones: () => zones.size,

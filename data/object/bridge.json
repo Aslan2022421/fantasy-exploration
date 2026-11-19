@@ -5,11 +5,12 @@
     "glyph": "═",
     "color": "#9a7650",
     "passable": true,
-    "height": 1,
+    "height": 2,
     "trunk": false,
     "sizes": [1],
     "tile": null,
-    "bridge": true
+    "bridge": true,
+    "stackPx": 4
   },
   {
     "id": "bridge-ns",
@@ -17,10 +18,11 @@
     "glyph": "║",
     "color": "#9a7650",
     "passable": true,
-    "height": 1,
+    "height": 2,
     "trunk": false,
     "sizes": [1],
     "tile": null,
-    "bridge": true
+    "bridge": true,
+    "stackPx": 4
   }
 ]

@@ -15,6 +15,7 @@ export function withNests(world, data, getNests) {
   const GRAVEL = data.surfaceIndex.get('gravel');
   const DIRT = data.surfaceIndex.get('dirt');
   const REEDS = data.coverIndex.get('reeds');
+  const ROAD = data.surfaceIndex.get('road');
   const CHEST = data.objectIndex.get('nest-chest');
   const CHEST_OPEN = data.objectIndex.get('nest-chest-open');
 
@@ -58,7 +59,7 @@ export function withNests(world, data, getNests) {
   // 範圍裡（圖樣外、沒有水）的格子換成什麼：{ s 材質, k 覆蓋（-1 沒有）} 或 null（dark 的據點保留原本的地形）
   function ringLook(x, y) {
     const at = nestAt(x, y);
-    if (!at || at.inside || world.waterAt(x, y) >= 0) return null;
+    if (!at || at.inside || world.waterAt(x, y) >= 0 || world.surfaceAt(x, y) === ROAD) return null; // 路照舊是路
     const ground = defOf(at.nest).ground;
     if (ground === 'dark') return null;
     if (ground === 'gravel') return { s: GRAVEL, k: -1 };

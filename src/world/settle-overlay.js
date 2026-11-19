@@ -20,6 +20,7 @@ const SIGNS = {
 export function withSettlements(world, data, getSettles, getCells = () => ({})) {
   const DIRT = data.surfaceIndex.get('dirt');
   const GRASS = data.coverIndex.get('sparse-grass');
+  const ROAD = data.surfaceIndex.get('road');
   const spill = Math.max(0, ...(data.settlements ?? []).map((d) => d.rangeBase + SETTLE.rangeSpan));
   const defOf = (s) => data.settlements[s.kind];
 
@@ -53,7 +54,7 @@ export function withSettlements(world, data, getSettles, getCells = () => ({})) 
   // 範圍裡（圖樣外、沒有水）的格子：泥土，三成長稀疏草叢
   function ringLook(x, y) {
     const at = settleAt(x, y);
-    if (!at || at.inside || world.waterAt(x, y) >= 0) return null;
+    if (!at || at.inside || world.waterAt(x, y) >= 0 || world.surfaceAt(x, y) === ROAD) return null; // 路照舊是路
     return { s: DIRT, k: hash01(world.seed, x, y, 9310) < 0.3 ? GRASS : -1 };
   }
 

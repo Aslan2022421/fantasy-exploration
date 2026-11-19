@@ -10,6 +10,7 @@ import { COLORS } from '../view/colors.js';
 import { loadPixelFont } from '../view/font.js';
 import { createMapView } from '../view/mapview.js';
 import { createPanels } from '../view/panels.js';
+import { createRegionMap } from '../view/regionmap.js';
 import { cssSize, gridLabel, layout } from '../view/screen.js';
 import { loadImage } from '../view/tiles.js';
 import { createWorldMap } from '../view/worldmap.js';
@@ -78,6 +79,9 @@ const windows = createGameWindows({
   game,
   data: DATA,
   worldMap,
+  regionMap: createRegionMap(world, DATA),
+  // 主畫面看得到的範圍（附近地圖畫白框）
+  camera: () => ({ ...camera(), w: screen.map.w / screen.tile, h: screen.map.h / screen.tile }),
   actions: () => actions,
   entries,
   version: VERSION,

@@ -3,6 +3,7 @@
 
 import { COLORS } from '../view/colors.js';
 import { drawGear, gearItems } from '../view/gear-view.js';
+import { REGION } from '../view/regionmap.js';
 import { drawSheet } from '../view/sheet.js';
 import { drawMapWindow } from '../view/worldmap.js';
 import { regionLabel } from '../world/place.js';
@@ -13,7 +14,20 @@ const inside = (r, x, y) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r
 
 // actions() 回傳 actions.js 的物件（視窗先建、actions 後建，所以用函式取）；entries() 是紀錄視窗的內容；
 // restart() 清掉存檔重新開始
-export function createGameWindows({ panels, game, data, worldMap, actions, entries, version, restart }) {
+// regionMap：附近地圖（regionmap.js）；camera()：主畫面左上角的世界格與看得到幾×幾格
+export function createGameWindows({
+  panels,
+  game,
+  data,
+  worldMap,
+  regionMap,
+  camera,
+  actions,
+  entries,
+  version,
+  restart,
+}) {
+  let mapWhole = false; // M 現在看的是整個世界（Tab 切換）
   let exported = null; // 這次打開選單後匯出的檔名
   let restartArmed = false; // 選單裡按過一次「重新建角」，再按一次才清掉存檔
   const gearUi = { cursor: 0 }; // B 頁背包清單的游標
@@ -49,10 +63,22 @@ export function createGameWindows({ panels, game, data, worldMap, actions, entri
       const hit = sheetHits.plus.find((p) => inside(p.rect, x, y));
       if (hit) actions().raise(hit.attr);
     },
+    // M：先看附近（舊版的小地圖畫法），Tab 切到整個世界
     map: (c, s, body) => {
       const p = game.state.player;
-      const label = `你在${regionLabel(world, data, p.x, p.y)}｜整個世界 ${world.zonesX}×${world.zonesY} 區，方框是你所在的區`;
-      drawMapWindow(c, s, body, worldMap, panels, p, label);
+      const where = `你在${regionLabel(world, data, p.x, p.y)}`;
+      if (mapWhole) {
+        const label = `${where}｜整個世界 ${world.zonesX}×${world.zonesY} 區，方框是你所在的區｜Tab 看附近`;
+        drawMapWindow(c, s, body, worldMap, panels, p, label);
+        return;
+      }
+      const label = `${where}｜附近 ${REGION.zones}×${REGION.zones} 區，白框是畫面看得到的範圍｜Tab 看整個世界`;
+      regionMap.draw(c, s, body, panels, p, camera(), game.log.size, label);
+    },
+    mapKey(code) {
+      if (code !== 'Tab') return false;
+      mapWhole = !mapWhole;
+      return true;
     },
     menu: () => [
       { time: null, text: '1　匯出試玩紀錄（下載成 JSON 檔，交給 Claude 讀）' },

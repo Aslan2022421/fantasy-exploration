@@ -16,7 +16,7 @@ import { createNestPlanner, createNestStamp } from './nests.js';
 import { createObjectPlacer } from './objects.js';
 import { isPeak } from './peak.js';
 import { applyGeography } from './riverbed.js';
-import { paintRoads, roadEntries } from './road-paint.js';
+import { paintRoads, roadEntries, roadIdsFor } from './road-paint.js';
 import { createSettlePlanner, createSettleStamp } from './settlements.js';
 import { bandOf, GEN, SLOPE_SCALE, TEMP_BANDS, WET_BANDS, waterLevel } from './terrain-params.js';
 
@@ -69,9 +69,7 @@ export function createTerrainGen(seed, data, size = null) {
   const [YARD, SQUARE, ROAD, FLOOR, FLAG, CAVE] = ['yard', 'square', 'road', 'floor', 'flagstone', 'cave-floor'].map(
     sf,
   );
-  const [EW, NS] = ['bridge-ew', 'bridge-ns'].map((id) => data.objectIndex.get(id));
-  const roadIds = { ROAD, NONE, EW, NS, PART_MID };
-  const isMine = data.objects.map((o) => !!o.layers);
+  const roadIds = roadIdsFor(data, { ROAD, NONE, PART_MID });
   let roads = null; // 道路網（roads.js），建世界時由 world.js 接上；沒接就沒有路
   const stampNest = createNestStamp(data, { FLAG, DIRT, ROAD, CAVE, REEDS, SWAMP, NONE });
   const planSettle = createSettlePlanner(seed, data, { NONE, SWAMP, ICE });
@@ -245,7 +243,7 @@ export function createTerrainGen(seed, data, size = null) {
 
     // 道路（road-paint.js）：照路網畫路，過河架橋，聚落附近接到出入口
     const zr = { size, x0, y0, zoneKey: `${zx},${zy}`, surface, cover, object, objectPart, water, tier, site };
-    paintRoads(roads, zr, roadIds, (o) => isMine[o], settle);
+    paintRoads(roads, zr, roadIds, settle);
 
     // 物種成群（herds.js）：物件層生完才放，避開樹與礦坑；據點的那群怪物也在這裡放，動物的群離據點遠一點
     const herds = planHerds({

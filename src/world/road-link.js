@@ -1,6 +1,7 @@
 // 道路接到聚落的出入口（road-paint.js 用）：
 // - dropLoose：聚落附近的路拿掉後，碰不到區界的那幾截也拿掉（路都是從區外來的，碰不到區界的是懸空的）
-// - linkGates：斷開的路頭一組一組接到朝那個方向開的出入口；route 找路（少踩水、拉直）
+// - headGroups：要接出入口的路頭（roadEntries 也用它決定出入口朝哪開）
+// - linkGates：路頭一組一組接到朝那個方向開的出入口；route 找路（少踩水、拉直）
 // - pruneSpurs：接好之後還有一頭沒接到東西的路剪掉
 
 import { heap } from './gridtools.js';
@@ -52,19 +53,8 @@ export function pruneSpurs(z, mark, road) {
   }
 }
 
-// 斷開的路頭（緊鄰拿掉的那段）與停在路網端點的路頭（end，聚落沒蓋在端點上時），一組一組接到出入口（route），記進 mark
-export function linkGates(z, mark, cut, s, none, end) {
-  const { size, x0, y0 } = z;
-  const goals = [];
-  const gates = [];
-  for (const g of s.layout.gates) {
-    const x = s.x0 + g.out.i - x0;
-    const y = s.y0 + g.out.j - y0;
-    if (x < 0 || y < 0 || x >= size || y >= size || z.site[y * size + x]) continue;
-    goals.push(y * size + x);
-    gates.push(g);
-  }
-  if (!goals.length) return;
+// 要接出入口的路頭：緊鄰拿掉那段的路，與停在路網端點（end，聚落沒蓋在端點上時）的路；連在一起（八方向）的算一組
+export function headGroups(mark, cut, size, x0, y0, end) {
   const head = new Uint8Array(size * size);
   for (let i = 0; i < size * size; i++) {
     if (!mark[i]) continue;
@@ -78,6 +68,7 @@ export function linkGates(z, mark, cut, s, none, end) {
     if (NEAR4.some(touch)) head[i] = 1;
     if (end && Math.max(Math.abs(x0 + x - Math.floor(end[0])), Math.abs(y0 + y - Math.floor(end[1]))) <= 1) head[i] = 1;
   }
+  const groups = [];
   for (let s0 = 0; s0 < size * size; s0++) {
     if (!head[s0]) continue;
     const group = [s0];
@@ -94,6 +85,25 @@ export function linkGates(z, mark, cut, s, none, end) {
           group.push(ny * size + nx);
         }
     }
+    groups.push(group);
+  }
+  return groups;
+}
+
+// 每組路頭接到出入口（route），記進 mark
+export function linkGates(z, mark, cut, s, none, end) {
+  const { size, x0, y0 } = z;
+  const goals = [];
+  const gates = [];
+  for (const g of s.layout.gates) {
+    const x = s.x0 + g.out.i - x0;
+    const y = s.y0 + g.out.j - y0;
+    if (x < 0 || y < 0 || x >= size || y >= size || z.site[y * size + x]) continue;
+    goals.push(y * size + x);
+    gates.push(g);
+  }
+  if (!goals.length) return;
+  for (const group of headGroups(mark, cut, size, x0, y0, end)) {
     // 照這組在聚落的哪個方向，走到角度最接近的出入口（每條來的路各接各的口）；走不到就接任何一個口
     const sx = s.x0 + (s.w - 1) / 2 - x0;
     const sy = s.y0 + (s.h - 1) / 2 - y0;

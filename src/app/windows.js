@@ -1,7 +1,9 @@
 // 大視窗（H 紀錄、B 裝備與背包、C 角色、M 地圖、Esc 選單）：同一時間只開一個，按自己的鍵或 Esc 關掉；
 // 文字視窗用方向鍵、PageUp／PageDown、滾輪捲動。紀錄打開時捲到最新，其他從頭看。
 // 自己畫的視窗（custom）：content[name](ctx, screen, body) 畫，content[name + 'Key'](code) 接鍵、
-// content[name + 'Click'](x, y, double) 接滑鼠；選單的數字鍵執行選項（actions）
+// content[name + 'Click'](x, y, double) 接滑鼠；選單的數字鍵執行選項（actions）。
+// 文字視窗也可以有 content[name + 'Key']（例如 H 用 Tab 換分頁，換了就重新捲到開頭或最新）、
+// content[name + 'Title']() 換標題、content[name + 'FromEnd']() 決定打開時捲到最新還是從頭看
 
 const WINDOWS = {
   KeyH: { name: 'history', title: '紀錄（H 或 Esc 關閉，滾輪或方向鍵捲動）', fromEnd: true },
@@ -25,7 +27,7 @@ export function createWindows(panels, content) {
 
   const show = (w) => {
     open = w;
-    scroll = w.fromEnd ? Number.MAX_SAFE_INTEGER : 0;
+    scroll = (content[`${w.name}FromEnd`]?.() ?? w.fromEnd) ? Number.MAX_SAFE_INTEGER : 0;
   };
 
   return {
@@ -42,6 +44,7 @@ export function createWindows(panels, content) {
       if (code === 'Escape' || WINDOWS[code] === open) open = null;
       else if (open.actions?.[code]) content[open.actions[code]]();
       else if (open.custom && content[`${open.name}Key`]?.(code)) return true;
+      else if (!open.custom && !open.small && content[`${open.name}Key`]?.(code)) show(open);
       else if (WINDOWS[code]) show(WINDOWS[code]);
       else if (SCROLL_KEYS[code]) this.scroll(SCROLL_KEYS[code]);
       return true;
@@ -66,11 +69,12 @@ export function createWindows(panels, content) {
         panels.dialog(ctx, screen, open.title, open.lines);
         return;
       }
+      const title = content[`${open.name}Title`]?.() ?? open.title;
       if (open.custom) {
-        content[open.name](ctx, screen, panels.windowBox(ctx, screen, open.title));
+        content[open.name](ctx, screen, panels.windowBox(ctx, screen, title));
         return;
       }
-      maxScroll = panels.window(ctx, screen, open.title, content[open.name](), scroll);
+      maxScroll = panels.window(ctx, screen, title, content[open.name](), scroll);
       scroll = Math.min(scroll, maxScroll);
     },
   };

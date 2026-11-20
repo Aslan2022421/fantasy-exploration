@@ -23,6 +23,33 @@ describe('大視窗', () => {
   });
 });
 
+describe('H 的分頁', () => {
+  test('文字視窗的 Tab 交給內容換頁、標題跟著換；換頁後照那一頁決定捲到最新還是從頭', () => {
+    let tab = 0;
+    let scrollSeen = null;
+    const panels = {
+      window: (_c, _s, title, _e, scroll) => {
+        scrollSeen = { title, scroll };
+        return 100;
+      },
+    };
+    const w = createWindows(panels, {
+      history: () => [],
+      historyKey: (code) => code === 'Tab' && ++tab > 0,
+      historyTitle: () => `頁 ${tab}`,
+      historyFromEnd: () => tab === 0,
+    });
+    w.key('KeyH');
+    w.draw(null, {});
+    expect(scrollSeen.title).toBe('頁 0');
+    expect(scrollSeen.scroll).toBeGreaterThanOrEqual(100); // 捲到最新（交給 panels 夾在最底）
+    w.key('Tab');
+    w.draw(null, {});
+    expect(scrollSeen).toEqual({ title: '頁 1', scroll: 0 });
+    expect(w.open).toBe('history');
+  });
+});
+
 describe('選單與地圖', () => {
   test('沒開視窗時 Esc 打開選單，按 1 匯出、選單留著；再按 Esc 關掉', () => {
     let exports = 0;

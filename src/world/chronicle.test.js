@@ -2,6 +2,7 @@
 import { expect, test } from 'vitest';
 import { createLog } from '../core/records.js';
 import { DATA } from '../data/load.js';
+import { bestiary, lifePage, worldHistory } from '../view/chronicle-view.js';
 import { createChronicle } from './chronicle.js';
 import { NEWS, newsFor } from './rumors.js';
 
@@ -66,6 +67,18 @@ test('會傳的事件每一句範本都填得滿（沒有留下 {名字}）', ()
   const ch = createChronicle(logWith([clear(100)]), Z);
   for (let i = 0; i < 40; i++)
     for (const n of newsFor(ch, settleAt(5 - (i % 4), 1), `npc:x#${i}`, 10 ** 6, Z)) expect(n.text).not.toMatch(/\{/);
+});
+
+test('H 的世界歷史寫「一位種族職業」、生涯寫「你」，統計數得出清光幾處', () => {
+  const ch = createChronicle(logWith([clear(100)]), Z);
+  const hist = worldHistory(ch).map((r) => r.text);
+  expect(hist[0]).toBe(
+    `一位${ch.hero}清光了${fort.name}外面那群${DATA.species[DATA.speciesIndex.get(fort.species)].name}。`,
+  );
+  const life = lifePage(ch, { time: 200 }).map((r) => r.text);
+  expect(life.some((t) => t.startsWith('你清光了'))).toBe(true);
+  expect(life.some((t) => t.includes('清光 1 處據點'))).toBe(true);
+  expect(bestiary(ch, null, DATA).map((r) => r.text)).toEqual(['還沒有見過任何生物。']);
 });
 
 test('走過的區加周圍一圈算知道；說話時聽到的傳聞記在紀錄裡，地圖照那筆標出地方', () => {

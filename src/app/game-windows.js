@@ -1,6 +1,7 @@
 // 遊戲裡的大視窗內容（windows.js 管開關，這裡管每個視窗畫什麼、按鍵與滑鼠做什麼）：
-// H 紀錄、B 裝備與背包、C 角色、M 世界地圖、Esc 選單（匯出試玩紀錄、重新建角）
+// H 紀錄（Tab 換頁：紀錄、世界歷史、生涯、圖鑑）、B 裝備與背包、C 角色、M 世界地圖、Esc 選單（匯出試玩紀錄、重新建角）
 
+import { bestiary, HISTORY_TABS, lifePage, worldHistory } from '../view/chronicle-view.js';
 import { COLORS } from '../view/colors.js';
 import { drawGear, gearItems } from '../view/gear-view.js';
 import { drawSheet } from '../view/sheet.js';
@@ -22,8 +23,23 @@ export function createGameWindows({ panels, game, data, asciiMap, camera, action
   let sheetHits = { plus: [] };
   const world = game.world;
 
+  let tab = 0; // H 現在看哪一頁（HISTORY_TABS），Tab 換頁
+  const pages = [
+    entries,
+    () => worldHistory(game.chronicle),
+    () => lifePage(game.chronicle, game.state),
+    () => bestiary(game.chronicle, world, data),
+  ];
+
   const windows = createWindows(panels, {
-    history: entries,
+    history: () => pages[tab](),
+    historyKey(code) {
+      if (code !== 'Tab') return false;
+      tab = (tab + 1) % HISTORY_TABS.length;
+      return true;
+    },
+    historyTitle: () => `${HISTORY_TABS[tab]}（Tab 換頁：${HISTORY_TABS.join('／')}｜H 或 Esc 關閉，滾輪或方向鍵捲動）`,
+    historyFromEnd: () => tab < 2, // 紀錄與世界歷史捲到最新，生涯與圖鑑從頭看
     bag: (c, s, body) => {
       gearUi.cursor = Math.max(0, Math.min(gearUi.cursor, gearItems(data, game.state.hero).length - 1));
       gearHits = drawGear(c, s, panels, data, game.state, gearUi, body);

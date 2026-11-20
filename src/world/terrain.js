@@ -220,6 +220,7 @@ export function createTerrainGen(seed, data, size = null) {
         // 聚落、據點的圖樣整平：同一層、沒有坡、地貌是平原（明暗在下面照平地算）
         if (n && !n.keep) [tier[i], slope[i], landform[i], site[i]] = [(settle ?? nest).tier, 0, PLAIN, 1];
         else if (n) site[i] = 1; // 堡壘兩翼的山壁：保留原本的高度
+        if (n) peak[i] = 0; // 圖樣裡不畫山峰剪影（兩翼的山壁是物件，也不讓剪影蓋上去）
         if (n?.s != null) {
           surface[i] = n.s;
           cover[i] = n.k;

@@ -37,7 +37,7 @@ test('兩翼的山壁：沿著跟路垂直的方向往外拉，碰到水就停',
   expect(mid.slice(55).every((c) => c === 'rampart-rock')).toBe(true);
 });
 
-test('世界上的堡壘、要塞放在隘口：城門外接著路', () => {
+test('世界上的堡壘、要塞放在隘口：城門外接著路；圖樣裡沒有山峰', () => {
   const world = newGame(20261112).world.base;
   const road = DATA.surfaceIndex.get('road');
   const home = world.geography.start;
@@ -58,4 +58,9 @@ test('世界上的堡壘、要塞放在隘口：城門外接著路', () => {
     const o = world.objectAt(x, y);
     expect(world.surfaceAt(x, y) === road || (o >= 0 && DATA.objects[o].bridge)).toBe(true);
   }
+  // 整平成平原的格子不留山峰標記（不然山峰剪影會畫在城牆上）
+  const mountain = DATA.landformIndex.get('mountain');
+  for (let y = s.y0; y < s.y0 + s.h; y++)
+    for (let x = s.x0; x < s.x0 + s.w; x++)
+      if (world.peakAt(x, y)) expect(world.landformAt(x, y), `${x},${y}`).toBe(mountain);
 }, 60000);

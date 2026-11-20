@@ -1,6 +1,7 @@
 // 把紀錄寫成給玩家看的一行字。連續、同方向、同起因的移動併成一行；戰鬥的在 describe-fight.js
 
 import { DATA } from '../data/load.js';
+import { describeCraft } from './describe-craft.js';
 import { describeFight } from './describe-fight.js';
 import { describeNest } from './describe-nest.js';
 
@@ -49,6 +50,7 @@ export function describeRecord(rec) {
       // 回傳 null 是不寫出來（生物移動），undefined 是不認得的動詞
       let text = describeFight(rec);
       if (text === undefined) text = describeNest(rec);
+      if (text === undefined) text = describeCraft(rec);
       return text === undefined ? rec.verb : text;
     }
   }

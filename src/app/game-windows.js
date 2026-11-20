@@ -1,11 +1,11 @@
 // 遊戲裡的大視窗內容（windows.js 管開關，這裡管每個視窗畫什麼、按鍵與滑鼠做什麼）：
-// H 紀錄（Tab 換頁：紀錄、世界歷史、生涯、圖鑑）、B 裝備與背包、C 角色、M 世界地圖、Esc 選單（匯出試玩紀錄、重新建角）
+// H 紀錄（Tab 換頁：紀錄、世界歷史、生涯、圖鑑）、B 裝備與背包（Tab 換頁：裝備、製作，bag-window.js）、C 角色、M 世界地圖、Esc 選單（匯出試玩紀錄、重新建角）
 
 import { bestiary, HISTORY_TABS, lifePage, worldHistory } from '../view/chronicle-view.js';
 import { COLORS } from '../view/colors.js';
-import { drawGear, gearItems } from '../view/gear-view.js';
 import { drawSheet } from '../view/sheet.js';
 import { regionLabel } from '../world/place.js';
+import { bagWindow } from './bag-window.js';
 import { downloadPlaylog } from './playlog.js';
 import { createWindows } from './windows.js';
 
@@ -18,8 +18,6 @@ export function createGameWindows({ panels, game, data, asciiMap, camera, action
   let mapWhole = false; // M 現在看的是整個世界（Tab 切換）
   let exported = null; // 這次打開選單後匯出的檔名
   let restartArmed = false; // 選單裡按過一次「重新建角」，再按一次才清掉存檔
-  const gearUi = { cursor: 0 }; // B 頁背包清單的游標
-  let gearHits = { rows: [] };
   let sheetHits = { plus: [] };
   const world = game.world;
 
@@ -40,25 +38,7 @@ export function createGameWindows({ panels, game, data, asciiMap, camera, action
     },
     historyTitle: () => `${HISTORY_TABS[tab]}（Tab 換頁：${HISTORY_TABS.join('／')}｜H 或 Esc 關閉，滾輪或方向鍵捲動）`,
     historyFromEnd: () => tab < 2, // 紀錄與世界歷史捲到最新，生涯與圖鑑從頭看
-    bag: (c, s, body) => {
-      gearUi.cursor = Math.max(0, Math.min(gearUi.cursor, gearItems(data, game.state.hero).length - 1));
-      gearHits = drawGear(c, s, panels, data, game.state, gearUi, body);
-    },
-    bagKey(code) {
-      const items = gearItems(data, game.state.hero);
-      if (code === 'ArrowUp' || code === 'ArrowDown') {
-        if (items.length) gearUi.cursor = (gearUi.cursor + (code === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
-      } else if (code === 'Enter' || code === 'NumpadEnter') {
-        if (items[gearUi.cursor]) actions().equip(items[gearUi.cursor]);
-      } else return false;
-      return true;
-    },
-    bagClick(x, y, double) {
-      const row = gearHits.rows.find((r) => inside(r.rect, x, y));
-      if (!row) return;
-      gearUi.cursor = row.i;
-      if (double) actions().equip(row.id);
-    },
+    ...bagWindow({ panels, game, data, actions }),
     sheet: (c, s, body) => {
       sheetHits = drawSheet(c, s, panels, data, game.state, body);
     },

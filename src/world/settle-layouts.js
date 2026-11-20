@@ -1,6 +1,6 @@
 // 聚落的圖樣（照使用者給的城鎮示意圖：木柵、瞭望塔、彎彎的街道、大小不一的房子、田、樹叢）：
 // 1. 輪廓（外形照地形挑）、出入口（朝道路來的方向）、廣場、街道（settle-shape.js）
-// 2. 建築：城鎮先蓋鎮公所、神殿、兵營，再來旅店、酒館（村莊夠大才有旅店），最後民房；外框不貼牆、彼此不相貼，
+// 2. 建築：城鎮先蓋鎮公所、神殿、兵營、鐵匠舖，再來旅店、酒館（村莊夠大才有旅店），最後民房；外框不貼牆、彼此不相貼，
 //    貼著街道的位置優先；門開在靠街那一邊，門外不是街就鋪一條巷子接到最近的街；家具照用途擺（settle-furnish.js）。
 //    民房的床位不夠住滿時改蓋大房子
 // 3. 田（一排作物一排泥土）、樹叢，放在剩下的空地（settle-fields.js）
@@ -25,6 +25,7 @@ const BUILDINGS = {
   temple: { wall: 'temple', w: 5, h: 4, doors: 1, items: ['altar', 'chair', 'chair', 'chair', 'chair'] },
   barracks: { wall: 'barracks', w: 7, h: 3, doors: 1, items: ['bed', 'bed', 'bed', 'bed', 'bed', 'cabinet'] },
   inn: { wall: 'inn', w: 6, h: 4, doors: 1, items: ['bed', 'bed', 'bed', 'table', 'chair', 'chair', 'barrel'] },
+  smithy: { wall: 'house', w: 4, h: 3, doors: 1, items: ['anvil', 'barrel', 'crate'] }, // 鐵匠舖：金屬的製造、修理、熔煉要貼著鐵砧
   castle: {
     wall: 'castle',
     w: 11,
@@ -41,10 +42,10 @@ const BUILDINGS = {
   },
 };
 // 公共建築：城鎮全有；村莊人口標籤到「穩定」以上才有旅店
-// 城市：北邊的城堡、兩座神殿與兵營、旅店酒館各兩間（交辦 4：兩座城鎮併起來的份量）
+// 城市：北邊的城堡、兩座神殿與兵營、旅店酒館各兩間（交辦 4：兩座城鎮併起來的份量）；城鎮、城市各一間鐵匠舖（階段 9）
 const PUBLIC = {
-  city: ['castle', 'hall', 'temple', 'temple', 'barracks', 'barracks', 'inn', 'inn', 'tavern', 'tavern'],
-  town: ['hall', 'temple', 'barracks', 'inn', 'tavern'],
+  city: ['castle', 'hall', 'temple', 'temple', 'barracks', 'barracks', 'smithy', 'inn', 'inn', 'tavern', 'tavern'],
+  town: ['hall', 'temple', 'barracks', 'smithy', 'inn', 'tavern'],
   village: ['inn'],
 };
 const SIDES = { east: 0, south: Math.PI / 2, west: Math.PI, north: -Math.PI / 2 };

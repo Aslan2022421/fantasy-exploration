@@ -17,6 +17,7 @@ const backgroundFiles = import.meta.glob('../../data/background/*.json', { eager
 const nestFiles = import.meta.glob('../../data/nest/*.json', { eager: true, import: 'default' });
 const settlementFiles = import.meta.glob('../../data/settlement/*.json', { eager: true, import: 'default' });
 const eventFiles = import.meta.glob('../../data/event/*.json', { eager: true, import: 'default' });
+const recipeFiles = import.meta.glob('../../data/recipe/*.json', { eager: true, import: 'default' });
 
 export const DATA = buildData({
   skill: skillFiles,
@@ -34,4 +35,5 @@ export const DATA = buildData({
   nest: nestFiles,
   settlement: settlementFiles,
   event: eventFiles,
+  recipe: recipeFiles,
 });

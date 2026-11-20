@@ -11,15 +11,17 @@ import { createLog, RecordSchema } from '../core/records.js';
 import { createStreams, diceSeed, streamSeed } from '../core/rng.js';
 import { DATA } from '../data/load.js';
 import { createChronicle } from './chronicle.js';
-import { applyFight, createFight } from './fight.js';
-import { applyGather, planGather, sourceAt, touches } from './gather.js';
+import { nearAnvil, planBreak, planCraft, planRepair, planSmelt, planUse } from './craft.js';
+import { createFight } from './fight.js';
+import { apply, emptyState, StateSchema } from './game-state.js';
+import { planGather, sourceAt, touches } from './gather.js';
 import { buildSheet, equip as equipSheet, heroStats, presetHero, raise as raiseSheet } from './hero.js';
 import { tryMove } from './move.js';
-import { applyNest } from './nest-apply.js';
 import { createNestWatch } from './nest-watch.js';
 import { overlayWorld } from './overlays.js';
 import { newsFor } from './rumors.js';
 import { createSettleWatch } from './settle-watch.js';
+import { brokenSlots } from './wear.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
 // 3：加上世界版本；4：狀態加上背包、現存數量、採過的格子；5：狀態加上見過的物種；
@@ -30,40 +32,8 @@ import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 export const SAVE_FORMAT = 12;
 export const SIGHT_RANGE = 10; // 走到離一群生物幾格內，算第一次見到那個物種
 export const CHECKPOINT_EVERY = 100;
-const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻
-const PLAYER = 'player';
+export { apply };
 
-const Counts = z.record(z.string(), z.number());
-const StateSchema = z.object({
-  player: z.object({ x: z.number(), y: z.number() }),
-  time: z.number(), // 刻
-  bag: Counts, // 背包：材料 → 幾個
-  stock: Counts, // 現存數量（算上限用）：採到的都算，之後消耗了才扣
-  cells: z.record(z.string(), z.object({}).passthrough()), // 採過的格子（changes.js）
-  seen: z.record(z.string(), z.number()), // 見過的物種 → 第一次見到是哪一筆紀錄
-  hero: z.object({}).passthrough().nullable(), // 冒險者的 sheet（hero.js）
-  hp: z.number(),
-  creatures: z.record(z.string(), z.object({}).passthrough()), // 動過的生物（creatures.js）
-  combat: z.object({}).passthrough().nullable(), // 戰鬥中（fight.js）
-  restDay: z.number(), // 哪一天休息過
-  nests: z.record(z.string(), z.object({}).passthrough()), // 動過的據點（nest-overlay.js）
-  settles: z.record(z.string(), z.object({}).passthrough()), // 動過的聚落（settle-overlay.js）
-});
-const emptyState = () => ({
-  player: { x: 0, y: 0 },
-  time: 0,
-  bag: {},
-  stock: {},
-  cells: {},
-  seen: {},
-  hero: null,
-  hp: 0,
-  creatures: {},
-  combat: null,
-  restDay: -1,
-  nests: {},
-  settles: {},
-});
 export const SaveSchema = z.object({
   format: z.literal(SAVE_FORMAT),
   world: z.literal(WORLD_VERSION),
@@ -74,29 +44,8 @@ export const SaveSchema = z.object({
     .nullable(),
 });
 
-// 一筆紀錄對狀態的影響；沒列到的動作（查看、決定路線、被擋住）不改變狀態
-export function apply(state, rec) {
-  switch (rec.verb) {
-    case 'start':
-      return { ...state, player: { ...rec.data.at }, time: rec.time, hero: rec.data.hero, hp: rec.data.hp };
-    case 'move':
-      return { ...state, player: { ...rec.data.to }, time: rec.time + rec.data.duration };
-    case 'gather':
-      return { ...applyGather(state, rec.data), time: rec.time + rec.data.duration };
-    case 'spot':
-      return { ...state, seen: { ...state.seen, [rec.data.species]: rec.id } };
-    case 'equip': // 換裝備：紀錄裡寫好換完的裝備欄與背包
-      return {
-        ...state,
-        hero: { ...state.hero, gear: rec.data.gear, items: rec.data.items },
-        time: rec.time + rec.data.duration,
-      };
-    case 'raise':
-      return { ...state, hero: { ...state.hero, attrs: rec.data.attrs, points: rec.data.points } };
-    default:
-      return applyFight(state, rec) ?? applyNest(state, rec) ?? state;
-  }
-}
+const GATHER_TICKS = 4; // 採集資料的時間單位是「中等身高走一格」＝4 刻
+const PLAYER = 'player';
 
 // 世界只由種子決定、建好後不會被改（區的快取除外），同一個種子重用上一次建好的（96×96 區建一次要 2 秒）
 let lastWorld = null;
@@ -117,8 +66,16 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     if ((rec.id + 1) % CHECKPOINT_EVERY === 0) {
       lastCheckpoint = { at: rec.id, state: structuredClone(state), rng: rng.snapshot() };
     }
+    // 磨到上限的裝備壞掉，各記一筆（起因是這一下）
+    if (rec.data?.wear)
+      for (const slot of brokenSlots(state.hero))
+        record({ verb: 'break', data: planBreak(DATA, state, slot), cause: rec.id });
     return rec;
   }
+  const craftDice = () => RNG.clone().setSeed(diceSeed(seed, `craft:${log.size}`));
+  // 製造、修理、熔煉、用掉補給品（craft.js）：做不到回傳 { refused }，做了記一筆
+  const craftAct = (verb, plan, cause) => (plan.refused ? plan : after(record({ verb, data: plan, cause })));
+  const anvil = () => nearAnvil(world, DATA, state.player);
 
   // 每一筆的骰子用「主種子＋這筆紀錄的編號」開，讀檔從檢查點接著做也一樣
   const fight = createFight({
@@ -197,7 +154,14 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
       const rec = record({
         verb: 'equip',
         target: null,
-        data: { item, gear: next.gear, items: next.items, duration: heroStats(DATA, state.hero).ticks },
+        data: {
+          item,
+          gear: next.gear,
+          items: next.items,
+          wear: next.wear,
+          itemWear: next.itemWear,
+          duration: heroStats(DATA, state.hero).ticks,
+        },
         cause,
       });
       fight.afterMove(rec.id);
@@ -243,6 +207,11 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     // 跟村民說話（不花時間、不改狀態）：要貼著；回傳紀錄或 null
     talk: (id, cause = null) => settles.talk(id, cause),
     chronicle,
+    nearAnvil: anvil,
+    craft: (id, cause = null) => craftAct('craft', planCraft(DATA, state, id, anvil(), craftDice()), cause),
+    repair: (slot, cause = null) => craftAct('repair', planRepair(DATA, state, slot, anvil()), cause),
+    smelt: (index, cause = null) => craftAct('smelt', planSmelt(DATA, state, index, anvil()), cause),
+    use: (material, cause = null) => craftAct('use', planUse(DATA, state, material, craftDice()), cause),
     // 村民說話的內容（talk.js 的 extra）：這個人現在會講的傳聞（說話不花時間，跟剛記下的那筆一樣），
     // 加上誰讓據點沒有怪物
     talkExtra(npc) {

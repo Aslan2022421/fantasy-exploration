@@ -223,10 +223,10 @@ export function createActions({ game, turns, worldView, describe, persist, redra
       stop();
       return fightAct(() => game.rest());
     },
-    // B 頁換上一件裝備（花一個動作；戰鬥中生物接著動）
-    equip(id) {
+    // B 視窗：equip 換裝、craft 製造、repair 修理、smelt 熔煉、use 補給品（game 的同名方法），都花時間
+    bag(kind, key) {
       stop();
-      return fightAct(() => game.equip(id));
+      return fightAct(() => game[kind](key));
     },
     // C 頁點屬性後面的 +（用掉一點升級的屬性點，不花時間）
     raise(attr) {

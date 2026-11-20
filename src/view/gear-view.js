@@ -2,11 +2,12 @@
 // （武器、防具可以選來換上；材料只列出來）。回傳點擊範圍 { rows: [{ rect, id }] }
 
 import { equip, heroStats } from '../world/hero.js';
+import { wearText } from '../world/wear.js';
 import { bagEntries } from './bag.js';
 import { COLORS } from './colors.js';
 import { armorOf, itemText, signed, weaponOf } from './names.js';
 
-const HELP = '↑↓ 或滑鼠選　Enter 或點兩下 換上（花一個動作）　B 或 Esc 關閉';
+const HELP = 'Tab 換頁　↑↓ 或滑鼠選　Enter 或點兩下 換上（花一個動作）　B 或 Esc 關閉';
 
 // 背包裡能換上的裝備，武器在前、防具在後
 export function gearItems(data, hero) {
@@ -36,13 +37,13 @@ export function compare(data, hero, id) {
   };
 }
 
-function slot(ctx, s, panels, data, rect, label, id, note) {
+function slot(ctx, s, panels, data, rect, label, id, note, wear = null) {
   panels.box(ctx, rect);
   const x = rect.x + s.pad * 2;
   panels.text(ctx, s, label, x, rect.y + s.pad, COLORS.dim);
   if (!id) return panels.text(ctx, s, note ?? '（空）', x, rect.y + s.pad + s.lineHeight, COLORS.line2);
   const it = itemText(data, id);
-  panels.text(ctx, s, it.name, x, rect.y + s.pad + s.lineHeight, COLORS.head);
+  panels.text(ctx, s, wear ? `${it.name}　${wear}` : it.name, x, rect.y + s.pad + s.lineHeight, COLORS.head);
   panels.text(ctx, s, note ?? it.text, x, rect.y + s.pad + s.lineHeight * 2, note ? COLORS.bad : COLORS.text);
 }
 
@@ -55,12 +56,14 @@ export function drawGear(ctx, s, panels, data, state, ui, body) {
   const slotH = s.lineHeight * 3 + s.pad * 2;
   let y = body.y;
   const twoHanded = h.weapon.twoHanded && hero.gear.shield;
-  slot(ctx, s, panels, data, { x: body.x, y, w: leftW, h: slotH }, '主手', hero.gear.weapon);
+  const worn = (k) => wearText(k, hero.gear[k], hero.wear?.[k] ?? 0);
+  const box = () => ({ x: body.x, y, w: leftW, h: slotH });
+  slot(ctx, s, panels, data, box(), '主手', hero.gear.weapon, hero.gear.weapon ? null : '徒手', worn('weapon'));
   y += slotH + s.pad * 2;
   const offNote = twoHanded ? '雙手武器，盾牌不能用' : null;
-  slot(ctx, s, panels, data, { x: body.x, y, w: leftW, h: slotH }, '副手', hero.gear.shield, offNote);
+  slot(ctx, s, panels, data, box(), '副手', hero.gear.shield, offNote, worn('shield'));
   y += slotH + s.pad * 2;
-  slot(ctx, s, panels, data, { x: body.x, y, w: leftW, h: slotH }, '身上', hero.gear.armor);
+  slot(ctx, s, panels, data, box(), '身上', hero.gear.armor, null, worn('armor'));
   y += slotH + s.pad * 3;
   panels.rule(ctx, s, body.x, y, leftW);
   y += s.lineHeight * 1.5;

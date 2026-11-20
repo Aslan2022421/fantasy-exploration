@@ -1,0 +1,149 @@
+[
+  {
+    "id": "bronze-ingot",
+    "makes": { "material": "bronze-ingot", "n": 2 },
+    "needs": [{ "material": "copper-ore", "n": 2 }, { "material": "tin-ore", "n": 2 }],
+    "dc": 8,
+    "ticks": 240,
+    "anvil": true
+  },
+  {
+    "id": "iron-ingot",
+    "makes": { "material": "iron-ingot" },
+    "needs": [{ "material": "iron-ore", "n": 2 }],
+    "fuel": [{ "material": "coal", "n": 1 }],
+    "dc": 8,
+    "ticks": 240,
+    "anvil": true
+  },
+  {
+    "id": "steel-ingot",
+    "makes": { "material": "steel-ingot" },
+    "needs": [{ "material": "iron-ingot", "n": 2 }],
+    "fuel": [{ "material": "coal", "n": 2 }],
+    "dc": 11,
+    "ticks": 480,
+    "anvil": true
+  },
+
+  {
+    "id": "dagger",
+    "makes": { "item": "dagger" },
+    "needs": [{ "material": "iron-ingot", "n": 1 }],
+    "dc": 8,
+    "ticks": 480,
+    "anvil": true
+  },
+  {
+    "id": "shortsword",
+    "makes": { "item": "shortsword" },
+    "needs": [{ "material": "iron-ingot", "n": 2 }, { "category": "wood", "n": 1 }],
+    "dc": 8,
+    "ticks": 720,
+    "anvil": true
+  },
+  {
+    "id": "longsword",
+    "makes": { "item": "longsword" },
+    "needs": [{ "material": "iron-ingot", "n": 3 }, { "category": "wood", "n": 1 }],
+    "dc": 11,
+    "ticks": 960,
+    "anvil": true
+  },
+  {
+    "id": "spear",
+    "makes": { "item": "spear" },
+    "needs": [{ "material": "iron-ingot", "n": 1 }, { "category": "wood", "n": 2 }],
+    "dc": 8,
+    "ticks": 480,
+    "anvil": true
+  },
+  {
+    "id": "battleaxe",
+    "makes": { "item": "battleaxe" },
+    "needs": [{ "material": "iron-ingot", "n": 3 }, { "category": "wood", "n": 1 }],
+    "dc": 11,
+    "ticks": 960,
+    "anvil": true
+  },
+  {
+    "id": "greatsword",
+    "makes": { "item": "greatsword" },
+    "needs": [{ "material": "steel-ingot", "n": 5 }, { "category": "wood", "n": 1 }],
+    "dc": 14,
+    "ticks": 1440,
+    "anvil": true
+  },
+  {
+    "id": "longbow",
+    "makes": { "item": "longbow" },
+    "needs": [{ "category": "wood", "n": 3 }, { "material": "flax", "n": 1 }],
+    "dc": 11,
+    "ticks": 720
+  },
+  {
+    "id": "heavy-crossbow",
+    "makes": { "item": "heavy-crossbow" },
+    "needs": [{ "category": "wood", "n": 3 }, { "material": "iron-ingot", "n": 2 }, { "material": "flax", "n": 1 }],
+    "dc": 14,
+    "ticks": 1200,
+    "anvil": true
+  },
+  { "id": "staff", "makes": { "item": "staff" }, "needs": [{ "category": "wood", "n": 2 }], "dc": 8, "ticks": 240 },
+  {
+    "id": "shield",
+    "makes": { "item": "shield" },
+    "needs": [{ "category": "wood", "n": 2 }, { "material": "iron-ingot", "n": 1 }],
+    "dc": 8,
+    "ticks": 480,
+    "anvil": true
+  },
+
+  { "id": "cloth", "makes": { "item": "cloth" }, "needs": [{ "material": "flax", "n": 4 }], "dc": 8, "ticks": 480 },
+  {
+    "id": "scale",
+    "makes": { "item": "scale" },
+    "needs": [{ "material": "bronze-ingot", "n": 4 }],
+    "dc": 11,
+    "ticks": 1200,
+    "anvil": true
+  },
+  {
+    "id": "chain",
+    "makes": { "item": "chain" },
+    "needs": [{ "material": "iron-ingot", "n": 5 }],
+    "dc": 14,
+    "ticks": 1440,
+    "anvil": true
+  },
+  {
+    "id": "plate",
+    "makes": { "item": "plate" },
+    "needs": [{ "material": "steel-ingot", "n": 8 }],
+    "dc": 17,
+    "ticks": 2400,
+    "anvil": true
+  },
+
+  {
+    "id": "bandage",
+    "makes": { "material": "bandage" },
+    "needs": [{ "material": "flax", "n": 2 }],
+    "dc": 8,
+    "ticks": 60
+  },
+  {
+    "id": "herb-salve",
+    "makes": { "material": "herb-salve" },
+    "needs": [{ "material": "yarrow", "n": 2 }],
+    "dc": 8,
+    "ticks": 120
+  },
+  {
+    "id": "aloe-salve",
+    "makes": { "material": "herb-salve" },
+    "needs": [{ "material": "aloe", "n": 2 }],
+    "dc": 8,
+    "ticks": 120
+  }
+]

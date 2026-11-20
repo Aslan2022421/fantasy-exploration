@@ -24,6 +24,7 @@ export function loadData() {
     nest: readKind('nest'),
     settlement: readKind('settlement'),
     event: readKind('event'),
+    recipe: readKind('recipe'),
     skill: readKind('skill'),
     weapon: readKind('weapon'),
     armor: readKind('armor'),

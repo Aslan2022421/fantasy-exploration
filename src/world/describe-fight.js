@@ -12,6 +12,14 @@ const REFUSE = {
   twohand: '拿著雙手武器，不能用盾牌。',
   today: '今天已經休息過了。',
   gone: '對方已經不在了。',
+  // 製造（craft.js）
+  busy: '戰鬥中做不了這件事。',
+  anvil: '要貼著鐵砧才能做（城鎮、城市的鐵匠舖，堡壘、要塞的工坊）。',
+  materials: '材料不夠。',
+  norecipe: '這件還做不出來，也修不了。',
+  nometal: '這件不是金屬做的，熔不了。',
+  fine: '這件不用修。',
+  full: '生命是滿的，用不著。',
 };
 
 function rollText(d) {

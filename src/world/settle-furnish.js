@@ -7,7 +7,7 @@
 
 import { BED, BLOCKING } from './settle-codes.js';
 
-const ORDER = ['altar', BED, 'cabinet', 'table', 'chair', 'stall', 'barrel'];
+const ORDER = ['altar', 'anvil', BED, 'cabinet', 'table', 'chair', 'stall', 'barrel', 'crate'];
 const STEPS4 = [
   [1, 0],
   [-1, 0],
@@ -58,6 +58,9 @@ export function furnishRoom(cells, inners, items, wantSpot, tie) {
     altar: (c) => (walls(c) ? -fromDoor(c) * 10 + Math.hypot(c.i - mid.i, c.j - mid.j) : null),
     stall: (c) => (walls(c) ? -fromDoor(c) * 10 - walls(c) : null),
     barrel: (c) => (walls(c) >= 2 ? -fromDoor(c) : walls(c) ? 5 - fromDoor(c) : null),
+    // 鐵砧放在房間中間、不貼門（鐵匠舖）；箱子跟木桶一樣靠牆角
+    anvil: (c) => (fromDoor(c) <= 1 ? null : walls(c) * 5 + Math.hypot(c.i - mid.i, c.j - mid.j)),
+    crate: (c) => (walls(c) >= 2 ? -fromDoor(c) : walls(c) ? 5 - fromDoor(c) : null),
   };
 
   // 擋路的家具放下去之後，空著的格子（含門內）要四方向連在一起

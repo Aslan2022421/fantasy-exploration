@@ -3,6 +3,7 @@
 // 屬性由種族決定（總和 60），職業的 2 點只能加在職業的兩項主要屬性（使用者定）
 
 import { attrMod, d12 } from './rules.js';
+import { slotPenalty } from './wear.js';
 
 export const HEIGHTS = ['矮小', '中等', '高大'];
 export const PHYSIQUES = ['瘦小', '普通', '結實', '魁梧'];
@@ -10,6 +11,18 @@ export const PHYSIQUES = ['瘦小', '普通', '結實', '魁梧'];
 export const ACTION_TICKS = [12, 9, 6];
 export const START_HP = [14, 18, 22, 26];
 export const CLASS_POINTS = 2;
+// 主手空著（武器壞掉）：規則草案沒有徒手，比匕首（−2）再弱一點（提議）
+export const UNARMED = {
+  id: null,
+  name: '徒手',
+  category: 'unarmed',
+  damage: -3,
+  type: 'blunt',
+  finesse: false,
+  twoHanded: false,
+  armorBreak: 0,
+  traits: [],
+};
 export const MAX_ATTR = 20;
 
 const get = (list, index, id) => list[index.get(id)];
@@ -90,29 +103,44 @@ export const presetHero = (data, options, rng) => buildSheet(data, defaultChoice
 
 // 換上背包裡的一件裝備：回傳新的 sheet；不能換回傳 { refused }。
 // 武器換主手（雙手武器會把盾牌收進背包）；護甲換身上；盾牌換副手（拿雙手武器時不行）
+// 耐久跟著那一件走：背包裡的記在 itemWear（跟 items 一一對應），身上的記在 wear（wear.js）
 export function equip(data, sheet, id) {
   if (!sheet.items.includes(id)) return { refused: 'gone' };
   const items = [...sheet.items];
-  items.splice(items.indexOf(id), 1);
+  const itemWear = items.map((_, i) => sheet.itemWear?.[i] ?? 0);
+  const at = items.indexOf(id);
+  const used = itemWear[at];
+  items.splice(at, 1);
+  itemWear.splice(at, 1);
   const gear = { ...sheet.gear };
+  const wear = { ...(sheet.wear ?? {}) };
+  const stow = (slot) => {
+    items.push(gear[slot]);
+    itemWear.push(wear[slot] ?? 0);
+  };
+  const put = (slot) => {
+    gear[slot] = id;
+    wear[slot] = used;
+  };
   const weapon = get(data.weapons, data.weaponIndex, id);
   const armor = get(data.armors, data.armorIndex, id);
   if (weapon) {
-    if (gear.weapon) items.push(gear.weapon);
-    gear.weapon = id;
+    if (gear.weapon) stow('weapon');
+    put('weapon');
     if (weapon.twoHanded && gear.shield) {
-      items.push(gear.shield);
+      stow('shield');
       gear.shield = null;
+      wear.shield = 0;
     }
   } else if (armor?.kind === 'shield') {
     if (get(data.weapons, data.weaponIndex, gear.weapon)?.twoHanded) return { refused: 'twohand' };
-    if (gear.shield) items.push(gear.shield);
-    gear.shield = id;
+    if (gear.shield) stow('shield');
+    put('shield');
   } else if (armor) {
-    if (gear.armor && gear.armor !== 'no-armor') items.push(gear.armor);
-    gear.armor = id;
+    if (gear.armor && gear.armor !== 'no-armor') stow('armor');
+    put('armor');
   } else return { refused: 'gone' };
-  return { ...sheet, gear, items };
+  return { ...sheet, gear, items, itemWear, wear };
 }
 
 // 加 1 點屬性（升級的點數）：沒有點數或到 20 回傳 { refused }
@@ -126,7 +154,7 @@ export function raise(sheet, attr) {
 export function heroStats(data, sheet) {
   const c = classOf(data, sheet.cls);
   const m = Object.fromEntries(Object.entries(sheet.attrs).map(([k, v]) => [k, attrMod(v)]));
-  const weapon = get(data.weapons, data.weaponIndex, sheet.gear.weapon);
+  const weapon = get(data.weapons, data.weaponIndex, sheet.gear.weapon) ?? UNARMED;
   const armor = get(data.armors, data.armorIndex, sheet.gear.armor) ?? get(data.armors, data.armorIndex, 'no-armor');
   // 雙手武器佔兩手，盾牌不能用
   const shield = sheet.gear.shield && !weapon.twoHanded ? get(data.armors, data.armorIndex, sheet.gear.shield) : null;
@@ -134,7 +162,8 @@ export function heroStats(data, sheet) {
   const ranged = weapon.range != null;
   const fine = weapon.finesse ? Math.max(m.str, m.dex) : m.str;
   const training = c.training && c.training === weapon.category ? 1 : 0;
-  const shieldDef = shield?.defense ?? 0;
+  // 磨損、破損：武器傷害、護甲減免、盾牌防禦各減 1、2（wear.js），最少 0
+  const shieldDef = Math.max(0, (shield?.defense ?? 0) - (shield ? slotPenalty(sheet, 'shield') : 0));
   const dodge = 7 + m.dex + skill('athletics') + shieldDef;
   const parry = 7 + fine + skill('melee') + shieldDef;
   return {
@@ -145,8 +174,8 @@ export function heroStats(data, sheet) {
     ranged,
     range: weapon.range ?? 1,
     attack: (ranged ? m.dex + skill('ranged') : fine + skill('melee')) + training,
-    damage: weapon.damage + (ranged ? 0 : fine),
-    reduction: armor.reduction,
+    damage: weapon.damage + (ranged ? 0 : fine) - slotPenalty(sheet, 'weapon'),
+    reduction: Math.max(0, armor.reduction - slotPenalty(sheet, 'armor')),
     dodge,
     parry,
     // 被近戰打時自動用較高的；被遠程打只能閃避

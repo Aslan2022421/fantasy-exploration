@@ -50,11 +50,14 @@ export const TerrainSchema = z.discriminatedUnion('layer', [
 // 材料：採集得到的東西（礦物、木頭、植物，之後的動物部位）。cap 是全世界的上限，玩家看不到；
 // 物理屬性都是選填，用到的階段才填：hardness 莫氏硬度（挖礦花的時間看它）、density 密度 g/cm³、
 // ignition 燃點 °C、edible 能不能吃、value 基本價值；source 寫數值的出處
+// 材料：mineral、wood、plant、animal 是採來的（有上限 cap）；metal（金屬錠）、supply（繃帶、草藥膏）是做出來的，
+// 不算上限（做它的原料還算著），supply 的 heal 是用掉時多回幾點生命
 export const MaterialSchema = z.object({
   id: Id,
   name: z.string().min(1),
-  category: z.enum(['mineral', 'wood', 'plant', 'animal']),
-  cap: z.number().int().positive(),
+  category: z.enum(['mineral', 'wood', 'plant', 'animal', 'metal', 'supply']),
+  cap: z.number().int().positive().optional(),
+  heal: z.number().int().optional(),
   hardness: z.number().positive().optional(),
   density: z.number().positive().optional(),
   ignition: z.number().optional(),

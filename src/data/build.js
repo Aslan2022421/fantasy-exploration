@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { buildBlock, ENV_VARIANTS } from './blocks.js';
 import { buildHeroData } from './build-hero.js';
 import { checkEvents, EventSchema } from './event-schema.js';
+import { checkRecipes, RecipeSchema } from './recipe-schema.js';
 import {
   BiomeSchema,
   BlockSchema,
@@ -54,6 +55,7 @@ export function buildData({
   nest: nestFiles = {},
   settlement: settlementFiles = {},
   event: eventFiles = {},
+  recipe: recipeFiles = {},
   ...heroFiles
 }) {
   const errors = [];
@@ -87,6 +89,8 @@ export function buildData({
     for (const o of [s.wall, `${s.id}-tower`]) if (!objectIndex.has(o)) errors.push(`聚落 ${s.id} 的物件找不到：${o}`);
   const events = merge(eventFiles, EventSchema, '事件', errors);
   checkEvents(events, errors);
+  const recipes = merge(recipeFiles, RecipeSchema, '配方', errors);
+  checkRecipes(recipes, { materialIndex, materials, ...hero }, errors);
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
   const palette = [...surfaces, ...waters, ...covers].map((t) => ({ ...t, shade: true }));
   return {
@@ -114,6 +118,8 @@ export function buildData({
     settlements,
     settlementIndex: indexOf(settlements),
     events,
+    recipes,
+    recipeIndex: indexOf(recipes),
     ...hero,
   };
 }

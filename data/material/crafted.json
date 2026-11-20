@@ -1,0 +1,7 @@
+[
+  { "id": "bronze-ingot", "name": "青銅錠", "category": "metal" },
+  { "id": "iron-ingot", "name": "鐵錠", "category": "metal" },
+  { "id": "steel-ingot", "name": "鋼錠", "category": "metal" },
+  { "id": "bandage", "name": "繃帶", "category": "supply", "heal": 0 },
+  { "id": "herb-salve", "name": "草藥膏", "category": "supply", "heal": 2 }
+]

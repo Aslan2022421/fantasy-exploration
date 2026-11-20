@@ -14,6 +14,7 @@ import { creatureCells } from './herds.js';
 import { heroStats } from './hero.js';
 import { d12, dayOf, resolveAttack, TICKS_PER_HOUR } from './rules.js';
 import { WANDER } from './wander.js';
+import { wearFor } from './wear.js';
 
 export { applyFight } from './fight-apply.js';
 
@@ -178,7 +179,15 @@ export function createFight(env) {
       verb: 'attack',
       actor: f.id,
       target: PLAYER,
-      data: { ...res, hp, species, ticks: f.stats.attackTicks, seenAt: p, aim: PLAYER },
+      data: {
+        ...res,
+        hp,
+        species,
+        ticks: f.stats.attackTicks,
+        seenAt: p,
+        aim: PLAYER,
+        wear: wearFor(st().hero, { hit: res.hit }),
+      },
       cause,
     });
     if (hp <= 0) env.record({ verb: 'down', data: { at: env.startAt, from: p, hp: h.hpMax }, cause: rec.id });
@@ -256,6 +265,7 @@ export function createFight(env) {
         sneak: first && h.sneak > 0 && res.hit,
         cells: f.cells,
         duration: h.ticks,
+        wear: wearFor(st().hero, { attacking: true }),
         ...nestLoss(f, hp),
       };
       const rec = env.record({ verb: 'attack', target: id, data: detail, cause });

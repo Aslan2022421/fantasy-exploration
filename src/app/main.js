@@ -28,7 +28,7 @@ import { bindMapMouse, drawMapLabels } from './mouse.js';
 import { newSeed } from './seed.js';
 import { createZoom } from './zoom.js';
 
-const VERSION = '0.1.3';
+const VERSION = '0.1.4';
 const SAVE_KEY = 'world';
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',

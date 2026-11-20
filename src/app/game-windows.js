@@ -71,8 +71,8 @@ export function createGameWindows({ panels, game, data, asciiMap, camera, action
       const p = game.state.player;
       const where = `你在${regionLabel(world, data, p.x, p.y)}`;
       if (mapWhole) {
-        const label = `${where}｜整個世界 ${world.zonesX}×${world.zonesY} 區，一個字一區｜Tab 看附近`;
-        asciiMap.drawWorld(c, s, body, panels, p, label);
+        const label = `${where}｜整個世界 ${world.zonesX}×${world.zonesY} 區，一個字一區，只畫走過、看過的地方｜Tab 看附近`;
+        asciiMap.drawWorld(c, s, body, panels, p, label, game.chronicle.known());
         return;
       }
       const label = `${where}｜附近 3×3 區，一個字 3×3 格，白框是畫面看得到的範圍｜Tab 看整個世界`;

@@ -72,7 +72,7 @@ export function createAsciiMap(world, data, tiles) {
     panels.text(ctx, screen, t, x + 1, y, '#f6f3de');
   };
 
-  function legend(ctx, screen, panels, x, y, title, rows) {
+  function legend(ctx, screen, panels, x, y, title, rows, extra = []) {
     panels.text(ctx, screen, title, x, y, '#f6f3de');
     let ly = y + screen.lineHeight * 1.5;
     for (const r of rows) {
@@ -80,7 +80,7 @@ export function createAsciiMap(world, data, tiles) {
       ly += screen.lineHeight;
     }
     ly += screen.lineHeight / 2;
-    for (const [ch, fg, name] of LEGEND) {
+    for (const [ch, fg, name] of [...LEGEND, ...extra]) {
       tiles.draw(ctx, ch, x, ly + 2, 16, fg, null);
       panels.text(ctx, screen, name, x + 24, ly);
       ly += screen.lineHeight;
@@ -139,12 +139,15 @@ export function createAsciiMap(world, data, tiles) {
     panels.text(ctx, screen, caption, body.x, body.y + f.size + screen.pad);
   }
 
-  // 總覽：整個世界，一個字一區；編號只標離冒險者最近的 TOWNS 座城鎮
+  // 總覽：整個世界，一個字一區；只畫知道的區（known.zones：走過的區加周圍一圈），
+  // 聽過傳聞、還沒去過的據點與聚落標「?」（known.places）；編號只標知道的、離冒險者最近的 TOWNS 座城鎮
   const TOWNS = 12;
-  function drawWorld(ctx, screen, body, panels, player, caption) {
+  const UNKNOWN = { ch: ' ' };
+  function drawWorld(ctx, screen, body, panels, player, caption, known) {
     zones ??= zoneCells(world, data);
     const f = frame(screen, body);
-    const img = render(`w:${f.px}`, (i, j) => zones(i, j), f.px);
+    const seen = (zx, zy) => known.zones.has(`${zx},${zy}`);
+    const img = render(`w:${f.px}:${known.version}`, (i, j) => (seen(i, j) ? zones(i, j) : UNKNOWN), f.px);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, body.x, body.y);
     const Z = world.zoneSize;
@@ -152,7 +155,7 @@ export function createAsciiMap(world, data, tiles) {
     const towns = [];
     for (let zy = 0; zy < world.zonesY; zy++)
       for (let zx = 0; zx < world.zonesX; zx++)
-        if (['town', 'city'].includes(world.settlementKind?.(zx, zy)))
+        if (seen(zx, zy) && ['town', 'city'].includes(world.settlementKind?.(zx, zy)))
           towns.push({ zx, zy, d: Math.hypot(zx - pz[0], zy - pz[1]) });
     towns.sort((a, b) => a.d - b.d);
     // 排了城鎮、實際放不下改成村莊的不算（要生出那一區才知道，名字記著）
@@ -168,8 +171,12 @@ export function createAsciiMap(world, data, tiles) {
       tag(ctx, screen, panels, body.x, body.y, f.px, t.zx, t.zy, rows.length + 1);
       rows.push(`${rows.length + 1}　${townNames.get(key)}`);
     }
+    for (const p of known.places)
+      if (!seen(p.zx, p.zy)) mark(ctx, body.x, body.y, f.px, p.zx, p.zy, '?', INK.nest, INK.bg);
     mark(ctx, body.x, body.y, f.px, pz[0], pz[1], '@', '#ffffff', '#a8302a');
-    legend(ctx, screen, panels, f.lx, body.y, `最近的 ${rows.length} 座城鎮、城市`, rows);
+    legend(ctx, screen, panels, f.lx, body.y, `知道的城鎮、城市（最近 ${rows.length} 座）`, rows, [
+      ['?', INK.nest, '聽說過的地方'],
+    ]);
     panels.text(ctx, screen, caption, body.x, body.y + f.size + screen.pad);
   }
 

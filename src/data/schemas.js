@@ -124,10 +124,12 @@ export const ObjectSchema = z.object({
 // 聚落（階段 7）：村莊、城鎮。w×h 是整塊圖樣（含外牆）；wall 是外牆的物件；gates 出入口幾個；
 // houses 是民房幾間、residents 是住幾人（兩者都照人口標籤五段，從大舉遷出到急速發展）；
 // pop 是隱藏人口的範圍；rangeBase 是範圍的基本半徑；econStart 是開局的經濟值（0～100）；
-// 公共建築照種類寫在 src/world/settle-layouts.js；名字從 names 挑一個再加 suffix
+// 公共建築照種類寫在 src/world/settle-layouts.js；名字從 names 挑一個再加 suffix；
+// layout 有寫的照固定圖樣蓋（堡壘、要塞，src/world/fort-layouts.js），houses 不用
 export const SettlementSchema = z.object({
   id: Id,
   name: z.string().min(1),
+  layout: z.enum(['fort', 'fortress']).optional(),
   w: z.number().int().min(15),
   h: z.number().int().min(11),
   wall: Id,

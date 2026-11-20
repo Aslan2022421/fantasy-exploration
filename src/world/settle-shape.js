@@ -15,8 +15,8 @@ import { line4 } from './road-paint.js';
 export const SHAPE = {
   margin: 3, // 牆離整塊圖樣的邊幾格（留給出入口外的路與瞭望塔）
   wave: [0.07, 0.05], // 2 倍角、3 倍角的波幅
-  plaza: { village: 3, town: 5 }, // 廣場半徑
-  street: { village: 2, town: 3 }, // 街道寬
+  plaza: { village: 3, town: 5, city: 8 }, // 廣場半徑
+  street: { village: 2, town: 3, city: 3 }, // 街道寬
   bend: 0.18, // 街道中間點往旁邊偏多少（佔那段長度）
   size: [0.82, 0.05], // 牆的大小：人口標籤 0 是 82%，每高一段加 5%
   long: 0.72, // 長形的短邊再縮成多少

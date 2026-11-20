@@ -10,8 +10,32 @@ export const BED = 'bed';
 export const OUTROAD = 'outroad'; // 出入口外面的路（牆外，村民不走出去）
 
 // 室內的物件（底下鋪室內地板）；擋路的家具
-export const INDOOR_OBJECTS = new Set(['door', 'stone-door', 'bed', 'table', 'cabinet', 'chair', 'altar', 'barrel']);
-export const BLOCKING = new Set(['table', 'cabinet', 'altar', 'stall', 'barrel']);
+export const INDOOR_OBJECTS = new Set([
+  'door',
+  'stone-door',
+  'bed',
+  'table',
+  'cabinet',
+  'chair',
+  'altar',
+  'barrel',
+  'stairs',
+  'anvil',
+  'crate',
+]);
+export const BLOCKING = new Set(['table', 'cabinet', 'altar', 'stall', 'barrel', 'anvil', 'crate']);
 // 走得過去的代碼
-const WALKABLE = new Set([GROUND, ROAD, INDOOR, FIELD, 'crops', 'door', 'stone-door', 'bed', 'chair']);
+const WALKABLE = new Set([
+  GROUND,
+  ROAD,
+  INDOOR,
+  FIELD,
+  'crops',
+  'door',
+  'stone-door',
+  'bed',
+  'chair',
+  'stairs',
+  'fort-gate',
+]);
 export const walkable = (code) => WALKABLE.has(code);

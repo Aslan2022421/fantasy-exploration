@@ -236,7 +236,7 @@ export function buildRoads(geo, plan, zonesX, zonesY, zoneSize, home) {
   const zd = (a, b) => Math.hypot(a.zx - b.zx, a.zy - b.zy);
 
   // 大道：城鎮的相對鄰近圖
-  const towns = nodes.filter((s) => s.kind === 'town');
+  const towns = nodes.filter((s) => s.kind === 'town' || s.kind === 'city'); // 城市也是大道的節點
   for (let i = 0; i < towns.length; i++)
     for (let j = i + 1; j < towns.length; j++) {
       const d = zd(towns[i], towns[j]);
@@ -248,7 +248,7 @@ export function buildRoads(geo, plan, zonesX, zonesY, zoneSize, home) {
   const joined = [...towns];
   if (!joined.length && nodes.length) joined.push(nodes[0]);
   const villages = nodes
-    .filter((s) => s.kind !== 'town' && !joined.includes(s))
+    .filter((s) => !towns.includes(s) && !joined.includes(s))
     .map((s) => ({ s, d: Math.min(...towns.map((t) => zd(s, t)), Number.POSITIVE_INFINITY) }))
     .sort((a, b) => a.d - b.d)
     .map((o) => o.s);
@@ -269,5 +269,6 @@ export function buildRoads(geo, plan, zonesX, zonesY, zoneSize, home) {
   const ends = new Map(
     nodes.map((n) => [`${n.zx},${n.zy}`, [(n.cell % W) * C + C / 2, Math.floor(n.cell / W) * C + C / 2]]),
   );
-  return { segments, lines, ends, byZone: indexByZone(segments, zoneSize, zonesX, zonesY), count };
+  // cells：粗格上有沒有路（隘口判斷要塞時用，passes.js）
+  return { segments, lines, ends, cells: road, byZone: indexByZone(segments, zoneSize, zonesX, zonesY), count };
 }

@@ -3,8 +3,8 @@
 
 import { FIELD, GROUND } from './settle-codes.js';
 
-const FIELDS = { village: [2, 3], town: [2, 3] }; // 幾塊田
-const GROVES = { village: [2, 3], town: [2, 4] }; // 幾叢樹
+const FIELDS = { village: [2, 3], town: [2, 3], city: [3, 4] }; // 幾塊田
+const GROVES = { village: [2, 3], town: [2, 4], city: [3, 5] }; // 幾叢樹
 const GROVE_TREES = ['oak', 'maple', 'birch'];
 
 export function fieldsAndGroves(grid, W, H, kind, rnd, inner) {

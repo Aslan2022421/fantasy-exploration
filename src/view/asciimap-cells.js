@@ -4,7 +4,7 @@
 // 附近的一塊，照優先順序取：聚落（牆 # 、建築 ⌂、田 √、街道 ·）> 據點的建物（照物件的字）> 橋 > 路 >
 //   水一半以上（深水 ≈、淺水與河 ~、沼澤 ~ 墨綠）> 樹（照樹種的字）> 山（山峰 ▲、其餘 ^，積雪白）> 生態覆蓋 > 地面（沙 ∙、其餘空白或淡淡的 .）
 // 總覽的一區：水多是海 ≈，山多是山 ▲ ^，否則照周圍九區投票的生態（針葉 ↑、闊葉 ♣、雨林 ♠、草原 "、疏林草原 ,、沙漠 ∙、凍原 .），
-//   有大道經過畫 ·，聚落畫 ⌂（村莊）■（城鎮）
+//   有大道經過畫路，聚落畫 ⌂（村莊）■（城鎮）◘（城市）╫（堡壘）╬（要塞）
 
 import { GEO } from '../world/geography.js';
 import { LAND } from '../world/landform.js';
@@ -26,6 +26,8 @@ export const INK = {
   sand: '#bfa868',
   village: '#f0d47a',
   town: '#d6a8f0',
+  city: '#f0a8c8',
+  fort: '#c8c8b0',
   nest: '#c4685a',
 };
 
@@ -115,11 +117,11 @@ export function regionCell(world, data, x, y, n) {
 function settleRank(code, def) {
   if (code === 'keep') return null;
   if (code === def.wall || code.endsWith('-tower')) return { p: 5, ch: '#', fg: INK.wall };
-  if (['house', 'hall', 'temple', 'barracks', 'inn', 'tavern', 'market'].includes(code))
+  if (code === 'rampart-rock') return { p: 5, ch: '▓', fg: INK.mountain }; // 堡壘兩翼的山壁
+  if (['house', 'hall', 'temple', 'barracks', 'inn', 'tavern', 'market', 'castle'].includes(code))
     return { p: 4, ch: '⌂', fg: INK.building };
   if (code === 'crops') return { p: 3, ch: '√', fg: INK.crops };
-  if (code === 'road' || code === 'outroad' || code === 'town-well' || code === 'stall')
-    return { p: 2, ch: '·', fg: INK.road };
+  if (['road', 'outroad', 'town-well', 'stall', 'fort-gate'].includes(code)) return { p: 2, ch: '·', fg: INK.road };
   return { p: 1, ch: ' ', fg: INK.ground };
 }
 
@@ -140,6 +142,15 @@ export function joinRoads(cells, n) {
     }
   return cells;
 }
+
+// 總覽上聚落的字
+export const SETTLE_GLYPH = {
+  village: { ch: '⌂', fg: INK.village },
+  town: { ch: '■', fg: INK.town },
+  city: { ch: '◘', fg: INK.city },
+  fort: { ch: '╫', fg: INK.fort },
+  fortress: { ch: '╬', fg: INK.fort },
+};
 
 // 總覽：每一區一個字。回傳 (zx, zy) → { ch, fg }（第一次呼叫時整個算好）
 export function zoneCells(world, data) {
@@ -189,8 +200,7 @@ export function zoneCells(world, data) {
       const st = stats[z];
       const kind = world.settlementKind?.(zx, zy);
       let cell;
-      if (kind === 'town') cell = { ch: '■', fg: INK.town, joint: true };
-      else if (kind === 'village') cell = { ch: '⌂', fg: INK.village, joint: true };
+      if (SETTLE_GLYPH[kind]) cell = { ...SETTLE_GLYPH[kind], joint: true };
       else if (st.water >= n * 0.6)
         cell = st.deep >= st.water / 2 ? { ch: '≈', fg: INK.deep } : { ch: '~', fg: INK.shallow };
       else if (st.mount >= (n - st.water) * 0.35)

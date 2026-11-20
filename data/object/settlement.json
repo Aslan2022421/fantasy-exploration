@@ -256,5 +256,133 @@
     "trunk": false,
     "sizes": [1],
     "tile": null
+  },
+  {
+    "id": "fortress-wall",
+    "name": "要塞的石牆",
+    "glyph": "═",
+    "color": "#b6c4c0",
+    "passable": false,
+    "height": 6,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "city-wall",
+    "name": "城牆",
+    "glyph": "═",
+    "color": "#b6c4c0",
+    "passable": false,
+    "height": 6,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "fort-tower",
+    "name": "塔樓",
+    "glyph": "■",
+    "color": "#b6c4c0",
+    "passable": false,
+    "height": 6,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "fortress-tower",
+    "name": "塔樓",
+    "glyph": "■",
+    "color": "#b6c4c0",
+    "passable": false,
+    "height": 6,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "city-tower",
+    "name": "城樓",
+    "glyph": "■",
+    "color": "#b6c4c0",
+    "passable": false,
+    "height": 6,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "fort-gate",
+    "name": "城門",
+    "glyph": "╪",
+    "color": "#b5976a",
+    "passable": true,
+    "height": 2,
+    "stackPx": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "stairs",
+    "name": "樓梯",
+    "glyph": "X",
+    "color": "#b6c4c0",
+    "passable": true,
+    "height": 2,
+    "stackPx": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "anvil",
+    "name": "鐵砧",
+    "glyph": "┬",
+    "color": "#9aa4a8",
+    "passable": false,
+    "height": 2,
+    "stackPx": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "crate",
+    "name": "箱子",
+    "glyph": "Æ",
+    "color": "#b5976a",
+    "passable": false,
+    "height": 2,
+    "stackPx": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "rampart-rock",
+    "name": "山壁",
+    "glyph": "▓",
+    "color": "#6e6a60",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null
+  },
+  {
+    "id": "castle",
+    "name": "城堡",
+    "glyph": "═",
+    "color": "#d0d6d2",
+    "passable": false,
+    "height": 6,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
   }
 ]

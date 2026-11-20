@@ -75,8 +75,9 @@ export function createTerrainGen(seed, data, size = null) {
   const planSettle = createSettlePlanner(seed, data, { NONE, SWAMP, ICE });
   const stampSettle = createSettleStamp(data, { YARD, SQUARE, ROAD, FLOOR, DIRT, NONE });
   let herdTargets = null; // (zx, zy) → { herbivores, predators }，建世界時由 world.js 接上；沒接就不放生物
-  let settlePlan = null; // (zx, zy) → 'village' | 'town' | null，建世界時由 world.js 接上；沒接就沒有聚落
+  let settlePlan = null; // (zx, zy) → 聚落種類或 null，建世界時由 world.js 接上；沒接就沒有聚落
   let startZone = null; // 起點那一區 { zx, zy }（村莊在整區裡找位置）
+  let forts = null; // 隘口的堡壘、要塞（passes.js）："zx,zy" → 隘口
   const covers = data.biomes.map((b) => b.cover.map((c) => [cv(c.cover), c.density]));
   const pickCover = createCoverPicker(
     seed,
@@ -196,7 +197,7 @@ export function createTerrainGen(seed, data, size = null) {
     const kind = settlePlan?.(zx, zy);
     const isStart = startZone?.zx === zx && startZone?.zy === zy;
     const ent = (ex, ey, w, h) => roadEntries(roads, `${zx},${zy}`, { x0: ex, y0: ey, w, h }, { x0, y0, size });
-    const settle = kind ? planSettle(z, zx, zy, kind, isStart, ent) : null;
+    const settle = kind ? planSettle(z, zx, zy, kind, isStart, ent, forts?.get(`${zx},${zy}`)) : null;
     const nest = settle ? null : planNest(z, zx, zy, geo?.start);
     const zc = { sAll, wAll, bAll, G }; // 生態覆蓋看的格子（cover.js）
     for (let y = 0; y < size; y++) {
@@ -217,7 +218,8 @@ export function createTerrainGen(seed, data, size = null) {
         cover[i] = pickCover(zc, c, X, Y);
         const n = settle ? stampSettle(settle, X, Y) : stampNest(nest, X, Y, wAll[c] !== NONE);
         // 聚落、據點的圖樣整平：同一層、沒有坡、地貌是平原（明暗在下面照平地算）
-        if (n) [tier[i], slope[i], landform[i], site[i]] = [(settle ?? nest).tier, 0, PLAIN, 1];
+        if (n && !n.keep) [tier[i], slope[i], landform[i], site[i]] = [(settle ?? nest).tier, 0, PLAIN, 1];
+        else if (n) site[i] = 1; // 堡壘兩翼的山壁：保留原本的高度
         if (n?.s != null) {
           surface[i] = n.s;
           cover[i] = n.k;
@@ -288,7 +290,7 @@ export function createTerrainGen(seed, data, size = null) {
 
   // 建世界時由 world.js 接上：每區的生物群數、哪幾區放聚落與起點那一區
   const setHerdTargets = (fn) => (herdTargets = fn);
-  const setSettlePlan = (fn, start) => ([settlePlan, startZone] = [fn, start]);
+  const setSettlePlan = (fn, start, f = null) => ([settlePlan, startZone, forts] = [fn, start, f]);
   const setRoads = (r) => (roads = r);
   const env = { heightAt: land.heightAt, landform: land, climateAt, biomeAt, shape };
   return { genZone, setGeography, setHerdTargets, setSettlePlan, setRoads, ...env };

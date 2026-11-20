@@ -25,6 +25,13 @@ const BUILDINGS = {
   temple: { wall: 'temple', w: 5, h: 4, doors: 1, items: ['altar', 'chair', 'chair', 'chair', 'chair'] },
   barracks: { wall: 'barracks', w: 7, h: 3, doors: 1, items: ['bed', 'bed', 'bed', 'bed', 'bed', 'cabinet'] },
   inn: { wall: 'inn', w: 6, h: 4, doors: 1, items: ['bed', 'bed', 'bed', 'table', 'chair', 'chair', 'barrel'] },
+  castle: {
+    wall: 'castle',
+    w: 11,
+    h: 6,
+    doors: 1,
+    items: ['chair', 'altar', 'table', 'table', 'chair', 'chair', 'chair', 'chair', 'cabinet', 'cabinet'],
+  },
   tavern: {
     wall: 'tavern',
     w: 6,
@@ -34,7 +41,12 @@ const BUILDINGS = {
   },
 };
 // 公共建築：城鎮全有；村莊人口標籤到「穩定」以上才有旅店
-const PUBLIC = { town: ['hall', 'temple', 'barracks', 'inn', 'tavern'], village: ['inn'] };
+// 城市：北邊的城堡、兩座神殿與兵營、旅店酒館各兩間（交辦 4：兩座城鎮併起來的份量）
+const PUBLIC = {
+  city: ['castle', 'hall', 'temple', 'temple', 'barracks', 'barracks', 'inn', 'inn', 'tavern', 'tavern'],
+  town: ['hall', 'temple', 'barracks', 'inn', 'tavern'],
+  village: ['inn'],
+};
 const SIDES = { east: 0, south: Math.PI / 2, west: Math.PI, north: -Math.PI / 2 };
 
 // def：聚落資料；tag：開局的人口標籤（0～4）；opts：{ w, h（圖樣大小，長形可能轉成直的）, form 外形, ok（能蓋的格子，
@@ -54,7 +66,7 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
     if (i >= 0 && j >= 0 && i < W && j < H) grid[j][i] = code;
   };
   const get = (i, j) => (i >= 0 && j >= 0 && i < W && j < H ? grid[j][i] : null);
-  const kind = def.id === 'town' ? 'town' : 'village';
+  const kind = def.id === 'village' ? 'village' : def.id === 'city' ? 'city' : 'town';
   const door = kind === 'village' ? 'door' : 'stone-door';
 
   // 出入口：朝道路來的方向；附近沒有路就照雜湊開一個（不朝湖開）。挨得太近的併成一個
@@ -113,7 +125,7 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
     }
   });
   // 城鎮在四個斜角的牆上再各一座
-  if (kind === 'town')
+  if (kind !== 'village')
     for (const [sx, sy] of [
       [1, 1],
       [1, -1],
@@ -202,7 +214,7 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
     return s ? build(s.hx, s.hy, b, beds, salt + 1) : null;
   };
 
-  const publics = kind === 'town' ? PUBLIC.town : tag >= 2 ? PUBLIC.village : [];
+  const publics = kind !== 'village' ? PUBLIC[kind] : tag >= 2 ? PUBLIC.village : [];
   // 旅店、兵營有床的也住人（旅店老闆、士兵），床位算進去
   const homes = [];
   let bedsSoFar = 0;
@@ -267,7 +279,7 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
 
   fieldsAndGroves(grid, W, H, kind, rnd, inner);
   // 城鎮廣場外圈擺市場攤位（不擋住街道的口：只放在外圈、兩旁都是廣場的格子）
-  if (kind === 'town')
+  if (kind !== 'village')
     for (let j = cy - pr; j <= cy + pr; j++)
       for (let i = cx - pr; i <= cx + pr; i++) {
         const d = Math.hypot(i - cx, j - cy);

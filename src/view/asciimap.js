@@ -20,6 +20,8 @@ const LEGEND = [
   ['─', INK.road, '路'],
   ['⌂', INK.village, '村莊'],
   ['■', INK.town, '城鎮'],
+  ['◘', INK.city, '城市'],
+  ['╫', INK.fort, '堡壘、要塞'],
   ['@', '#ffffff', '你'],
 ];
 
@@ -150,7 +152,8 @@ export function createAsciiMap(world, data, tiles) {
     const towns = [];
     for (let zy = 0; zy < world.zonesY; zy++)
       for (let zx = 0; zx < world.zonesX; zx++)
-        if (world.settlementKind?.(zx, zy) === 'town') towns.push({ zx, zy, d: Math.hypot(zx - pz[0], zy - pz[1]) });
+        if (['town', 'city'].includes(world.settlementKind?.(zx, zy)))
+          towns.push({ zx, zy, d: Math.hypot(zx - pz[0], zy - pz[1]) });
     towns.sort((a, b) => a.d - b.d);
     // 排了城鎮、實際放不下改成村莊的不算（要生出那一區才知道，名字記著）
     const rows = [];
@@ -159,14 +162,14 @@ export function createAsciiMap(world, data, tiles) {
       const key = `${t.zx},${t.zy}`;
       if (!townNames.has(key)) {
         const s = world.settleOf(t.zx, t.zy);
-        townNames.set(key, s && data.settlements[s.kind].id === 'town' ? s.name : null);
+        townNames.set(key, s && ['town', 'city'].includes(data.settlements[s.kind].id) ? s.name : null);
       }
       if (!townNames.get(key)) continue;
       tag(ctx, screen, panels, body.x, body.y, f.px, t.zx, t.zy, rows.length + 1);
       rows.push(`${rows.length + 1}　${townNames.get(key)}`);
     }
     mark(ctx, body.x, body.y, f.px, pz[0], pz[1], '@', '#ffffff', '#a8302a');
-    legend(ctx, screen, panels, f.lx, body.y, `最近的 ${rows.length} 座城鎮`, rows);
+    legend(ctx, screen, panels, f.lx, body.y, `最近的 ${rows.length} 座城鎮、城市`, rows);
     panels.text(ctx, screen, caption, body.x, body.y + f.size + screen.pad);
   }
 

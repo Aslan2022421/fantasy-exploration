@@ -8,6 +8,7 @@ import { creatureCells } from './herds.js';
 import { LAND } from './landform.js';
 import { createNestIndex } from './nests.js';
 import { anchorOffset } from './objects.js';
+import { findForts } from './passes.js';
 import { buildRegions } from './regions.js';
 import { buildRoads } from './roads.js';
 import { createSettleIndex, settlementPlan } from './settlements.js';
@@ -16,7 +17,7 @@ import { createTerrainGen, LAYER_NONE } from './terrain.js';
 export { startPosition } from './start.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 38; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法；30：橋、據點重做；31：聚落與據點整平；32：整平處是平原、出入口外的路；33：道路；34：路改成邊靠邊；35：聚落改成圓牆；36：城鎮放不下改放村莊；37：聚落外形照地形、出入口朝路、路拉直不並排；38：路加寬、路邊清空
+export const WORLD_VERSION = 39; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法；30：橋、據點重做；31：聚落與據點整平；32：整平處是平原、出入口外的路；33：道路；34：路改成邊靠邊；35：聚落改成圓牆；36：城鎮放不下改放村莊；37：聚落外形照地形、出入口朝路、路拉直不並排；38：路加寬、路邊清空；39：堡壘、要塞、城市
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -107,6 +108,10 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
   if (home0) geography.start = { ...home0.plaza };
   const roads = buildRoads(geography, settlePlan, zonesX, zonesY, zoneSize, home0);
   gen.setRoads(roads);
+  // 堡壘、要塞（passes.js）：路網算好之後找隘口，放進沒排聚落的區
+  const forts = findForts(geography, roads, settlePlan, zoneSize);
+  const kindAt = (zx, zy) => settlePlan(zx, zy) ?? forts.get(`${zx},${zy}`)?.kind ?? null;
+  gen.setSettlePlan(kindAt, startZone, forts);
   zones.clear();
   last = null;
   settleIndex.clearSettles();
@@ -189,7 +194,7 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
       return settleIndex.settleOf(startZone.zx, startZone.zy) ?? null;
     },
     roads, // 道路網（roads.js）：{ segments, byZone }，總覽畫路用
-    settlementKind: settlePlan, // (zx, zy) → 排好要放的聚落 'village' | 'town' | null（不用生出那一區；極少數放不下的區實際沒有）
+    settlementKind: kindAt, // (zx, zy) → 排好要放的聚落種類或 null（不用生出那一區；放不下時實際會退一級）
     herdsOf: (zx, zy) => (zx < 0 || zy < 0 || zx >= zonesX || zy >= zonesY ? [] : zone(zx, zy).herds),
     generatedZones: () => zones.size,
     inside,

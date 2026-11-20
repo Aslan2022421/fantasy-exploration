@@ -1,10 +1,11 @@
-// 聚落（村莊、城鎮，階段 7）：放在哪、圖樣、隱藏人口與標籤、範圍。見 design/PLAN.md「聚落」。
-// - 哪幾區放什麼（settlementPlan）：建世界時照種子與區座標擲，陸地區 15% 村莊、4% 城鎮（城鎮彼此相隔 6 區以上），
-//   起點那一區一定是村莊。一區最多放一樣：放了聚落就不放據點
+// 聚落（村莊、城鎮、城市、堡壘、要塞，階段 7）：放在哪、圖樣、隱藏人口與標籤、範圍。見 design/PLAN.md「聚落」。
+// - 哪幾區放什麼（settlementPlan）：建世界時照種子與區座標擲，陸地區 15% 村莊、4% 城鎮（城鎮彼此相隔 6 區以上，
+//   其中三成是城市），起點那一區一定是村莊；堡壘、要塞放在隘口（passes.js）。一區最多放一樣：放了聚落就不放據點
 // - 放置（createSettlePlanner）：同據點，中心落在那一區正中間的方塊裡、整塊在自己那一區裡；外形照地形挑（settle-form.js）；
 //   靠水的位置優先；出入口朝道路來的方向（沒有路才照雜湊開一個，不朝湖開）。起點那一區在整區裡找、照離區中心近排
 // - 人口：隱藏，存在遊戲狀態的 settles；沒動過的照種子擲開局的人口。標籤照人口在範圍裡的位置分五段
 
+import { buildFort, WING } from './fort-layouts.js';
 import { gapToNest } from './nests.js';
 import { hash01 } from './noise.js';
 import { FORM, pickForm, waterSide } from './settle-form.js';
@@ -14,6 +15,7 @@ export const SETTLE = {
   village: 0.15, // 陸地區放村莊的機率
   town: 0.04, // 陸地區放城鎮的機率
   townGap: 6, // 城鎮彼此至少相隔幾區
+  city: 0.3, // 城鎮裡改放城市的比例
   core: 32, // 中心落在一區正中間這麼大的方塊裡
   step: 4, // 候選的中心每幾格取一個
   rangeSpan: 8, // 人口滿時範圍再多幾格
@@ -45,7 +47,7 @@ export function startPop(seed, s, def) {
   return Math.round(lo + (hi - lo) * hash01(seed, s.x0, s.y0, 9301));
 }
 
-// 建世界時決定每一區放什麼：回傳 (zx, zy) → 'village' | 'town' | null。
+// 建世界時決定每一區放什麼：回傳 (zx, zy) → 'village' | 'town' | 'city' | null。
 // isLand(zx, zy) 看那一區是不是陸地；startZone 是起點那一區（一定是村莊）
 export function settlementPlan(seed, zonesX, zonesY, isLand, startZone) {
   const plan = new Map();
@@ -65,7 +67,7 @@ export function settlementPlan(seed, zonesX, zonesY, isLand, startZone) {
     if (near) plan.set(c.zy * zonesX + c.zx, 'village');
     else {
       towns.push(c);
-      plan.set(c.zy * zonesX + c.zx, 'town');
+      plan.set(c.zy * zonesX + c.zx, hash01(seed, c.zx, c.zy, 9310) < SETTLE.city ? 'city' : 'town');
     }
   }
   if (startZone) plan.set(startZone.zy * zonesX + startZone.zx, 'village');
@@ -77,13 +79,45 @@ export function createSettlePlanner(seed, data, ids) {
   const { NONE } = ids;
   const kinds = new Map((data.settlements ?? []).map((d, k) => [d.id, { k, def: d }]));
 
-  // z：一區生成時共用的格子（terrain.js 的 genZone）；kind：'village' | 'town'；start：這區是不是起點那一區；
-  // entriesAt(x0, y0, w, h)：道路從哪些角度靠近這塊圖樣（世界座標；road-paint.js 的 roadEntries）
-  // 城鎮放不下（要一大片平地）就改放村莊
-  return function planSettle(z, zx, zy, kind, start, entriesAt) {
-    const placed = placeOne(z, zx, zy, kind, start, entriesAt);
-    return placed ?? (kind === 'town' ? placeOne(z, zx, zy, 'village', start, entriesAt) : null);
+  // z：一區生成時共用的格子（terrain.js 的 genZone）；kind：聚落種類；start：這區是不是起點那一區；
+  // entriesAt(x0, y0, w, h)：道路從哪些角度靠近這塊圖樣（世界座標；road-paint.js 的 roadEntries）；fort：隘口（passes.js）
+  // 城市放不下改城鎮、城鎮放不下（要一大片平地）改村莊
+  const FALLBACK = { city: 'town', town: 'village' };
+  return function planSettle(z, zx, zy, kind, start, entriesAt, fort) {
+    if (kinds.get(kind)?.def.layout) return fort ? placeFort(z, zx, zy, kinds.get(kind), fort) : null;
+    for (let k = kind; k; k = FALLBACK[k]) {
+      const placed = placeOne(z, zx, zy, k, start, entriesAt);
+      if (placed) return placed;
+    }
+    return null;
   };
+  // 一座聚落的紀錄
+  function record(def, k, zx, zy, x0, y0, layout, tier, pop0) {
+    const name = `${def.names[Math.floor(hash01(seed, x0, y0, 9303) * def.names.length)]}${def.suffix}`;
+    const plaza = { x: x0 + layout.plaza.i, y: y0 + layout.plaza.j };
+    return { id: `${zx},${zy}`, kind: k, zx, zy, x0, y0, w: layout.w, h: layout.h, name, layout, tier, pop0, plaza };
+  }
+  // 堡壘、要塞：固定圖樣，城門朝路，中心對準隘口、整塊夾進這一區；整平到隘口那一點的高度（城門外的路才接得上）
+  // 兩翼的山壁沿著跟路垂直的方向拉到區界或 WING 格，碰到水就停（fort-layouts.js）
+  function placeFort(z, zx, zy, { def, k }, fort) {
+    const core = buildFort(def, fort.turn);
+    const clamp = (v, n) => Math.max(0, Math.min(z.size - n, v));
+    const px = fort.x - zx * z.size;
+    const py = fort.y - zy * z.size;
+    let x = clamp(px - (core.w >> 1), core.w);
+    let y = clamp(py - (core.h >> 1), core.h);
+    const [lo, len] = fort.turn ? [y, core.h] : [x, core.w];
+    const before = Math.min(WING, lo);
+    const after = Math.min(WING, z.size - lo - len);
+    if (fort.turn) y -= before;
+    else x -= before;
+    const wet = (i, j) => z.wAll[(y + j + z.E) * z.G + (x + i + z.E)] !== NONE;
+    const layout = buildFort(def, fort.turn, { before, after, wet });
+    const x0 = zx * z.size + x;
+    const y0 = zy * z.size + y;
+    const tier = z.tier[(py + z.E) * z.G + (px + z.E)];
+    return record(def, k, zx, zy, x0, y0, layout, tier, startPop(seed, { x0, y0 }, def));
+  }
   function placeOne(z, zx, zy, kind, start, entriesAt) {
     const entry = kinds.get(kind);
     if (!entry) return null;
@@ -166,32 +200,17 @@ export function createSettlePlanner(seed, data, ids) {
         canOpen: canOpen(s.x, s.y, s.w, s.h),
       });
       if (!layout) continue;
-      const name = `${def.names[Math.floor(hash01(seed, x0, y0, 9303) * def.names.length)]}${def.suffix}`;
       // 圖樣整平到圖樣裡最低的那一層（舊版：工作範圍整平成同一個高度），外牆才不會在層界錯開
       let tier = 99;
       for (let j = 0; j < s.h; j++)
         for (let i = 0; i < s.w; i++)
           if (layout.grid[j][i] !== KEEP) tier = Math.min(tier, z.tier[g(s.x + i, s.y + j)]);
-      const out = {
-        id: `${zx},${zy}`,
-        kind: k,
-        zx,
-        zy,
-        x0,
-        y0,
-        w: s.w,
-        h: s.h,
-        name,
-        layout,
-        tier,
-        pop0,
-        plaza: { x: x0 + layout.plaza.i, y: y0 + layout.plaza.j },
-      };
+      const out = record(def, k, zx, zy, x0, y0, layout, tier, pop0);
       const beds = layout.homes.reduce((n, h) => n + h.beds.length, 0);
       if (start || beds >= def.residents[tag][1]) return out;
       spare ??= out;
     }
-    return spare;
+    return kind === 'city' ? null : spare; // 城市住不下就改城鎮，不蓋一座小城市
   }
 }
 
@@ -213,6 +232,11 @@ export function createSettleStamp(data, ids) {
     const code = settleCode(s, X, Y);
     if (!code || code === KEEP) return null;
     const ground = data.settlements[s.kind].id === 'village' ? YARD : SQUARE;
+    // 堡壘蓋在隘口：水排掉；山壁（keep）保留原本的高度，不整平
+    if (data.settlements[s.kind].layout) return { ...stampCode(code, ground), w: NONE, keep: code === 'rampart-rock' };
+    return stampCode(code, ground);
+  };
+  function stampCode(code, ground) {
     if (code === GROUND) return { s: ground, k: NONE, o: -1 };
     if (code === ROAD || code === OUTROAD) return { s: RD, k: NONE, o: -1 }; // 出入口外面那段也是路
     if (code === INDOOR) return { s: FLOOR, k: NONE, o: -1 };
@@ -225,7 +249,7 @@ export function createSettleStamp(data, ids) {
           ? DIRT
           : ground;
     return { s: under, k: NONE, o: data.objectIndex.get(code) };
-  };
+  }
 }
 
 // 世界層的聚落查詢（world.js）：同據點，區被丟掉再生時不用為了問聚落重生整區

@@ -12,7 +12,7 @@ const speciesName = (nestId) => {
 };
 const itemName = (id) =>
   DATA.weapons[DATA.weaponIndex.get(id)]?.name ?? DATA.armors[DATA.armorIndex.get(id)]?.name ?? id;
-function gotText(d) {
+export function gotText(d) {
   if (d.item) return `一件${itemName(d.item)}`;
   return Object.entries(d.got)
     .map(([id, n]) => {

@@ -1,6 +1,7 @@
-// 跟村民說話：名字、種族，加兩三句從聚落現在的狀態讀出來的話（經濟的徵兆或標籤、附近據點的動靜）。
-// 只讀狀態，不擲骰；同樣的狀態說同樣的話
+// 跟村民說話：名字、種族，加兩三句從聚落現在的狀態讀出來的話（經濟的徵兆或標籤、附近據點的動靜），
+// 再加最多兩則傳聞（rumors.js）。只讀狀態與紀錄，不擲骰；同樣的狀態說同樣的話
 
+import { dirWord } from './rumors.js';
 import { SETTLE } from './settlements.js';
 
 const ECON_LINES = [
@@ -10,16 +11,10 @@ const ECON_LINES = [
   '最近生意不錯，大家手頭都寬了些。',
   '這幾年大家都過得很好。',
 ];
-const DIRS = ['東', '東南', '南', '西南', '西', '西北', '北', '東北'];
 
-// from → to 大致在哪個方向
-function dirOf(from, to) {
-  const a = Math.atan2(to.y - from.y, to.x - from.x);
-  return DIRS[(Math.round(a / (Math.PI / 4)) + 8) % 8];
-}
-
-// npc：withVillagers 的村民；回傳 { title, lines: [字串] }
-export function talkLines(world, data, npc) {
+// npc：withVillagers 的村民；extra：{ news: [{ text }] 傳聞, clearedBy(據點 id) 是誰讓那裡沒有怪物 }。
+// 回傳 { title, lines: [字串] }
+export function talkLines(world, data, npc, extra = {}) {
   const s = npc.settle;
   const v = npc.villager;
   const race = data.races[data.raceIndex.get(v.race)]?.name ?? '';
@@ -38,13 +33,16 @@ export function talkLines(world, data, npc) {
     const n = near.n;
     const def = data.nests[n.kind];
     const sp = data.species[data.speciesIndex.get(def.species)]?.name ?? '怪物';
-    const where = `${dirOf(c, { x: n.x0 + (n.w >> 1), y: n.y0 + (n.h >> 1) })}邊的${def.name}`;
+    const where = `${dirWord(c, { x: n.x0 + (n.w >> 1), y: n.y0 + (n.h >> 1) })}的${def.name}`;
     const st = world.nestState(n.id);
     const tag = world.nestTag(n).mod;
-    if (st.pop <= 0) lines.push(`「${where}已經沒有怪物了，不知道是誰清掉的。」`);
+    const who = extra.clearedBy?.(n.id);
+    if (st.pop <= 0)
+      lines.push(who ? `「${where}已經沒有怪物了，聽說是${who}清掉的。」` : `「${where}已經沒有怪物了。」`);
     else if (tag > 0) lines.push(`「${where}最近常有${sp}出沒，晚上別亂跑。」`);
     else if (tag < 0) lines.push(`「${where}最近安靜多了。」`);
     else lines.push(`「${where}住著${sp}，最好別靠近。」`);
   }
+  for (const n of extra.news ?? []) lines.push(n.text);
   return { title: `${v.name}（${race}）`, lines };
 }

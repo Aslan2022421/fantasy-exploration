@@ -1,0 +1,96 @@
+[
+  {
+    "id": "nest-cleared",
+    "name": "清光據點",
+    "verb": "nestclear",
+    "life": true,
+    "history": "{hero}清光了{place}外面那群{monster}。",
+    "seen": [
+      "「{dir}的{place}，外面那群{monster}被一位{hero}收拾乾淨了，我親眼看到的。」",
+      "「{dir}的{place}安靜下來了，聽說是一位{hero}一個人清掉的。」"
+    ],
+    "heard": [
+      "「聽說{dir}的{place}，外面那群{monster}被人清光了。」",
+      "「有人說{place}的{monster}全倒了，是誰做的倒沒人說得清楚。」"
+    ],
+    "wrong": ["「聽說{place}那群{monster}自己打起來，死得一隻不剩。真的假的？」"]
+  },
+  {
+    "id": "nest-respawn",
+    "name": "據點的怪物又回來了",
+    "verb": "nestspawn",
+    "history": "{place}外面又出來一群{monster}，{size} 隻。",
+    "seen": ["「{dir}的{place}又有{monster}出來了，我數了數，有 {size} 隻。」"],
+    "heard": ["「聽說{dir}的{place}又冒出一群{monster}。」"],
+    "wrong": ["「聽說{place}那邊來了一大群{monster}，少說也有幾十隻。」"]
+  },
+  {
+    "id": "nest-grow",
+    "name": "據點壯大",
+    "verb": "nestroll",
+    "when": { "win": true, "tagChanged": true },
+    "history": "{place}的{monster}越來越多，{tag}。",
+    "seen": ["「{dir}的{place}，{monster}一天比一天多，晚上都聽得到牠們的聲音。」"],
+    "heard": ["「聽說{dir}的{place}，{monster}越來越多了。」"],
+    "wrong": ["「聽說{place}的{monster}已經多到要打過來了。」"]
+  },
+  {
+    "id": "nest-shrink",
+    "name": "據點衰退",
+    "verb": "nestroll",
+    "when": { "win": false, "tagChanged": true },
+    "history": "{who}壓制了{place}的{monster}，{tag}。",
+    "seen": ["「{dir}的{place}最近少了不少{monster}，是{who}去清的。」"],
+    "heard": ["「聽說{who}去了{dir}的{place}，{monster}少了很多。」"],
+    "wrong": ["「聽說{place}的{monster}被人趕盡殺絕了。」"]
+  },
+  {
+    "id": "settle-econ",
+    "name": "聚落的日子變了",
+    "verb": "settletag",
+    "history": "{settle}的日子難過了起來（{from} → {to}）。",
+    "seen": ["「{settle}最近日子不好過，附近能採的都被採光了。」"],
+    "heard": ["「聽說{dir}的{settle}，這陣子日子不太好過。」"],
+    "wrong": ["「聽說{settle}的人都快走光了。」"]
+  },
+  {
+    "id": "big-kill",
+    "name": "打倒大型生物",
+    "verb": "attack",
+    "when": { "big": true },
+    "life": true,
+    "history": "{hero}打倒了一隻{species}。",
+    "seen": ["「{dir}有一隻{species}被一位{hero}打倒了，那麼大的傢伙呢。」"],
+    "heard": ["「聽說{dir}有人打倒了一隻{species}。」"],
+    "wrong": ["「聽說有人赤手空拳打死了一隻{species}。」"]
+  },
+  {
+    "id": "hero-down",
+    "name": "冒險者倒下",
+    "verb": "down",
+    "world": false,
+    "life": true,
+    "history": "{hero}倒下了，醒來時已經回到出發的村莊。",
+    "seen": ["「前陣子{dir}有位{hero}倒在路邊，被人抬回去了。」"],
+    "heard": ["「聽說{dir}有位{hero}差點把命丟了。」"]
+  },
+  {
+    "id": "first-sight",
+    "name": "第一次遇見某種生物",
+    "verb": "spot",
+    "world": false,
+    "life": true,
+    "spread": false,
+    "history": "第一次看見{species}（一群 {count} 隻）。"
+  },
+  {
+    "id": "chest-opened",
+    "name": "打開據點的寶箱",
+    "verb": "open",
+    "life": true,
+    "history": "{hero}打開了{place}的寶箱，拿到{item}。",
+    "seen": ["「有位{hero}從{dir}的{place}帶了東西出來，好像是{item}。」"],
+    "heard": ["「聽說有人打開了{dir}的{place}裡的寶箱。」"],
+    "wrong": ["「聽說{place}的寶箱裡全是金子，被人搬光了。」"]
+  }
+]

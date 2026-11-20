@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { createLog, RecordSchema } from '../core/records.js';
 import { createStreams, diceSeed, streamSeed } from '../core/rng.js';
 import { DATA } from '../data/load.js';
+import { createChronicle } from './chronicle.js';
 import { applyFight, createFight } from './fight.js';
 import { applyGather, planGather, sourceAt, touches } from './gather.js';
 import { buildSheet, equip as equipSheet, heroStats, presetHero, raise as raiseSheet } from './hero.js';
@@ -17,6 +18,7 @@ import { tryMove } from './move.js';
 import { applyNest } from './nest-apply.js';
 import { createNestWatch } from './nest-watch.js';
 import { overlayWorld } from './overlays.js';
+import { newsFor } from './rumors.js';
 import { createSettleWatch } from './settle-watch.js';
 import { createWorld, startPosition, WORLD_VERSION } from './world.js';
 
@@ -134,7 +136,10 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     record,
     dice: (tag) => RNG.clone().setSeed(diceSeed(seed, `${tag}:${log.size}`)),
   });
-  const settles = createSettleWatch({ world, state: () => state, record });
+  // 歷史（事件、統計、走過的區）與傳聞：從紀錄算，不進存檔
+  const chronicle = createChronicle(log, baseWorld.zoneSize);
+  const news = (s, speaker) => newsFor(chronicle, s, speaker, state.time, baseWorld.zoneSize);
+  const settles = createSettleWatch({ world, state: () => state, record, news });
   // 花時間的動作做完之後：據點看一次（清光、重生、看到時擲對抗）
   const after = (rec) => {
     if (rec && !rec.refused) nests.afterAction(rec.id);
@@ -237,6 +242,12 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     },
     // 跟村民說話（不花時間、不改狀態）：要貼著；回傳紀錄或 null
     talk: (id, cause = null) => settles.talk(id, cause),
+    chronicle,
+    // 村民說話的內容（talk.js 的 extra）：這個人現在會講的傳聞（說話不花時間，跟剛記下的那筆一樣），
+    // 加上誰讓據點沒有怪物
+    talkExtra(npc) {
+      return { news: news(npc.settle, npc.id), clearedBy: (nestId) => chronicle.clearedBy(nestId) };
+    },
     nests,
     serialize() {
       return { format: SAVE_FORMAT, world: WORLD_VERSION, seed, records: log.all(), checkpoint: lastCheckpoint };

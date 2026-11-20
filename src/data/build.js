@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { buildBlock, ENV_VARIANTS } from './blocks.js';
 import { buildHeroData } from './build-hero.js';
+import { checkEvents, EventSchema } from './event-schema.js';
 import {
   BiomeSchema,
   BlockSchema,
@@ -52,6 +53,7 @@ export function buildData({
   species: speciesFiles = {},
   nest: nestFiles = {},
   settlement: settlementFiles = {},
+  event: eventFiles = {},
   ...heroFiles
 }) {
   const errors = [];
@@ -83,6 +85,8 @@ export function buildData({
   const settlements = merge(settlementFiles, SettlementSchema, '聚落', errors);
   for (const s of settlements)
     for (const o of [s.wall, `${s.id}-tower`]) if (!objectIndex.has(o)) errors.push(`聚落 ${s.id} 的物件找不到：${o}`);
+  const events = merge(eventFiles, EventSchema, '事件', errors);
+  checkEvents(events, errors);
   if (errors.length) throw new Error(`資料有錯：\n${errors.join('\n')}`);
   const palette = [...surfaces, ...waters, ...covers].map((t) => ({ ...t, shade: true }));
   return {
@@ -109,6 +113,7 @@ export function buildData({
     nestIndex: indexOf(nests),
     settlements,
     settlementIndex: indexOf(settlements),
+    events,
     ...hero,
   };
 }

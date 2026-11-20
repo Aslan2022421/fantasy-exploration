@@ -98,7 +98,7 @@ const actions = createActions({
     store.save(SAVE_KEY, game.serialize());
   },
   redraw: () => render(),
-  talk: (npc) => npc && windows.talk(talkLines(world, DATA, npc)),
+  talk: (npc) => npc && windows.talk(talkLines(world, DATA, npc, game.talkExtra(npc))),
 });
 
 function entries() {

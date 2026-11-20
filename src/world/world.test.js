@@ -159,7 +159,7 @@ describe('世界的形狀', () => {
       const g = w.geography.start;
       expect(Math.max(Math.abs(p.x - g.x), Math.abs(p.y - g.y))).toBeLessThan(24);
     }
-  });
+  }, 30000); // 建 10 個世界，全部測試平行跑時會慢好幾倍
 
   // 只看湖海：這裡的 gen 沒接世界的地理，生出來的區沒有河（河跟著地勢走，見 geography.test.js）
   test('湖海的水面在第 0 層、陸地在第 1 層以上；淺水一定在深水旁邊', () => {

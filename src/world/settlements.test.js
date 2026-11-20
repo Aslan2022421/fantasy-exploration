@@ -69,7 +69,8 @@ test('圖樣：從廣場走得到每一格能走的地方、每個出入口與�
     const seen = reachable(L);
     for (let j = 0; j < L.h; j++)
       for (let i = 0; i < L.w; i++) if (walkable(L.grid[j][i])) expect(seen.has(`${i},${j}`)).toBe(true);
-    expect(L.gates.length).toBeGreaterThanOrEqual(3);
+    expect(L.gates.length).toBeGreaterThanOrEqual(1);
+    expect(['round', 'long', 'square', 'terrain']).toContain(L.form);
     expect(L.homes.length).toBeGreaterThan(0);
     expect(L.homes.length).toBeLessThanOrEqual(defOf(s).houses[popTagIndex(s.pop0, defOf(s))]);
     for (const h of L.homes) for (const b of h.beds) expect(L.grid[b.j][b.i]).toBe('bed');

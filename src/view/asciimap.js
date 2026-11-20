@@ -5,7 +5,7 @@
 // 地圖上畫冒險者 @、附近的怪物；聚落與據點標編號，右邊一欄列出編號對應的名字與圖例。
 // 地圖的字照「看哪一塊＋紀錄筆數」快取，標記每次重畫
 
-import { INK, regionCell, zoneCells } from './asciimap-cells.js';
+import { INK, joinRoads, regionCell, zoneCells } from './asciimap-cells.js';
 
 const GRID = 96; // 地圖幾個字見方
 const LEGEND = [
@@ -17,7 +17,7 @@ const LEGEND = [
   ['▲', INK.mountain, '山'],
   ['≈', INK.deep, '海、湖'],
   ['~', INK.shallow, '河、淺水'],
-  ['·', INK.road, '路'],
+  ['─', INK.road, '路'],
   ['⌂', INK.village, '村莊'],
   ['■', INK.town, '城鎮'],
   ['@', '#ffffff', '你'],
@@ -37,11 +37,12 @@ export function createAsciiMap(world, data, tiles) {
     g.imageSmoothingEnabled = false;
     g.fillStyle = INK.bg;
     g.fillRect(0, 0, canvas.width, canvas.height);
-    for (let j = 0; j < GRID; j++)
-      for (let i = 0; i < GRID; i++) {
-        const c = cellAt(i, j);
-        if (c.ch !== ' ') tiles.draw(g, c.ch, i * px, j * px, px, c.fg, null);
-      }
+    const cells = [];
+    for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) cells.push({ ...cellAt(i, j) });
+    joinRoads(cells, GRID); // 路連成線
+    cells.forEach((c, k) => {
+      if (c.ch !== ' ') tiles.draw(g, c.ch, (k % GRID) * px, Math.floor(k / GRID) * px, px, c.fg, null);
+    });
     cache = { key, canvas };
     return canvas;
   }

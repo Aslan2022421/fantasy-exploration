@@ -1,6 +1,7 @@
 // 世界地圖（M）的奇幻 ASCII 畫法：每一格地圖字代表世界的一塊（附近：3×3 格；總覽：一區），這裡決定那一塊畫什麼字、什麼顏色。
 // 只看世界（不碰畫布），可以在 Node 裡測。
-// 附近的一塊，照優先順序取：聚落（牆 # 、建築 ⌂、田 √、街道 ·）> 據點的建物（照物件的字）> 橋 > 路 · >
+// 路最後連成單線框字（joinRoads：─ │ ┌ ┼ …，接進聚落）
+// 附近的一塊，照優先順序取：聚落（牆 # 、建築 ⌂、田 √、街道 ·）> 據點的建物（照物件的字）> 橋 > 路 >
 //   水一半以上（深水 ≈、淺水與河 ~、沼澤 ~ 墨綠）> 樹（照樹種的字）> 山（山峰 ▲、其餘 ^，積雪白）> 生態覆蓋 > 地面（沙 ∙、其餘空白或淡淡的 .）
 // 總覽的一區：水多是海 ≈，山多是山 ▲ ^，否則照周圍九區投票的生態（針葉 ↑、闊葉 ♣、雨林 ♠、草原 "、疏林草原 ,、沙漠 ∙、凍原 .），
 //   有大道經過畫 ·，聚落畫 ⌂（村莊）■（城鎮）
@@ -15,7 +16,7 @@ export const INK = {
   wall: '#c9a874',
   building: '#d8c090',
   crops: '#b8b05a',
-  road: '#9a8a68',
+  road: '#d0b47a',
   deep: '#3f6f94',
   shallow: '#5f93b0',
   swamp: '#5d7a4a',
@@ -90,10 +91,10 @@ export function regionCell(world, data, x, y, n) {
       if (k >= 0) cover.set(k, (cover.get(k) ?? 0) + 1);
     }
   const half = (n * n) / 2;
-  if (site) return { ch: site.ch, fg: site.fg };
+  if (site) return { ch: site.ch, fg: site.fg, joint: true };
   if (nestObj) return { ch: nestObj.glyph, fg: INK.nest };
-  if (bridge) return { ch: bridge.glyph, fg: INK.road };
-  if (road) return { ch: '·', fg: INK.road };
+  if (bridge) return { ch: bridge.glyph, fg: INK.road, road: true, keep: true };
+  if (road) return { ch: '·', fg: INK.road, road: true };
   if (water >= half) {
     if (swamp >= water / 2) return { ch: '~', fg: INK.swamp };
     return deep >= water / 2 ? { ch: '≈', fg: INK.deep } : { ch: '~', fg: INK.shallow };
@@ -120,6 +121,24 @@ function settleRank(code, def) {
   if (code === 'road' || code === 'outroad' || code === 'town-well' || code === 'stall')
     return { p: 2, ch: '·', fg: INK.road };
   return { p: 1, ch: ' ', fg: INK.ground };
+}
+
+// 路連成線：看上下左右哪幾格也是路（或聚落），換成單線框字（─ │ ┌ ┼ …）；橋保留自己的字。cells 是 n×n 的陣列
+const LINES = ['·', '│', '─', '└', '│', '│', '┌', '├', '─', '┘', '─', '┴', '┐', '┤', '┬', '┼'];
+export function joinRoads(cells, n) {
+  const linked = (i, j) => i >= 0 && j >= 0 && i < n && j < n && (cells[j * n + i].road || cells[j * n + i].joint);
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++) {
+      const c = cells[j * n + i];
+      if (!c.road || c.keep) continue;
+      const bits =
+        (linked(i, j - 1) ? 1 : 0) |
+        (linked(i + 1, j) ? 2 : 0) |
+        (linked(i, j + 1) ? 4 : 0) |
+        (linked(i - 1, j) ? 8 : 0);
+      c.ch = LINES[bits];
+    }
+  return cells;
 }
 
 // 總覽：每一區一個字。回傳 (zx, zy) → { ch, fg }（第一次呼叫時整個算好）
@@ -170,13 +189,13 @@ export function zoneCells(world, data) {
       const st = stats[z];
       const kind = world.settlementKind?.(zx, zy);
       let cell;
-      if (kind === 'town') cell = { ch: '■', fg: INK.town };
-      else if (kind === 'village') cell = { ch: '⌂', fg: INK.village };
+      if (kind === 'town') cell = { ch: '■', fg: INK.town, joint: true };
+      else if (kind === 'village') cell = { ch: '⌂', fg: INK.village, joint: true };
       else if (st.water >= n * 0.6)
         cell = st.deep >= st.water / 2 ? { ch: '≈', fg: INK.deep } : { ch: '~', fg: INK.shallow };
       else if (st.mount >= (n - st.water) * 0.35)
         cell = { ch: st.high ? '▲' : '^', fg: st.high > 3 ? INK.snow : INK.mountain };
-      else if (mainRoad.has(z)) cell = { ch: '·', fg: INK.road };
+      else if (mainRoad.has(z)) cell = { ch: '·', fg: INK.road, road: true };
       else {
         // 生態：周圍九區投票（自己兩票），一區一區交錯的棋盤收成一大片
         const votes = new Float64Array(nb);

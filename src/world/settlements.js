@@ -1,13 +1,13 @@
 // 聚落（村莊、城鎮，階段 7）：放在哪、圖樣、隱藏人口與標籤、範圍。見 design/PLAN.md「聚落」。
 // - 哪幾區放什麼（settlementPlan）：建世界時照種子與區座標擲，陸地區 15% 村莊、4% 城鎮（城鎮彼此相隔 6 區以上），
 //   起點那一區一定是村莊。一區最多放一樣：放了聚落就不放據點
-// - 放置（createSettlePlanner）：同據點，中心落在那一區正中間的方塊裡、整塊在自己那一區裡；平坦（高低最多差一層）、
-//   沒有水、冰、山；靠水的位置優先；出入口那一邊外面有湖就不開。起點那一區在整區裡找、照離區中心近排
+// - 放置（createSettlePlanner）：同據點，中心落在那一區正中間的方塊裡、整塊在自己那一區裡；外形照地形挑（settle-form.js）；
+//   靠水的位置優先；出入口朝道路來的方向（沒有路才照雜湊開一個，不朝湖開）。起點那一區在整區裡找、照離區中心近排
 // - 人口：隱藏，存在遊戲狀態的 settles；沒動過的照種子擲開局的人口。標籤照人口在範圍裡的位置分五段
 
-import { LAND } from './landform.js';
 import { gapToNest } from './nests.js';
 import { hash01 } from './noise.js';
+import { FORM, pickForm, waterSide } from './settle-form.js';
 import { buildSettlement, FIELD, GROUND, INDOOR, INDOOR_OBJECTS, KEEP, OUTROAD, ROAD, WELL } from './settle-layouts.js';
 
 export const SETTLE = {
@@ -74,11 +74,17 @@ export function settlementPlan(seed, zonesX, zonesY, isLand, startZone) {
 
 // ids：地形編號 { NONE, SWAMP, ICE }
 export function createSettlePlanner(seed, data, ids) {
-  const { NONE, ICE } = ids;
+  const { NONE } = ids;
   const kinds = new Map((data.settlements ?? []).map((d, k) => [d.id, { k, def: d }]));
 
-  // z：一區生成時共用的格子（terrain.js 的 genZone）；kind：'village' | 'town'；start：這區是不是起點那一區
-  return function planSettle(z, zx, zy, kind, start) {
+  // z：一區生成時共用的格子（terrain.js 的 genZone）；kind：'village' | 'town'；start：這區是不是起點那一區；
+  // entriesAt(x0, y0, w, h)：道路從哪些角度靠近這塊圖樣（世界座標；road-paint.js 的 roadEntries）
+  // 城鎮放不下（要一大片平地）就改放村莊
+  return function planSettle(z, zx, zy, kind, start, entriesAt) {
+    const placed = placeOne(z, zx, zy, kind, start, entriesAt);
+    return placed ?? (kind === 'town' ? placeOne(z, zx, zy, 'village', start, entriesAt) : null);
+  };
+  function placeOne(z, zx, zy, kind, start, entriesAt) {
     const entry = kinds.get(kind);
     if (!entry) return null;
     const { def, k } = entry;
@@ -86,58 +92,32 @@ export function createSettlePlanner(seed, data, ids) {
     const inGrid = (x, y) => x >= -z.E + 1 && y >= -z.E + 1 && x < z.size + z.E - 1 && y < z.size + z.E - 1;
     const X0 = zx * z.size;
     const Y0 = zy * z.size;
-    const W = def.w;
-    const H = def.h;
-
-    // 只看圓形牆圈得到的範圍（四角牆外保留原本的地形，不用平）
-    const inShape = (i, j) => ((i - (W - 1) / 2) / (W / 2 - 1)) ** 2 + ((j - (H - 1) / 2) / (H / 2 - 1)) ** 2 <= 1;
-    const fits = (x, y) => {
-      if (x < 0 || y < 0 || x + W > z.size || y + H > z.size) return false;
-      let lo = 99;
-      let hi = -1;
-      for (let j = 0; j < H; j++)
-        for (let i = 0; i < W; i++) {
-          if (!inShape(i, j)) continue;
-          const c = g(x + i, y + j);
-          if (z.wAll[c] !== NONE || z.sAll[c] === ICE || z.h[c] > LAND.mountain) return false;
-          lo = Math.min(lo, z.tier[c]);
-          hi = Math.max(hi, z.tier[c]);
-          if (hi - lo > 1) return false;
-        }
-      return true;
-    };
+    const fitsZone = (x, y, w, h) => x >= 0 && y >= 0 && x + w <= z.size && y + h <= z.size;
     // 湖、河（不含沼澤）
     const lake = (x, y) => inGrid(x, y) && z.wAll[g(x, y)] !== NONE && z.wAll[g(x, y)] !== ids.SWAMP;
-    // 靠水：圖樣外 3～waterNear 格內有湖或河
-    const nearWater = (x, y) => {
-      const R = SETTLE.waterNear;
-      for (let j = y - R; j < y + H + R; j++)
-        for (let i = x - R; i < x + W + R; i++) {
-          if (i >= x - 2 && i < x + W + 2 && j >= y - 2 && j < y + H + 2) continue;
-          if (lake(i, j)) return true;
-        }
-      return false;
-    };
-    // 出入口那一邊：從牆往外 3 格寬、看到最大範圍再多 exitLook 格，有湖就不開
-    const canOpen = (x, y) => (side) => {
+    const sideOf = (x, y, w, h) => waterSide(x, y, w, h, SETTLE.waterNear, lake);
+    // 沒有路時開的出入口：那一邊從牆往外 3 格寬、看到最大範圍再多 exitLook 格，有湖就不開
+    const canOpen = (x, y, w, h) => (side) => {
       const L = def.rangeBase + SETTLE.rangeSpan + SETTLE.exitLook;
-      const cx = x + (W >> 1);
-      const cy = y + (H >> 1);
+      const cx = x + (w >> 1);
+      const cy = y + (h >> 1);
       for (let d = 1; d <= L; d++)
-        for (let w = -1; w <= 1; w++) {
+        for (let v = -1; v <= 1; v++) {
           const [i, j] =
             side === 'west'
-              ? [x - d, cy + w]
+              ? [x - d, cy + v]
               : side === 'east'
-                ? [x + W - 1 + d, cy + w]
+                ? [x + w - 1 + d, cy + v]
                 : side === 'north'
-                  ? [cx + w, y - d]
-                  : [cx + w, y + H - 1 + d];
+                  ? [cx + v, y - d]
+                  : [cx + v, y + h - 1 + d];
           if (lake(i, j)) return false;
         }
       return true;
     };
 
+    const W = def.w;
+    const H = def.h;
     const spots = [];
     if (start) {
       for (let y = 0; y + H <= z.size; y += 2)
@@ -153,44 +133,66 @@ export function createSettlePlanner(seed, data, ids) {
           spots.push({ x: x - (W >> 1), y: y - (H >> 1), rank: hash01(seed, X0 + x, Y0 + y, 9302) });
     }
     spots.sort((a, b) => a.rank - b.rank);
-    // 放得下的裡面，靠水的優先（看前 12 個放得下的就好，不然太慢）
-    const ok = [];
-    for (const s of spots) {
-      if (ok.length >= 12) break;
-      if (fits(s.x, s.y)) ok.push(s);
+    // 放得下的裡面，整片都能蓋的優先、再來靠水的（看前 12 個放得下的就好，不然太慢）；
+    // 一個都放不下就降低照地形外形的門檻再找一次（山多、水多的區，聚落小一點也要有）
+    let ok = [];
+    for (const min of [FORM.terrain, FORM.least]) {
+      for (const s of spots) {
+        if (ok.length >= 12) break;
+        if (!fitsZone(s.x, s.y, W, H)) continue;
+        const site = pickForm(z, def, s, ids, seed, X0, Y0, fitsZone, sideOf, min);
+        if (site) ok.push(site);
+      }
+      if (ok.length) break;
+      ok = [];
     }
-    ok.sort((a, b) => (nearWater(b.x, b.y) ? 1 : 0) - (nearWater(a.x, a.y) ? 1 : 0));
+    const score = (s) => (s.form === 'terrain' ? 0 : 2) + (sideOf(s.x, s.y, s.w, s.h) ? 1 : 0);
+    ok.sort((a, b) => score(b) - score(a));
 
+    // 床位住得下開局人口的優先；都不夠就用第一個蓋得出來的（起點村莊不挑，廣場的位置才不會跟著路網變）
+    let spare = null;
     for (const s of ok) {
       const x0 = X0 + s.x;
       const y0 = Y0 + s.y;
       const base = { x0, y0 };
       const pop0 = startPop(seed, base, def);
-      const layout = buildSettlement(def, seed, x0, y0, popTagIndex(pop0, def), canOpen(s.x, s.y));
+      const tag = popTagIndex(pop0, def);
+      const layout = buildSettlement(def, seed, x0, y0, tag, {
+        w: s.w,
+        h: s.h,
+        form: s.form,
+        ok: s.ok,
+        entries: entriesAt?.(x0, y0, s.w, s.h) ?? [],
+        canOpen: canOpen(s.x, s.y, s.w, s.h),
+      });
       if (!layout) continue;
       const name = `${def.names[Math.floor(hash01(seed, x0, y0, 9303) * def.names.length)]}${def.suffix}`;
-      // 牆內整平到工作範圍裡最低的那一層（舊版：工作範圍整平成同一個高度），外牆才不會在層界錯開
+      // 圖樣整平到圖樣裡最低的那一層（舊版：工作範圍整平成同一個高度），外牆才不會在層界錯開
       let tier = 99;
-      for (let j = 0; j < H; j++)
-        for (let i = 0; i < W; i++) if (inShape(i, j)) tier = Math.min(tier, z.tier[g(s.x + i, s.y + j)]);
-      return {
+      for (let j = 0; j < s.h; j++)
+        for (let i = 0; i < s.w; i++)
+          if (layout.grid[j][i] !== KEEP) tier = Math.min(tier, z.tier[g(s.x + i, s.y + j)]);
+      const out = {
         id: `${zx},${zy}`,
         kind: k,
         zx,
         zy,
         x0,
         y0,
-        w: W,
-        h: H,
+        w: s.w,
+        h: s.h,
         name,
         layout,
         tier,
         pop0,
         plaza: { x: x0 + layout.plaza.i, y: y0 + layout.plaza.j },
       };
+      const beds = layout.homes.reduce((n, h) => n + h.beds.length, 0);
+      if (start || beds >= def.residents[tag][1]) return out;
+      spare ??= out;
     }
-    return null;
-  };
+    return spare;
+  }
 }
 
 // 圖樣裡 (X, Y) 那格的代碼；不在圖樣裡回傳 null

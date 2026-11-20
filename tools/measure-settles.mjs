@@ -38,7 +38,9 @@ console.log(`種子 ${seed}，起點周圍 ${2 * R + 1}×${2 * R + 1} 區，陸�
 console.log(
   `每 100 個陸地區：村莊 ${per(count.village)}、城鎮 ${per(count.town)}、據點 ${per(count.nest)}；對手是聚落的據點 ${count.rival}/${count.nest}`,
 );
-console.log(`起點村莊 ${home.name}：出入口 ${home.layout.gates.join('、')}，民房 ${home.layout.homes.length} 間`);
+console.log(
+  `起點村莊 ${home.name}：外形 ${home.layout.form}，出入口 ${home.layout.gates.length} 個，民房 ${home.layout.homes.length} 間`,
+);
 
 // 起點走不走得出去：不看生物，只看地面
 const p = startPosition(world);

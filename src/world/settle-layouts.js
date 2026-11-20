@@ -1,16 +1,17 @@
-// 聚落的圖樣（照使用者給的城鎮示意圖：不規則的圓形木柵、瞭望塔、彎彎的街道、大小不一的房子、田、樹叢）：
-// 1. 輪廓、出入口、廣場、街道（settle-shape.js）
+// 聚落的圖樣（照使用者給的城鎮示意圖：木柵、瞭望塔、彎彎的街道、大小不一的房子、田、樹叢）：
+// 1. 輪廓（外形照地形挑）、出入口（朝道路來的方向）、廣場、街道（settle-shape.js）
 // 2. 建築：城鎮先蓋鎮公所、神殿、兵營，再來旅店、酒館（村莊夠大才有旅店），最後民房；外框不貼牆、彼此不相貼，
 //    貼著街道的位置優先；門開在靠街那一邊，門外不是街就鋪一條巷子接到最近的街；家具照用途擺（settle-furnish.js）。
 //    民房的床位不夠住滿時改蓋大房子
-// 3. 田（一排作物一排泥土）、樹叢，放在剩下的空地
+// 3. 田（一排作物一排泥土）、樹叢，放在剩下的空地（settle-fields.js）
 // 4. 城鎮廣場的外圈擺市場攤位
 // 每格是一個代碼：GROUND（聚落裡的空地）、ROAD（街道、巷子、廣場）、INDOOR（室內地板）、FIELD（田裡的泥土）、
-// KEEP（牆外，保留原本的地形）、OUTROAD（出入口外的路）或物件的 id。只看種子＋錨點的雜湊與「哪幾邊能開出入口」
+// KEEP（牆外，保留原本的地形）、OUTROAD（出入口外的路）或物件的 id。只看種子＋錨點的雜湊與 opts
 
-import { BED, FIELD, GROUND, INDOOR, KEEP, OUTROAD, ROAD, WELL, walkable } from './settle-codes.js';
+import { BED, GROUND, INDOOR, KEEP, OUTROAD, ROAD, WELL, walkable } from './settle-codes.js';
+import { fieldsAndGroves } from './settle-fields.js';
 import { furnishRoom } from './settle-furnish.js';
-import { gateAt, makeRnd, SHAPE, STEPS4, streetPath, wallShape, widen } from './settle-shape.js';
+import { gateToward, makeRnd, SHAPE, STEPS4, streetPath, wallShape, widen } from './settle-shape.js';
 import { reachable } from './settle-walls.js';
 
 export * from './settle-codes.js';
@@ -34,16 +35,16 @@ const BUILDINGS = {
 };
 // 公共建築：城鎮全有；村莊人口標籤到「穩定」以上才有旅店
 const PUBLIC = { town: ['hall', 'temple', 'barracks', 'inn', 'tavern'], village: ['inn'] };
-const FIELDS = { village: [2, 3], town: [2, 3] }; // 幾塊田
-const GROVES = { village: [2, 3], town: [2, 4] }; // 幾叢樹
-const GROVE_TREES = ['oak', 'maple', 'birch'];
+const SIDES = { east: 0, south: Math.PI / 2, west: Math.PI, north: -Math.PI / 2 };
 
-// def：聚落資料；tag：開局的人口標籤（0～4）；canOpen(side)：那一邊外面能不能開出入口（不朝湖開）。開不出 3 個回傳 null
-export function buildSettlement(def, seed, x0, y0, tag, canOpen) {
-  const W = def.w;
-  const H = def.h;
+// def：聚落資料；tag：開局的人口標籤（0～4）；opts：{ w, h（圖樣大小，長形可能轉成直的）, form 外形, ok（能蓋的格子，
+// 照地形的外形用；也擋住出入口外的路）, entries（道路來的角度）, canOpen(side)（沒有路時，那一邊能不能開）}。圍不出來回傳 null
+export function buildSettlement(def, seed, x0, y0, tag, opts) {
+  const W = opts.w;
+  const H = opts.h;
   const rnd = makeRnd(seed, x0, y0);
-  const shape = wallShape(W, H, rnd);
+  const shape = wallShape(W, H, rnd, opts.form, opts.form === 'terrain' ? opts.ok : null, tag);
+  if (!shape) return null;
   const { inner, ring, cx, cy } = shape;
   const at = (i, j) => j * W + i;
   const grid = Array.from({ length: H }, (_, j) =>
@@ -56,13 +57,25 @@ export function buildSettlement(def, seed, x0, y0, tag, canOpen) {
   const kind = def.id === 'town' ? 'town' : 'village';
   const door = kind === 'village' ? 'door' : 'stone-door';
 
-  // 出入口：東西兩邊優先，南北的順序照雜湊
-  const [glo, ghi] = def.gates;
-  const want = glo + Math.floor(rnd(1) * (ghi - glo + 1));
-  const order = rnd(2) < 0.5 ? ['west', 'east', 'north', 'south'] : ['west', 'east', 'south', 'north'];
-  const sides = order.filter((s) => canOpen(s)).slice(0, want);
-  if (sides.length < Math.min(3, want)) return null;
-  const gates = sides.map((s) => gateAt(shape, W, H, s));
+  // 出入口：朝道路來的方向；附近沒有路就照雜湊開一個（不朝湖開）。挨得太近的併成一個
+  let angles = opts.entries ?? [];
+  if (!angles.length) {
+    const order = rnd(2) < 0.5 ? ['west', 'east', 'north', 'south'] : ['east', 'south', 'west', 'north'];
+    angles = [SIDES[order.find((s) => opts.canOpen(s)) ?? order[0]]];
+  }
+  const canBuild = (i, j) => !opts.ok || i < 0 || j < 0 || i >= W || j >= H || opts.ok[j * W + i];
+  const gates = [];
+  for (const a of angles) {
+    // 口外那一格是水或陡坡，就往兩旁轉一點再找
+    let g = gateToward(shape, W, H, a);
+    for (const turn of [0, 0.25, -0.25, 0.5, -0.5, 0.75, -0.75]) {
+      const t = gateToward(shape, W, H, a + turn);
+      if (!canBuild(t.i + t.di, t.j + t.dj) || !canBuild(t.i + 2 * t.di, t.j + 2 * t.dj)) continue;
+      g = t;
+      break;
+    }
+    if (!gates.some((o) => Math.abs(o.i - g.i) + Math.abs(o.j - g.j) < 6)) gates.push(g);
+  }
 
   // 廣場與井
   const pr = SHAPE.plaza[kind];
@@ -73,14 +86,19 @@ export function buildSettlement(def, seed, x0, y0, tag, canOpen) {
   // 街道與出入口：口 3 格寬，從牆往外打通到圖樣的邊；兩側瞭望塔
   const tower = `${kind}-tower`;
   gates.forEach((g, k) => {
-    const street = streetPath([cx + g.di * pr, cy + g.dj * pr], [g.i, g.j], rnd, 20 + k * 5);
+    const from = [cx + Math.round(Math.cos(g.angle) * pr), cy + Math.round(Math.sin(g.angle) * pr)];
+    const street = streetPath(from, [g.i, g.j], rnd, 20 + k * 5);
     for (const [i, j] of widen(street, SHAPE.street[kind])) if (inner[at(i, j)] && get(i, j) !== WELL) set(i, j, ROAD);
+    // 口往外打通：牆外那段是路，碰到圖樣的邊或不能蓋的格子（水、陡坡）就停；g.out 是路要接到的那一格
+    g.out = { i: g.i + g.di, j: g.j + g.dj };
     for (let w = -1; w <= 1; w++)
       for (let d = 0; ; d++) {
         const i = g.i + g.di * d + (g.dj ? w : 0);
         const j = g.j + g.dj * d + (g.di ? w : 0);
         if (i < 0 || j < 0 || i >= W || j >= H) break;
+        if (get(i, j) === KEEP && !canBuild(i, j)) break;
         set(i, j, get(i, j) === KEEP ? OUTROAD : ROAD);
+        if (w === 0) g.out = { i: i + g.di, j: j + g.dj };
         // 口往內接到街道
         for (let back = 1; back <= 3; back++) {
           const bi = g.i - g.di * back + (g.dj ? w : 0);
@@ -257,42 +275,5 @@ export function buildSettlement(def, seed, x0, y0, tag, canOpen) {
         const ok = STEPS4.every(([di, dj]) => [ROAD, WELL].includes(get(i + di, j + dj)));
         if (ok) set(i, j, 'stall');
       }
-  return { grid, w: W, h: H, plaza: { i: cx, j: cy + 1 }, gates: sides, homes };
-}
-
-// 田（一排作物、一排泥土）與樹叢：在剩下的空地上找放得下的地方（外圍留一格空地）
-function fieldsAndGroves(grid, W, H, kind, rnd, inner) {
-  const free = (i, j) => i > 0 && j > 0 && i < W - 1 && j < H - 1 && inner[j * W + i] && grid[j][i] === GROUND;
-  const clear = (x, y, w, h) => {
-    for (let j = y - 1; j <= y + h; j++) for (let i = x - 1; i <= x + w; i++) if (!free(i, j)) return false;
-    return true;
-  };
-  const tryPlace = (w, h, salt, fill) => {
-    for (let t = 0; t < 200; t++) {
-      const x = 1 + Math.floor(rnd(salt + t * 2) * (W - w - 2));
-      const y = 1 + Math.floor(rnd(salt + t * 2 + 1) * (H - h - 2));
-      if (!clear(x, y, w, h)) continue;
-      fill(x, y);
-      return true;
-    }
-    return false;
-  };
-  const [flo, fhi] = FIELDS[kind];
-  const fields = flo + Math.floor(rnd(70) * (fhi - flo + 1));
-  for (let f = 0; f < fields; f++) {
-    const w = 6 + Math.floor(rnd(71 + f) * 5);
-    const h = 3 + Math.floor(rnd(81 + f) * 3);
-    tryPlace(w, h, 3000 + f * 400, (x, y) => {
-      for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) grid[j][i] = (j - y) % 2 ? FIELD : 'crops';
-    });
-  }
-  const [glo, ghi] = GROVES[kind];
-  const groves = glo + Math.floor(rnd(90) * (ghi - glo + 1));
-  for (let g = 0; g < groves; g++) {
-    const tree = GROVE_TREES[Math.floor(rnd(91 + g) * GROVE_TREES.length)];
-    tryPlace(4, 3, 5000 + g * 400, (x, y) => {
-      for (let j = y; j < y + 3; j++)
-        for (let i = x; i < x + 4; i++) if ((i + j) % 2 === 0 && rnd(6000 + i * 17 + j) < 0.8) grid[j][i] = tree;
-    });
-  }
+  return { grid, w: W, h: H, plaza: { i: cx, j: cy + 1 }, gates, homes, form: opts.form };
 }

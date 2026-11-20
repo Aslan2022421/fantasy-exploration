@@ -16,7 +16,7 @@ import { createTerrainGen, LAYER_NONE } from './terrain.js';
 export { startPosition } from './start.js';
 
 // 世界版本：改了地形生成（landform.js、terrain.js、地形或生態資料）就加一，舊存檔自動作廢
-export const WORLD_VERSION = 36; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法；30：橋、據點重做；31：聚落與據點整平；32：整平處是平原、出入口外的路；33：道路；34：路改成邊靠邊；35：聚落改成圓牆；36：城鎮放不下改放村莊
+export const WORLD_VERSION = 37; // 25：生物佔格擋路（物種成群）；26：混食的怪物成群；27：據點；28：村莊與城鎮；29：聚落照舊版排法；30：橋、據點重做；31：聚落與據點整平；32：整平處是平原、出入口外的路；33：道路；34：路改成邊靠邊；35：聚落改成圓牆；36：城鎮放不下改放村莊；37：聚落外形照地形、出入口朝路、路拉直不並排
 
 // 世界層寬幾區：建世界（地理＋世界層）約 2 秒；區用到才生，一區約 25 毫秒
 export const ZONES_X = 96;
@@ -40,7 +40,11 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
   const startZone = start0
     ? { zx: Math.floor(start0.x / zoneSize), zy: Math.floor(start0.y / zoneSize) }
     : { zx: zonesX >> 1, zy: zonesY >> 1 };
-  const isLand = (zx, zy) => regions[zy * zonesX + zx].height >= LAND.water;
+  // 能放聚落的區：陸地、不是整片山（山裡排了也放不下，路還會白白通過去）
+  const isLand = (zx, zy) => {
+    const h = regions[zy * zonesX + zx].height;
+    return h >= LAND.water && h <= LAND.mountain;
+  };
   const settlePlan = settlementPlan(seed, zonesX, zonesY, isLand, startZone);
   gen.setSettlePlan(settlePlan, startZone);
 
@@ -98,9 +102,10 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
 
   // 起點改到起點村莊的廣場（井的南邊一格）。起點那一區的生物群照起點放，起點換了就整個重生一次
   // 道路網（roads.js）要知道起點村莊在哪，算好後已經生過的區（起點那一區）丟掉重生
-  const home = settleIndex.settleOf(startZone.zx, startZone.zy);
-  if (home) geography.start = { ...home.plaza };
-  const roads = buildRoads(geography, settlePlan, zonesX, zonesY, zoneSize, home);
+  // 起點村莊的位置與廣場不看路網，重生之後出入口照路來的方向重開
+  const home0 = settleIndex.settleOf(startZone.zx, startZone.zy);
+  if (home0) geography.start = { ...home0.plaza };
+  const roads = buildRoads(geography, settlePlan, zonesX, zonesY, zoneSize, home0);
   gen.setRoads(roads);
   zones.clear();
   last = null;
@@ -179,7 +184,10 @@ export function createWorld(seed, data, { zonesX = ZONES_X, zonesY = ZONES_Y, zo
     herdsNear,
     ...nestIndex,
     ...settleIndex,
-    startVillage: home ?? null, // 起點的村莊（冒險者從這裡出發）
+    // 起點的村莊（冒險者從這裡出發）；用到才生那一區
+    get startVillage() {
+      return settleIndex.settleOf(startZone.zx, startZone.zy) ?? null;
+    },
     roads, // 道路網（roads.js）：{ segments, byZone }，總覽畫路用
     settlementKind: settlePlan, // (zx, zy) → 排好要放的聚落 'village' | 'town' | null（不用生出那一區；極少數放不下的區實際沒有）
     herdsOf: (zx, zy) => (zx < 0 || zy < 0 || zx >= zonesX || zy >= zonesY ? [] : zone(zx, zy).herds),

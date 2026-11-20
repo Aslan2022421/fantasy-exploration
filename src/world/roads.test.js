@@ -39,6 +39,35 @@ test('路網：有大道也有小路；起點村莊有路從出入口通出去�
   expect(far).toBeGreaterThan(40);
 }, 60000);
 
+test('路都接得上：起點周圍 5×5 區的聚落，每個出入口外面接著路；圖樣外沒有斷頭的路', () => {
+  const Z = world.zoneSize;
+  const hz = [Math.floor(home.x0 / Z), Math.floor(home.y0 / Z)];
+  const inPattern = (x, y) => {
+    const zx = Math.floor(x / Z);
+    const zy = Math.floor(y / Z);
+    for (const p of [world.settleOf(zx, zy), world.nestOf(zx, zy)])
+      if (p && x >= p.x0 && y >= p.y0 && x < p.x0 + p.w && y < p.y0 + p.h) return true;
+    return false;
+  };
+  let gates = 0;
+  for (let zy = hz[1] - 2; zy <= hz[1] + 2; zy++)
+    for (let zx = hz[0] - 2; zx <= hz[0] + 2; zx++) {
+      const s = world.settleOf(zx, zy);
+      for (const g of s?.layout.gates ?? []) {
+        gates++;
+        expect(isRoad(s.x0 + g.out.i, s.y0 + g.out.j)).toBe(true);
+      }
+    }
+  expect(gates).toBeGreaterThan(0);
+  for (let y = (hz[1] - 2) * Z + 1; y < (hz[1] + 3) * Z - 1; y++)
+    for (let x = (hz[0] - 2) * Z + 1; x < (hz[0] + 3) * Z - 1; x++) {
+      if (!isRoad(x, y) || inPattern(x, y)) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && isRoad(x + dx, y + dy)) n++;
+      expect(n, `${x},${y}`).toBeGreaterThan(1);
+    }
+}, 120000);
+
 test('橋只在路過河的地方：每座橋旁邊都接著路或橋', () => {
   let bridges = 0;
   for (let y = home.y0 - 150; y < home.y0 + 150; y++)

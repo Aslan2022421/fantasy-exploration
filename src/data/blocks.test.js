@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildBlock, ENV_VARIANTS, envExtras } from './blocks.js';
 import { DATA } from './load.js';
-import { BlockSchema } from './schemas.js';
+import { BlockSchema } from './species-schema.js';
 
 const base = {
   organization: 'group',

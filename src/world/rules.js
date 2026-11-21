@@ -7,7 +7,6 @@ export const attrMod = (v) => Math.floor((v - 10) / 2);
 export const d12 = (rng) => rng.getUniformInt(1, 12);
 
 // 時間：1 刻＝0.25 秒，1 回合（6 秒）＝24 刻
-export const TICKS_PER_ROUND = 24;
 export const TICKS_PER_HOUR = 4 * 60 * 60;
 export const TICKS_PER_DAY = 24 * TICKS_PER_HOUR;
 const START_TICKS = 8 * TICKS_PER_HOUR; // 開局是第 1 天早上 8 點

@@ -88,10 +88,6 @@ export function createChronicle(log, zoneSize) {
       update();
       return events;
     },
-    event(id) {
-      update();
-      return byId.get(id) ?? null;
-    },
     get hero() {
       update();
       return hero;

@@ -22,7 +22,7 @@ import { talkLines } from '../world/talk.js';
 import { createActions } from './actions.js';
 import { runCreation } from './creation.js';
 import { createGameWindows } from './game-windows.js';
-import { createKeyboard } from './input.js';
+import { bindKeys } from './keys.js';
 import { showLoading } from './loading.js';
 import { bindMapMouse, drawMapLabels } from './mouse.js';
 import { newSeed } from './seed.js';
@@ -175,53 +175,7 @@ function describeCell(cell) {
   return describePlace(world, cell.x, cell.y);
 }
 
-const keyboard = createKeyboard((dx, dy) => {
-  if (windows.open) return;
-  actions.step(dx, dy);
-  render();
-});
-
-window.addEventListener('keydown', (e) => {
-  // 生物的回合還在播放：其他鍵先不接受（一兩秒內播完）；空白鍵、Esc 可以先把自動走停下，生物照樣把這一輪動完
-  if (actions.busy) {
-    e.preventDefault();
-    if ((e.code === 'Space' || e.code === 'Escape') && actions.walking.length) actions.stop();
-    return;
-  }
-  // Esc：自動走路中先停下；沒開視窗時打開選單
-  if (e.code === 'Escape' && !windows.open && actions.walking.length) {
-    e.preventDefault();
-    actions.stop();
-    render();
-    return;
-  }
-  if (e.code === 'Escape' && !windows.open) windows.resetMenu();
-  if (windows.key(e.code)) {
-    e.preventDefault();
-    actions.stop();
-    render();
-    return;
-  }
-  if (zoom.isKey(e)) {
-    e.preventDefault();
-    if (zoom.press(e)) resize();
-    return;
-  }
-  if (e.code === 'KeyQ' || e.code === 'Space' || e.code === 'KeyR') {
-    e.preventDefault();
-    // 空白鍵：走路中停下；選定了目標、畫出路線時出發
-    if (e.code === 'KeyQ') actions.actOnTarget();
-    else if (e.code === 'KeyR') {
-      if (!e.repeat && !windows.open) actions.rest();
-    } else if (actions.walking.length) actions.stop();
-    else if (!windows.open && !e.repeat) actions.startRoute();
-    render();
-    return;
-  }
-  if (keyboard.keydown(e.code, e.repeat)) e.preventDefault();
-});
-window.addEventListener('keyup', (e) => keyboard.keyup(e.code));
-window.addEventListener('blur', () => keyboard.clear());
+bindKeys({ windows, actions, zoom, resize, render });
 window.addEventListener(
   'wheel',
   (e) => {

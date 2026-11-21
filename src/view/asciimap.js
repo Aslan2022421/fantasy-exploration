@@ -176,5 +176,5 @@ export function createAsciiMap(world, data, tiles) {
     return { f, places, cell: (i, j) => ({ x: i * Z + Z / 2, y: j * Z + Z / 2 }) };
   }
 
-  return { drawRegion, drawWorld, highlight, tiles, GRID };
+  return { drawRegion, drawWorld, highlight, tiles };
 }

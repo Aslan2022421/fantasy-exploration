@@ -9,15 +9,14 @@ import { checkEvents, EventSchema } from './event-schema.js';
 import { checkRecipes, RecipeSchema } from './recipe-schema.js';
 import {
   BiomeSchema,
-  BlockSchema,
   MaterialSchema,
   NestSchema,
   ObjectSchema,
   SettlementSchema,
-  SpeciesSchema,
   TerrainSchema,
   WorldShapeSchema,
 } from './schemas.js';
+import { BlockSchema, SpeciesSchema } from './species-schema.js';
 
 // files：{ 檔名: 條目陣列 }。回傳 [條目⋯⋯]，順序照檔名再照檔內順序（編號就是這個順序）
 function merge(files, schema, kind, errors) {

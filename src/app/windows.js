@@ -1,10 +1,8 @@
-// 大視窗（H 紀錄、B 裝備與背包、C 角色、M 地圖、Esc 選單）：同一時間只開一個，按自己的鍵或 Esc 關掉；
-// 文字視窗用方向鍵、PageUp／PageDown、滾輪捲動。紀錄打開時捲到最新，其他從頭看。
+// 大視窗（H 紀錄與歷史、B 裝備與背包、C 角色、M 地圖、Esc 選單）：同一時間只開一個，按自己的鍵或 Esc 關掉。
 // 自己畫的視窗（custom）：content[name](ctx, screen, body) 畫，content[name + 'Key'](code) 接鍵、
-// content[name + 'Click'](x, y, double) 接滑鼠；選單的數字鍵執行選項（actions）。
-// 文字視窗也可以有 content[name + 'Key']（例如 H 用 Tab 換分頁，換了就重新捲到開頭或最新）、
-// content[name + 'Title']() 換標題、content[name + 'FromEnd']() 決定打開時捲到最新還是從頭看；
-// content[name + 'Open']() 在打開時呼叫，content[name + 'Scroll'](幾行) 接自己畫的視窗的滾輪
+// content[name + 'Click'](x, y, double) 接滑鼠、content[name + 'Scroll'](幾行) 接滾輪、
+// content[name + 'Title']() 換標題、content[name + 'Open']() 在打開時呼叫。
+// 文字視窗（Esc 選單）用方向鍵、PageUp／PageDown、滾輪捲動，數字鍵執行選項（actions）
 
 const WINDOWS = {
   KeyH: { name: 'history', title: '紀錄與歷史', custom: true },
@@ -28,7 +26,7 @@ export function createWindows(panels, content) {
 
   const show = (w) => {
     open = w;
-    scroll = (content[`${w.name}FromEnd`]?.() ?? w.fromEnd) ? Number.MAX_SAFE_INTEGER : 0;
+    scroll = 0;
     content[`${w.name}Open`]?.();
   };
 
@@ -46,7 +44,6 @@ export function createWindows(panels, content) {
       if (code === 'Escape' || WINDOWS[code] === open) open = null;
       else if (open.actions?.[code]) content[open.actions[code]]();
       else if (open.custom && content[`${open.name}Key`]?.(code)) return true;
-      else if (!open.custom && !open.small && content[`${open.name}Key`]?.(code)) show(open);
       else if (WINDOWS[code]) show(WINDOWS[code]);
       else if (SCROLL_KEYS[code]) this.scroll(SCROLL_KEYS[code]);
       return true;

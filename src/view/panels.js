@@ -23,14 +23,21 @@ function drawLine(ctx, font, line, x, y, scale) {
   font.drawText(ctx, line.text, x + line.indent, y, scale, line.color);
 }
 
+// 細框：框線用實心的 2 像素（畫布會縮放到視窗大小，1 像素的線縮小後會斷斷續續）
 function frame(ctx, rect, fill, border) {
+  const x = Math.round(rect.x);
+  const y = Math.round(rect.y);
+  const w = Math.round(rect.w);
+  const h = Math.round(rect.h);
   ctx.fillStyle = fill;
-  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-  if (border) {
-    ctx.strokeStyle = border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
-  }
+  ctx.fillRect(x, y, w, h);
+  if (!border) return;
+  const t = 2;
+  ctx.fillStyle = border;
+  ctx.fillRect(x, y, w, t);
+  ctx.fillRect(x, y + h - t, w, t);
+  ctx.fillRect(x, y, t, h);
+  ctx.fillRect(x + w - t, y, t, h);
 }
 
 // 奇幻感的外框：雙線框（兩圈細線），標題嵌在上框線中間，兩端各一個 ☼
@@ -39,7 +46,7 @@ function ornateFrame(ctx, font, rect, title, scale, pad) {
   ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   const gap = Math.max(2, Math.round(scale * 1.5));
   ctx.strokeStyle = COLORS.line2;
-  ctx.lineWidth = Math.max(1, Math.floor(scale / 2));
+  ctx.lineWidth = Math.max(2, Math.floor(scale / 2));
   for (const d of [0, gap]) ctx.strokeRect(rect.x + d + 0.5, rect.y + d + 0.5, rect.w - d * 2 - 1, rect.h - d * 2 - 1);
   if (!title) return;
   const label = `☼ ${title} ☼`;
@@ -58,8 +65,8 @@ function ornateRule(ctx, font, x, y, w, scale, pad) {
   const mx = x + Math.floor((w - mw) / 2);
   const ly = y + Math.floor(6 * scale);
   ctx.fillStyle = COLORS.line2;
-  ctx.fillRect(x, ly, mx - pad * 2 - x, Math.max(1, Math.floor(scale / 2)));
-  ctx.fillRect(mx + mw + pad * 2, ly, x + w - (mx + mw + pad * 2), Math.max(1, Math.floor(scale / 2)));
+  ctx.fillRect(x, ly, mx - pad * 2 - x, Math.max(2, Math.floor(scale / 2)));
+  ctx.fillRect(mx + mw + pad * 2, ly, x + w - (mx + mw + pad * 2), Math.max(2, Math.floor(scale / 2)));
   font.drawText(ctx, mark, mx, y, scale, COLORS.line2);
 }
 

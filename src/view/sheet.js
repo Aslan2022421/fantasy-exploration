@@ -146,15 +146,35 @@ export function drawSheet(ctx, s, panels, data, state, body) {
   });
   y += Math.ceil(data.skills.length / per) * (skH + s.pad * 2) + s.pad;
 
-  // 能力
-  const abilities = [
-    ...race.abilities.map((a) => `種族｜${a}`),
-    ...cls.abilities.map((a) => `職業｜${a}`),
-    ...(bg ? [`背景裝備｜${bg.gear.join('、')}`] : []),
+  // 能力：種族、職業、背景三張卡；資料寫成「名稱：說明」，名稱一行、說明換行排在下面
+  const split2 = (a) => {
+    const k = a.indexOf('：');
+    return k < 0 ? [a, ''] : [a.slice(0, k), a.slice(k + 1)];
+  };
+  const groups = [
+    ['種族能力', race.abilities.map(split2)],
+    ['職業能力', cls.abilities.map(split2)],
+    [
+      '背景',
+      bg
+        ? [
+            [bg.name, bg.feature],
+            ['背景裝備', bg.gear.join('、')],
+          ]
+        : [],
+    ],
   ];
-  for (const a of abilities) {
-    if (y + L > b.y + b.h) break;
-    y += panels.para(ctx, s, a, b.x, y, b.w, COLORS.dim);
-  }
+  const abRects = row(s, b.x, y, b.w, 3, b.y + b.h - y);
+  groups.forEach(([title, items], i) => {
+    const cc = card(ctx, s, panels, abRects[i], title);
+    let ay = cc.y;
+    for (const [name, desc] of items) {
+      if (ay + L > abRects[i].y + abRects[i].h - s.pad) break;
+      panels.text(ctx, s, name, cc.x, ay, COLORS.head);
+      ay += L;
+      if (desc) ay += panels.para(ctx, s, desc, cc.x, ay, cc.w, COLORS.text);
+      ay += s.pad * 2;
+    }
+  });
   return { plus };
 }

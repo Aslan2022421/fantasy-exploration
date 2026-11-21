@@ -40,7 +40,7 @@ export function split(ctx, s, body, share) {
   const gap = s.pad * 8;
   const lw = Math.floor(body.w * share);
   ctx.fillStyle = COLORS.line;
-  ctx.fillRect(body.x + lw + Math.floor(gap / 2), body.y, Math.max(1, s.scale), body.h);
+  ctx.fillRect(body.x + lw + Math.floor(gap / 2), body.y, Math.max(2, s.scale), body.h);
   return {
     left: { x: body.x, y: body.y, w: lw, h: body.h },
     right: { x: body.x + lw + gap, y: body.y, w: body.w - lw - gap, h: body.h },

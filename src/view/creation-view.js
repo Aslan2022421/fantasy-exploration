@@ -100,7 +100,7 @@ export function drawCreation(ctx, s, panels, data, m, steps) {
   const left = { x: body.x, y: top, w: leftW, h: bottom - top - s.pad * 2 };
   const right = { x: body.x + leftW + gapX, y: top, w: body.w - leftW - gapX, h: left.h };
   ctx.fillStyle = COLORS.line;
-  ctx.fillRect(body.x + leftW + Math.floor(gapX / 2), top, Math.max(1, s.scale), left.h);
+  ctx.fillRect(body.x + leftW + Math.floor(gapX / 2), top, Math.max(2, s.scale), left.h);
   const rows = drawRows(ctx, s, panels, m, left);
   drawDetail(ctx, s, panels, data, m, stepId, right);
   panels.text(ctx, s, stepId === 'points' ? HELP_POINTS : HELP, body.x, bottom, COLORS.dim);

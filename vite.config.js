@@ -23,5 +23,7 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.js', 'test/**/*.test.js', 'tools/**/*.test.js'],
     environment: 'node',
+    // 很多測試要生成世界（一區十幾到幾十毫秒、起點附近幾十區），平行跑時 5 秒不夠
+    testTimeout: 15000,
   },
 });

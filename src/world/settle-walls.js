@@ -1,6 +1,6 @@
 // 聚落圖樣裡從廣場走得到的格子（測試與村民走路用）：廣度優先，八方向
 
-import { walkable } from './settle-codes.js';
+import { FIELD, GROUND, KEEP, walkable } from './settle-codes.js';
 
 export function reachable(layout, from = layout.plaza) {
   const seen = new Set([`${from.i},${from.j}`]);
@@ -19,4 +19,15 @@ export function reachable(layout, from = layout.plaza) {
       }
   }
   return seen;
+}
+
+// 房子貼著蓋，可能把一小塊空地圍死：走不到的空地、田保留原本的地形（像後院）。回傳 layout
+export function keepPockets(layout) {
+  const seen = reachable(layout);
+  for (let j = 0; j < layout.h; j++)
+    for (let i = 0; i < layout.w; i++) {
+      const c = layout.grid[j][i];
+      if (walkable(c) && !seen.has(`${i},${j}`) && [GROUND, FIELD, 'crops'].includes(c)) layout.grid[j][i] = KEEP;
+    }
+  return layout;
 }

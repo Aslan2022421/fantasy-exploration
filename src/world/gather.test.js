@@ -44,9 +44,14 @@ function nearest(game, id, test = () => true) {
   return null;
 }
 
+// 走到 src 旁邊：每走一步重算路線（村民會走動，可能擋在路上）
 function walkNextTo(game, src) {
-  for (const step of findPathNextTo(game.world, game.state.player, src))
-    expect(game.move(stepDirection(game.state.player, step))).not.toBeNull();
+  for (let n = 0; n < 2000; n++) {
+    const path = findPathNextTo(game.world, game.state.player, src);
+    if (!path.length) return;
+    game.move(stepDirection(game.state.player, path[0]));
+  }
+  expect.unreachable('走不到來源旁邊');
 }
 
 describe('上限與組成', () => {

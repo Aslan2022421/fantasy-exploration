@@ -9,11 +9,11 @@
 // KEEP（牆外，保留原本的地形）、OUTROAD（出入口外的路）或物件的 id。只看種子＋錨點的雜湊與 opts
 
 import { BUILDINGS, PUBLIC } from './settle-buildings.js';
-import { BED, FIELD, GROUND, INDOOR, KEEP, OUTROAD, ROAD, WELL, walkable } from './settle-codes.js';
+import { BED, GROUND, INDOOR, KEEP, OUTROAD, ROAD, WELL, walkable } from './settle-codes.js';
 import { fieldsAndGroves } from './settle-fields.js';
 import { furnishRoom } from './settle-furnish.js';
 import { gateToward, makeRnd, SHAPE, STEPS4, streetPath, wallShape, widen } from './settle-shape.js';
-import { reachable } from './settle-walls.js';
+import { keepPockets, reachable } from './settle-walls.js';
 
 export * from './settle-codes.js';
 export { reachable };
@@ -26,7 +26,9 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
   const W = opts.w;
   const H = opts.h;
   const rnd = makeRnd(seed, x0, y0);
-  const shape = wallShape(W, H, rnd, opts.form, opts.form === 'terrain' ? opts.ok : null, tag);
+  // 村莊的牆不照人口縮（人口只決定蓋幾間），城鎮、城市照人口標籤
+  const village = def.id === 'village';
+  const shape = wallShape(W, H, rnd, opts.form, opts.form === 'terrain' ? opts.ok : null, village ? 4 : tag);
   if (!shape) return null;
   const { inner, ring, cx, cy } = shape;
   const at = (i, j) => j * W + i;
@@ -217,11 +219,11 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
       ? ['big', 'house2', 'house']
       : [0, 1, 2].map((k) => ['house2', 'house3', 'house'][(first + k) % 3]);
     if (!big) sizes.push('house');
-    const extra = big ? Math.max(2, Math.min(3, short - (left - 1))) : 0;
+    const extra = big ? Math.max(2, Math.min(4, short - (left - 1))) : 0;
     let h = null;
     for (const size of sizes) {
-      // 床位不夠時，民房多放一張床（雙人床位）
-      const more = size === 'big' ? extra : short > 0 ? 1 : 0;
+      // 床位不夠時，民房多放床：小屋多一張，中型多兩張
+      const more = size === 'big' ? extra : short > 0 ? (size === 'house' ? 1 : 2) : 0;
       h = place(BUILDINGS[size], 2000 + n * 37, false, more);
       if (h) break;
     }
@@ -234,7 +236,7 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
   for (let n = 0; bedsSoFar < need && n < 8; n++) {
     let h = null;
     for (const [size, more] of [
-      ['big', 3],
+      ['big', 4],
       ['house2', 1],
       ['house3', 1],
       ['house', 1],
@@ -288,12 +290,5 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
         const ok = STEPS4.every(([di, dj]) => [ROAD, WELL].includes(get(i + di, j + dj)));
         if (ok) set(i, j, 'stall');
       }
-  // 房子貼著蓋，可能把一小塊空地圍死：走不到的空地、田保留原本的地形（像後院）
-  const layout = { grid, w: W, h: H, plaza: { i: cx, j: cy + 1 }, gates, homes, form: opts.form };
-  const seen = reachable(layout);
-  for (let j = 0; j < H; j++)
-    for (let i = 0; i < W; i++)
-      if (walkable(grid[j][i]) && !seen.has(`${i},${j}`) && [GROUND, FIELD, 'crops'].includes(grid[j][i]))
-        grid[j][i] = KEEP;
-  return layout;
+  return keepPockets({ grid, w: W, h: H, plaza: { i: cx, j: cy + 1 }, gates, homes, form: opts.form });
 }

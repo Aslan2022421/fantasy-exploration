@@ -28,7 +28,9 @@ import { bindMapMouse, drawMapLabels } from './mouse.js';
 import { newSeed } from './seed.js';
 import { createZoom } from './zoom.js';
 
-const VERSION = '0.1.5';
+// 版本號後面接打包時的提交（vite.config.js 的 __BUILD__，例如 0.1.5·e2f8072），分得出是哪一次打包
+const BUILD = typeof __BUILD__ === 'undefined' ? 'dev' : __BUILD__;
+const VERSION = `0.1.5·${BUILD}`;
 const SAVE_KEY = 'world';
 const HELP = [
   '方向鍵／WASD 移動，同時按兩鍵斜走；數字鍵盤八方向。',

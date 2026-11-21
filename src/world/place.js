@@ -102,6 +102,9 @@ function nestText(world, at) {
   return `${def.name}。${sp.name}的據點，${empty ? '已經沒有怪物了' : world.nestTag(at.nest).name}。`;
 }
 
+// 世界地圖選中的地方（{ settle } 或 { nest }）：跟右鍵查看同一套句子
+export const placeSummary = (world, p) => (p.settle ? settleText(world, p) : nestText(world, p));
+
 // 狀態列：「區 1,1 溫帶森林」（世界層那一區的生態，不是腳下那一格的）
 export function regionLabel(world, data, x, y) {
   const r = world.regionAt(x, y);

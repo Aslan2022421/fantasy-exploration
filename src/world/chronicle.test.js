@@ -72,13 +72,14 @@ test('會傳的事件每一句範本都填得滿（沒有留下 {名字}）', ()
 test('H 的世界歷史寫「一位種族職業」、生涯寫「你」，統計數得出清光幾處', () => {
   const ch = createChronicle(logWith([clear(100)]), Z);
   const hist = worldHistory(ch).map((r) => r.text);
-  expect(hist[0]).toBe(
-    `一位${ch.hero}清光了${fort.name}外面那群${DATA.species[DATA.speciesIndex.get(fort.species)].name}。`,
+  expect(hist[0]).toBe('第 1 天'); // 照天分段
+  expect(hist[1]).toBe(
+    `● 一位${ch.hero}清光了${fort.name}外面那群${DATA.species[DATA.speciesIndex.get(fort.species)].name}。`,
   );
-  const life = lifePage(ch, { time: 200 }).map((r) => r.text);
-  expect(life.some((t) => t.startsWith('你清光了'))).toBe(true);
-  expect(life.some((t) => t.includes('清光 1 處據點'))).toBe(true);
-  expect(bestiary(ch, null, DATA).map((r) => r.text)).toEqual(['還沒有見過任何生物。']);
+  const life = lifePage(ch, { time: 200 });
+  expect(life.rows.some((r) => r.text.startsWith('● 你清光了'))).toBe(true);
+  expect(life.tiles).toContainEqual(['清光據點', 1]);
+  expect(bestiary(ch, null, DATA)).toEqual([]);
 });
 
 test('走過的區加周圍一圈算知道；說話時聽到的傳聞記在紀錄裡，地圖照那筆標出地方', () => {
@@ -90,5 +91,5 @@ test('走過的區加周圍一圈算知道；說話時聽到的傳聞記在紀�
   const k = createChronicle(log, Z).known();
   expect(k.zones.has('0,0') && k.zones.has('1,0') && k.zones.has('2,1')).toBe(true);
   expect(k.zones.has('3,0')).toBe(false);
-  expect(k.places).toEqual([{ zx: 5, zy: 0 }]);
+  expect(k.places).toMatchObject([{ zx: 5, zy: 0, name: fort.name }]);
 });

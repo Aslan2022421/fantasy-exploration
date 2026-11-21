@@ -3,10 +3,11 @@
 // 自己畫的視窗（custom）：content[name](ctx, screen, body) 畫，content[name + 'Key'](code) 接鍵、
 // content[name + 'Click'](x, y, double) 接滑鼠；選單的數字鍵執行選項（actions）。
 // 文字視窗也可以有 content[name + 'Key']（例如 H 用 Tab 換分頁，換了就重新捲到開頭或最新）、
-// content[name + 'Title']() 換標題、content[name + 'FromEnd']() 決定打開時捲到最新還是從頭看
+// content[name + 'Title']() 換標題、content[name + 'FromEnd']() 決定打開時捲到最新還是從頭看；
+// content[name + 'Open']() 在打開時呼叫，content[name + 'Scroll'](幾行) 接自己畫的視窗的滾輪
 
 const WINDOWS = {
-  KeyH: { name: 'history', title: '紀錄（H 或 Esc 關閉，滾輪或方向鍵捲動）', fromEnd: true },
+  KeyH: { name: 'history', title: '紀錄與歷史', custom: true },
   KeyB: { name: 'bag', title: '裝備與背包', custom: true },
   KeyC: { name: 'sheet', title: '角色', custom: true },
   KeyM: { name: 'map', title: '世界地圖（M 或 Esc 關閉）', custom: true },
@@ -28,6 +29,7 @@ export function createWindows(panels, content) {
   const show = (w) => {
     open = w;
     scroll = (content[`${w.name}FromEnd`]?.() ?? w.fromEnd) ? Number.MAX_SAFE_INTEGER : 0;
+    content[`${w.name}Open`]?.();
   };
 
   return {
@@ -60,8 +62,10 @@ export function createWindows(panels, content) {
     talk(talk) {
       open = { name: 'talk', title: `${talk.title}（Esc 關閉）`, small: true, lines: talk.lines };
     },
+    // 滾輪：自己畫的視窗交給 content[name + 'Scroll']
     scroll(delta) {
-      scroll = Math.max(0, Math.min(maxScroll, scroll + delta));
+      if (open?.custom) content[`${open.name}Scroll`]?.(delta);
+      else scroll = Math.max(0, Math.min(maxScroll, scroll + delta));
     },
     draw(ctx, screen) {
       if (!open) return;

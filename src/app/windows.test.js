@@ -24,28 +24,28 @@ describe('大視窗', () => {
 });
 
 describe('H 的分頁', () => {
-  test('文字視窗的 Tab 交給內容換頁、標題跟著換；換頁後照那一頁決定捲到最新還是從頭', () => {
-    let tab = 0;
-    let scrollSeen = null;
+  test('H 自己畫：打開時通知內容、Tab 交給內容換頁、標題照內容、滾輪交給內容', () => {
+    const seen = { open: 0, keys: [], scroll: 0, title: null };
     const panels = {
-      window: (_c, _s, title, _e, scroll) => {
-        scrollSeen = { title, scroll };
-        return 100;
+      windowBox: (_c, _s, title) => {
+        seen.title = title;
+        return {};
       },
     };
     const w = createWindows(panels, {
-      history: () => [],
-      historyKey: (code) => code === 'Tab' && ++tab > 0,
-      historyTitle: () => `頁 ${tab}`,
-      historyFromEnd: () => tab === 0,
+      history: () => {},
+      historyOpen: () => seen.open++,
+      historyKey: (code) => seen.keys.push(code) > 0,
+      historyTitle: () => '紀錄與歷史',
+      historyScroll: (d) => {
+        seen.scroll += d;
+      },
     });
     w.key('KeyH');
-    w.draw(null, {});
-    expect(scrollSeen.title).toBe('頁 0');
-    expect(scrollSeen.scroll).toBeGreaterThanOrEqual(100); // 捲到最新（交給 panels 夾在最底）
     w.key('Tab');
+    w.scroll(3);
     w.draw(null, {});
-    expect(scrollSeen).toEqual({ title: '頁 1', scroll: 0 });
+    expect(seen).toEqual({ open: 1, keys: ['Tab'], scroll: 3, title: '紀錄與歷史' });
     expect(w.open).toBe('history');
   });
 });

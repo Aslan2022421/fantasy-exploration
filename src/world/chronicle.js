@@ -117,7 +117,7 @@ export function createChronicle(log, zoneSize) {
       const places = [...heard]
         .map((id) => byId.get(id))
         .filter((e) => e && (e.facts.place || e.facts.settle))
-        .map((e) => e.zone);
+        .map((e) => ({ ...e.zone, name: e.facts.place ?? e.facts.settle, heard: e.def.history }));
       return { zones, places, version: `${visited.size}:${heard.size}` };
     },
   };

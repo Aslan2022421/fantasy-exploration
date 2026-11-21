@@ -124,8 +124,21 @@ export function createPanels(font) {
 
     // 大視窗（H 紀錄、B 背包、Esc 選單）：內容從上往下排；scroll 是往下捲了幾行。回傳最多能捲幾行
     window(ctx, s, title, entries, scroll) {
+      return this.lines(ctx, s, this.windowBox(ctx, s, title), entries, scroll);
+    },
+
+    // 一段會換行的字，回傳用掉的高度（資訊欄用）
+    para(ctx, s, text, x, y, w, color = COLORS.text) {
+      const rows = wrap(text, w, (ch) => font.measure(ch, s.textScale));
+      rows.forEach((r, i) => {
+        font.drawText(ctx, r, x, y + i * s.lineHeight, s.textScale, color);
+      });
+      return rows.length * s.lineHeight;
+    },
+
+    // 在 body 裡從上往下排 entries（會換行）；scroll 是往下捲了幾行。回傳最多能捲幾行
+    lines(ctx, s, body, entries, scroll) {
       const { textScale, lineHeight } = s;
-      const body = this.windowBox(ctx, s, title);
       const lines = visualLines(font, entries, body.w, textScale);
       const visible = Math.max(1, Math.floor(body.h / lineHeight));
       const maxScroll = Math.max(0, lines.length - visible);

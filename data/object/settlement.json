@@ -36,6 +36,66 @@
     "join": true
   },
   {
+    "id": "house-timber",
+    "name": "木屋",
+    "glyph": "═",
+    "color": "#9c7450",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "house-plaster",
+    "name": "灰泥屋",
+    "glyph": "═",
+    "color": "#d6c8a8",
+    "passable": false,
+    "height": 3,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "house-stone",
+    "name": "石屋",
+    "glyph": "═",
+    "color": "#a4a49a",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "barn",
+    "name": "穀倉",
+    "glyph": "═",
+    "color": "#a35a3c",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
+    "id": "smithy",
+    "name": "鐵匠舖",
+    "glyph": "═",
+    "color": "#7e766e",
+    "passable": false,
+    "height": 4,
+    "trunk": false,
+    "sizes": [1],
+    "tile": null,
+    "join": true
+  },
+  {
     "id": "temple",
     "name": "神殿",
     "glyph": "═",

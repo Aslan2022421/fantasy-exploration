@@ -8,7 +8,8 @@
 // 每格是一個代碼：GROUND（聚落裡的空地）、ROAD（街道、巷子、廣場）、INDOOR（室內地板）、FIELD（田裡的泥土）、
 // KEEP（牆外，保留原本的地形）、OUTROAD（出入口外的路）或物件的 id。只看種子＋錨點的雜湊與 opts
 
-import { BED, GROUND, INDOOR, KEEP, OUTROAD, ROAD, WELL, walkable } from './settle-codes.js';
+import { BUILDINGS, PUBLIC } from './settle-buildings.js';
+import { BED, FIELD, GROUND, INDOOR, KEEP, OUTROAD, ROAD, WELL, walkable } from './settle-codes.js';
 import { fieldsAndGroves } from './settle-fields.js';
 import { furnishRoom } from './settle-furnish.js';
 import { gateToward, makeRnd, SHAPE, STEPS4, streetPath, wallShape, widen } from './settle-shape.js';
@@ -17,37 +18,6 @@ import { reachable } from './settle-walls.js';
 export * from './settle-codes.js';
 export { reachable };
 
-// 建築：牆的物件、室內寬高、門數、家具；spot 是住戶站的格子（貼著門內那一格）；home 是有人住
-const BUILDINGS = {
-  house: { wall: 'house', w: 3, h: 2, doors: 1, spot: true, home: true, items: ['bed', 'cabinet', 'chair'] },
-  big: { wall: 'house', w: 4, h: 3, doors: 1, home: true, items: ['table', 'cabinet', 'chair', 'chair'] },
-  hall: { wall: 'hall', w: 7, h: 4, doors: 1, items: ['table', 'table', 'chair', 'chair', 'chair', 'cabinet'] },
-  temple: { wall: 'temple', w: 5, h: 4, doors: 1, items: ['altar', 'chair', 'chair', 'chair', 'chair'] },
-  barracks: { wall: 'barracks', w: 7, h: 3, doors: 1, items: ['bed', 'bed', 'bed', 'bed', 'bed', 'cabinet'] },
-  inn: { wall: 'inn', w: 6, h: 4, doors: 1, items: ['bed', 'bed', 'bed', 'table', 'chair', 'chair', 'barrel'] },
-  smithy: { wall: 'house', w: 4, h: 3, doors: 1, items: ['anvil', 'barrel', 'crate'] }, // 鐵匠舖：金屬的製造、修理、熔煉要貼著鐵砧
-  castle: {
-    wall: 'castle',
-    w: 11,
-    h: 6,
-    doors: 1,
-    items: ['chair', 'altar', 'table', 'table', 'chair', 'chair', 'chair', 'chair', 'cabinet', 'cabinet'],
-  },
-  tavern: {
-    wall: 'tavern',
-    w: 6,
-    h: 4,
-    doors: 1,
-    items: ['table', 'table', 'chair', 'chair', 'chair', 'chair', 'barrel'],
-  },
-};
-// 公共建築：城鎮全有；村莊人口標籤到「穩定」以上才有旅店
-// 城市：北邊的城堡、兩座神殿與兵營、旅店酒館各兩間（交辦 4：兩座城鎮併起來的份量）；城鎮、城市各一間鐵匠舖（階段 9）
-const PUBLIC = {
-  city: ['castle', 'hall', 'temple', 'temple', 'barracks', 'barracks', 'smithy', 'inn', 'inn', 'tavern', 'tavern'],
-  town: ['hall', 'temple', 'barracks', 'smithy', 'inn', 'tavern'],
-  village: ['inn'],
-};
 const SIDES = { east: 0, south: Math.PI / 2, west: Math.PI, north: -Math.PI / 2 };
 
 // def：聚落資料；tag：開局的人口標籤（0～4）；opts：{ w, h（圖樣大小，長形可能轉成直的）, form 外形, ok（能蓋的格子，
@@ -142,17 +112,21 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
       if (ring[at(i, j)] && get(i, j) === def.wall) set(i, j, tower);
     }
 
-  // 建築：放得下＝外框都是空地、外圍一圈不是別的建築或牆
+  // 建築：放得下＝外框都是空地、外圍一圈不是聚落的牆；可以跟別的建築貼著（沿街排成一排），
+  // 但四邊的正中間至少有一邊外面是空地或路（門開得出去）
   const taken = new Uint8Array(W * H);
+  const free = (i, j) => (get(i, j) === GROUND || get(i, j) === ROAD) && !taken[at(i, j)];
   const fits = (hx, hy, w, h) => {
     for (let j = hy - 1; j <= hy + h; j++)
       for (let i = hx - 1; i <= hx + w; i++) {
         const inside = i >= hx && i < hx + w && j >= hy && j < hy + h;
         const c = get(i, j);
-        if (inside && c !== GROUND) return false;
-        if (!inside && (c === null || taken[at(i, j)] || c === def.wall || c === tower || c === KEEP)) return false;
+        if (inside && (c !== GROUND || taken[at(i, j)] || doorsOut.some((d) => d.i === i && d.j === j))) return false;
+        if (!inside && (c === null || c === def.wall || c === tower || c === KEEP)) return false;
       }
-    return true;
+    const mx = hx + (w >> 1);
+    const my = hy + ((h - 1) >> 1);
+    return free(mx, hy - 1) || free(mx, hy + h) || free(hx - 1, my) || free(hx + w, my);
   };
   const roadGap = (hx, hy, w, h) => {
     let best = 99;
@@ -180,10 +154,13 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
   const build = (hx, hy, b, beds, salt) => {
     const w = b.w + 2;
     const h = b.h + 2;
+    // 民房的材質：村莊多木屋，城鎮、城市多灰泥與石屋
+    const mats = kind === 'village' ? [0, 1, 1, 2] : [0, 2, 2, 3, 3];
+    const wall = b.walls ? b.walls[mats[Math.floor(rnd(salt + 7) * mats.length)]] : b.wall;
     for (let j = hy; j < hy + h; j++)
       for (let i = hx; i < hx + w; i++) {
         const edge = i === hx || j === hy || i === hx + w - 1 || j === hy + h - 1;
-        set(i, j, edge ? b.wall : INDOOR);
+        set(i, j, edge ? wall : INDOOR);
         taken[at(i, j)] = 1;
       }
     const mids = [
@@ -192,8 +169,8 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
       { i: hx, j: hy + ((h - 1) >> 1), oi: -1, oj: 0 },
       { i: hx + w - 1, j: hy + ((h - 1) >> 1), oi: 1, oj: 0 },
     ];
-    // 門開在離街道最近的那一邊
-    const toRoad = (m) => roadGap(m.i + m.oi, m.j + m.oj, 1, 1);
+    // 門開在離街道最近、外面沒被別的建築擋住的那一邊
+    const toRoad = (m) => (free(m.i + m.oi, m.j + m.oj) ? 0 : 1000) + roadGap(m.i + m.oi, m.j + m.oj, 1, 1);
     mids.sort((a, c) => toRoad(a) - toRoad(c));
     const m = mids[0];
     set(m.i, m.j, door);
@@ -215,7 +192,8 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
     return s ? build(s.hx, s.hy, b, beds, salt + 1) : null;
   };
 
-  const publics = kind !== 'village' ? PUBLIC[kind] : tag >= 2 ? PUBLIC.village : [];
+  // 村莊先蓋民房（住得下人最要緊），鐵匠舖、穀倉在民房之後有空間才蓋
+  const publics = kind !== 'village' ? PUBLIC[kind] : tag >= 2 ? ['inn'] : [];
   // 旅店、兵營有床的也住人（旅店老闆、士兵），床位算進去
   const homes = [];
   let bedsSoFar = 0;
@@ -233,24 +211,46 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
     const left = count - homes.length;
     const short = need - bedsSoFar;
     const big = short > left;
-    const b = BUILDINGS[big ? 'big' : 'house'];
+    // 民房照雜湊挑大小（5×4、6×3、4×3），床位不夠才蓋大房子；放不下就換下一種，連最小的都放不下才停
+    const first = Math.floor(rnd(2100 + n * 13) * 3);
+    const sizes = big
+      ? ['big', 'house2', 'house']
+      : [0, 1, 2].map((k) => ['house2', 'house3', 'house'][(first + k) % 3]);
+    if (!big) sizes.push('house');
     const extra = big ? Math.max(2, Math.min(3, short - (left - 1))) : 0;
-    const h = place(b, 2000 + n * 37, false, extra);
-    if (!h) {
-      if (!big) break;
-      continue;
+    let h = null;
+    for (const size of sizes) {
+      // 床位不夠時，民房多放一張床（雙人床位）
+      const more = size === 'big' ? extra : short > 0 ? 1 : 0;
+      h = place(BUILDINGS[size], 2000 + n * 37, false, more);
+      if (h) break;
     }
+    if (!h) break;
     if (!h.beds.length) continue;
     bedsSoFar += h.beds.length;
     homes.push({ beds: h.beds, spot: h.spot, inside: h.cells.filter((c) => walkable(grid[c.j][c.i])) });
   }
-  // 民房蓋不滿、床位還不夠：再找地方蓋大房子（3 張床）補到夠
-  for (let n = 0; bedsSoFar < need && n < 6; n++) {
-    const h = place(BUILDINGS.big, 2600 + n * 41, false, 3);
+  // 民房蓋不滿、床位還不夠：再找地方蓋大房子（3 張床）補到夠，放不下就退到中型（2 張）、小屋
+  for (let n = 0; bedsSoFar < need && n < 8; n++) {
+    let h = null;
+    for (const [size, more] of [
+      ['big', 3],
+      ['house2', 1],
+      ['house3', 1],
+      ['house', 1],
+    ]) {
+      h = place(BUILDINGS[size], 2600 + n * 41, false, more);
+      if (h) break;
+    }
     if (!h) break;
     bedsSoFar += h.beds.length;
     homes.push({ beds: h.beds, spot: h.spot, inside: h.cells.filter((c) => walkable(grid[c.j][c.i])) });
   }
+
+  if (kind === 'village')
+    PUBLIC.village.forEach((b, k) => {
+      place(BUILDINGS[b], 3000 + k * 53, true);
+    });
 
   // 巷子：門外不是街，就鋪一條接到最近的街（四方向，只走空地）
   for (const d of doorsOut) lane(d);
@@ -288,5 +288,12 @@ export function buildSettlement(def, seed, x0, y0, tag, opts) {
         const ok = STEPS4.every(([di, dj]) => [ROAD, WELL].includes(get(i + di, j + dj)));
         if (ok) set(i, j, 'stall');
       }
-  return { grid, w: W, h: H, plaza: { i: cx, j: cy + 1 }, gates, homes, form: opts.form };
+  // 房子貼著蓋，可能把一小塊空地圍死：走不到的空地、田保留原本的地形（像後院）
+  const layout = { grid, w: W, h: H, plaza: { i: cx, j: cy + 1 }, gates, homes, form: opts.form };
+  const seen = reachable(layout);
+  for (let j = 0; j < H; j++)
+    for (let i = 0; i < W; i++)
+      if (walkable(grid[j][i]) && !seen.has(`${i},${j}`) && [GROUND, FIELD, 'crops'].includes(grid[j][i]))
+        grid[j][i] = KEEP;
+  return layout;
 }

@@ -7,6 +7,7 @@
 // 墓地（29×19）與陰暗的沼澤（39×25）在 nest-sites.js，照種子＋錨點的雜湊排，不看生成順序
 
 import { CHEST, FLOOR, graveyard, KEEP, SITE_SIZE, swamp } from './nest-sites.js';
+import { hash01 } from './noise.js';
 
 export { CAVE, CHEST, FLOOR, KEEP, PATH, POOL, REEDS } from './nest-sites.js';
 
@@ -105,9 +106,23 @@ const FORT = fortRows().map((r) => [...r].map((ch) => FORT_CODE[ch]));
 
 export const LAYOUT_SIZE = { fort: { w: 39, h: 25 }, ...SITE_SIZE };
 
-// 一處據點的圖樣：[列][行] 的代碼；(x0, y0) 是左上角的世界座標（墓地、沼澤照它的雜湊排）
+// 廢棄的堡壘每處不一樣：照雜湊左右、上下翻轉，再多塌幾段牆（只變成走得過去的崩牆、碎片，不會把路堵死）
+function fortVariant(seed, x0, y0) {
+  let rows = FORT.map((r) => [...r]);
+  if (hash01(seed, x0, y0, 9601) < 0.5) rows = rows.map((r) => r.reverse());
+  if (hash01(seed, x0, y0, 9602) < 0.5) rows.reverse();
+  return rows.map((r, j) =>
+    r.map((c, i) => {
+      if (c !== 'ruin-wall') return c;
+      const h = hash01(seed, x0 + i, y0 + j, 9603);
+      return h < 0.08 ? 'crumbled-wall' : h < 0.13 ? 'rubble' : c;
+    }),
+  );
+}
+
+// 一處據點的圖樣：[列][行] 的代碼；(x0, y0) 是左上角的世界座標（都照它的雜湊排）
 export function buildLayout(kind, seed, x0, y0) {
-  if (kind === 'fort') return FORT;
+  if (kind === 'fort') return fortVariant(seed, x0, y0);
   if (kind === 'graveyard') return graveyard(seed, x0, y0);
   return swamp(seed, x0, y0);
 }

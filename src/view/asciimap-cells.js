@@ -118,7 +118,23 @@ function settleRank(code, def) {
   if (code === 'keep') return null;
   if (code === def.wall || code.endsWith('-tower')) return { p: 5, ch: '#', fg: INK.wall };
   if (code === 'rampart-rock') return { p: 5, ch: '▓', fg: INK.mountain }; // 堡壘兩翼的山壁
-  if (['house', 'hall', 'temple', 'barracks', 'inn', 'tavern', 'market', 'castle'].includes(code))
+  if (
+    [
+      'house',
+      'house-timber',
+      'house-plaster',
+      'house-stone',
+      'barn',
+      'smithy',
+      'hall',
+      'temple',
+      'barracks',
+      'inn',
+      'tavern',
+      'market',
+      'castle',
+    ].includes(code)
+  )
     return { p: 4, ch: '⌂', fg: INK.building };
   if (code === 'crops') return { p: 3, ch: '√', fg: INK.crops };
   if (['road', 'outroad', 'town-well', 'stall', 'fort-gate'].includes(code)) return { p: 2, ch: '·', fg: INK.road };

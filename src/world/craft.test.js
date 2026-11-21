@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { DATA } from '../data/load.js';
 import { planBreak, planCraft, planRepair, planSmelt, planUse, rawOf } from './craft.js';
 import { apply } from './game-state.js';
-import { equip, heroStats, presetHero } from './hero.js';
+import { equip, heroStats, presetHero, unequip } from './hero.js';
 import { addWear, brokenSlots, DURABILITY } from './wear.js';
 
 const hero = presetHero(DATA, { race: 'human', cls: 'warrior' }, RNG.clone().setSeed(1));
@@ -71,6 +71,13 @@ test('耐久：剩一半傷害 −1、四分之一 −2；換裝時耐久跟著�
   const next = equip(DATA, sheet, 'dagger');
   expect(next.wear.weapon).toBe(30);
   expect(next.itemWear).toEqual([120]);
+  // 脫下：放回背包、耐久跟著走，主手變徒手
+  const off = unequip(next, 'weapon');
+  expect(off.gear.weapon).toBe(null);
+  expect(off.items.at(-1)).toBe('dagger');
+  expect(off.itemWear.at(-1)).toBe(30);
+  expect(heroStats(DATA, off).weapon.name).toBe('徒手');
+  expect(unequip(off, 'weapon').refused).toBe('empty');
 });
 
 test('修理花主料的兩成五、修回滿；熔煉拿回一半金屬錠；繃帶回生命、用掉的亞麻讓出上限', () => {

@@ -15,7 +15,14 @@ import { nearAnvil, planBreak, planCraft, planRepair, planSmelt, planUse } from 
 import { createFight } from './fight.js';
 import { apply, emptyState, StateSchema } from './game-state.js';
 import { planGather, sourceAt, touches } from './gather.js';
-import { buildSheet, equip as equipSheet, heroStats, presetHero, raise as raiseSheet } from './hero.js';
+import {
+  buildSheet,
+  equip as equipSheet,
+  heroStats,
+  presetHero,
+  raise as raiseSheet,
+  unequip as unequipSheet,
+} from './hero.js';
 import { tryMove } from './move.js';
 import { createNestWatch } from './nest-watch.js';
 import { overlayWorld } from './overlays.js';
@@ -76,6 +83,15 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
   // 製造、修理、熔煉、用掉補給品（craft.js）：做不到回傳 { refused }，做了記一筆
   const craftAct = (verb, plan, cause) => (plan.refused ? plan : after(record({ verb, data: plan, cause })));
   const anvil = () => nearAnvil(world, DATA, state.player);
+  // 換上或脫下：紀錄寫好換完的裝備欄、背包與耐久，花一個動作的刻數（戰鬥中生物接著動）
+  function swapGear(next, what, cause) {
+    if (next.refused) return next;
+    const { gear, items, wear, itemWear } = next;
+    const duration = heroStats(DATA, state.hero).ticks;
+    const rec = record({ verb: 'equip', data: { ...what, gear, items, wear, itemWear, duration }, cause });
+    fight.afterMove(rec.id);
+    return after(rec);
+  }
 
   // 每一筆的骰子用「主種子＋這筆紀錄的編號」開，讀檔從檢查點接著做也一樣
   const fight = createFight({
@@ -148,25 +164,10 @@ function makeGame(seed, rng, baseWorld, log, initialState, checkpoint) {
     attack: (id, cause = null) => after(fight.attack(id, cause)),
     rest: (cause = null) => after(fight.rest(cause)),
     // 換上背包裡的一件裝備，花一個動作的刻數（戰鬥中生物接著動）；不能換回傳 { refused }
-    equip(item, cause = null) {
-      const next = equipSheet(DATA, state.hero, item);
-      if (next.refused) return next;
-      const rec = record({
-        verb: 'equip',
-        target: null,
-        data: {
-          item,
-          gear: next.gear,
-          items: next.items,
-          wear: next.wear,
-          itemWear: next.itemWear,
-          duration: heroStats(DATA, state.hero).ticks,
-        },
-        cause,
-      });
-      fight.afterMove(rec.id);
-      return after(rec);
-    },
+    equip: (item, cause = null) => swapGear(equipSheet(DATA, state.hero, item), { item }, cause),
+    // 脫下身上那一格（weapon、shield、armor）放回背包，一樣花一個動作；記成 equip（data 帶 off：脫下的那件）
+    unequip: (slot, cause = null) =>
+      swapGear(unequipSheet(state.hero, slot), { item: null, off: state.hero.gear[slot] }, cause),
     // 用掉一點升級的屬性點（不花時間）
     raise(attr) {
       const next = raiseSheet(state.hero, attr);

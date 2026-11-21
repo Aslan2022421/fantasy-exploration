@@ -1,24 +1,55 @@
-// B 裝備頁：左邊三個裝備格（主手、副手、身上）與選中那一件的說明、換上之後的差別；右邊是背包清單
-// （武器、防具可以選來換上；材料只列出來）。回傳點擊範圍 { rows: [{ rect, id }] }
+// B 的「裝備」頁（照舊版第三十七版的背包）：上方分類篩選；左邊三個裝備格（點了選中，可以脫下）與選中那一件的說明、
+// 換上或脫下之後的差別；右邊是背包依分類分組的清單（身上、武器、防具、礦物、木材⋯⋯）。
+// gearChoices 排出能選的東西，drawGear 畫出來，回傳點擊範圍 { filters, rows, slots }
 
-import { equip, heroStats } from '../world/hero.js';
+import { equip, heroStats, unequip } from '../world/hero.js';
 import { wearText } from '../world/wear.js';
-import { bagEntries } from './bag.js';
 import { COLORS } from './colors.js';
 import { armorOf, itemText, signed, weaponOf } from './names.js';
+import { drawButtons, drawHelp, drawList, split } from './ui-kit.js';
 
-const HELP = 'Tab 換頁　↑↓ 或滑鼠選　Enter 或點兩下 換上（花一個動作）　B 或 Esc 關閉';
+export const GEAR_FILTERS = ['全部', '身上', '武器', '防具', '材料', '補給品'];
+const HELP = 'Tab 換頁　← → 換分類　↑↓ 或滑鼠選　Enter 或點兩下 換上、脫下、使用（花一個動作）　B 或 Esc 關閉';
+const SLOT_NAMES = { weapon: '主手', shield: '副手', armor: '身上' };
+const MATERIAL_GROUPS = [
+  ['mineral', '礦物', '塊'],
+  ['wood', '木材', '段'],
+  ['plant', '植物', '株'],
+  ['animal', '動物部位', '份'],
+  ['metal', '金屬錠', '個'],
+  ['supply', '補給品', '份'],
+];
 
-// 背包裡能換上的裝備，武器在前、防具在後
-export function gearItems(data, hero) {
-  const weapons = hero.items.filter((id) => weaponOf(data, id));
-  const armors = hero.items.filter((id) => !weaponOf(data, id) && armorOf(data, id));
-  return [...weapons, ...armors];
+// 能選的東西：[{ kind, group 分組標題, filter 屬於哪個篩選, ... }]；kind 是 unequip、equip、use（補給品）、none（材料只看）
+export function gearChoices(data, hero, bag) {
+  const out = [];
+  for (const slot of ['weapon', 'shield', 'armor']) {
+    const id = hero.gear[slot];
+    if (id && id !== 'no-armor') out.push({ kind: 'unequip', slot, id, group: '身上', filter: 1 });
+  }
+  hero.items.forEach((id, index) => {
+    if (weaponOf(data, id)) out.push({ kind: 'equip', id, index, group: '武器', filter: 2 });
+  });
+  hero.items.forEach((id, index) => {
+    if (!weaponOf(data, id) && armorOf(data, id)) out.push({ kind: 'equip', id, index, group: '防具', filter: 3 });
+  });
+  for (const [cat, title, unit] of MATERIAL_GROUPS)
+    for (const m of data.materials.filter((x) => x.category === cat && bag[x.id] > 0))
+      out.push({
+        kind: cat === 'supply' ? 'use' : 'none',
+        id: m.id,
+        name: m.name,
+        count: `${bag[m.id]} ${unit}`,
+        group: title,
+        filter: cat === 'supply' ? 5 : 4,
+      });
+  return out;
 }
+export const filteredGear = (list, filter) => (filter ? list.filter((c) => c.filter === filter) : list);
 
-// 換上 id 之後的差別：[「攻擊 1d12+2 → +3」⋯⋯]；不能換回傳原因
-export function compare(data, hero, id) {
-  const next = equip(data, hero, id);
+// 換上或脫下之後的差別：[「攻擊 1d12+2 → +3」⋯⋯]；不能換回傳原因
+export function compare(data, hero, choice) {
+  const next = choice.kind === 'unequip' ? unequip(hero, choice.slot) : equip(data, hero, choice.id);
   if (next.refused === 'twohand') return { refused: '拿著雙手武器，不能用盾牌。' };
   if (next.refused) return { refused: '這件不在背包裡。' };
   const a = heroStats(data, hero);
@@ -37,103 +68,113 @@ export function compare(data, hero, id) {
   };
 }
 
-function slot(ctx, s, panels, data, rect, label, id, note, wear = null) {
-  panels.box(ctx, rect);
+function slotBox(ctx, s, panels, data, rect, label, id, note, wear, on) {
+  panels.box(ctx, rect, on ? COLORS.panel2 : COLORS.bg, on ? COLORS.head : COLORS.line);
   const x = rect.x + s.pad * 2;
   panels.text(ctx, s, label, x, rect.y + s.pad, COLORS.dim);
-  if (!id) return panels.text(ctx, s, note ?? '（空）', x, rect.y + s.pad + s.lineHeight, COLORS.line2);
+  if (!id || id === 'no-armor')
+    return panels.text(ctx, s, note ?? '（空）', x, rect.y + s.pad + s.lineHeight, COLORS.line2);
   const it = itemText(data, id);
   panels.text(ctx, s, wear ? `${it.name}　${wear}` : it.name, x, rect.y + s.pad + s.lineHeight, COLORS.head);
   panels.text(ctx, s, note ?? it.text, x, rect.y + s.pad + s.lineHeight * 2, note ? COLORS.bad : COLORS.text);
 }
 
-// ui：{ cursor }（背包清單裡游標在第幾件）
+// 選中那一件：名稱、說明、耐久、換上或脫下之後的差別、能做什麼
+function detail(ctx, s, panels, data, state, cur, x, y, w) {
+  const hero = state.hero;
+  if (!cur) return panels.text(ctx, s, '這一類沒有東西。', x, y, COLORS.dim);
+  if (cur.kind === 'none' || cur.kind === 'use') {
+    panels.text(ctx, s, `${cur.name}　${cur.count}`, x, y, COLORS.head);
+    const hint = cur.kind === 'use' ? 'Enter 或點兩下使用（戰鬥外，回生命）。' : '材料：拿去 B 的「製作」頁用。';
+    return panels.para(ctx, s, hint, x, y + s.lineHeight * 1.5, w, COLORS.dim);
+  }
+  const it = itemText(data, cur.id);
+  const used = cur.kind === 'unequip' ? (hero.wear?.[cur.slot] ?? 0) : (hero.itemWear?.[cur.index] ?? 0);
+  const slot =
+    cur.kind === 'unequip'
+      ? cur.slot
+      : weaponOf(data, cur.id)
+        ? 'weapon'
+        : armorOf(data, cur.id)?.kind === 'shield'
+          ? 'shield'
+          : 'armor';
+  panels.text(ctx, s, it.name, x, y, COLORS.head);
+  let ly = y + s.lineHeight * 1.3;
+  ly += panels.para(ctx, s, it.text, x, ly, w);
+  const wt = wearText(slot, cur.id, used);
+  if (wt) ly += panels.para(ctx, s, wt, x, ly, w, COLORS.dim);
+  ly += s.lineHeight * 0.5;
+  const c = compare(data, hero, cur);
+  const verb = cur.kind === 'unequip' ? '脫下' : '換上';
+  const lines = c.refused ? [c.refused] : c.lines.length ? [`${verb}之後：`, ...c.lines] : [`${verb}之後數字不變。`];
+  lines.forEach((l, i) => {
+    ly += panels.para(ctx, s, l, x, ly, w, c.refused ? COLORS.bad : i ? COLORS.good : COLORS.dim);
+  });
+  panels.para(ctx, s, `Enter 或點兩下${verb}（花一個動作）。`, x, ly + s.lineHeight * 0.5, w, COLORS.dim);
+}
+
+// ui：{ cursor, filter }
 export function drawGear(ctx, s, panels, data, state, ui, body) {
   const hero = state.hero;
   const h = heroStats(data, hero);
-  const leftW = Math.floor(body.w * 0.42);
-  const gapX = s.pad * 8;
+  const b = drawHelp(ctx, s, panels, body, HELP);
+  const f = drawButtons(ctx, s, panels, b.x, b.y, GEAR_FILTERS, ui.filter, { strong: false });
+  const top = b.y + f.h + s.pad * 3;
+  const { left, right } = split(ctx, s, { x: b.x, y: top, w: b.w, h: b.y + b.h - top }, 0.42);
+  const list = filteredGear(gearChoices(data, hero, state.bag), ui.filter);
+  const cur = list[ui.cursor];
+
+  // 左：三個裝備格（點了選中那一件）
   const slotH = s.lineHeight * 3 + s.pad * 2;
-  let y = body.y;
-  const twoHanded = h.weapon.twoHanded && hero.gear.shield;
-  const worn = (k) => wearText(k, hero.gear[k], hero.wear?.[k] ?? 0);
-  const box = () => ({ x: body.x, y, w: leftW, h: slotH });
-  slot(ctx, s, panels, data, box(), '主手', hero.gear.weapon, hero.gear.weapon ? null : '徒手', worn('weapon'));
-  y += slotH + s.pad * 2;
-  const offNote = twoHanded ? '雙手武器，盾牌不能用' : null;
-  slot(ctx, s, panels, data, box(), '副手', hero.gear.shield, offNote, worn('shield'));
-  y += slotH + s.pad * 2;
-  slot(ctx, s, panels, data, box(), '身上', hero.gear.armor, null, worn('armor'));
-  y += slotH + s.pad * 3;
-  panels.rule(ctx, s, body.x, y, leftW);
-  y += s.lineHeight * 1.5;
+  const slots = [];
+  let y = left.y;
+  for (const slot of ['weapon', 'shield', 'armor']) {
+    const rect = { x: left.x, y, w: left.w, h: slotH };
+    const id = hero.gear[slot];
+    const note =
+      slot === 'weapon' && !id ? '徒手' : slot === 'shield' && h.weapon.twoHanded && id ? '雙手武器，盾牌不能用' : null;
+    const on = cur?.kind === 'unequip' && cur.slot === slot;
+    slotBox(ctx, s, panels, data, rect, SLOT_NAMES[slot], id, note, wearText(slot, id, hero.wear?.[slot] ?? 0), on);
+    slots.push({ rect, slot });
+    y += slotH + s.pad * 2;
+  }
+  y += s.pad;
+  panels.rule(ctx, s, left.x, y, left.w);
+  detail(ctx, s, panels, data, state, cur, left.x, y + s.lineHeight * 1.5, left.w);
 
-  // 選中那一件的說明與換上之後的差別
-  const items = gearItems(data, hero);
-  const cur = items[Math.min(ui.cursor, items.length - 1)];
-  if (cur) {
-    const it = itemText(data, cur);
-    panels.text(ctx, s, it.name, body.x, y, COLORS.head);
-    panels.text(ctx, s, it.text, body.x, y + s.lineHeight, COLORS.text);
-    const c = compare(data, hero, cur);
-    const lines = c.refused ? [c.refused] : c.lines.length ? ['換上之後：', ...c.lines] : ['換上之後數字不變。'];
-    lines.forEach((l, i) => {
-      panels.text(
-        ctx,
-        s,
-        l,
-        body.x,
-        y + s.lineHeight * (2.5 + i),
-        c.refused ? COLORS.bad : i ? COLORS.good : COLORS.dim,
-      );
-    });
-  } else panels.text(ctx, s, '背包裡沒有可以換上的裝備。', body.x, y, COLORS.dim);
-
-  // 右邊：背包清單
-  const rx = body.x + leftW + gapX;
-  const rw = body.w - leftW - gapX;
-  ctx.fillStyle = COLORS.line;
-  ctx.fillRect(body.x + leftW + Math.floor(gapX / 2), body.y, Math.max(1, s.scale), body.h - s.lineHeight * 2);
-  let ry = body.y;
+  // 右：依分類分組的清單
   const rows = [];
-  const heading = (t) => {
-    panels.text(ctx, s, t, rx, ry, COLORS.head);
-    ry += s.lineHeight * 1.2;
-  };
-  const rowH = Math.round(s.lineHeight * 1.3);
-  const listRow = (id, i) => {
-    const rect = { x: rx, y: ry, w: rw, h: rowH };
-    if (i === ui.cursor) panels.box(ctx, rect, COLORS.panel2, COLORS.line2);
-    const it = itemText(data, id);
-    panels.text(
-      ctx,
-      s,
-      `${it.name}　${it.text}`,
-      rx + s.pad * 2,
-      ry + Math.round((rowH - s.lineHeight) / 2),
-      COLORS.text,
-    );
-    rows.push({ rect, id, i });
-    ry += rowH;
-  };
-  const weapons = items.filter((id) => weaponOf(data, id));
-  const armors = items.filter((id) => !weaponOf(data, id));
-  if (weapons.length) heading('武器');
-  for (const id of weapons) listRow(id, items.indexOf(id));
-  if (armors.length) heading('防具');
-  for (const id of armors) listRow(id, items.indexOf(id));
-  if (!items.length) {
-    panels.text(ctx, s, '背包裡沒有裝備。', rx, ry, COLORS.dim);
-    ry += s.lineHeight * 1.2;
+  let group = null;
+  for (const c of list) {
+    if (c.group !== group) {
+      rows.push({ heading: c.group });
+      group = c.group;
+    }
+    if (c.kind === 'none' || c.kind === 'use') rows.push({ text: c.name, note: c.count, color: COLORS.text });
+    else {
+      const it = itemText(data, c.id);
+      const used = c.kind === 'unequip' ? (hero.wear?.[c.slot] ?? 0) : (hero.itemWear?.[c.index] ?? 0);
+      const slot =
+        c.kind === 'unequip'
+          ? c.slot
+          : weaponOf(data, c.id)
+            ? 'weapon'
+            : armorOf(data, c.id)?.kind === 'shield'
+              ? 'shield'
+              : 'armor';
+      rows.push({
+        text: it.name,
+        note: wearText(slot, c.id, used) ?? '',
+        mark: c.kind === 'unequip' ? '◘' : '•',
+        markColor: c.kind === 'unequip' ? COLORS.head : COLORS.good,
+      });
+    }
   }
-  ry += s.lineHeight * 0.5;
-  const materials = Object.values(state.bag).some((n) => n > 0) ? bagEntries(state.bag, data) : [];
-  if (!materials.length) panels.text(ctx, s, '材料：沒有', rx, ry, COLORS.dim);
-  for (const e of materials) {
-    if (ry + s.lineHeight > body.y + body.h - s.lineHeight * 2) break;
-    panels.text(ctx, s, e.text, rx, ry, e.color ?? COLORS.text);
-    ry += s.lineHeight;
-  }
-  panels.text(ctx, s, HELP, body.x, body.y + body.h - s.lineHeight, COLORS.dim);
-  return { rows };
+  if (!list.length) panels.text(ctx, s, '這一類沒有東西。', right.x, right.y, COLORS.dim);
+  const l = drawList(ctx, s, panels, right, rows, ui.cursor);
+  // 點裝備格：選中身上那一件（在目前的篩選裡找）
+  const slotHits = slots
+    .map((x) => ({ rect: x.rect, i: list.findIndex((c) => c.kind === 'unequip' && c.slot === x.slot) }))
+    .filter((x) => x.i >= 0);
+  return { filters: f.hits, rows: [...l.hits, ...slotHits] };
 }

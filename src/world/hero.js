@@ -143,6 +143,21 @@ export function equip(data, sheet, id) {
   return { ...sheet, gear, items, itemWear, wear };
 }
 
+// 脫下身上那一格（weapon、shield、armor）放回背包，耐久跟著走；空的格子回傳 { refused }
+export function unequip(sheet, slot) {
+  const id = sheet.gear[slot];
+  if (!id || id === 'no-armor') return { refused: 'empty' };
+  const items = [...sheet.items, id];
+  const itemWear = [...sheet.items.map((_, i) => sheet.itemWear?.[i] ?? 0), sheet.wear?.[slot] ?? 0];
+  return {
+    ...sheet,
+    gear: { ...sheet.gear, [slot]: null },
+    items,
+    itemWear,
+    wear: { ...(sheet.wear ?? {}), [slot]: 0 },
+  };
+}
+
 // 加 1 點屬性（升級的點數）：沒有點數或到 20 回傳 { refused }
 export function raise(sheet, attr) {
   if (!(sheet.points > 0)) return { refused: 'points' };

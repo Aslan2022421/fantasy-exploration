@@ -1,11 +1,39 @@
-// C 角色頁：種族、職業、背景、身高體格、屬性（有還沒加的屬性點時，屬性後面浮出 + 可以點）、技能、裝備、
-// 算出來的攻擊防禦，以及種族與職業能力。段落之間用分隔線。回傳點擊範圍 { plus: [{ rect, attr }] }
+// C 角色頁（照舊版第三十七版的卡片）：最上面一張身分卡（種族、職業、等級、背景，還有沒加的屬性點時提示）；
+// 接著身體、生命、裝備三張卡；六張屬性卡（數值、修正值、用在哪些技能，有點數時卡上有「加 1」）；
+// 戰鬥數字的小格；技能卡（全部技能，沒學的變淡）；種族與職業能力。回傳點擊範圍 { plus: [{ rect, attr }] }
 
 import { HEIGHTS, heroStats, MAX_ATTR, PHYSIQUES } from '../world/hero.js';
 import { attrMod } from '../world/rules.js';
+import { wearText } from '../world/wear.js';
 import { COLORS } from './colors.js';
-import { ATTR_NAMES, ATTR_ORDER, itemText, RANKS, signed, skillName } from './names.js';
-import { wrap } from './wrap.js';
+import { ATTR_NAMES, ATTR_ORDER, itemText, RANKS, signed } from './names.js';
+import { drawHelp, drawTile } from './ui-kit.js';
+
+const GAP = 3; // 卡片間距（pad 的倍數）
+
+// 一張卡：細框、左上角小標題；回傳內容的起點
+function card(ctx, s, panels, rect, title) {
+  panels.box(ctx, rect, COLORS.bg, COLORS.line2);
+  panels.text(ctx, s, title, rect.x + s.pad * 2, rect.y + s.pad, COLORS.dim);
+  return { x: rect.x + s.pad * 2, y: rect.y + s.pad + s.lineHeight * 1.2, w: rect.w - s.pad * 4 };
+}
+
+// 進度條（生命）
+function bar(ctx, s, x, y, w, ratio, color) {
+  const h = Math.max(4, Math.round(s.lineHeight * 0.4));
+  ctx.fillStyle = COLORS.line;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, Math.round(w * Math.max(0, Math.min(1, ratio))), h);
+  return h;
+}
+
+// 一排 n 張等寬的卡：回傳每張的 rect
+const row = (s, x, y, w, n, h) => {
+  const gap = s.pad * GAP;
+  const cw = Math.floor((w - gap * (n - 1)) / n);
+  return Array.from({ length: n }, (_, i) => ({ x: x + i * (cw + gap), y, w: cw, h }));
+};
 
 export function drawSheet(ctx, s, panels, data, state, body) {
   const hero = state.hero;
@@ -13,71 +41,120 @@ export function drawSheet(ctx, s, panels, data, state, body) {
   const race = data.races[data.raceIndex.get(hero.race)];
   const cls = data.classes[data.classIndex.get(hero.cls)];
   const bg = hero.background ? data.backgrounds[data.backgroundIndex.get(hero.background)] : null;
-  const measure = (ch) => panels.measure(ch, s);
+  const b = drawHelp(ctx, s, panels, body, '有屬性點時點屬性卡上的「加 1」　C 或 Esc 關閉');
   const plus = [];
-  let y = body.y;
-  const write = (text, color = COLORS.text, x = body.x, w = body.w) => {
-    for (const part of wrap(text, w, measure)) {
-      panels.text(ctx, s, part, x, y, color);
-      y += s.lineHeight;
-    }
-  };
-  const rule = () => {
-    y += s.pad;
-    panels.rule(ctx, s, body.x, y, body.w);
-    y += s.lineHeight + s.pad;
-  };
+  const L = s.lineHeight;
+  const gap = s.pad * GAP;
+  let y = b.y;
 
-  write(
+  // 身分
+  const idRect = { x: b.x, y, w: b.w, h: L * 2.4 };
+  const id = card(ctx, s, panels, idRect, '冒險者');
+  panels.text(
+    ctx,
+    s,
     `${race.icon} ${race.name}　${cls.icon} ${cls.name}　${hero.level} 級${bg ? `　背景：${bg.name}（${bg.feature}）` : ''}`,
+    id.x,
+    id.y,
     COLORS.head,
   );
-  write(
-    `身高 ${HEIGHTS[hero.height]}（擲 ${hero.rolls.height}）：每個動作花 ${h.ticks} 刻　　體格 ${PHYSIQUES[hero.physique]}（擲 ${hero.rolls.physique}）：生命 ${state.hp}/${h.hpMax}`,
-  );
-  rule();
+  if (hero.points > 0) {
+    const t = `還有 ${hero.points} 點屬性可以加`;
+    panels.text(ctx, s, t, idRect.x + idRect.w - panels.measure(t, s) - s.pad * 3, id.y, COLORS.good);
+  }
+  y += idRect.h + gap;
 
-  // 屬性：兩排各三項；有點數時每項後面一個 [ + ]
-  const colW = Math.floor(body.w / 3);
-  if (hero.points > 0) write(`還有 ${hero.points} 點屬性可以加，點屬性後面的 +。`, COLORS.good);
+  // 身體、生命、裝備
+  const [bodyR, lifeR, gearR] = row(s, b.x, y, b.w, 3, L * 4.6);
+  let c = card(ctx, s, panels, bodyR, '身體');
+  panels.text(ctx, s, `身高 ${HEIGHTS[hero.height]}（擲 ${hero.rolls.height}）`, c.x, c.y);
+  panels.text(ctx, s, `每個動作花 ${h.ticks} 刻`, c.x, c.y + L, COLORS.dim);
+  panels.text(ctx, s, `體格 ${PHYSIQUES[hero.physique]}（擲 ${hero.rolls.physique}）`, c.x, c.y + L * 2);
+  c = card(ctx, s, panels, lifeR, '生命');
+  panels.text(ctx, s, `${state.hp}／${h.hpMax}`, c.x, c.y, COLORS.head);
+  const ratio = state.hp / h.hpMax;
+  bar(ctx, s, c.x, c.y + L * 1.3, c.w, ratio, ratio > 0.5 ? COLORS.good : COLORS.bad);
+  c = card(ctx, s, panels, gearR, '裝備（B 換）');
+  ['weapon', 'shield', 'armor'].forEach((slot, i) => {
+    const gid = hero.gear[slot];
+    const name = gid && gid !== 'no-armor' ? itemText(data, gid).name : slot === 'weapon' ? '徒手' : '（空）';
+    const wt = gid ? (wearText(slot, gid, hero.wear?.[slot] ?? 0) ?? '') : '';
+    panels.text(ctx, s, `${['主手', '副手', '身上'][i]}　${name}`, c.x, c.y + L * i, gid ? COLORS.text : COLORS.line2);
+    if (wt) panels.text(ctx, s, wt, c.x + c.w - panels.measure(wt, s), c.y + L * i, COLORS.dim);
+  });
+  y += bodyR.h + gap;
+
+  // 屬性卡
+  const attrRects = row(s, b.x, y, b.w, 6, L * 4.4);
   ATTR_ORDER.forEach((k, i) => {
-    const x = body.x + (i % 3) * colW;
-    const row = y + Math.floor(i / 3) * s.lineHeight * 1.3;
+    const r = attrRects[i];
     const v = hero.attrs[k];
-    const text = `${ATTR_NAMES[k]} ${v}（${signed(attrMod(v))}）`;
-    panels.text(ctx, s, text, x, row, COLORS.text);
+    const cc = card(ctx, s, panels, r, ATTR_NAMES[k]);
+    panels.text(ctx, s, `${v}`, cc.x, cc.y, COLORS.head);
+    panels.text(ctx, s, `修正 ${signed(attrMod(v))}`, cc.x + panels.measure('00　', s), cc.y, COLORS.text);
+    // 用在哪些技能：放得下幾個寫幾個
+    let uses = '';
+    for (const sk of data.skills.filter((x) => x.attrs.includes(k))) {
+      const next = uses ? `${uses}、${sk.name}` : sk.name;
+      if (panels.measure(next, s) > cc.w) break;
+      uses = next;
+    }
+    panels.text(ctx, s, uses, cc.x, cc.y + L, COLORS.dim);
     if (hero.points > 0 && v < MAX_ATTR) {
-      const bx = x + panels.measure(text, s) + s.pad * 3;
-      const bw = panels.measure('[ + ]', s);
-      panels.text(ctx, s, '[ + ]', bx, row, COLORS.good);
-      plus.push({ rect: { x: bx, y: row, w: bw, h: s.lineHeight }, attr: k });
+      const t = '[ 加 1 ]';
+      const rect = { x: cc.x, y: cc.y + L * 2, w: panels.measure(t, s), h: L };
+      panels.text(ctx, s, t, rect.x, rect.y, COLORS.good);
+      plus.push({ rect, attr: k });
     }
   });
-  y += s.lineHeight * 2.6;
-  rule();
+  y += attrRects[0].h + gap;
 
-  const skills = Object.entries(hero.skills).map(([id, r]) => `${skillName(data, id)} ${RANKS[r]}（${signed(r)}）`);
-  write(`技能：${skills.join('、') || '沒有'}`);
-  rule();
+  // 戰鬥數字
+  const fights = [
+    ['攻擊', `1d12${signed(h.attack)}`],
+    ['傷害', `1d12${signed(h.damage)}`],
+    ['閃避', h.dodge],
+    ['格擋', h.parry],
+    ['減免', h.reduction],
+    ['射程', `${h.range} 格`],
+    ['每個動作', `${h.ticks} 刻`],
+  ];
+  const tiles = row(s, b.x, y, b.w, fights.length, L * 2 + s.pad * 2);
+  fights.forEach(([label, v], i) => {
+    drawTile(ctx, s, panels, tiles[i], label, v);
+  });
+  y += tiles[0].h + s.pad;
+  panels.text(ctx, s, '被近戰打時自動用閃避、格擋裡高的那個，被遠程打只能閃避。', b.x, y, COLORS.dim);
+  y += L + gap;
 
-  const slot = (label, id, note) => {
-    if (!id) return write(`${label}　（空）`, COLORS.line2);
-    const it = itemText(data, id);
-    write(`${label}　${it.name}　${note ?? it.text}`, note ? COLORS.bad : COLORS.text);
-  };
-  slot('主手', hero.gear.weapon);
-  slot('副手', hero.gear.shield, h.weapon.twoHanded && hero.gear.shield ? '雙手武器，盾牌不能用' : null);
-  slot('身上', hero.gear.armor);
-  const bagged = hero.items.map((id) => itemText(data, id).name);
-  if (bagged.length) write(`背包：${bagged.join('、')}（B 換裝備）`, COLORS.dim);
-  write(
-    `攻擊 1d12${signed(h.attack)}　傷害 1d12${signed(h.damage)}　防禦 閃避 ${h.dodge}／格擋 ${h.parry}（被近戰打時自動取高，被遠程打只能閃避）　減免 ${h.reduction}`,
-    COLORS.head,
-  );
-  rule();
+  // 技能卡：全部技能，學過的亮
+  const per = 6;
+  const skH = L * 2 + s.pad * 2;
+  data.skills.forEach((sk, i) => {
+    const r = row(s, b.x, y + Math.floor(i / per) * (skH + s.pad * 2), b.w, per, skH)[i % per];
+    const rank = hero.skills[sk.id] ?? 0;
+    panels.box(ctx, r, rank ? COLORS.panel2 : COLORS.bg, rank ? COLORS.line2 : COLORS.line);
+    panels.text(ctx, s, sk.name, r.x + s.pad * 2, r.y + s.pad, rank ? COLORS.head : COLORS.line2);
+    panels.text(
+      ctx,
+      s,
+      `${RANKS[rank]}　${signed(rank)}`,
+      r.x + s.pad * 2,
+      r.y + s.pad + L,
+      rank ? COLORS.text : COLORS.line2,
+    );
+  });
+  y += Math.ceil(data.skills.length / per) * (skH + s.pad * 2) + s.pad;
 
-  for (const a of race.abilities) write(`種族能力｜${a}`, COLORS.dim);
-  for (const a of cls.abilities) write(`職業能力｜${a}`, COLORS.dim);
-  if (bg) write(`背景裝備｜${bg.gear.join('、')}`, COLORS.dim);
+  // 能力
+  const abilities = [
+    ...race.abilities.map((a) => `種族｜${a}`),
+    ...cls.abilities.map((a) => `職業｜${a}`),
+    ...(bg ? [`背景裝備｜${bg.gear.join('、')}`] : []),
+  ];
+  for (const a of abilities) {
+    if (y + L > b.y + b.h) break;
+    y += panels.para(ctx, s, a, b.x, y, b.w, COLORS.dim);
+  }
   return { plus };
 }

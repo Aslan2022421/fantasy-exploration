@@ -43,7 +43,7 @@ export function describeRecord(rec) {
     case 'spot':
       return `遠遠看見${speciesName(d.species)}（一群 ${d.count} 隻）。`;
     case 'equip':
-      return `換上了${itemName(d.item)}。`;
+      return d.item ? `換上了${itemName(d.item)}。` : `脫下了${itemName(d.off)}。`;
     case 'raise':
       return `${ATTR_NAMES[d.attr] ?? d.attr}加 1 點，現在 ${d.attrs?.[d.attr]}。`;
     default: {

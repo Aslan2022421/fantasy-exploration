@@ -1,14 +1,15 @@
 // 村民（階段 7，先只有對話）：人數照聚落現在的人口標籤；種族人類 70%、矮人 15%、精靈 15%；名字照種族從字表組。
 // 每人有一張床（照民房的順序分），位置由「種子＋這個人＋現在的時間」算出來，不寫紀錄、不進存檔：
 // 每隔一段時間換一個去處，偶數段回家（小屋站在門內旁邊、大房子站在自己的床上）、奇數段到室外的路或空地，
-// 照走一格 9 刻沿著圖樣裡的最短路走過去。
+// 沿著圖樣裡的最短路走過去；走一格的刻數照冒險者的規則看身高（每人照種族的身高表擲一次）。
 // 村民擋路；冒險者站的格子村民不會走上去
 
+import { ACTION_TICKS, bodyIndex } from './hero.js';
 import { hash01 } from './noise.js';
 import { walkable } from './settle-layouts.js';
 import { popTagIndex } from './settlements.js';
 
-export const VILLAGER = { period: [240, 720], moveTicks: 9 };
+export const VILLAGER = { period: [240, 720], moveTicks: 9 }; // moveTicks：種族沒有身高表時用
 const RACES = [
   ['human', 0.7],
   ['dwarf', 0.85],
@@ -32,7 +33,11 @@ export function residentsOf(world, data, s) {
     const parts = data.races[data.raceIndex.get(race)]?.villager?.names ?? [['無'], ['名']];
     const a = parts[0][Math.floor(hash01(world.seed, s.x0 + i, s.y0, 9411) * parts[0].length)];
     const b = parts[1][Math.floor(hash01(world.seed, s.x0 + i, s.y0, 9412) * parts[1].length)];
-    out.push({ id: `${s.id}#${i}`, i, name: `${a}${b}`, race, ...beds[i % beds.length] });
+    // 身高照冒險者的規則擲（種族的身高表），走一格的刻數跟著身高：矮小 12、中等 9、高大 6
+    const def = data.races[data.raceIndex.get(race)];
+    const roll = 1 + Math.floor(hash01(world.seed, s.x0 + i, s.y0, 9413) * 12);
+    const ticks = def ? ACTION_TICKS[bodyIndex(def.height, roll)] : VILLAGER.moveTicks;
+    out.push({ id: `${s.id}#${i}`, i, name: `${a}${b}`, race, ticks, ...beds[i % beds.length] });
   }
   return out;
 }
@@ -93,7 +98,7 @@ export function villagerAt(seed, s, v, time, hero) {
   const from = spotOf(seed, s, v, k - 1);
   const to = spotOf(seed, s, v, k);
   const steps = pathIn(s.layout, from, to);
-  const n = Math.min(steps.length, Math.floor((t - k * period) / VILLAGER.moveTicks));
+  const n = Math.min(steps.length, Math.floor((t - k * period) / (v.ticks ?? VILLAGER.moveTicks)));
   const world = (c) => ({ x: s.x0 + c.i, y: s.y0 + c.j });
   const isHero = (c) => hero && s.x0 + c.i === hero.x && s.y0 + c.j === hero.y;
   for (const c of [n ? steps[n - 1] : from, n > 1 ? steps[n - 2] : from, from, steps[n], to])
